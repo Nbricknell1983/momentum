@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RootState, updateLeadStage, addLead, setStageFilter, setTerritoryFilter } from '@/store';
+import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setTerritoryFilter } from '@/store';
 import { Stage, STAGE_ORDER, STAGE_LABELS, Lead } from '@/lib/types';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,6 +28,8 @@ export default function PipelinePage() {
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
   const [newContactEmail, setNewContactEmail] = useState('');
+  const [showArchivedWarning, setShowArchivedWarning] = useState(false);
+  const [matchingArchivedLead, setMatchingArchivedLead] = useState<Lead | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -63,6 +65,17 @@ export default function PipelinePage() {
   const handleAddLead = () => {
     if (!newCompanyName.trim()) return;
     
+    // Check for archived lead with similar name
+    const archivedMatch = leads.find(
+      l => l.archived && l.companyName.toLowerCase() === newCompanyName.toLowerCase().trim()
+    );
+    
+    if (archivedMatch && !showArchivedWarning) {
+      setMatchingArchivedLead(archivedMatch);
+      setShowArchivedWarning(true);
+      return;
+    }
+    
     const newLead: Lead = {
       id: uuidv4(),
       userId: user?.id || 'demo',
@@ -83,6 +96,44 @@ export default function PipelinePage() {
     setNewContactName('');
     setNewContactPhone('');
     setNewContactEmail('');
+    setShowArchivedWarning(false);
+    setMatchingArchivedLead(null);
+    setIsAddDialogOpen(false);
+  };
+
+  const handleRestoreArchived = () => {
+    if (matchingArchivedLead) {
+      dispatch(updateLead({ ...matchingArchivedLead, archived: false, updatedAt: new Date() }));
+      setShowArchivedWarning(false);
+      setMatchingArchivedLead(null);
+      setNewCompanyName('');
+      setIsAddDialogOpen(false);
+    }
+  };
+
+  const handleAddAnyway = () => {
+    setShowArchivedWarning(false);
+    // Call handleAddLead again, this time it will proceed since showArchivedWarning was true
+    const newLead: Lead = {
+      id: uuidv4(),
+      userId: user?.id || 'demo',
+      companyName: newCompanyName,
+      stage: newStage,
+      territory: user?.territory || '',
+      contactName: newContactName || undefined,
+      phone: newContactPhone || undefined,
+      email: newContactEmail || undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      archived: false,
+    };
+    dispatch(addLead(newLead));
+    setNewCompanyName('');
+    setNewStage('suspect');
+    setNewContactName('');
+    setNewContactPhone('');
+    setNewContactEmail('');
+    setMatchingArchivedLead(null);
     setIsAddDialogOpen(false);
   };
 
@@ -184,9 +235,28 @@ export default function PipelinePage() {
                     data-testid="input-new-contact-email"
                   />
                 </div>
-                <Button onClick={handleAddLead} className="w-full" data-testid="button-confirm-add">
-                  Add Company
-                </Button>
+                {showArchivedWarning && matchingArchivedLead ? (
+                  <div className="space-y-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-md border border-amber-200 dark:border-amber-800">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      A company with this name was previously archived.
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Would you like to restore "{matchingArchivedLead.companyName}" or add a new one?
+                    </p>
+                    <div className="flex gap-2">
+                      <Button onClick={handleRestoreArchived} variant="outline" className="flex-1" data-testid="button-restore-archived">
+                        Restore
+                      </Button>
+                      <Button onClick={handleAddAnyway} className="flex-1" data-testid="button-add-anyway">
+                        Add New
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button onClick={handleAddLead} className="w-full" data-testid="button-confirm-add">
+                    Add Company
+                  </Button>
+                )}
               </div>
             </DialogContent>
           </Dialog>
