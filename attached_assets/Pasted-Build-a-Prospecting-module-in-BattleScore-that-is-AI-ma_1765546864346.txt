@@ -1,0 +1,159 @@
+Build a Prospecting module in BattleScore that is AI-managed, activity-driven, and enforces Fanatical Prospecting discipline, while balancing new prospecting and current client actions. This module must use the Google Places API for live business discovery (no scraping, no bulk exporting, no silent background importing).
+
+1) Google Places API requirement
+
+The Prospecting module must use Google Places to:
+
+Convert an Area (city/LGA/region) into a lat/lng search origin
+
+Retrieve nearby business results for the selected industry and optional keyword
+
+Fetch Place Details only when needed (view details or add to pipeline)
+
+API calls (high-level flow)
+
+Geocode the Area
+Input: “Logan QLD”
+Output: latitude/longitude + viewport/bounds
+Use: to centre the places search
+
+Search for businesses (Places search)
+Inputs:
+
+location (lat/lng from step 1)
+
+radius or bounds
+
+industry preset mapped to Places “type” OR free-text query
+
+optional keyword modifier
+Output: list of places with place_id and lightweight display fields
+
+Place Details (on demand)
+Triggered only when:
+
+user clicks “View” on a row, or
+
+user clicks “Add to Pipeline” (to confirm phone/website/address live)
+Output: the specific fields needed for the UI at that moment
+
+2) Inputs and mapping rules
+Industry
+
+Dropdown presets mapped to Google Places types (example: plumber, electrician, etc.)
+
+Checkbox: “Use free text for industry”
+
+When enabled, use a text query rather than a fixed type
+
+Area
+
+Free text (city/LGA/region)
+
+Must be geocoded before running Places search
+
+Keyword (optional)
+
+Used to refine relevance only (e.g., “emergency”, “after hours”)
+
+Should be appended to the text query, or used as an additional query term when free-text is enabled
+
+3) Result table fields (from Places search + details-on-demand)
+
+Show these columns:
+
+Business (name)
+
+Phone (if available)
+
+Website (if available)
+
+Reviews (count)
+
+Address
+
+Actions (View, Select, Add to Pipeline, Mark Attempted)
+
+Important: the table can display these fields, but they are not persisted by default (see storage rules).
+
+4) Storage rules (Prospectr/BattleScore rules)
+Do not store on search
+
+When the user clicks Search and results load:
+
+Do not write the result set to Firestore
+
+Do not create lead records automatically
+
+Keep results ephemeral (in UI state only)
+
+Store only on “Add to Pipeline”
+
+When the user clicks “Add to Pipeline” for selected rows, store:
+
+place_id (primary external reference)
+
+Internal BattleScore fields:
+
+owner/rep
+
+stage (default: “New – Not Contacted”)
+
+createdAt
+
+next contact date
+
+notes (rep-entered)
+
+NEPQ notes (rep-entered)
+
+activity log (call/visit/email/sms outcomes)
+
+tags
+
+deal value estimate / potential
+
+Re-hydrate on demand
+
+For pipeline leads, when the UI needs business details:
+
+Fetch live Place Details using place_id
+
+Render business name/phone/website/address/reviews from the live response
+
+Do not rely on long-term stored copies of Places business data
+
+5) “Prioritise likely-new profiles” ranking
+
+When enabled, re-rank search results (client-side) using:
+
+lower review count first
+
+missing website first
+
+other “sparse profile” indicators if present
+This changes ordering only, not inclusion/exclusion.
+
+6) AI-managed activity engine
+
+The AI agent manages this module as an execution system:
+
+Sets daily targets (calls, door knocks, follow-ups, current-client touches)
+
+Turns selected prospects into a call/visit queue for today
+
+Forces balance: new prospecting + follow-ups + current client actions
+
+Every interaction writes an activity log and sets/updates next contact date
+
+7) Definition of done
+
+Places-powered search works: Industry + Area (+ optional keyword) returns results
+
+Add to Pipeline saves only place_id + internal sales fields
+
+Lead detail view re-hydrates business info via Place Details using place_id
+
+AI agent assigns next actions and tracks daily activity totals
+
+If you want, paste your current Places implementation snippet (the function that calls Places) and I’ll rewrite it to match this flow exactly (geocode → search → details on demand) and align it with your storage rules.
