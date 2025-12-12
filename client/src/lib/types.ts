@@ -20,7 +20,6 @@ export type TrafficLightStatus = 'green' | 'amber' | 'red';
 
 // Nurture system types
 export type NurtureMode = 'none' | 'active' | 'passive';
-export type NurtureCadenceId = 'active_30' | 'passive_90' | null;
 export type NurtureStatus = 'new' | 'touched_waiting' | 'needs_touch' | 'reengaged' | 'dormant' | 'exit' | null;
 export type TouchChannel = 'call' | 'sms' | 'email';
 
@@ -43,46 +42,62 @@ export const NURTURE_STATUS_ORDER: NurtureStatus[] = [
 ];
 
 export interface CadenceStep {
+  id: string;
   dayOffset: number;
   channel: TouchChannel;
 }
 
 export interface Cadence {
-  id: NurtureCadenceId;
+  id: string;
   name: string;
+  description?: string;
   mode: 'active' | 'passive';
   steps: CadenceStep[];
+  isDefault?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Default cadences as per requirements
-export const CADENCES: Cadence[] = [
+export const DEFAULT_CADENCES: Cadence[] = [
   {
     id: 'active_30',
     name: 'Active Nurture (30 days)',
+    description: 'Intensive follow-up sequence for warm leads',
     mode: 'active',
+    isDefault: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
     steps: [
-      { dayOffset: 1, channel: 'call' },
-      { dayOffset: 3, channel: 'sms' },
-      { dayOffset: 5, channel: 'email' },
-      { dayOffset: 8, channel: 'call' },
-      { dayOffset: 10, channel: 'sms' },
-      { dayOffset: 14, channel: 'email' },
-      { dayOffset: 17, channel: 'call' },
-      { dayOffset: 21, channel: 'sms' },
-      { dayOffset: 30, channel: 'call' },
+      { id: 's1', dayOffset: 1, channel: 'call' },
+      { id: 's2', dayOffset: 3, channel: 'sms' },
+      { id: 's3', dayOffset: 5, channel: 'email' },
+      { id: 's4', dayOffset: 8, channel: 'call' },
+      { id: 's5', dayOffset: 10, channel: 'sms' },
+      { id: 's6', dayOffset: 14, channel: 'email' },
+      { id: 's7', dayOffset: 17, channel: 'call' },
+      { id: 's8', dayOffset: 21, channel: 'sms' },
+      { id: 's9', dayOffset: 30, channel: 'call' },
     ],
   },
   {
     id: 'passive_90',
     name: 'Passive Nurture (90 days)',
+    description: 'Light touch sequence for parking leads',
     mode: 'passive',
+    isDefault: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
     steps: [
-      { dayOffset: 30, channel: 'email' },
-      { dayOffset: 60, channel: 'sms' },
-      { dayOffset: 90, channel: 'call' },
+      { id: 's1', dayOffset: 30, channel: 'email' },
+      { id: 's2', dayOffset: 60, channel: 'sms' },
+      { id: 's3', dayOffset: 90, channel: 'call' },
     ],
   },
 ];
+
+// Legacy export for backwards compatibility
+export const CADENCES = DEFAULT_CADENCES;
 
 export interface Touch {
   id: string;
@@ -117,7 +132,7 @@ export interface Lead {
   crmLink?: string;
   // Nurture fields
   nurtureMode: NurtureMode;
-  nurtureCadenceId: NurtureCadenceId;
+  nurtureCadenceId: string | null;
   nurtureStatus: NurtureStatus;
   nurtureStepIndex: number | null;
   enrolledInNurtureAt: Date | null;
@@ -320,7 +335,7 @@ export function calculateNextTouchDate(enrolledAt: Date, stepIndex: number, cade
 // Default nurture fields for a new lead
 export const DEFAULT_NURTURE_FIELDS = {
   nurtureMode: 'none' as NurtureMode,
-  nurtureCadenceId: null as NurtureCadenceId,
+  nurtureCadenceId: null as string | null,
   nurtureStatus: null as NurtureStatus,
   nurtureStepIndex: null,
   enrolledInNurtureAt: null,

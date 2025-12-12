@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '@/store';
 import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, Archive, Trash2, Heart, HeartOff } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +40,118 @@ interface LeadCardExpandedProps {
   lead: Lead;
   isExpanded: boolean;
   onToggle: () => void;
+}
+
+function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
+  const dispatch = useDispatch();
+  const cadences = useSelector((state: RootState) => state.app.cadences);
+  const [selectedCadenceId, setSelectedCadenceId] = useState<string>('');
+  
+  const activeCadences = cadences.filter(c => c.mode === 'active');
+  const passiveCadences = cadences.filter(c => c.mode === 'passive');
+  const currentCadence = lead.nurtureCadenceId ? cadences.find(c => c.id === lead.nurtureCadenceId) : null;
+
+  const handleEnroll = (mode: 'active' | 'passive') => {
+    const cadenceList = mode === 'active' ? activeCadences : passiveCadences;
+    const selectedCadence = cadences.find(c => c.id === selectedCadenceId);
+    const cadenceId = (selectedCadence && selectedCadence.mode === mode) 
+      ? selectedCadenceId 
+      : cadenceList[0]?.id;
+    if (cadenceId) {
+      dispatch(enrollInNurture({ leadId: lead.id, mode, cadenceId }));
+      setSelectedCadenceId('');
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">Nurture</Label>
+      {lead.nurtureMode === 'none' ? (
+        <div className="space-y-2">
+          <Select value={selectedCadenceId} onValueChange={setSelectedCadenceId}>
+            <SelectTrigger className="h-9" data-testid={`select-cadence-${lead.id}`}>
+              <SelectValue placeholder="Select a cadence..." />
+            </SelectTrigger>
+            <SelectContent>
+              {activeCadences.length > 0 && (
+                <>
+                  <SelectItem value="header-active" disabled className="text-xs text-muted-foreground font-medium">Active Cadences</SelectItem>
+                  {activeCadences.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </>
+              )}
+              {passiveCadences.length > 0 && (
+                <>
+                  <SelectItem value="header-passive" disabled className="text-xs text-muted-foreground font-medium">Passive Cadences</SelectItem>
+                  {passiveCadences.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </>
+              )}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800"
+              onClick={() => handleEnroll('active')}
+              disabled={!selectedCadenceId && activeCadences.length === 0}
+              data-testid={`button-enroll-active-${lead.id}`}
+            >
+              <Heart className="h-3 w-3" />
+              Enroll Active
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-800"
+              onClick={() => handleEnroll('passive')}
+              disabled={!selectedCadenceId && passiveCadences.length === 0}
+              data-testid={`button-enroll-passive-${lead.id}`}
+            >
+              <Heart className="h-3 w-3" />
+              Enroll Passive
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge 
+              variant="secondary"
+              className={lead.nurtureMode === 'active' 
+                ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' 
+                : 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-300'}
+            >
+              {currentCadence?.name || (lead.nurtureMode === 'active' ? 'Active Nurture' : 'Passive Nurture')}
+            </Badge>
+            {lead.nurtureStatus && (
+              <Badge variant="outline" className="text-xs">
+                {NURTURE_STATUS_LABELS[lead.nurtureStatus] || lead.nurtureStatus}
+              </Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => dispatch(removeFromNurture(lead.id))}
+              data-testid={`button-remove-nurture-${lead.id}`}
+            >
+              <HeartOff className="h-3 w-3" />
+              Remove
+            </Button>
+          </div>
+          {lead.nextTouchAt && (
+            <p className="text-xs text-muted-foreground">
+              Next touch: {format(new Date(lead.nextTouchAt), 'dd/MM/yyyy')}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCardExpandedProps) {
@@ -240,62 +353,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
           </div>
 
           {/* Nurture Enrollment */}
-          <div className="space-y-2">
-            <Label className="text-xs">Nurture</Label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {lead.nurtureMode === 'none' ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800"
-                    onClick={() => dispatch(enrollInNurture({ leadId: lead.id, mode: 'active' }))}
-                    data-testid={`button-enroll-active-${lead.id}`}
-                  >
-                    <Heart className="h-3 w-3" />
-                    Enroll Active
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-800"
-                    onClick={() => dispatch(enrollInNurture({ leadId: lead.id, mode: 'passive' }))}
-                    data-testid={`button-enroll-passive-${lead.id}`}
-                  >
-                    <Heart className="h-3 w-3" />
-                    Enroll Passive
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Badge 
-                    variant="secondary"
-                    className={lead.nurtureMode === 'active' 
-                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' 
-                      : 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-300'}
-                  >
-                    {lead.nurtureMode === 'active' ? 'Active Nurture' : 'Passive Nurture'}
-                    {lead.nurtureStatus && ` - ${NURTURE_STATUS_LABELS[lead.nurtureStatus] || lead.nurtureStatus}`}
-                  </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={() => dispatch(removeFromNurture(lead.id))}
-                    data-testid={`button-remove-nurture-${lead.id}`}
-                  >
-                    <HeartOff className="h-3 w-3" />
-                    Remove
-                  </Button>
-                </>
-              )}
-            </div>
-            {lead.nurtureMode !== 'none' && lead.nextTouchAt && (
-              <p className="text-xs text-muted-foreground">
-                Next touch: {format(new Date(lead.nextTouchAt), 'dd/MM/yyyy')}
-              </p>
-            )}
-          </div>
+          <NurtureEnrollmentSection lead={lead} />
 
           {/* Primary Contact */}
           <div className="space-y-2">

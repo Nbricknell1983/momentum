@@ -1,5 +1,5 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, getCadenceByMode } from '@/lib/types';
+import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore } from '@/lib/types';
 import { mockLeads, mockActivities, mockTasks, mockDailyMetrics, mockUser } from '@/lib/mockData';
 
 // todo: remove mock functionality - replace with Firebase
@@ -10,6 +10,7 @@ interface AppState {
   activities: Activity[];
   tasks: Task[];
   touches: Touch[];
+  cadences: Cadence[];
   dailyMetrics: DailyMetrics[];
   selectedLeadId: string | null;
   isDrawerOpen: boolean;
@@ -25,6 +26,7 @@ const initialState: AppState = {
   activities: mockActivities,
   tasks: mockTasks,
   touches: [],
+  cadences: [...DEFAULT_CADENCES],
   dailyMetrics: mockDailyMetrics,
   selectedLeadId: null,
   isDrawerOpen: false,
@@ -58,7 +60,7 @@ const appSlice = createSlice({
         
         // Auto-enroll in passive nurture when stage is set to "nurture"
         if (action.payload.stage === 'nurture' && lead.nurtureMode === 'none') {
-          const cadence = getCadenceByMode('passive');
+          const cadence = state.cadences.find(c => c.mode === 'passive');
           if (cadence) {
             const now = new Date();
             lead.nurtureMode = 'passive';
@@ -144,11 +146,31 @@ const appSlice = createSlice({
     setNurtureTab(state, action: PayloadAction<'active' | 'passive'>) {
       state.nurtureTab = action.payload;
     },
+    addCadence(state, action: PayloadAction<Cadence>) {
+      state.cadences.push(action.payload);
+    },
+    updateCadence(state, action: PayloadAction<Cadence>) {
+      const index = state.cadences.findIndex(c => c.id === action.payload.id);
+      if (index !== -1) {
+        state.cadences[index] = action.payload;
+      }
+    },
+    deleteCadence(state, action: PayloadAction<string>) {
+      const cadence = state.cadences.find(c => c.id === action.payload);
+      if (cadence && !cadence.isDefault) {
+        state.cadences = state.cadences.filter(c => c.id !== action.payload);
+      }
+    },
     // Nurture enrollment - MANUAL ONLY per requirements
-    enrollInNurture(state, action: PayloadAction<{ leadId: string; mode: 'active' | 'passive' }>) {
+    enrollInNurture(state, action: PayloadAction<{ leadId: string; mode: 'active' | 'passive'; cadenceId?: string }>) {
       const lead = state.leads.find(l => l.id === action.payload.leadId);
       if (lead) {
-        const cadence = getCadenceByMode(action.payload.mode);
+        let cadence: Cadence | undefined;
+        if (action.payload.cadenceId) {
+          cadence = state.cadences.find(c => c.id === action.payload.cadenceId);
+        } else {
+          cadence = state.cadences.find(c => c.mode === action.payload.mode);
+        }
         if (cadence) {
           const now = new Date();
           lead.nurtureMode = action.payload.mode;
@@ -187,7 +209,7 @@ const appSlice = createSlice({
     logNurtureTouch(state, action: PayloadAction<{ leadId: string; channel: TouchChannel; responseReceived: boolean; notes?: string }>) {
       const lead = state.leads.find(l => l.id === action.payload.leadId);
       if (lead && lead.nurtureMode !== 'none' && lead.nurtureCadenceId) {
-        const cadence = CADENCES.find(c => c.id === lead.nurtureCadenceId);
+        const cadence = state.cadences.find(c => c.id === lead.nurtureCadenceId);
         if (cadence) {
           const now = new Date();
           // Update lead touch info
@@ -281,6 +303,9 @@ export const {
   setStageFilter,
   setTerritoryFilter,
   setNurtureTab,
+  addCadence,
+  updateCadence,
+  deleteCadence,
   enrollInNurture,
   removeFromNurture,
   updateNurtureStatus,
