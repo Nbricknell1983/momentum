@@ -413,6 +413,12 @@ const appSlice = createSlice({
       }
     },
     
+    markQueuesInitialized(state) {
+      if (state.dailyPlan) {
+        state.dailyPlan.isQueuesInitialized = true;
+      }
+    },
+    
     updateDailyTargets(state, action: PayloadAction<{
       category: 'prospecting' | 'clients';
       metric: string;
@@ -485,6 +491,7 @@ export const {
   completeRouteStop,
   reorderRouteStops,
   submitDebrief,
+  markQueuesInitialized,
   updateDailyTargets,
   addBattleScore,
 } = appSlice.actions;

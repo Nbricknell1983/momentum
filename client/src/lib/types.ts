@@ -443,6 +443,7 @@ export interface DailyPlan {
   debrief: DailyDebrief;
   battleScoreEarned: number;
   hasProspectingBlock: boolean;
+  isQueuesInitialized: boolean;
 }
 
 export const TIME_BLOCK_LABELS: Record<TimeBlockType, string> = {
@@ -555,5 +556,6 @@ export function createDefaultDailyPlan(date: Date): DailyPlan {
     },
     battleScoreEarned: 0,
     hasProspectingBlock: true,
+    isQueuesInitialized: false,
   };
 }
