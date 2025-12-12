@@ -1,0 +1,313 @@
+BUILD INSTRUCTION — BattleScore Nurture + AI Automation (FINAL)
+
+Build BattleScore, an AI-assisted sales operating system.
+Add a manual-only Nurture system with optional AI automation that activates only when I explicitly place a lead into Nurture.
+
+1) NON-NEGOTIABLE RULE (GLOBAL)
+
+No lead may enter a cadence, receive automated follow-ups, or trigger AI responses unless I manually enroll it into Nurture.
+
+There must be:
+
+❌ no automatic enrollment
+
+❌ no implicit cadence triggers
+
+❌ no background AI actions on pipeline leads
+
+Everything is opt-in, explicit, and reversible.
+
+2) NAVIGATION & PAGES
+
+Add a left-nav item: Nurture
+
+Inside Nurture:
+
+Tab 1: Active Nurture
+
+Tab 2: Passive Nurture (Parking)
+
+Pipeline and Nurture are separate systems.
+
+3) DATA MODEL (Firestore)
+Extend leads/{leadId}
+nurtureMode: "none" | "active" | "passive"
+nurtureCadenceId: "active_30" | "passive_90" | null
+nurtureStatus: "new" | "touched_waiting" | "needs_touch" | "reengaged" | "dormant" | "exit" | null
+nurtureStepIndex: number | null
+enrolledInNurtureAt: timestamp | null
+nextTouchAt: timestamp | null
+lastTouchAt: timestamp | null
+lastTouchChannel: "call" | "sms" | "email" | null
+touchesNoResponse: number
+engagementScore: number
+nurturePriorityScore: number
+
+New collections
+cadences/{cadenceId}
+touches/{touchId}
+conversations/{conversationId}
+messages/{messageId}
+aiLogs/{logId}
+
+4) CADENCE DEFINITIONS (SEED THESE)
+Active Nurture — active_30
+
+12 touches over 30 days:
+
+Day 1  - Call
+Day 3  - SMS
+Day 5  - Email
+Day 8  - Call
+Day 10 - SMS
+Day 14 - Email
+Day 17 - Call
+Day 21 - SMS
+Day 30 - Call or Email
+
+Passive Nurture — passive_90
+Day 30 - Email
+Day 60 - SMS
+Day 90 - Call
+
+
+Cadences are editable later, but ship with these defaults.
+
+5) MANUAL ENROLLMENT ONLY (HARD RULE)
+
+A lead enters nurture only via:
+
+“Move to Active Nurture”
+
+“Move to Passive Nurture”
+
+Bulk action: “Add to Nurture”
+
+On enrollment:
+
+nurtureMode = "active" | "passive"
+nurtureCadenceId = selected cadence
+nurtureStatus = "new"
+nurtureStepIndex = 0
+enrolledInNurtureAt = now
+nextTouchAt = now + cadence.steps[0].dayOffset
+touchesNoResponse = 0
+
+
+⚠️ If nurtureMode === "none":
+
+no cadence logic runs
+
+no nextTouchAt exists
+
+no AI automation allowed
+
+6) REMOVAL STOPS EVERYTHING
+
+When I click “Remove from Nurture” or move back to Pipeline:
+
+nurtureMode = "none"
+nurtureCadenceId = null
+nurtureStatus = null
+nurtureStepIndex = null
+nextTouchAt = null
+enrolledInNurtureAt = null
+
+
+All automation must immediately stop.
+
+7) NURTURE BOARD (ACTIVITY-BASED)
+
+Create a Kanban board with these columns:
+
+New to Nurture
+
+Touched – Awaiting Response
+
+Needs Next Touch
+
+Re-engaged
+
+Dormant
+
+Exit
+
+Cards show:
+
+Company
+
+Territory
+
+NextTouchAt
+
+LastTouchChannel + date
+
+NurturePriorityScore
+
+MRR (if present)
+
+Drag & drop updates nurtureStatus.
+
+8) TODAY’S NURTURE QUEUE (CRITICAL)
+
+At top of Nurture page:
+
+Sorted by nextTouchAt, then nurturePriorityScore
+
+Filters: due today, overdue, cadence type, channel, territory
+
+Each row actions:
+
+Call
+
+Copy SMS
+
+Copy Email
+
+Mark Response Received
+
+Snooze (1d / 3d / 7d)
+
+Move Back to Pipeline
+
+9) CADENCE ADVANCEMENT (CONTROLLED)
+
+Cadence only advances when I log a NURTURE TOUCH.
+
+On “Log Nurture Touch”:
+
+create touch record
+lastTouchAt = now
+lastTouchChannel = channel
+if responseReceived == false → touchesNoResponse++
+nurtureStepIndex += 1
+nextTouchAt = enrolledInNurtureAt + cadence.steps[nurtureStepIndex].dayOffset
+
+
+Normal activity logging must NOT advance cadence unless explicitly logged as a nurture touch.
+
+10) NURTURE PRIORITY SCORE
+
+Recalculate daily and after each touch:
+
++5 if response in last 14 days
+
++3 if high MRR
+
++2 if previously Qualified/Proposal
+
+−2 per unanswered touch
+
+−5 if silent > 45 days
+
+Store score on lead.
+
+11) AI AUTOPILOT — STRICTLY LIMITED
+AI is allowed ONLY IF:
+
+nurtureMode !== "none"
+
+AND user has enabled Autopilot
+
+AND lead has consent
+
+AND message is inbound
+
+AI is NOT allowed to:
+
+initiate outbound messages
+
+message cold pipeline leads
+
+bypass cadence logic
+
+12) INBOUND AI RESPONSES (SMS & EMAIL)
+Channels
+
+SMS: Twilio webhook /webhooks/sms/inbound
+
+Email: SendGrid Inbound Parse /webhooks/email/inbound
+
+AI Goal (every reply)
+
+Move toward micro-commitment:
+
+Book call
+
+Confirm scope
+
+Confirm decision maker
+
+Confirm timing
+
+Confirm next step
+
+Guardrails
+
+Never invent facts
+
+Ask 1–2 NEPQ-style questions
+
+Escalate to human if:
+
+pricing negotiation
+
+anger
+
+legal threats
+
+high buying intent
+
+uncertainty
+
+13) AI FUNCTIONS (SERVER-SIDE ONLY)
+
+Create Cloud Functions:
+
+POST /ai/nurtureNextTouch
+
+POST /ai/inboundReply
+
+Output JSON:
+
+{
+  "replyText": "",
+  "intent": "",
+  "questions": [],
+  "nextStep": "",
+  "needsEscalation": true | false,
+  "escalationReason": ""
+}
+
+
+Log all AI activity to aiLogs.
+
+14) UI REQUIREMENTS
+
+Lead Drawer badge: Nurture: Off | Active | Passive
+
+One-click enroll / remove
+
+One-click log nurture touch
+
+Inbox page for SMS + Email
+
+Draft-only mode default for AI
+
+No emojis. Fast. Sales-first.
+
+15) BUILD ORDER
+
+Firestore fields + cadence seed
+
+Manual enrollment + removal
+
+Nurture board + Today Queue
+
+Cadence advancement logic
+
+AI drafts (server-side)
+
+Inbound automation (guarded)
+
+Dashboard nurture metrics

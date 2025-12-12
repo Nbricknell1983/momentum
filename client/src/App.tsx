@@ -13,6 +13,7 @@ import TopBar from '@/components/TopBar';
 import AgentPanel from '@/components/AgentPanel';
 import DashboardPage from '@/pages/dashboard';
 import PipelinePage from '@/pages/pipeline';
+import NurturePage from '@/pages/nurture';
 import TasksPage from '@/pages/tasks';
 import DailyPlanPage from '@/pages/daily-plan';
 import SettingsPage from '@/pages/settings';
@@ -23,6 +24,7 @@ function Router() {
     <Switch>
       <Route path="/" component={DashboardPage} />
       <Route path="/pipeline" component={PipelinePage} />
+      <Route path="/nurture" component={NurturePage} />
       <Route path="/list" component={PipelinePage} />
       <Route path="/forecast" component={DashboardPage} />
       <Route path="/daily-plan" component={DailyPlanPage} />

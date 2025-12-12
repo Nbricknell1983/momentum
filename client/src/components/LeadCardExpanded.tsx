@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, Archive, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, Archive, Trash2, Heart, HeartOff } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,9 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus } from '@/lib/types';
+import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus, NURTURE_STATUS_LABELS } from '@/lib/types';
 import { countActivitiesByType } from '@/lib/mockData';
-import { updateLead, updateLeadStage, addActivity, archiveLead, deleteLead } from '@/store';
+import { updateLead, updateLeadStage, addActivity, archiveLead, deleteLead, enrollInNurture, removeFromNurture } from '@/store';
 import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
@@ -237,6 +237,64 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Nurture Enrollment */}
+          <div className="space-y-2">
+            <Label className="text-xs">Nurture</Label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {lead.nurtureMode === 'none' ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800"
+                    onClick={() => dispatch(enrollInNurture({ leadId: lead.id, mode: 'active' }))}
+                    data-testid={`button-enroll-active-${lead.id}`}
+                  >
+                    <Heart className="h-3 w-3" />
+                    Enroll Active
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-800"
+                    onClick={() => dispatch(enrollInNurture({ leadId: lead.id, mode: 'passive' }))}
+                    data-testid={`button-enroll-passive-${lead.id}`}
+                  >
+                    <Heart className="h-3 w-3" />
+                    Enroll Passive
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Badge 
+                    variant="secondary"
+                    className={lead.nurtureMode === 'active' 
+                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' 
+                      : 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-300'}
+                  >
+                    {lead.nurtureMode === 'active' ? 'Active Nurture' : 'Passive Nurture'}
+                    {lead.nurtureStatus && ` - ${NURTURE_STATUS_LABELS[lead.nurtureStatus] || lead.nurtureStatus}`}
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => dispatch(removeFromNurture(lead.id))}
+                    data-testid={`button-remove-nurture-${lead.id}`}
+                  >
+                    <HeartOff className="h-3 w-3" />
+                    Remove
+                  </Button>
+                </>
+              )}
+            </div>
+            {lead.nurtureMode !== 'none' && lead.nextTouchAt && (
+              <p className="text-xs text-muted-foreground">
+                Next touch: {format(new Date(lead.nextTouchAt), 'dd/MM/yyyy')}
+              </p>
+            )}
           </div>
 
           {/* Primary Contact */}

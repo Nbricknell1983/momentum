@@ -10,6 +10,7 @@ import {
   Zap,
   Moon,
   Sun,
+  Heart,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -28,6 +29,7 @@ import { useTheme } from './ThemeProvider';
 const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Pipeline', url: '/pipeline', icon: Kanban },
+  { title: 'Nurture', url: '/nurture', icon: Heart },
   { title: 'List', url: '/list', icon: List },
   { title: 'Forecast', url: '/forecast', icon: TrendingUp },
   { title: 'Daily Plan', url: '/daily-plan', icon: Calendar },

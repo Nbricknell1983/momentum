@@ -1,5 +1,5 @@
 // todo: remove mock functionality
-import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, ActivityType } from './types';
+import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, ActivityType, DEFAULT_NURTURE_FIELDS } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 const userId = 'demo-user-1';
@@ -69,6 +69,7 @@ export const mockLeads: Lead[] = [
     contactName: 'Sarah Chen',
     notes: 'Very interested in our enterprise plan. Needs approval from CTO.',
     crmLink: 'https://crm.example.com/leads/123',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -89,6 +90,7 @@ export const mockLeads: Lead[] = [
     archived: false,
     contactName: 'Michael Roberts',
     notes: 'Proposal sent. Waiting for budget approval from finance.',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -105,6 +107,7 @@ export const mockLeads: Lead[] = [
     updatedAt: daysAgo(1),
     archived: false,
     contactName: 'Jennifer Wu',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -117,6 +120,7 @@ export const mockLeads: Lead[] = [
     updatedAt: daysAgo(3),
     archived: false,
     contactName: 'David Park',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -137,6 +141,7 @@ export const mockLeads: Lead[] = [
     archived: false,
     contactName: 'Lisa Martinez',
     notes: 'Strong fit for mid-tier package.',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -152,6 +157,7 @@ export const mockLeads: Lead[] = [
     updatedAt: daysAgo(5),
     archived: false,
     contactName: 'Robert Johnson',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -168,6 +174,7 @@ export const mockLeads: Lead[] = [
     archived: false,
     contactName: 'Amanda Foster',
     notes: 'Contract review in progress. Legal signoff expected this week.',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -182,6 +189,7 @@ export const mockLeads: Lead[] = [
     updatedAt: daysAgo(7),
     archived: false,
     contactName: 'Chris Taylor',
+    ...DEFAULT_NURTURE_FIELDS,
   },
   {
     id: uuidv4(),
@@ -197,6 +205,18 @@ export const mockLeads: Lead[] = [
     archived: false,
     contactName: 'Emily Davis',
     notes: 'Not ready now. Follow up next quarter.',
+    // Example of a lead enrolled in passive nurture
+    nurtureMode: 'passive',
+    nurtureCadenceId: 'passive_90',
+    nurtureStatus: 'new',
+    nurtureStepIndex: 0,
+    enrolledInNurtureAt: daysAgo(14),
+    nextTouchAt: daysFromNow(16),
+    lastTouchAt: null,
+    lastTouchChannel: null,
+    touchesNoResponse: 0,
+    engagementScore: 0,
+    nurturePriorityScore: 0,
   },
 ];
 

@@ -1,5 +1,5 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage } from '@/lib/types';
+import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, getCadenceByMode } from '@/lib/types';
 import { mockLeads, mockActivities, mockTasks, mockDailyMetrics, mockUser } from '@/lib/mockData';
 
 // todo: remove mock functionality - replace with Firebase
@@ -9,12 +9,14 @@ interface AppState {
   leads: Lead[];
   activities: Activity[];
   tasks: Task[];
+  touches: Touch[];
   dailyMetrics: DailyMetrics[];
   selectedLeadId: string | null;
   isDrawerOpen: boolean;
   searchQuery: string;
   stageFilter: Stage | 'all';
   territoryFilter: string | 'all';
+  nurtureTab: 'active' | 'passive';
 }
 
 const initialState: AppState = {
@@ -22,12 +24,14 @@ const initialState: AppState = {
   leads: mockLeads,
   activities: mockActivities,
   tasks: mockTasks,
+  touches: [],
   dailyMetrics: mockDailyMetrics,
   selectedLeadId: null,
   isDrawerOpen: false,
   searchQuery: '',
   stageFilter: 'all',
   territoryFilter: 'all',
+  nurtureTab: 'active',
 };
 
 const appSlice = createSlice({
@@ -120,6 +124,123 @@ const appSlice = createSlice({
     setTerritoryFilter(state, action: PayloadAction<string | 'all'>) {
       state.territoryFilter = action.payload;
     },
+    setNurtureTab(state, action: PayloadAction<'active' | 'passive'>) {
+      state.nurtureTab = action.payload;
+    },
+    // Nurture enrollment - MANUAL ONLY per requirements
+    enrollInNurture(state, action: PayloadAction<{ leadId: string; mode: 'active' | 'passive' }>) {
+      const lead = state.leads.find(l => l.id === action.payload.leadId);
+      if (lead) {
+        const cadence = getCadenceByMode(action.payload.mode);
+        if (cadence) {
+          const now = new Date();
+          lead.nurtureMode = action.payload.mode;
+          lead.nurtureCadenceId = cadence.id;
+          lead.nurtureStatus = 'new';
+          lead.nurtureStepIndex = 0;
+          lead.enrolledInNurtureAt = now;
+          lead.nextTouchAt = calculateNextTouchDate(now, 0, cadence);
+          lead.touchesNoResponse = 0;
+          lead.updatedAt = now;
+        }
+      }
+    },
+    // Remove from nurture - stops all automation
+    removeFromNurture(state, action: PayloadAction<string>) {
+      const lead = state.leads.find(l => l.id === action.payload);
+      if (lead) {
+        lead.nurtureMode = 'none';
+        lead.nurtureCadenceId = null;
+        lead.nurtureStatus = null;
+        lead.nurtureStepIndex = null;
+        lead.enrolledInNurtureAt = null;
+        lead.nextTouchAt = null;
+        lead.updatedAt = new Date();
+      }
+    },
+    // Update nurture status (for Kanban drag-drop)
+    updateNurtureStatus(state, action: PayloadAction<{ leadId: string; status: NurtureStatus }>) {
+      const lead = state.leads.find(l => l.id === action.payload.leadId);
+      if (lead && lead.nurtureMode !== 'none') {
+        lead.nurtureStatus = action.payload.status;
+        lead.updatedAt = new Date();
+      }
+    },
+    // Log nurture touch - advances cadence
+    logNurtureTouch(state, action: PayloadAction<{ leadId: string; channel: TouchChannel; responseReceived: boolean; notes?: string }>) {
+      const lead = state.leads.find(l => l.id === action.payload.leadId);
+      if (lead && lead.nurtureMode !== 'none' && lead.nurtureCadenceId) {
+        const cadence = CADENCES.find(c => c.id === lead.nurtureCadenceId);
+        if (cadence) {
+          const now = new Date();
+          // Update lead touch info
+          lead.lastTouchAt = now;
+          lead.lastTouchChannel = action.payload.channel;
+          
+          // Handle response tracking
+          if (!action.payload.responseReceived) {
+            lead.touchesNoResponse++;
+            lead.nurtureStatus = 'touched_waiting';
+          } else {
+            lead.touchesNoResponse = 0;
+            lead.nurtureStatus = 'reengaged';
+          }
+          
+          // Advance cadence
+          const nextIndex = (lead.nurtureStepIndex ?? 0) + 1;
+          lead.nurtureStepIndex = nextIndex;
+          
+          if (nextIndex >= cadence.steps.length) {
+            // Cadence complete - move to exit
+            lead.nurtureStatus = 'exit';
+            lead.nextTouchAt = null;
+          } else if (lead.enrolledInNurtureAt) {
+            lead.nextTouchAt = calculateNextTouchDate(lead.enrolledInNurtureAt, nextIndex, cadence);
+            lead.nurtureStatus = 'needs_touch';
+          }
+          
+          // Recalculate priority score
+          lead.nurturePriorityScore = calculateNurturePriorityScore(lead);
+          lead.updatedAt = now;
+          
+          // Add touch record
+          const touch: Touch = {
+            id: Date.now().toString(),
+            leadId: action.payload.leadId,
+            userId: state.user?.id || 'demo',
+            channel: action.payload.channel,
+            responseReceived: action.payload.responseReceived,
+            notes: action.payload.notes,
+            createdAt: now,
+          };
+          state.touches.push(touch);
+        }
+      }
+    },
+    // Snooze nurture touch
+    snoozeNurtureTouch(state, action: PayloadAction<{ leadId: string; days: number }>) {
+      const lead = state.leads.find(l => l.id === action.payload.leadId);
+      if (lead && lead.nurtureMode !== 'none') {
+        const newDate = new Date();
+        newDate.setDate(newDate.getDate() + action.payload.days);
+        lead.nextTouchAt = newDate;
+        lead.updatedAt = new Date();
+      }
+    },
+    // Move back to pipeline from nurture
+    moveToPipeline(state, action: PayloadAction<{ leadId: string; stage: Stage }>) {
+      const lead = state.leads.find(l => l.id === action.payload.leadId);
+      if (lead) {
+        lead.stage = action.payload.stage;
+        lead.nurtureMode = 'none';
+        lead.nurtureCadenceId = null;
+        lead.nurtureStatus = null;
+        lead.nurtureStepIndex = null;
+        lead.enrolledInNurtureAt = null;
+        lead.nextTouchAt = null;
+        lead.updatedAt = new Date();
+      }
+    },
   },
 });
 
@@ -142,6 +263,13 @@ export const {
   setSearchQuery,
   setStageFilter,
   setTerritoryFilter,
+  setNurtureTab,
+  enrollInNurture,
+  removeFromNurture,
+  updateNurtureStatus,
+  logNurtureTouch,
+  snoozeNurtureTouch,
+  moveToPipeline,
 } = appSlice.actions;
 
 export const store = configureStore({

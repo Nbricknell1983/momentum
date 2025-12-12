@@ -18,6 +18,82 @@ export type TaskStatus = 'pending' | 'completed' | 'snoozed';
 
 export type TrafficLightStatus = 'green' | 'amber' | 'red';
 
+// Nurture system types
+export type NurtureMode = 'none' | 'active' | 'passive';
+export type NurtureCadenceId = 'active_30' | 'passive_90' | null;
+export type NurtureStatus = 'new' | 'touched_waiting' | 'needs_touch' | 'reengaged' | 'dormant' | 'exit' | null;
+export type TouchChannel = 'call' | 'sms' | 'email';
+
+export const NURTURE_STATUS_LABELS: Record<string, string> = {
+  new: 'New to Nurture',
+  touched_waiting: 'Touched - Awaiting Response',
+  needs_touch: 'Needs Next Touch',
+  reengaged: 'Re-engaged',
+  dormant: 'Dormant',
+  exit: 'Exit',
+};
+
+export const NURTURE_STATUS_ORDER: NurtureStatus[] = [
+  'new',
+  'touched_waiting',
+  'needs_touch',
+  'reengaged',
+  'dormant',
+  'exit',
+];
+
+export interface CadenceStep {
+  dayOffset: number;
+  channel: TouchChannel;
+}
+
+export interface Cadence {
+  id: NurtureCadenceId;
+  name: string;
+  mode: 'active' | 'passive';
+  steps: CadenceStep[];
+}
+
+// Default cadences as per requirements
+export const CADENCES: Cadence[] = [
+  {
+    id: 'active_30',
+    name: 'Active Nurture (30 days)',
+    mode: 'active',
+    steps: [
+      { dayOffset: 1, channel: 'call' },
+      { dayOffset: 3, channel: 'sms' },
+      { dayOffset: 5, channel: 'email' },
+      { dayOffset: 8, channel: 'call' },
+      { dayOffset: 10, channel: 'sms' },
+      { dayOffset: 14, channel: 'email' },
+      { dayOffset: 17, channel: 'call' },
+      { dayOffset: 21, channel: 'sms' },
+      { dayOffset: 30, channel: 'call' },
+    ],
+  },
+  {
+    id: 'passive_90',
+    name: 'Passive Nurture (90 days)',
+    mode: 'passive',
+    steps: [
+      { dayOffset: 30, channel: 'email' },
+      { dayOffset: 60, channel: 'sms' },
+      { dayOffset: 90, channel: 'call' },
+    ],
+  },
+];
+
+export interface Touch {
+  id: string;
+  leadId: string;
+  userId: string;
+  channel: TouchChannel;
+  responseReceived: boolean;
+  notes?: string;
+  createdAt: Date;
+}
+
 export interface Lead {
   id: string;
   userId: string;
@@ -39,6 +115,18 @@ export interface Lead {
   contactName?: string;
   notes?: string;
   crmLink?: string;
+  // Nurture fields
+  nurtureMode: NurtureMode;
+  nurtureCadenceId: NurtureCadenceId;
+  nurtureStatus: NurtureStatus;
+  nurtureStepIndex: number | null;
+  enrolledInNurtureAt: Date | null;
+  nextTouchAt: Date | null;
+  lastTouchAt: Date | null;
+  lastTouchChannel: TouchChannel | null;
+  touchesNoResponse: number;
+  engagementScore: number;
+  nurturePriorityScore: number;
 }
 
 export interface Activity {
@@ -170,3 +258,76 @@ export function getTrafficLightStatus(lead: Lead): TrafficLightStatus {
   
   return 'green';
 }
+
+// Calculate nurture priority score based on requirements:
+// +5 if response in last 14 days
+// +3 if high MRR (>500)
+// +2 if previously Qualified/Proposal
+// -2 per unanswered touch
+// -5 if silent > 45 days
+export function calculateNurturePriorityScore(lead: Lead): number {
+  let score = 0;
+  const now = new Date();
+  
+  // +5 if response in last 14 days (touchesNoResponse == 0 and lastTouchAt within 14 days)
+  if (lead.lastTouchAt && lead.touchesNoResponse === 0) {
+    const daysSinceTouch = Math.floor((now.getTime() - new Date(lead.lastTouchAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceTouch <= 14) {
+      score += 5;
+    }
+  }
+  
+  // +3 if high MRR (>500)
+  if (lead.mrr && lead.mrr > 500) {
+    score += 3;
+  }
+  
+  // +2 if previously Qualified/Proposal
+  if (lead.stage === 'qualified' || lead.stage === 'proposal' || lead.stage === 'discovery') {
+    score += 2;
+  }
+  
+  // -2 per unanswered touch
+  score -= lead.touchesNoResponse * 2;
+  
+  // -5 if silent > 45 days
+  if (lead.lastTouchAt) {
+    const daysSilent = Math.floor((now.getTime() - new Date(lead.lastTouchAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSilent > 45) {
+      score -= 5;
+    }
+  }
+  
+  return score;
+}
+
+// Get cadence by mode
+export function getCadenceByMode(mode: 'active' | 'passive'): Cadence | undefined {
+  return CADENCES.find(c => c.mode === mode);
+}
+
+// Calculate next touch date based on cadence
+export function calculateNextTouchDate(enrolledAt: Date, stepIndex: number, cadence: Cadence): Date | null {
+  if (stepIndex >= cadence.steps.length) {
+    return null; // Cadence complete
+  }
+  const step = cadence.steps[stepIndex];
+  const nextDate = new Date(enrolledAt);
+  nextDate.setDate(nextDate.getDate() + step.dayOffset);
+  return nextDate;
+}
+
+// Default nurture fields for a new lead
+export const DEFAULT_NURTURE_FIELDS = {
+  nurtureMode: 'none' as NurtureMode,
+  nurtureCadenceId: null as NurtureCadenceId,
+  nurtureStatus: null as NurtureStatus,
+  nurtureStepIndex: null,
+  enrolledInNurtureAt: null,
+  nextTouchAt: null,
+  lastTouchAt: null,
+  lastTouchChannel: null as TouchChannel | null,
+  touchesNoResponse: 0,
+  engagementScore: 0,
+  nurturePriorityScore: 0,
+};

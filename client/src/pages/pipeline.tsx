@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setTerritoryFilter } from '@/store';
-import { Stage, STAGE_ORDER, STAGE_LABELS, Lead } from '@/lib/types';
+import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS } from '@/lib/types';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -88,6 +88,7 @@ export default function PipelinePage() {
       createdAt: new Date(),
       updatedAt: new Date(),
       archived: false,
+      ...DEFAULT_NURTURE_FIELDS,
     };
     
     dispatch(addLead(newLead));
@@ -113,7 +114,6 @@ export default function PipelinePage() {
 
   const handleAddAnyway = () => {
     setShowArchivedWarning(false);
-    // Call handleAddLead again, this time it will proceed since showArchivedWarning was true
     const newLead: Lead = {
       id: uuidv4(),
       userId: user?.id || 'demo',
@@ -126,6 +126,7 @@ export default function PipelinePage() {
       createdAt: new Date(),
       updatedAt: new Date(),
       archived: false,
+      ...DEFAULT_NURTURE_FIELDS,
     };
     dispatch(addLead(newLead));
     setNewCompanyName('');
