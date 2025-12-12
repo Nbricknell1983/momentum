@@ -68,6 +68,8 @@ const appSlice = createSlice({
             lead.enrolledInNurtureAt = now;
             lead.nextTouchAt = calculateNextTouchDate(now, 0, cadence);
             lead.touchesNoResponse = 0;
+            // Switch to passive tab so user sees the enrolled lead
+            state.nurtureTab = 'passive';
           }
         }
       }
