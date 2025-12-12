@@ -123,7 +123,6 @@ export const STAGE_ORDER: Stage[] = [
   'qualified',
   'discovery',
   'proposal',
-  'verbal_commit',
   'won',
   'lost',
   'nurture',
