@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { insertLeadSchema, insertActivitySchema } from "@shared/schema";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -13,7 +14,106 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Generate Daily Plan Summary
+  // ============================================
+  // Leads API
+  // ============================================
+  
+  app.get("/api/leads", async (req, res) => {
+    try {
+      const userId = req.query.userId as string | undefined;
+      const leads = await storage.getLeads(userId);
+      res.json(leads);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+      res.status(500).json({ error: "Failed to fetch leads" });
+    }
+  });
+
+  app.get("/api/leads/:id", async (req, res) => {
+    try {
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+      res.json(lead);
+    } catch (error) {
+      console.error("Error fetching lead:", error);
+      res.status(500).json({ error: "Failed to fetch lead" });
+    }
+  });
+
+  app.post("/api/leads", async (req, res) => {
+    try {
+      const parsed = insertLeadSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid lead data", details: parsed.error.errors });
+      }
+      const lead = await storage.createLead(parsed.data);
+      res.status(201).json(lead);
+    } catch (error) {
+      console.error("Error creating lead:", error);
+      res.status(500).json({ error: "Failed to create lead" });
+    }
+  });
+
+  app.put("/api/leads/:id", async (req, res) => {
+    try {
+      const lead = await storage.updateLead(req.params.id, req.body);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+      res.json(lead);
+    } catch (error) {
+      console.error("Error updating lead:", error);
+      res.status(500).json({ error: "Failed to update lead" });
+    }
+  });
+
+  app.delete("/api/leads/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteLead(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting lead:", error);
+      res.status(500).json({ error: "Failed to delete lead" });
+    }
+  });
+
+  // ============================================
+  // Activities API
+  // ============================================
+
+  app.get("/api/leads/:leadId/activities", async (req, res) => {
+    try {
+      const activities = await storage.getActivities(req.params.leadId);
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching activities:", error);
+      res.status(500).json({ error: "Failed to fetch activities" });
+    }
+  });
+
+  app.post("/api/activities", async (req, res) => {
+    try {
+      const parsed = insertActivitySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid activity data", details: parsed.error.errors });
+      }
+      const activity = await storage.createActivity(parsed.data);
+      res.status(201).json(activity);
+    } catch (error) {
+      console.error("Error creating activity:", error);
+      res.status(500).json({ error: "Failed to create activity" });
+    }
+  });
+
+  // ============================================
+  // Daily Plan AI Endpoints
+  // ============================================
+  
   app.post("/api/daily-plan/summary", async (req, res) => {
     try {
       const { leads, metrics, targets } = req.body;
@@ -66,7 +166,6 @@ Keep it motivating but realistic. Focus on prospecting activities.`;
     }
   });
 
-  // Generate End-of-Day Debrief
   app.post("/api/daily-plan/debrief", async (req, res) => {
     try {
       const { targets, completedActions, battleScore } = req.body;
