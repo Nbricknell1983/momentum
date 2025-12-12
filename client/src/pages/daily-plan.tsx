@@ -306,6 +306,111 @@ export default function DailyPlanPage() {
         )}
       </Card>
 
+      {/* Calendar View */}
+      <Card className="p-6">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <Calendar className="h-4 w-4" />
+          Today's Schedule
+        </h2>
+        <div className="relative" data-testid="calendar-view">
+          {/* Time axis */}
+          <div className="flex">
+            <div className="w-16 shrink-0" />
+            <div className="flex-1 grid grid-cols-9 gap-0 text-xs text-muted-foreground mb-2">
+              {['9am', '10am', '11am', '12pm', '1pm', '2pm', '3pm', '4pm', '5pm'].map(time => (
+                <div key={time} className="text-center">{time}</div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Schedule rows */}
+          <div className="space-y-2">
+            {/* Time blocks row */}
+            <div className="flex items-center gap-2">
+              <div className="w-16 shrink-0 text-xs text-muted-foreground">Blocks</div>
+              <div className="flex-1 relative h-12 bg-muted/30 rounded-md overflow-hidden">
+                {dailyPlan.timeBlocks.map(block => {
+                  const startHour = parseInt(block.startTime.split(':')[0]);
+                  const endHour = parseInt(block.endTime.split(':')[0]);
+                  const startOffset = ((startHour - 9) / 8) * 100;
+                  const width = ((endHour - startHour) / 8) * 100;
+                  
+                  const blockColors: Record<string, string> = {
+                    prospecting_calls: 'bg-blue-500/20 border-blue-500/40',
+                    prospecting_doors: 'bg-green-500/20 border-green-500/40',
+                    client_management: 'bg-purple-500/20 border-purple-500/40',
+                    meetings: 'bg-amber-500/20 border-amber-500/40',
+                    admin: 'bg-gray-500/20 border-gray-500/40',
+                  };
+                  
+                  return (
+                    <div
+                      key={block.id}
+                      className={`absolute top-1 bottom-1 rounded border ${blockColors[block.type] || 'bg-muted border-muted-foreground/20'} flex items-center justify-center px-2`}
+                      style={{ left: `${startOffset}%`, width: `${width}%` }}
+                      title={`${block.name}: ${block.startTime} - ${block.endTime}`}
+                    >
+                      <span className="text-xs font-medium truncate flex items-center gap-1">
+                        {block.isLocked && <Lock className="h-3 w-3" />}
+                        {block.name}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Current time indicator */}
+            <div className="flex items-center gap-2">
+              <div className="w-16 shrink-0 text-xs text-muted-foreground">Now</div>
+              <div className="flex-1 relative h-6">
+                {(() => {
+                  const now = new Date();
+                  const currentHour = now.getHours() + now.getMinutes() / 60;
+                  if (currentHour >= 9 && currentHour <= 17) {
+                    const position = ((currentHour - 9) / 8) * 100;
+                    return (
+                      <div 
+                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                        style={{ left: `${position}%` }}
+                      >
+                        <div className="absolute -top-1 -left-1.5 w-3 h-3 rounded-full bg-red-500" />
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-dashed border-muted-foreground/30" />
+                </div>
+              </div>
+            </div>
+            
+            {/* Actions timeline */}
+            <div className="flex items-start gap-2">
+              <div className="w-16 shrink-0 text-xs text-muted-foreground pt-1">Actions</div>
+              <div className="flex-1 flex flex-wrap gap-1">
+                {dailyPlan.actionQueue.slice(0, 6).map(action => (
+                  <Badge 
+                    key={action.id} 
+                    variant={action.status === 'completed' ? 'secondary' : 'outline'}
+                    className={`text-xs ${action.status === 'completed' ? 'opacity-60' : ''}`}
+                  >
+                    {getActionIcon(action.type)}
+                    <span className="ml-1 truncate max-w-20">{action.title.replace('Call ', '')}</span>
+                  </Badge>
+                ))}
+                {dailyPlan.actionQueue.length > 6 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{dailyPlan.actionQueue.length - 6} more
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column - Targets & Time Blocks */}
         <div className="space-y-6">
