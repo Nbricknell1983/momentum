@@ -224,12 +224,12 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
           {/* NEPQ Label */}
           <div className="space-y-1">
             <Label className="text-xs">NEPQ label</Label>
-            <Select value={lead.nepqLabel || ''} onValueChange={(val) => handleUpdateField('nepqLabel', val || undefined)}>
+            <Select value={lead.nepqLabel || 'none'} onValueChange={(val) => handleUpdateField('nepqLabel', val === 'none' ? undefined : val)}>
               <SelectTrigger className="h-9" data-testid={`select-nepq-${lead.id}`}>
                 <SelectValue placeholder="--" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">--</SelectItem>
+                <SelectItem value="none">--</SelectItem>
                 {NEPQ_LABELS.map((label) => (
                   <SelectItem key={label} value={label}>
                     {label}
