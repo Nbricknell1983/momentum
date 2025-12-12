@@ -25,6 +25,9 @@ export default function PipelinePage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newStage, setNewStage] = useState<Stage>('suspect');
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -66,6 +69,9 @@ export default function PipelinePage() {
       companyName: newCompanyName,
       stage: newStage,
       territory: user?.territory || '',
+      contactName: newContactName || undefined,
+      phone: newContactPhone || undefined,
+      email: newContactEmail || undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
       archived: false,
@@ -74,6 +80,9 @@ export default function PipelinePage() {
     dispatch(addLead(newLead));
     setNewCompanyName('');
     setNewStage('suspect');
+    setNewContactName('');
+    setNewContactPhone('');
+    setNewContactEmail('');
     setIsAddDialogOpen(false);
   };
 
@@ -152,6 +161,28 @@ export default function PipelinePage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Primary contact</Label>
+                  <Input
+                    value={newContactName}
+                    onChange={(e) => setNewContactName(e.target.value)}
+                    placeholder="Name"
+                    data-testid="input-new-contact-name"
+                  />
+                  <Input
+                    value={newContactPhone}
+                    onChange={(e) => setNewContactPhone(e.target.value)}
+                    placeholder="Phone"
+                    data-testid="input-new-contact-phone"
+                  />
+                  <Input
+                    value={newContactEmail}
+                    onChange={(e) => setNewContactEmail(e.target.value)}
+                    placeholder="Email"
+                    type="email"
+                    data-testid="input-new-contact-email"
+                  />
                 </div>
                 <Button onClick={handleAddLead} className="w-full" data-testid="button-confirm-add">
                   Add Company
