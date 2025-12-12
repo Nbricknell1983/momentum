@@ -55,6 +55,21 @@ const appSlice = createSlice({
       if (lead) {
         lead.stage = action.payload.stage;
         lead.updatedAt = new Date();
+        
+        // Auto-enroll in passive nurture when stage is set to "nurture"
+        if (action.payload.stage === 'nurture' && lead.nurtureMode === 'none') {
+          const cadence = getCadenceByMode('passive');
+          if (cadence) {
+            const now = new Date();
+            lead.nurtureMode = 'passive';
+            lead.nurtureCadenceId = cadence.id;
+            lead.nurtureStatus = 'new';
+            lead.nurtureStepIndex = 0;
+            lead.enrolledInNurtureAt = now;
+            lead.nextTouchAt = calculateNextTouchDate(now, 0, cadence);
+            lead.touchesNoResponse = 0;
+          }
+        }
       }
     },
     addLead(state, action: PayloadAction<Lead>) {
