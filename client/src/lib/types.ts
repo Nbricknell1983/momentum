@@ -346,3 +346,214 @@ export const DEFAULT_NURTURE_FIELDS = {
   engagementScore: 0,
   nurturePriorityScore: 0,
 };
+
+// ============================================
+// Daily Plan Types (Fanatical Prospecting)
+// ============================================
+
+export type TimeBlockType = 'prospecting_doors' | 'prospecting_calls' | 'client_management' | 'meetings' | 'admin';
+export type ActionType = 'call' | 'door' | 'email' | 'meeting' | 'follow_up' | 'check_in';
+export type ActionStatus = 'pending' | 'completed' | 'skipped';
+export type Urgency = 'high' | 'medium' | 'low';
+
+export interface TimeBlock {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  type: TimeBlockType;
+  activityTarget: number;
+  activitiesCompleted: number;
+  isLocked: boolean;
+}
+
+export interface ActionQueueItem {
+  id: string;
+  type: ActionType;
+  leadId?: string;
+  clientId?: string;
+  title: string;
+  subtitle?: string;
+  timeBlockId?: string;
+  urgency: Urgency;
+  priorityScore: number;
+  status: ActionStatus;
+  completedAt?: Date;
+  battleScorePoints: number;
+}
+
+export interface DailyPlanSummary {
+  todaysFocus: string;
+  nonNegotiableActions: string[];
+  riskAreas: string[];
+  generatedAt: Date;
+}
+
+export interface TargetProgress {
+  target: number;
+  completed: number;
+}
+
+export interface DailyTargets {
+  prospecting: {
+    calls: TargetProgress;
+    doors: TargetProgress;
+    conversations: TargetProgress;
+    meetingsBooked: TargetProgress;
+  };
+  clients: {
+    checkIns: TargetProgress;
+    upsellConversations: TargetProgress;
+    renewalActions: TargetProgress;
+    followUps: TargetProgress;
+  };
+}
+
+export interface DailyDebrief {
+  completed: boolean;
+  aiReview?: string;
+  plannedVsCompleted?: {
+    planned: number;
+    completed: number;
+    percentage: number;
+  };
+  improvements?: string[];
+  tomorrowsFocus?: string;
+  submittedAt?: Date;
+}
+
+export interface RouteStop {
+  id: string;
+  leadId: string;
+  companyName: string;
+  address: string;
+  priority: number;
+  estimatedTime?: string;
+  completed: boolean;
+}
+
+export interface DailyPlan {
+  id: string;
+  date: Date;
+  summary: DailyPlanSummary | null;
+  targets: DailyTargets;
+  timeBlocks: TimeBlock[];
+  actionQueue: ActionQueueItem[];
+  routeStops: RouteStop[];
+  debrief: DailyDebrief;
+  battleScoreEarned: number;
+  hasProspectingBlock: boolean;
+}
+
+export const TIME_BLOCK_LABELS: Record<TimeBlockType, string> = {
+  prospecting_doors: 'Door Knocking',
+  prospecting_calls: 'Prospecting Calls',
+  client_management: 'Client Management',
+  meetings: 'Meetings',
+  admin: 'Admin',
+};
+
+export const ACTION_TYPE_LABELS: Record<ActionType, string> = {
+  call: 'Call',
+  door: 'Door Knock',
+  email: 'Email',
+  meeting: 'Meeting',
+  follow_up: 'Follow-up',
+  check_in: 'Check-in',
+};
+
+export const URGENCY_LABELS: Record<Urgency, string> = {
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
+
+export const BATTLE_SCORE_POINTS: Record<ActionType, number> = {
+  call: 5,
+  door: 10,
+  email: 3,
+  meeting: 25,
+  follow_up: 5,
+  check_in: 5,
+};
+
+export function createDefaultDailyPlan(date: Date): DailyPlan {
+  return {
+    id: `dp-${date.toISOString().split('T')[0]}`,
+    date,
+    summary: null,
+    targets: {
+      prospecting: {
+        calls: { target: 25, completed: 0 },
+        doors: { target: 5, completed: 0 },
+        conversations: { target: 10, completed: 0 },
+        meetingsBooked: { target: 2, completed: 0 },
+      },
+      clients: {
+        checkIns: { target: 5, completed: 0 },
+        upsellConversations: { target: 2, completed: 0 },
+        renewalActions: { target: 3, completed: 0 },
+        followUps: { target: 10, completed: 0 },
+      },
+    },
+    timeBlocks: [
+      {
+        id: 'tb-1',
+        name: 'Morning Prospecting',
+        startTime: '09:00',
+        endTime: '11:00',
+        type: 'prospecting_calls',
+        activityTarget: 15,
+        activitiesCompleted: 0,
+        isLocked: true,
+      },
+      {
+        id: 'tb-2',
+        name: 'Follow-ups',
+        startTime: '11:00',
+        endTime: '12:00',
+        type: 'client_management',
+        activityTarget: 8,
+        activitiesCompleted: 0,
+        isLocked: false,
+      },
+      {
+        id: 'tb-3',
+        name: 'Lunch Meetings',
+        startTime: '12:00',
+        endTime: '14:00',
+        type: 'meetings',
+        activityTarget: 2,
+        activitiesCompleted: 0,
+        isLocked: false,
+      },
+      {
+        id: 'tb-4',
+        name: 'Afternoon Doors',
+        startTime: '14:00',
+        endTime: '16:00',
+        type: 'prospecting_doors',
+        activityTarget: 5,
+        activitiesCompleted: 0,
+        isLocked: true,
+      },
+      {
+        id: 'tb-5',
+        name: 'Admin & Prep',
+        startTime: '16:00',
+        endTime: '17:00',
+        type: 'admin',
+        activityTarget: 0,
+        activitiesCompleted: 0,
+        isLocked: false,
+      },
+    ],
+    actionQueue: [],
+    routeStops: [],
+    debrief: {
+      completed: false,
+    },
+    battleScoreEarned: 0,
+    hasProspectingBlock: true,
+  };
+}

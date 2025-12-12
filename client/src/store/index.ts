@@ -1,5 +1,5 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore } from '@/lib/types';
+import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, DailyPlan, ActionQueueItem, TimeBlock, DailyPlanSummary, DailyDebrief, RouteStop, createDefaultDailyPlan, BATTLE_SCORE_POINTS, ActionType } from '@/lib/types';
 import { mockLeads, mockActivities, mockTasks, mockDailyMetrics, mockUser } from '@/lib/mockData';
 
 // todo: remove mock functionality - replace with Firebase
@@ -12,6 +12,7 @@ interface AppState {
   touches: Touch[];
   cadences: Cadence[];
   dailyMetrics: DailyMetrics[];
+  dailyPlan: DailyPlan | null;
   selectedLeadId: string | null;
   isDrawerOpen: boolean;
   searchQuery: string;
@@ -28,6 +29,7 @@ const initialState: AppState = {
   touches: [],
   cadences: [...DEFAULT_CADENCES],
   dailyMetrics: mockDailyMetrics,
+  dailyPlan: createDefaultDailyPlan(new Date()),
   selectedLeadId: null,
   isDrawerOpen: false,
   searchQuery: '',
@@ -280,6 +282,163 @@ const appSlice = createSlice({
         lead.updatedAt = new Date();
       }
     },
+
+    // ============================================
+    // Daily Plan Actions
+    // ============================================
+    
+    setDailyPlan(state, action: PayloadAction<DailyPlan>) {
+      state.dailyPlan = action.payload;
+    },
+    
+    initializeDailyPlan(state, action: PayloadAction<Date>) {
+      state.dailyPlan = createDefaultDailyPlan(action.payload);
+    },
+    
+    setDailyPlanSummary(state, action: PayloadAction<DailyPlanSummary>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.summary = action.payload;
+      }
+    },
+    
+    addActionToQueue(state, action: PayloadAction<ActionQueueItem>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.actionQueue.push(action.payload);
+      }
+    },
+    
+    removeActionFromQueue(state, action: PayloadAction<string>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.actionQueue = state.dailyPlan.actionQueue.filter(
+          a => a.id !== action.payload
+        );
+      }
+    },
+    
+    completeAction(state, action: PayloadAction<string>) {
+      if (state.dailyPlan) {
+        const actionItem = state.dailyPlan.actionQueue.find(a => a.id === action.payload);
+        if (actionItem && actionItem.status === 'pending') {
+          actionItem.status = 'completed';
+          actionItem.completedAt = new Date();
+          
+          state.dailyPlan.battleScoreEarned += actionItem.battleScorePoints;
+          
+          if (actionItem.timeBlockId) {
+            const timeBlock = state.dailyPlan.timeBlocks.find(
+              tb => tb.id === actionItem.timeBlockId
+            );
+            if (timeBlock) {
+              timeBlock.activitiesCompleted++;
+            }
+          }
+          
+          const actionType = actionItem.type;
+          if (actionType === 'call') {
+            state.dailyPlan.targets.prospecting.calls.completed++;
+          } else if (actionType === 'door') {
+            state.dailyPlan.targets.prospecting.doors.completed++;
+          } else if (actionType === 'meeting') {
+            state.dailyPlan.targets.prospecting.meetingsBooked.completed++;
+          } else if (actionType === 'follow_up') {
+            state.dailyPlan.targets.clients.followUps.completed++;
+          } else if (actionType === 'check_in') {
+            state.dailyPlan.targets.clients.checkIns.completed++;
+          }
+        }
+      }
+    },
+    
+    skipAction(state, action: PayloadAction<string>) {
+      if (state.dailyPlan) {
+        const actionItem = state.dailyPlan.actionQueue.find(a => a.id === action.payload);
+        if (actionItem && actionItem.status === 'pending') {
+          actionItem.status = 'skipped';
+        }
+      }
+    },
+    
+    updateTimeBlock(state, action: PayloadAction<TimeBlock>) {
+      if (state.dailyPlan) {
+        const index = state.dailyPlan.timeBlocks.findIndex(
+          tb => tb.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.dailyPlan.timeBlocks[index] = action.payload;
+        }
+      }
+    },
+    
+    incrementTimeBlockActivity(state, action: PayloadAction<string>) {
+      if (state.dailyPlan) {
+        const timeBlock = state.dailyPlan.timeBlocks.find(tb => tb.id === action.payload);
+        if (timeBlock) {
+          timeBlock.activitiesCompleted++;
+        }
+      }
+    },
+    
+    addRouteStop(state, action: PayloadAction<RouteStop>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.routeStops.push(action.payload);
+      }
+    },
+    
+    removeRouteStop(state, action: PayloadAction<string>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.routeStops = state.dailyPlan.routeStops.filter(
+          rs => rs.id !== action.payload
+        );
+      }
+    },
+    
+    completeRouteStop(state, action: PayloadAction<string>) {
+      if (state.dailyPlan) {
+        const stop = state.dailyPlan.routeStops.find(rs => rs.id === action.payload);
+        if (stop) {
+          stop.completed = true;
+        }
+      }
+    },
+    
+    reorderRouteStops(state, action: PayloadAction<RouteStop[]>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.routeStops = action.payload;
+      }
+    },
+    
+    submitDebrief(state, action: PayloadAction<DailyDebrief>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.debrief = action.payload;
+      }
+    },
+    
+    updateDailyTargets(state, action: PayloadAction<{
+      category: 'prospecting' | 'clients';
+      metric: string;
+      value: number;
+    }>) {
+      if (state.dailyPlan) {
+        const { category, metric, value } = action.payload;
+        if (category === 'prospecting') {
+          const prospecting = state.dailyPlan.targets.prospecting as Record<string, { target: number; completed: number }>;
+          if (prospecting[metric]) {
+            prospecting[metric].completed = value;
+          }
+        } else {
+          const clients = state.dailyPlan.targets.clients as Record<string, { target: number; completed: number }>;
+          if (clients[metric]) {
+            clients[metric].completed = value;
+          }
+        }
+      }
+    },
+    
+    addBattleScore(state, action: PayloadAction<number>) {
+      if (state.dailyPlan) {
+        state.dailyPlan.battleScoreEarned += action.payload;
+      }
+    },
   },
 });
 
@@ -312,6 +471,22 @@ export const {
   logNurtureTouch,
   snoozeNurtureTouch,
   moveToPipeline,
+  setDailyPlan,
+  initializeDailyPlan,
+  setDailyPlanSummary,
+  addActionToQueue,
+  removeActionFromQueue,
+  completeAction,
+  skipAction,
+  updateTimeBlock,
+  incrementTimeBlockActivity,
+  addRouteStop,
+  removeRouteStop,
+  completeRouteStop,
+  reorderRouteStops,
+  submitDebrief,
+  updateDailyTargets,
+  addBattleScore,
 } = appSlice.actions;
 
 export const store = configureStore({
