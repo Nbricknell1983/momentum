@@ -1,0 +1,345 @@
+Build a production-ready AI Agent web app called Momentum Agent that turns daily sales activity into consistent pipeline momentum. The UI should be an admin-style dashboard with a left sidebar, top bar, and a Kanban-style Pipeline board. Leads open in a right-side drawer for fast updates (like the screenshots).
+
+What success looks like
+
+The app must:
+
+make logging activity frictionless (one-click actions, fast drawer editing)
+
+enforce follow-up discipline (traffic-light status, due-today lists, reminders)
+
+guide the rep with stage-aware coaching (questions, scripts, next best actions)
+
+produce daily/weekly momentum reporting (targets vs actuals, trendlines, conversion rates)
+
+generate follow-up assets instantly (email/SMS/call plans) without inventing facts
+
+Tech requirements
+
+Frontend: React + TypeScript + Vite + Tailwind.
+
+State: Redux Toolkit (or Zustand if simpler, but default Redux Toolkit).
+
+Backend: Firebase Auth + Firestore + Cloud Functions + Hosting.
+
+AI: OpenAI API called ONLY from Cloud Functions (never from client).
+
+Must run locally: npm install then npm run dev.
+
+Include README with Firebase setup, emulators, env vars, deployment steps.
+
+Roles (start simple but future-proof)
+
+Single user initially.
+
+Data model should include userId on all docs so multi-user can be added later.
+
+Core modules (must be included)
+1) Pipeline (Kanban Board)
+
+Columns (customizable): Suspect, Contacted, Engaged, Qualified, Discovery/Meeting, Proposal/Solution, Verbal Commit, Won/Lost, Nurture (Parking).
+
+Drag-and-drop cards between stages.
+
+Card shows: Company name, location/territory, next contact date badge, last activity type/date, NEPQ label (optional), MRR (optional), phone (optional).
+
+Top controls: search, filters (territory, stage, due today, overdue, no next date, value range, activity type), and “Add company”.
+
+Bulk actions: set next contact date, add to nurture, archive, export CSV.
+
+2) Lead Drawer (Right-side panel)
+
+When a lead card is clicked, open a drawer with:
+
+Stage dropdown
+
+MRR input (and one-click save)
+
+One-click activity logging buttons with counters and undo:
+
+Log Call
+
+Log Email
+
+Log SMS
+
+Log Meeting
+
+Log Drop-in
+
+“Playbooks” section (stage-aware templates)
+
+NEPQ label dropdown
+
+Primary contact block: name, phone, email + one-click call link
+
+CRM link field (local link paste) with copy/open buttons
+
+Notes + “Start dictation” (browser speech-to-text is acceptable) + save notes
+
+Next contact date picker + “Mark contacted today”
+
+Archive and Delete (with confirmation)
+
+Move left / move right controls for quick stage changes
+
+3) Activity Timeline
+
+Inside lead drawer or lead detail page:
+
+Chronological activity feed with filters
+
+Each activity stores: type, timestamp, notes, outcome, nextContactDate, attachments (optional later)
+
+Quick add activity from timeline
+
+4) Daily Plan (Cadence System)
+
+A dedicated page that creates momentum through a daily structure:
+
+Targets: calls, doors, meetings, follow-ups, proposals, deals (editable per user)
+
+Time blocks (editable): Prospecting, Follow-ups, Meetings, Admin
+
+A “Today’s Focus” list auto-generated from pipeline (due today + highest priority)
+
+Checklist: follow-ups completed, new outreach started, proposals sent
+
+End-of-day debrief prompt (AI)
+
+5) Dashboard (Momentum Score + Analytics)
+
+Include:
+
+Targets vs actuals (today, week-to-date, month-to-date)
+
+Momentum Score and trend chart (daily/weekly)
+
+Conversion funnel metrics:
+
+Suspect → Contacted → Engaged → Qualified → Meeting → Proposal → Won
+
+Activity breakdown by type
+
+Top overdue leads
+
+Upcoming next contact dates
+
+Deals won and value (MRR or estimated value)
+
+6) Tasks (Follow-up discipline)
+
+Tasks list with due dates and filters (today, overdue, this week)
+
+Tasks can be linked to a lead
+
+One-click “Complete” and “Snooze”
+
+Auto-create tasks when nextContactDate is set (optional setting)
+
+Traffic-light follow-up status (must match this logic)
+
+Based on nextContactDate and lastContactDate:
+
+Green: today is before nextContactDate OR (lastContactDate exists and lastContactDate is after nextContactDate)
+
+Amber: today equals nextContactDate
+
+Red: today is after nextContactDate AND (lastContactDate is missing OR lastContactDate is before nextContactDate)
+Display this as a badge on cards and in lists.
+
+AI Agent (must be genuinely useful)
+
+Add an “Agent” panel accessible from:
+
+Dashboard (global coaching)
+
+Pipeline (lead-specific coaching)
+
+Lead drawer (follow-up generation)
+
+The Agent must be stage-aware and able to:
+
+Next Best Actions
+
+Input: today’s targets + current progress + pipeline snapshot (stages, nextContactDate, last outcomes)
+
+Output: prioritized action list (what to do next, who to contact, recommended channel) with a short rationale.
+
+Follow-up Generator (lead-specific)
+
+Inputs: lead data + last interaction notes + desired channel (email/SMS/call plan)
+
+Outputs:
+
+Email draft (professional, concise)
+
+SMS draft (short, compliant)
+
+Call opener + 3 likely objections + responses
+
+7–10 discovery questions (NEPQ-style: situation, problem awareness, consequence, solution awareness, commitment)
+
+Guardrails:
+
+Never invent facts about the lead.
+
+If key info is missing, ask a clarifying question inside the agent response.
+
+Meeting Prep
+
+Inputs: lead + meeting objective
+
+Outputs: agenda, questions, risks, close plan, next steps options.
+
+End-of-day Debrief
+
+Input: today’s activity + outcomes
+
+Output: what worked, what to fix, top follow-ups for tomorrow, and a short plan.
+
+AI implementation requirements
+
+All AI calls must be server-side Cloud Functions.
+
+Log every AI request/response to Firestore (aiLogs) with timestamp, userId, leadId (optional), and token usage if available.
+
+Provide prompt templates in code so they are easy to refine.
+
+Integrations (build now, expand later)
+
+Must include:
+
+Import/Export CSV for leads and activities
+
+Optional: calendar-style view of nextContactDate (simple)
+Later-ready placeholders:
+
+CRM link fields (Salesforce link stored as plain string)
+
+Email/SMS sending should be “draft-only” for now (generate text, copy button). No sending required.
+
+Firestore data model (minimum viable)
+
+Collections:
+
+users/{userId}
+
+name, territory, targets, workingHours
+
+leads/{leadId}
+
+userId
+
+companyName, territory, address, phone, email, website
+
+stage
+
+mrr (number)
+
+neqpLabel (string)
+
+nextContactDate (date)
+
+lastContactDate (date)
+
+lastActivityAt (date)
+
+createdAt, updatedAt
+
+archived (boolean)
+
+activities/{activityId}
+
+userId, leadId
+
+type ("call" | "email" | "sms" | "meeting" | "dropin" | "followup" | "proposal" | "deal")
+
+notes, outcome
+
+createdAt
+
+nextContactDate (date optional)
+
+tasks/{taskId}
+
+userId, leadId (optional)
+
+title, dueAt, status, createdAt
+
+dailyMetrics/{docId} (docId = userId_YYYY-MM-DD)
+
+userId, date
+
+calls, doors, meetings, followups, proposals, deals
+
+momentumScore
+
+Momentum Score (configurable)
+
+Implement a default scoring system:
+
+call = 1
+
+email = 1
+
+sms = 1
+
+drop-in = 2
+
+meeting = 5
+
+proposal sent = 6
+
+deal closed = 15
+Compute daily and weekly totals. Make weights editable in settings.
+
+UI requirements (match the screenshots)
+
+Left sidebar navigation: Dashboard, Pipeline, List, Forecast, Daily Plan, Tasks, Settings.
+
+Pipeline is full-width Kanban with clean spacing.
+
+Lead drawer is compact and action-heavy (one-click logging).
+
+Fast keyboard-friendly UX where possible.
+
+No emoji in UI copy.
+
+Security and validation
+
+Firestore rules: user can only access docs where userId == auth.uid.
+
+Validate inputs in Cloud Functions.
+
+Store OpenAI key in environment variables only.
+
+Deliverables
+
+Working app with all pages above
+
+Firebase config and emulator instructions
+
+Seed demo data script to populate sample leads/stages
+
+Clear README
+
+Build order:
+
+Scaffold app + layout + routing
+
+Auth
+
+Firestore models + rules
+
+Pipeline Kanban + lead drawer
+
+Activity logging + traffic-light logic
+
+Dashboard + momentum scoring
+
+AI Functions + Agent panel
+
+Tasks + Daily Plan
+
+Import/Export + seed script
