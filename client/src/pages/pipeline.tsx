@@ -1,17 +1,15 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { DndContext, DragEndEvent, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { Plus, Filter, Download, Calendar } from 'lucide-react';
+import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { Plus, Filter, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RootState, selectLead, updateLeadStage, addLead, setStageFilter, setTerritoryFilter } from '@/store';
+import { RootState, updateLeadStage, addLead, setStageFilter, setTerritoryFilter } from '@/store';
 import { Stage, STAGE_ORDER, STAGE_LABELS, Lead } from '@/lib/types';
-import KanbanColumn from '@/components/KanbanColumn';
-import LeadCard from '@/components/LeadCard';
-import LeadDrawer from '@/components/LeadDrawer';
+import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
@@ -23,7 +21,7 @@ export default function PipelinePage() {
   const territoryFilter = useSelector((state: RootState) => state.app.territoryFilter);
   const user = useSelector((state: RootState) => state.app.user);
   
-  const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newStage, setNewStage] = useState<Stage>('suspect');
@@ -48,13 +46,7 @@ export default function PipelinePage() {
   // Get unique territories
   const territories = Array.from(new Set(leads.map(l => l.territory).filter(Boolean)));
 
-  const handleDragStart = (event: any) => {
-    const lead = leads.find(l => l.id === event.active.id);
-    if (lead) setActiveLead(lead);
-  };
-
   const handleDragEnd = (event: DragEndEvent) => {
-    setActiveLead(null);
     const { active, over } = event;
     
     if (over && active.id !== over.id) {
@@ -63,10 +55,6 @@ export default function PipelinePage() {
         dispatch(updateLeadStage({ leadId: active.id as string, stage }));
       }
     }
-  };
-
-  const handleLeadClick = (leadId: string) => {
-    dispatch(selectLead(leadId));
   };
 
   const handleAddLead = () => {
@@ -180,16 +168,16 @@ export default function PipelinePage() {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
             <div className="flex gap-4 min-w-max">
               {STAGE_ORDER.slice(0, -2).map(stage => (
-                <KanbanColumn
+                <KanbanColumnExpandable
                   key={stage}
                   stage={stage}
                   leads={getLeadsByStage(stage)}
-                  onLeadClick={handleLeadClick}
+                  expandedLeadId={expandedLeadId}
+                  onLeadToggle={setExpandedLeadId}
                   onAddLead={() => {
                     setNewStage(stage);
                     setIsAddDialogOpen(true);
@@ -197,16 +185,10 @@ export default function PipelinePage() {
                 />
               ))}
             </div>
-            <DragOverlay>
-              {activeLead ? <LeadCard lead={activeLead} isDragging /> : null}
-            </DragOverlay>
           </DndContext>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-
-      {/* Lead Drawer */}
-      <LeadDrawer />
     </div>
   );
 }
