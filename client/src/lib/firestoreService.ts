@@ -1,4 +1,4 @@
-import { db, leadsCollection, activitiesCollection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp } from './firebase';
+import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection } from './firebase';
 import type { Lead, Activity } from './types';
 
 function convertTimestampToDate(data: any): any {
@@ -29,9 +29,24 @@ function convertDatesToTimestamp(data: any): any {
   return data;
 }
 
-export async function fetchLeads(): Promise<Lead[]> {
+function removeUndefinedFields(obj: any): any {
+  const result: any = {};
+  for (const key in obj) {
+    if (obj[key] !== undefined) {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
+
+export async function fetchLeads(orgId: string): Promise<Lead[]> {
+  if (!orgId) {
+    console.warn('fetchLeads called without orgId');
+    return [];
+  }
   try {
-    const q = query(leadsCollection, orderBy('updatedAt', 'desc'));
+    const leadsRef = collection(db, 'orgs', orgId, 'leads');
+    const q = query(leadsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -43,9 +58,13 @@ export async function fetchLeads(): Promise<Lead[]> {
   }
 }
 
-export async function fetchLead(id: string): Promise<Lead | null> {
+export async function fetchLead(orgId: string, id: string): Promise<Lead | null> {
+  if (!orgId) {
+    console.warn('fetchLead called without orgId');
+    return null;
+  }
   try {
-    const docRef = doc(db, 'leads', id);
+    const docRef = doc(db, 'orgs', orgId, 'leads', id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as Lead;
@@ -57,33 +76,50 @@ export async function fetchLead(id: string): Promise<Lead | null> {
   }
 }
 
-export async function createLead(lead: Omit<Lead, 'id'>): Promise<Lead> {
+export async function createLead(orgId: string, lead: Omit<Lead, 'id'>): Promise<Lead> {
+  if (!orgId) {
+    throw new Error('Cannot create lead without orgId');
+  }
+  const cleanedLead = removeUndefinedFields(lead);
   const dataToSave = convertDatesToTimestamp({
-    ...lead,
+    ...cleanedLead,
     createdAt: new Date(),
     updatedAt: new Date(),
   });
-  const docRef = await addDoc(leadsCollection, dataToSave);
-  return { ...lead, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Lead;
+  const leadsRef = collection(db, 'orgs', orgId, 'leads');
+  const docRef = await addDoc(leadsRef, dataToSave);
+  return { ...cleanedLead, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Lead;
 }
 
-export async function updateLeadInFirestore(id: string, updates: Partial<Lead>): Promise<void> {
-  const docRef = doc(db, 'leads', id);
+export async function updateLeadInFirestore(orgId: string, id: string, updates: Partial<Lead>): Promise<void> {
+  if (!orgId) {
+    throw new Error('Cannot update lead without orgId');
+  }
+  const docRef = doc(db, 'orgs', orgId, 'leads', id);
+  const cleanedUpdates = removeUndefinedFields(updates);
   const dataToUpdate = convertDatesToTimestamp({
-    ...updates,
+    ...cleanedUpdates,
     updatedAt: new Date(),
   });
   await updateDoc(docRef, dataToUpdate);
 }
 
-export async function deleteLeadFromFirestore(id: string): Promise<void> {
-  const docRef = doc(db, 'leads', id);
+export async function deleteLeadFromFirestore(orgId: string, id: string): Promise<void> {
+  if (!orgId) {
+    throw new Error('Cannot delete lead without orgId');
+  }
+  const docRef = doc(db, 'orgs', orgId, 'leads', id);
   await deleteDoc(docRef);
 }
 
-export async function fetchActivities(leadId: string): Promise<Activity[]> {
+export async function fetchActivities(orgId: string, leadId: string): Promise<Activity[]> {
+  if (!orgId) {
+    console.warn('fetchActivities called without orgId');
+    return [];
+  }
   try {
-    const q = query(activitiesCollection, where('leadId', '==', leadId), orderBy('createdAt', 'desc'));
+    const activitiesRef = collection(db, 'orgs', orgId, 'activities');
+    const q = query(activitiesRef, where('leadId', '==', leadId), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -95,11 +131,16 @@ export async function fetchActivities(leadId: string): Promise<Activity[]> {
   }
 }
 
-export async function createActivity(activity: Omit<Activity, 'id'>): Promise<Activity> {
+export async function createActivity(orgId: string, activity: Omit<Activity, 'id'>): Promise<Activity> {
+  if (!orgId) {
+    throw new Error('Cannot create activity without orgId');
+  }
+  const cleanedActivity = removeUndefinedFields(activity);
   const dataToSave = convertDatesToTimestamp({
-    ...activity,
+    ...cleanedActivity,
     createdAt: new Date(),
   });
-  const docRef = await addDoc(activitiesCollection, dataToSave);
-  return { ...activity, id: docRef.id, createdAt: new Date() } as Activity;
+  const activitiesRef = collection(db, 'orgs', orgId, 'activities');
+  const docRef = await addDoc(activitiesRef, dataToSave);
+  return { ...cleanedActivity, id: docRef.id, createdAt: new Date() } as Activity;
 }

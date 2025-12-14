@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { createLead as createLeadInFirestore, updateLeadInFirestore } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function PipelinePage() {
   const dispatch = useDispatch();
@@ -23,6 +24,7 @@ export default function PipelinePage() {
   const territoryFilter = useSelector((state: RootState) => state.app.territoryFilter);
   const user = useSelector((state: RootState) => state.app.user);
   const { toast } = useToast();
+  const { user: authUser, orgId } = useAuth();
   
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -64,7 +66,9 @@ export default function PipelinePage() {
         const leadId = active.id as string;
         dispatch(updateLeadStage({ leadId, stage }));
         try {
-          await updateLeadInFirestore(leadId, { stage, updatedAt: new Date() });
+          if (orgId) {
+            await updateLeadInFirestore(orgId, leadId, { stage, updatedAt: new Date() });
+          }
         } catch (error) {
           console.error('Error updating lead stage in Firestore:', error);
         }
@@ -87,8 +91,11 @@ export default function PipelinePage() {
     
     setIsSaving(true);
     try {
+      if (!orgId) {
+        throw new Error('Organization not found');
+      }
       const leadData = {
-        userId: user?.id || 'demo',
+        userId: authUser?.uid || user?.id || 'demo',
         companyName: newCompanyName,
         stage: newStage,
         territory: user?.territory || '',
@@ -101,7 +108,7 @@ export default function PipelinePage() {
         ...DEFAULT_NURTURE_FIELDS,
       };
       
-      const savedLead = await createLeadInFirestore(leadData);
+      const savedLead = await createLeadInFirestore(orgId, leadData);
       dispatch(addLead(savedLead));
       
       toast({
@@ -130,10 +137,10 @@ export default function PipelinePage() {
   };
 
   const handleRestoreArchived = async () => {
-    if (matchingArchivedLead) {
+    if (matchingArchivedLead && orgId) {
       setIsSaving(true);
       try {
-        await updateLeadInFirestore(matchingArchivedLead.id, { archived: false, updatedAt: new Date() });
+        await updateLeadInFirestore(orgId, matchingArchivedLead.id, { archived: false, updatedAt: new Date() });
         dispatch(updateLead({ ...matchingArchivedLead, archived: false, updatedAt: new Date() }));
         toast({
           title: "Company restored",
@@ -160,8 +167,11 @@ export default function PipelinePage() {
     setShowArchivedWarning(false);
     setIsSaving(true);
     try {
+      if (!orgId) {
+        throw new Error('Organization not found');
+      }
       const leadData = {
-        userId: user?.id || 'demo',
+        userId: authUser?.uid || user?.id || 'demo',
         companyName: newCompanyName,
         stage: newStage,
         territory: user?.territory || '',
@@ -173,7 +183,7 @@ export default function PipelinePage() {
         archived: false,
         ...DEFAULT_NURTURE_FIELDS,
       };
-      const savedLead = await createLeadInFirestore(leadData);
+      const savedLead = await createLeadInFirestore(orgId, leadData);
       dispatch(addLead(savedLead));
       toast({
         title: "Company added",

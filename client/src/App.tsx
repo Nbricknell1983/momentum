@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Switch, Route } from 'wouter';
+import { Switch, Route, useLocation } from 'wouter';
 import { Provider, useDispatch } from 'react-redux';
 import { store, setLeads } from './store';
 import { queryClient } from './lib/queryClient';
@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import AppSidebar from '@/components/AppSidebar';
 import TopBar from '@/components/TopBar';
 import AgentPanel from '@/components/AgentPanel';
@@ -17,10 +18,12 @@ import NurturePage from '@/pages/nurture';
 import TasksPage from '@/pages/tasks';
 import DailyPlanPage from '@/pages/daily-plan';
 import SettingsPage from '@/pages/settings';
+import LoginPage from '@/pages/login';
 import NotFound from '@/pages/not-found';
 import { fetchLeads } from '@/lib/firestoreService';
+import { Loader2 } from 'lucide-react';
 
-function Router() {
+function ProtectedRoutes() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
@@ -39,11 +42,14 @@ function Router() {
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const dispatch = useDispatch();
+  const { user, orgId, loading } = useAuth();
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     async function loadLeads() {
+      if (!orgId) return;
       try {
-        const leads = await fetchLeads();
+        const leads = await fetchLeads(orgId);
         if (leads.length > 0) {
           dispatch(setLeads(leads));
         }
@@ -51,8 +57,23 @@ function AppLayout() {
         console.error('Error loading leads from Firestore:', error);
       }
     }
-    loadLeads();
-  }, [dispatch]);
+    if (user && orgId) {
+      loadLeads();
+    }
+  }, [dispatch, user, orgId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    setLocation('/login');
+    return null;
+  }
 
   const sidebarStyle = {
     '--sidebar-width': '16rem',
@@ -66,7 +87,7 @@ function AppLayout() {
         <div className="flex flex-col flex-1 min-w-0">
           <TopBar onAgentClick={() => setIsAgentOpen(true)} />
           <main className="flex-1 overflow-hidden">
-            <Router />
+            <ProtectedRoutes />
           </main>
         </div>
       </div>
@@ -79,14 +100,25 @@ function AppLayout() {
   );
 }
 
+function AppRoutes() {
+  return (
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route component={AppLayout} />
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <TooltipProvider>
-            <AppLayout />
-            <Toaster />
+            <AuthProvider>
+              <AppRoutes />
+              <Toaster />
+            </AuthProvider>
           </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>
