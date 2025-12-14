@@ -358,6 +358,41 @@ export default function PipelinePage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label>Territory</Label>
+                  <div className="flex gap-2">
+                    <Select 
+                      value={newRegionId} 
+                      onValueChange={(val) => {
+                        setNewRegionId(val);
+                        setNewAreaId('');
+                      }}
+                    >
+                      <SelectTrigger className="flex-1" data-testid="select-new-region">
+                        <SelectValue placeholder="Select region..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TERRITORY_CONFIG.map(region => (
+                          <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select 
+                      value={newAreaId} 
+                      onValueChange={setNewAreaId}
+                      disabled={!newRegionId || availableNewLeadAreas.length === 0}
+                    >
+                      <SelectTrigger className="flex-1" data-testid="select-new-area">
+                        <SelectValue placeholder={availableNewLeadAreas.length > 0 ? "Select area..." : "No areas"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableNewLeadAreas.map(area => (
+                          <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <Label>Primary contact</Label>
                   <Input
                     value={newContactName}

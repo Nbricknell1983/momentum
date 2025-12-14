@@ -13,6 +13,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RootState, toggleDrawer, updateLead, updateLeadStage, addActivity, archiveLead, deleteLead } from '@/store';
 import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType } from '@/lib/types';
+import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, getTerritoryDisplayName } from '@/lib/territoryConfig';
 import { countActivitiesByType } from '@/lib/mockData';
 import ActivityButton from './ActivityButton';
 import TrafficLight from './TrafficLight';
@@ -174,6 +175,66 @@ export default function LeadDrawer() {
                 placeholder="0"
                 data-testid="input-mrr"
               />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Territory */}
+          <div className="space-y-2">
+            <Label>Territory</Label>
+            <div className="flex gap-2">
+              <Select 
+                value={lead.regionId || ''} 
+                onValueChange={(val) => {
+                  const fields = computeTerritoryFields(val, null);
+                  dispatch(updateLead({
+                    ...lead,
+                    regionId: fields.regionId,
+                    regionName: fields.regionName,
+                    areaId: null,
+                    areaName: null,
+                    territoryKey: fields.territoryKey,
+                    territory: fields.regionName,
+                    updatedAt: new Date(),
+                  }));
+                }}
+              >
+                <SelectTrigger className="flex-1" data-testid="select-edit-region">
+                  <SelectValue placeholder="Select region..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {TERRITORY_CONFIG.map(region => (
+                    <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select 
+                value={lead.areaId || ''} 
+                onValueChange={(val) => {
+                  if (lead.regionId) {
+                    const fields = computeTerritoryFields(lead.regionId, val);
+                    dispatch(updateLead({
+                      ...lead,
+                      areaId: fields.areaId,
+                      areaName: fields.areaName,
+                      territoryKey: fields.territoryKey,
+                      territory: getTerritoryDisplayName(lead.regionId, val),
+                      updatedAt: new Date(),
+                    }));
+                  }
+                }}
+                disabled={!lead.regionId || getAreasForRegion(lead.regionId || '').length === 0}
+              >
+                <SelectTrigger className="flex-1" data-testid="select-edit-area">
+                  <SelectValue placeholder={lead.regionId && getAreasForRegion(lead.regionId).length > 0 ? "Select area..." : "No areas"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAreasForRegion(lead.regionId || '').map(area => (
+                    <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
