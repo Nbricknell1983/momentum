@@ -42,15 +42,15 @@ function ProtectedRoutes() {
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const dispatch = useDispatch();
-  const { user, orgId, loading, authReady } = useAuth();
+  const { user, orgId, loading, authReady, orgError } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
-      console.log('[App] No user, redirecting to login');
+    if (authReady && !user) {
+      console.log('[App] authReady and no user, redirecting to login');
       setLocation('/login');
     }
-  }, [loading, user, setLocation]);
+  }, [authReady, user, setLocation]);
 
   useEffect(() => {
     async function loadLeads() {
@@ -72,10 +72,25 @@ function AppLayout() {
     }
   }, [dispatch, user, orgId, authReady]);
 
-  if (loading || !user || !authReady) {
+  if (loading || !authReady) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  if (orgError || !orgId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center space-y-4">
+          <p className="text-lg text-destructive">{orgError || 'Organisation not initialised.'}</p>
+          <p className="text-sm text-muted-foreground">Please try signing out and signing in again.</p>
+        </div>
       </div>
     );
   }

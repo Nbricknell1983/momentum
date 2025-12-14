@@ -15,7 +15,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.active == true;
     }
     
-    // Global memberships collection - for looking up user's org
+    // User profiles - source of truth for org membership
+    match /users/{userId} {
+      // Users can only read/write their own profile
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Global memberships collection - legacy, kept for backwards compatibility
     match /memberships/{membershipId} {
       // Users can read their own memberships
       allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;

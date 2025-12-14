@@ -1,0 +1,94 @@
+Firebase Authentication now succeeds (Google sign-in returns a valid UID), but Firestore requests fail with Missing or insufficient permissions during organisation resolution. This is caused by a permission deadlock: the app attempts to discover the user’s organisation by querying org membership documents before an orgId exists, while Firestore rules only allow access once orgId is known. This results in failed reads, redirect loops, and blocked lead creation.
+
+Required Fix – Implement this exactly
+
+1. Fix auth state handling
+
+Do not redirect to /login until Firebase auth state is fully resolved.
+
+Introduce authReady / authLoading.
+
+Only redirect when authReady === true AND currentUser === null.
+
+Block all Firestore reads/writes until auth is resolved and a user exists.
+
+2. Stop discovering organisations via membership queries
+
+Do NOT attempt to locate an organisation by querying /orgs/*/members/*.
+
+This causes a Firestore permission deadlock and must be removed.
+
+3. Add a user profile document as the source of truth
+
+On successful sign-in, read /users/{uid}.
+
+This document must store: { orgId, role, createdAt }.
+
+The authenticated user may read/write only their own /users/{uid} document.
+
+4. First-login bootstrap logic
+If /users/{uid} does NOT exist:
+
+Create a new organisation: /orgs/{newOrgId}.
+
+Create membership: /orgs/{newOrgId}/members/{uid} with { role: "owner", active: true }.
+
+Create user profile: /users/{uid} with { orgId: newOrgId, role: "owner" }.
+
+This bootstrap must complete before any lead reads or writes occur.
+
+5. Organisation resolution flow
+
+After sign-in:
+
+Read /users/{uid}.
+
+Extract and store orgId in app state.
+
+Only AFTER orgId is set:
+
+Fetch leads from /orgs/{orgId}/leads.
+
+Allow “Add Company / Add Lead” actions.
+
+If orgId cannot be resolved:
+
+Block lead actions.
+
+Show: “Organisation not initialised.”
+
+6. Firestore security rules expectations
+
+/users/{uid} → readable/writable only by authenticated user with matching UID.
+
+/orgs/{orgId}/members/{uid} → readable by org members.
+
+/orgs/{orgId}/leads/* → readable and writable only by active org members.
+
+All other paths denied by default.
+
+7. Error handling & logging
+
+When Firestore denies access, log:
+
+uid
+
+orgId
+
+collection/document path
+
+operation (read/write)
+
+This is required to prevent silent failures.
+
+Acceptance Criteria
+
+Google sign-in succeeds.
+
+App does not redirect back to login after sign-in.
+
+Organisation resolves via /users/{uid}.
+
+Leads can be created and fetched without permission errors.
+
+No Missing or insufficient permissions errors in console.

@@ -12,9 +12,6 @@ import {
   getDoc,
   setDoc,
   collection,
-  query,
-  where,
-  getDocs,
   type User 
 } from '@/lib/firebase';
 
@@ -30,6 +27,7 @@ interface AuthContextType {
   orgId: string | null;
   loading: boolean;
   authReady: boolean;
+  orgError: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
@@ -43,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
+  const [orgError, setOrgError] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[Auth] Setting up onAuthStateChanged listener');
@@ -51,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[Auth] onAuthStateChanged fired, user:', firebaseUser?.uid || 'null');
       
       setAuthReady(false);
+      setOrgError(null);
       
       if (firebaseUser) {
         const authUser: AuthUser = {
@@ -62,29 +62,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(authUser);
         
         try {
-          console.log('[Auth] Resolving org for user:', firebaseUser.uid);
-          const resolvedOrgId = await resolveOrCreateOrg(firebaseUser);
-          console.log('[Auth] Resolved orgId:', resolvedOrgId);
-          setOrgId(resolvedOrgId);
+          console.log('[Auth] Resolving org via /users/' + firebaseUser.uid);
+          const resolvedOrgId = await resolveOrCreateUserProfile(firebaseUser);
           
-          const membershipVerified = await verifyMembership(firebaseUser.uid, resolvedOrgId);
-          if (membershipVerified) {
-            console.log('[Auth] Membership verified, authReady = true');
+          if (resolvedOrgId) {
+            console.log('[Auth] Resolved orgId:', resolvedOrgId);
+            setOrgId(resolvedOrgId);
             setAuthReady(true);
+            console.log('[Auth] authReady = true');
           } else {
-            console.error('[Auth] Membership verification failed');
-            setAuthReady(false);
+            console.error('[Auth] Failed to resolve orgId');
+            setOrgId(null);
+            setOrgError('Organisation not initialised.');
+            setAuthReady(true);
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('[Auth] Error resolving org:', error);
+          logFirestoreError('resolveOrCreateUserProfile', `/users/${firebaseUser.uid}`, firebaseUser.uid, null, error);
           setOrgId(null);
-          setAuthReady(false);
+          setOrgError('Failed to initialise organisation. Please try again.');
+          setAuthReady(true);
         }
       } else {
         console.log('[Auth] No user, clearing state');
         setUser(null);
         setOrgId(null);
-        setAuthReady(false);
+        setAuthReady(true);
       }
       setLoading(false);
     });
@@ -92,80 +95,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  async function verifyMembership(uid: string, orgId: string): Promise<boolean> {
+  function logFirestoreError(operation: string, path: string, uid: string | null, orgId: string | null, error: any) {
+    console.error('[Firestore Error]', {
+      operation,
+      path,
+      uid: uid || 'NO_USER',
+      orgId: orgId || 'NO_ORG',
+      errorCode: error?.code,
+      errorMessage: error?.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  async function resolveOrCreateUserProfile(firebaseUser: User): Promise<string | null> {
+    const userDocRef = doc(db, 'users', firebaseUser.uid);
+    
     try {
-      console.log('[Auth] Verifying membership for uid:', uid, 'orgId:', orgId);
-      const memberRef = doc(db, 'orgs', orgId, 'members', uid);
-      const memberSnap = await getDoc(memberRef);
+      console.log('[Auth] Reading user profile at /users/' + firebaseUser.uid);
+      const userSnap = await getDoc(userDocRef);
       
-      if (memberSnap.exists()) {
-        const memberData = memberSnap.data();
-        console.log('[Auth] Member document found:', memberData);
-        return memberData.active === true;
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        console.log('[Auth] User profile found:', userData);
+        
+        if (userData.orgId) {
+          return userData.orgId;
+        } else {
+          console.error('[Auth] User profile exists but has no orgId');
+          return null;
+        }
       }
       
-      console.log('[Auth] Member document not found, checking global memberships');
-      const membershipsRef = collection(db, 'memberships');
-      const q = query(membershipsRef, where('uid', '==', uid), where('orgId', '==', orgId), where('active', '==', true));
-      const snapshot = await getDocs(q);
-      
-      if (!snapshot.empty) {
-        console.log('[Auth] Found membership in global memberships collection');
-        return true;
+      console.log('[Auth] User profile not found, bootstrapping first-time user');
+      return await bootstrapNewUser(firebaseUser);
+    } catch (error: any) {
+      if (error?.code === 'permission-denied') {
+        console.log('[Auth] Permission denied reading user profile, attempting bootstrap');
+        return await bootstrapNewUser(firebaseUser);
       }
-      
-      console.log('[Auth] No valid membership found');
-      return false;
-    } catch (error) {
-      console.error('[Auth] Error verifying membership:', error);
-      return false;
+      throw error;
     }
   }
 
-  async function resolveOrCreateOrg(firebaseUser: User): Promise<string> {
-    console.log('[Auth] Looking for existing membership for uid:', firebaseUser.uid);
+  async function bootstrapNewUser(firebaseUser: User): Promise<string> {
+    console.log('[Auth] Starting first-login bootstrap for uid:', firebaseUser.uid);
     
-    const membershipsRef = collection(db, 'memberships');
-    const q = query(membershipsRef, where('uid', '==', firebaseUser.uid), where('active', '==', true));
-    const snapshot = await getDocs(q);
-
-    if (!snapshot.empty) {
-      const membership = snapshot.docs[0].data();
-      console.log('[Auth] Found existing membership, orgId:', membership.orgId);
-      return membership.orgId;
-    }
-
-    console.log('[Auth] No existing membership, creating new org');
     const orgRef = doc(collection(db, 'orgs'));
     const newOrgId = orgRef.id;
-
-    console.log('[Auth] Creating org document at path: /orgs/' + newOrgId);
+    
+    console.log('[Auth] Step 1: Creating org document at /orgs/' + newOrgId);
     await setDoc(orgRef, {
       name: firebaseUser.displayName ? `${firebaseUser.displayName}'s Organization` : 'My Organization',
       createdAt: new Date(),
       createdBy: firebaseUser.uid,
     });
-
-    console.log('[Auth] Creating member document at path: /orgs/' + newOrgId + '/members/' + firebaseUser.uid);
-    const membershipRef = doc(db, 'orgs', newOrgId, 'members', firebaseUser.uid);
-    await setDoc(membershipRef, {
+    
+    console.log('[Auth] Step 2: Creating member document at /orgs/' + newOrgId + '/members/' + firebaseUser.uid);
+    const memberRef = doc(db, 'orgs', newOrgId, 'members', firebaseUser.uid);
+    await setDoc(memberRef, {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       role: 'owner',
       active: true,
       joinedAt: new Date(),
     });
-
-    console.log('[Auth] Creating global membership document');
-    const globalMembershipRef = doc(collection(db, 'memberships'));
-    await setDoc(globalMembershipRef, {
-      uid: firebaseUser.uid,
+    
+    console.log('[Auth] Step 3: Creating user profile at /users/' + firebaseUser.uid);
+    const userDocRef = doc(db, 'users', firebaseUser.uid);
+    await setDoc(userDocRef, {
       orgId: newOrgId,
       role: 'owner',
-      active: true,
+      createdAt: new Date(),
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
     });
-
-    console.log('[Auth] Org and membership created successfully');
+    
+    console.log('[Auth] Bootstrap complete, orgId:', newOrgId);
     return newOrgId;
   }
 
@@ -219,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       orgId,
       loading,
       authReady,
+      orgError,
       signInWithGoogle,
       signInWithEmail,
       signUpWithEmail,
