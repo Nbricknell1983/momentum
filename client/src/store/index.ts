@@ -18,6 +18,8 @@ interface AppState {
   searchQuery: string;
   stageFilter: Stage | 'all';
   territoryFilter: string | 'all';
+  regionFilter: string | 'all';
+  areaFilter: string | 'all';
   nurtureTab: 'active' | 'passive';
 }
 
@@ -35,6 +37,8 @@ const initialState: AppState = {
   searchQuery: '',
   stageFilter: 'all',
   territoryFilter: 'all',
+  regionFilter: 'all',
+  areaFilter: 'all',
   nurtureTab: 'active',
 };
 
@@ -144,6 +148,13 @@ const appSlice = createSlice({
     },
     setTerritoryFilter(state, action: PayloadAction<string | 'all'>) {
       state.territoryFilter = action.payload;
+    },
+    setRegionFilter(state, action: PayloadAction<string | 'all'>) {
+      state.regionFilter = action.payload;
+      state.areaFilter = 'all';
+    },
+    setAreaFilter(state, action: PayloadAction<string | 'all'>) {
+      state.areaFilter = action.payload;
     },
     setNurtureTab(state, action: PayloadAction<'active' | 'passive'>) {
       state.nurtureTab = action.payload;
@@ -467,6 +478,8 @@ export const {
   setSearchQuery,
   setStageFilter,
   setTerritoryFilter,
+  setRegionFilter,
+  setAreaFilter,
   setNurtureTab,
   addCadence,
   updateCadence,

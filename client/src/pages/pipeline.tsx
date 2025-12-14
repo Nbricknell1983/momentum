@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setTerritoryFilter } from '@/store';
+import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setRegionFilter, setAreaFilter } from '@/store';
 import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS } from '@/lib/types';
+import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, isAreaRequiredForRegion, validateTerritorySelection } from '@/lib/territoryConfig';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -21,7 +22,8 @@ export default function PipelinePage() {
   const leads = useSelector((state: RootState) => state.app.leads);
   const searchQuery = useSelector((state: RootState) => state.app.searchQuery);
   const stageFilter = useSelector((state: RootState) => state.app.stageFilter);
-  const territoryFilter = useSelector((state: RootState) => state.app.territoryFilter);
+  const regionFilter = useSelector((state: RootState) => state.app.regionFilter);
+  const areaFilter = useSelector((state: RootState) => state.app.areaFilter);
   const user = useSelector((state: RootState) => state.app.user);
   const { toast } = useToast();
   const { user: authUser, orgId, authReady } = useAuth();
@@ -33,6 +35,8 @@ export default function PipelinePage() {
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
   const [newContactEmail, setNewContactEmail] = useState('');
+  const [newRegionId, setNewRegionId] = useState('');
+  const [newAreaId, setNewAreaId] = useState('');
   const [showArchivedWarning, setShowArchivedWarning] = useState(false);
   const [matchingArchivedLead, setMatchingArchivedLead] = useState<Lead | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,17 +49,26 @@ export default function PipelinePage() {
     })
   );
 
-  // Filter leads
+  // Get available areas for the selected region filter
+  const availableFilterAreas = regionFilter !== 'all' ? getAreasForRegion(regionFilter) : [];
+  
+  // Get available areas for the new lead form
+  const availableNewLeadAreas = newRegionId ? getAreasForRegion(newRegionId) : [];
+
+  // Filter leads using hierarchical territory fields
   const filteredLeads = leads.filter(lead => {
     if (lead.archived) return false;
     if (searchQuery && !lead.companyName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (stageFilter !== 'all' && lead.stage !== stageFilter) return false;
-    if (territoryFilter !== 'all' && lead.territory !== territoryFilter) return false;
+    
+    // Territory filtering using persisted fields
+    if (regionFilter !== 'all') {
+      if (lead.regionId !== regionFilter) return false;
+      if (areaFilter !== 'all' && lead.areaId !== areaFilter) return false;
+    }
+    
     return true;
   });
-
-  // Get unique territories
-  const territories = Array.from(new Set(leads.map(l => l.territory).filter(Boolean)));
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -89,16 +102,36 @@ export default function PipelinePage() {
       return;
     }
     
+    // Validate territory selection
+    const territoryValidation = validateTerritorySelection(newRegionId, newAreaId || null);
+    if (!territoryValidation.valid) {
+      toast({
+        title: "Validation Error",
+        description: territoryValidation.error,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsSaving(true);
     try {
       if (!orgId) {
         throw new Error('Organization not found');
       }
+      
+      // Compute territory fields
+      const territoryFields = computeTerritoryFields(newRegionId, newAreaId || null);
+      
       const leadData = {
         userId: authUser?.uid || user?.id || 'demo',
         companyName: newCompanyName,
         stage: newStage,
-        territory: user?.territory || '',
+        territory: territoryFields.regionName + (territoryFields.areaName ? ` - ${territoryFields.areaName}` : ''),
+        regionId: territoryFields.regionId,
+        regionName: territoryFields.regionName,
+        areaId: territoryFields.areaId,
+        areaName: territoryFields.areaName,
+        territoryKey: territoryFields.territoryKey,
         contactName: newContactName || null,
         phone: newContactPhone || null,
         email: newContactEmail || null,
@@ -121,6 +154,8 @@ export default function PipelinePage() {
       setNewContactName('');
       setNewContactPhone('');
       setNewContactEmail('');
+      setNewRegionId('');
+      setNewAreaId('');
       setShowArchivedWarning(false);
       setMatchingArchivedLead(null);
       setIsAddDialogOpen(false);
@@ -164,17 +199,37 @@ export default function PipelinePage() {
   };
 
   const handleAddAnyway = async () => {
+    // Validate territory selection
+    const territoryValidation = validateTerritorySelection(newRegionId, newAreaId || null);
+    if (!territoryValidation.valid) {
+      toast({
+        title: "Validation Error",
+        description: territoryValidation.error,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setShowArchivedWarning(false);
     setIsSaving(true);
     try {
       if (!orgId) {
         throw new Error('Organization not found');
       }
+      
+      // Compute territory fields
+      const territoryFields = computeTerritoryFields(newRegionId, newAreaId || null);
+      
       const leadData = {
         userId: authUser?.uid || user?.id || 'demo',
         companyName: newCompanyName,
         stage: newStage,
-        territory: user?.territory || '',
+        territory: territoryFields.regionName + (territoryFields.areaName ? ` - ${territoryFields.areaName}` : ''),
+        regionId: territoryFields.regionId,
+        regionName: territoryFields.regionName,
+        areaId: territoryFields.areaId,
+        areaName: territoryFields.areaName,
+        territoryKey: territoryFields.territoryKey,
         contactName: newContactName || null,
         phone: newContactPhone || null,
         email: newContactEmail || null,
@@ -194,6 +249,8 @@ export default function PipelinePage() {
       setNewContactName('');
       setNewContactPhone('');
       setNewContactEmail('');
+      setNewRegionId('');
+      setNewAreaId('');
       setMatchingArchivedLead(null);
       setIsAddDialogOpen(false);
     } catch (error) {
@@ -230,14 +287,30 @@ export default function PipelinePage() {
             </SelectContent>
           </Select>
           
-          <Select value={territoryFilter} onValueChange={(val) => dispatch(setTerritoryFilter(val))}>
-            <SelectTrigger className="w-40" data-testid="select-filter-territory">
-              <SelectValue placeholder="All Territories" />
+          <Select value={regionFilter} onValueChange={(val) => dispatch(setRegionFilter(val))}>
+            <SelectTrigger className="w-40" data-testid="select-filter-region">
+              <SelectValue placeholder="All Regions" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Territories</SelectItem>
-              {territories.map(territory => (
-                <SelectItem key={territory} value={territory!}>{territory}</SelectItem>
+              <SelectItem value="all">All Regions</SelectItem>
+              {TERRITORY_CONFIG.map(region => (
+                <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Select 
+            value={areaFilter} 
+            onValueChange={(val) => dispatch(setAreaFilter(val))}
+            disabled={regionFilter === 'all' || availableFilterAreas.length === 0}
+          >
+            <SelectTrigger className="w-40" data-testid="select-filter-area">
+              <SelectValue placeholder="All Areas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Areas</SelectItem>
+              {availableFilterAreas.map(area => (
+                <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>

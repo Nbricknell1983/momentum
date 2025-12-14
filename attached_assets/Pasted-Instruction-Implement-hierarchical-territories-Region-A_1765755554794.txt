@@ -1,0 +1,111 @@
+Instruction: Implement hierarchical territories (Region → Area) and persist them in Firestore
+
+Goal: Brisbane is split into areas (North/South/East/West). Territories must be hierarchical and stored in the database, not derived only in the UI, so filtering, reporting, and rep assignment are reliable.
+
+1) Firestore data model (required)
+
+Persist the following fields on every Lead/Company document:
+
+regionId (string, required) — e.g. "brisbane"
+
+regionName (string, required) — e.g. "Brisbane"
+
+areaId (string, optional) — e.g. "north", "south", "east", "west"
+
+areaName (string, optional)
+
+territoryKey (string, required)
+
+territoryKey must be computed and saved as:
+
+With area: "{regionId}:{areaId}" → "brisbane:north"
+
+Without area: "{regionId}:all" → "gold-coast:all"
+
+These fields are the source of truth and must be saved to Firestore on create and update.
+
+2) Central territory configuration
+
+Define a central config used by UI and validation:
+
+Regions:
+
+Brisbane (brisbane)
+
+Gold Coast (gold-coast)
+
+Logan (logan)
+
+Areas:
+
+Brisbane → North, South, East, West
+
+Other regions → no areas (for now)
+
+3) UI filtering behavior
+
+Replace the single Territory dropdown with two linked filters:
+
+Region filter
+
+All Regions + each region
+
+Area filter
+
+Disabled until Region selected
+
+Shows only areas for the selected region
+
+Resets when Region changes
+
+4) Firestore query logic
+
+Filtering must use persisted fields:
+
+All Regions → no territory filter
+
+Region only → where("regionId", "==", selectedRegionId)
+
+Region + Area → where("territoryKey", "==", "{regionId}:{areaId}")
+
+No string parsing or UI-only logic.
+
+5) Lead create/edit behavior
+
+Region is required
+
+Area is conditionally required (e.g. Brisbane)
+
+On save:
+
+Compute territoryKey
+
+Persist all territory fields to Firestore
+
+On edit:
+
+Recompute territoryKey if Region or Area changes
+
+6) Migration for existing data
+
+Perform a one-time migration for existing leads:
+
+Map old territory strings to:
+
+regionId
+
+areaId
+
+territoryKey
+
+Backfill missing fields for all existing documents
+
+Acceptance criteria
+
+Territory fields exist in Firestore for all leads
+
+Filters read from Firestore fields only
+
+Brisbane areas work independently
+
+Reporting by Region and Area is accurate

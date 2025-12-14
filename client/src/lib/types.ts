@@ -114,6 +114,11 @@ export interface Lead {
   userId: string;
   companyName: string;
   territory: string;
+  regionId?: string;
+  regionName?: string;
+  areaId?: string | null;
+  areaName?: string | null;
+  territoryKey?: string;
   address?: string;
   phone?: string;
   email?: string;
