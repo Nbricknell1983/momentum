@@ -60,7 +60,7 @@ function AppLayout() {
       }
       console.log('[App] Auth ready, fetching leads for org:', orgId);
       try {
-        const leads = await fetchLeads(orgId);
+        const leads = await fetchLeads(orgId, true);
         console.log('[App] Fetched', leads.length, 'leads');
         dispatch(setLeads(leads));
       } catch (error) {

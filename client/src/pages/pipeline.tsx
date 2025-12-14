@@ -66,8 +66,8 @@ export default function PipelinePage() {
         const leadId = active.id as string;
         dispatch(updateLeadStage({ leadId, stage }));
         try {
-          if (orgId) {
-            await updateLeadInFirestore(orgId, leadId, { stage, updatedAt: new Date() });
+          if (orgId && authReady) {
+            await updateLeadInFirestore(orgId, leadId, { stage, updatedAt: new Date() }, authReady);
           }
         } catch (error) {
           console.error('Error updating lead stage in Firestore:', error);
@@ -108,7 +108,7 @@ export default function PipelinePage() {
         ...DEFAULT_NURTURE_FIELDS,
       };
       
-      const savedLead = await createLeadInFirestore(orgId, leadData);
+      const savedLead = await createLeadInFirestore(orgId, leadData, authReady);
       dispatch(addLead(savedLead));
       
       toast({
@@ -137,10 +137,10 @@ export default function PipelinePage() {
   };
 
   const handleRestoreArchived = async () => {
-    if (matchingArchivedLead && orgId) {
+    if (matchingArchivedLead && orgId && authReady) {
       setIsSaving(true);
       try {
-        await updateLeadInFirestore(orgId, matchingArchivedLead.id, { archived: false, updatedAt: new Date() });
+        await updateLeadInFirestore(orgId, matchingArchivedLead.id, { archived: false, updatedAt: new Date() }, authReady);
         dispatch(updateLead({ ...matchingArchivedLead, archived: false, updatedAt: new Date() }));
         toast({
           title: "Company restored",
@@ -183,7 +183,7 @@ export default function PipelinePage() {
         archived: false,
         ...DEFAULT_NURTURE_FIELDS,
       };
-      const savedLead = await createLeadInFirestore(orgId, leadData);
+      const savedLead = await createLeadInFirestore(orgId, leadData, authReady);
       dispatch(addLead(savedLead));
       toast({
         title: "Company added",

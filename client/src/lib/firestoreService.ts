@@ -58,8 +58,14 @@ function removeUndefinedFields(obj: any): any {
   return result;
 }
 
-function checkAuthReady(orgId: string | null, operation: string, path: string): boolean {
+function checkAuthReady(orgId: string | null, authReady: boolean, operation: string, path: string): boolean {
   const currentUser = auth.currentUser;
+  
+  if (!authReady) {
+    console.error('[Firestore] BLOCKED:', operation, '- authReady is false. Path:', path);
+    logFirestoreOperation(operation, path, orgId, false, new Error('Auth not ready - membership not verified'));
+    return false;
+  }
   
   if (!currentUser) {
     console.error('[Firestore] BLOCKED:', operation, '- No authenticated user. Path:', path);
@@ -76,10 +82,10 @@ function checkAuthReady(orgId: string | null, operation: string, path: string): 
   return true;
 }
 
-export async function fetchLeads(orgId: string): Promise<Lead[]> {
+export async function fetchLeads(orgId: string, authReady: boolean = false): Promise<Lead[]> {
   const path = `orgs/${orgId}/leads`;
   
-  if (!checkAuthReady(orgId, 'READ', path)) {
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
     return [];
   }
   
@@ -107,10 +113,10 @@ export async function fetchLeads(orgId: string): Promise<Lead[]> {
   }
 }
 
-export async function fetchLead(orgId: string, id: string): Promise<Lead | null> {
+export async function fetchLead(orgId: string, id: string, authReady: boolean = false): Promise<Lead | null> {
   const path = `orgs/${orgId}/leads/${id}`;
   
-  if (!checkAuthReady(orgId, 'READ', path)) {
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
     return null;
   }
   
@@ -131,10 +137,10 @@ export async function fetchLead(orgId: string, id: string): Promise<Lead | null>
   }
 }
 
-export async function createLead(orgId: string, lead: Omit<Lead, 'id'>): Promise<Lead> {
+export async function createLead(orgId: string, lead: Omit<Lead, 'id'>, authReady: boolean = false): Promise<Lead> {
   const path = `orgs/${orgId}/leads`;
   
-  if (!checkAuthReady(orgId, 'WRITE', path)) {
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
     throw new Error('Cannot create lead: not authenticated or no orgId');
   }
   
@@ -163,10 +169,10 @@ export async function createLead(orgId: string, lead: Omit<Lead, 'id'>): Promise
   }
 }
 
-export async function updateLeadInFirestore(orgId: string, id: string, updates: Partial<Lead>): Promise<void> {
+export async function updateLeadInFirestore(orgId: string, id: string, updates: Partial<Lead>, authReady: boolean = false): Promise<void> {
   const path = `orgs/${orgId}/leads/${id}`;
   
-  if (!checkAuthReady(orgId, 'WRITE', path)) {
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
     throw new Error('Cannot update lead: not authenticated or no orgId');
   }
   
@@ -186,10 +192,10 @@ export async function updateLeadInFirestore(orgId: string, id: string, updates: 
   }
 }
 
-export async function deleteLeadFromFirestore(orgId: string, id: string): Promise<void> {
+export async function deleteLeadFromFirestore(orgId: string, id: string, authReady: boolean = false): Promise<void> {
   const path = `orgs/${orgId}/leads/${id}`;
   
-  if (!checkAuthReady(orgId, 'DELETE', path)) {
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
     throw new Error('Cannot delete lead: not authenticated or no orgId');
   }
   
@@ -204,10 +210,10 @@ export async function deleteLeadFromFirestore(orgId: string, id: string): Promis
   }
 }
 
-export async function fetchActivities(orgId: string, leadId: string): Promise<Activity[]> {
+export async function fetchActivities(orgId: string, leadId: string, authReady: boolean = false): Promise<Activity[]> {
   const path = `orgs/${orgId}/activities`;
   
-  if (!checkAuthReady(orgId, 'READ', path)) {
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
     return [];
   }
   
@@ -228,10 +234,10 @@ export async function fetchActivities(orgId: string, leadId: string): Promise<Ac
   }
 }
 
-export async function createActivity(orgId: string, activity: Omit<Activity, 'id'>): Promise<Activity> {
+export async function createActivity(orgId: string, activity: Omit<Activity, 'id'>, authReady: boolean = false): Promise<Activity> {
   const path = `orgs/${orgId}/activities`;
   
-  if (!checkAuthReady(orgId, 'WRITE', path)) {
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
     throw new Error('Cannot create activity: not authenticated or no orgId');
   }
   
