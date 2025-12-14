@@ -3,10 +3,12 @@ import { getFirestore, collection, doc, getDocs, getDoc, addDoc, updateDoc, dele
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
+  authDomain: "prospectr-a8ef3.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
+  storageBucket: "prospectr-a8ef3.firebasestorage.app",
+  messagingSenderId: "204358129964",
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: "G-S7FB5GLPL4",
 };
 
 const app = initializeApp(firebaseConfig);
