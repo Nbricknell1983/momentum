@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { Plus, Filter, Download } from 'lucide-react';
+import { Plus, Filter, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -12,6 +12,8 @@ import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS } from '
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { createLead as createLeadInFirestore, updateLeadInFirestore } from '@/lib/firestoreService';
+import { useToast } from '@/hooks/use-toast';
 
 export default function PipelinePage() {
   const dispatch = useDispatch();
@@ -20,6 +22,7 @@ export default function PipelinePage() {
   const stageFilter = useSelector((state: RootState) => state.app.stageFilter);
   const territoryFilter = useSelector((state: RootState) => state.app.territoryFilter);
   const user = useSelector((state: RootState) => state.app.user);
+  const { toast } = useToast();
   
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -30,6 +33,7 @@ export default function PipelinePage() {
   const [newContactEmail, setNewContactEmail] = useState('');
   const [showArchivedWarning, setShowArchivedWarning] = useState(false);
   const [matchingArchivedLead, setMatchingArchivedLead] = useState<Lead | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -51,21 +55,26 @@ export default function PipelinePage() {
   // Get unique territories
   const territories = Array.from(new Set(leads.map(l => l.territory).filter(Boolean)));
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     
     if (over && active.id !== over.id) {
       const stage = over.id as Stage;
       if (STAGE_ORDER.includes(stage)) {
-        dispatch(updateLeadStage({ leadId: active.id as string, stage }));
+        const leadId = active.id as string;
+        dispatch(updateLeadStage({ leadId, stage }));
+        try {
+          await updateLeadInFirestore(leadId, { stage, updatedAt: new Date() });
+        } catch (error) {
+          console.error('Error updating lead stage in Firestore:', error);
+        }
       }
     }
   };
 
-  const handleAddLead = () => {
+  const handleAddLead = async () => {
     if (!newCompanyName.trim()) return;
     
-    // Check for archived lead with similar name
     const archivedMatch = leads.find(
       l => l.archived && l.companyName.toLowerCase() === newCompanyName.toLowerCase().trim()
     );
@@ -76,66 +85,117 @@ export default function PipelinePage() {
       return;
     }
     
-    const newLead: Lead = {
-      id: uuidv4(),
-      userId: user?.id || 'demo',
-      companyName: newCompanyName,
-      stage: newStage,
-      territory: user?.territory || '',
-      contactName: newContactName || undefined,
-      phone: newContactPhone || undefined,
-      email: newContactEmail || undefined,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      archived: false,
-      ...DEFAULT_NURTURE_FIELDS,
-    };
-    
-    dispatch(addLead(newLead));
-    setNewCompanyName('');
-    setNewStage('suspect');
-    setNewContactName('');
-    setNewContactPhone('');
-    setNewContactEmail('');
-    setShowArchivedWarning(false);
-    setMatchingArchivedLead(null);
-    setIsAddDialogOpen(false);
-  };
-
-  const handleRestoreArchived = () => {
-    if (matchingArchivedLead) {
-      dispatch(updateLead({ ...matchingArchivedLead, archived: false, updatedAt: new Date() }));
+    setIsSaving(true);
+    try {
+      const leadData = {
+        userId: user?.id || 'demo',
+        companyName: newCompanyName,
+        stage: newStage,
+        territory: user?.territory || '',
+        contactName: newContactName || null,
+        phone: newContactPhone || null,
+        email: newContactEmail || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        archived: false,
+        ...DEFAULT_NURTURE_FIELDS,
+      };
+      
+      const savedLead = await createLeadInFirestore(leadData);
+      dispatch(addLead(savedLead));
+      
+      toast({
+        title: "Company added",
+        description: `${newCompanyName} has been saved.`,
+      });
+      
+      setNewCompanyName('');
+      setNewStage('suspect');
+      setNewContactName('');
+      setNewContactPhone('');
+      setNewContactEmail('');
       setShowArchivedWarning(false);
       setMatchingArchivedLead(null);
-      setNewCompanyName('');
       setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving lead:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save company. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleAddAnyway = () => {
+  const handleRestoreArchived = async () => {
+    if (matchingArchivedLead) {
+      setIsSaving(true);
+      try {
+        await updateLeadInFirestore(matchingArchivedLead.id, { archived: false, updatedAt: new Date() });
+        dispatch(updateLead({ ...matchingArchivedLead, archived: false, updatedAt: new Date() }));
+        toast({
+          title: "Company restored",
+          description: `${matchingArchivedLead.companyName} has been restored.`,
+        });
+        setShowArchivedWarning(false);
+        setMatchingArchivedLead(null);
+        setNewCompanyName('');
+        setIsAddDialogOpen(false);
+      } catch (error) {
+        console.error('Error restoring lead:', error);
+        toast({
+          title: "Error",
+          description: "Failed to restore company. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  const handleAddAnyway = async () => {
     setShowArchivedWarning(false);
-    const newLead: Lead = {
-      id: uuidv4(),
-      userId: user?.id || 'demo',
-      companyName: newCompanyName,
-      stage: newStage,
-      territory: user?.territory || '',
-      contactName: newContactName || undefined,
-      phone: newContactPhone || undefined,
-      email: newContactEmail || undefined,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      archived: false,
-      ...DEFAULT_NURTURE_FIELDS,
-    };
-    dispatch(addLead(newLead));
-    setNewCompanyName('');
-    setNewStage('suspect');
-    setNewContactName('');
-    setNewContactPhone('');
-    setNewContactEmail('');
-    setMatchingArchivedLead(null);
-    setIsAddDialogOpen(false);
+    setIsSaving(true);
+    try {
+      const leadData = {
+        userId: user?.id || 'demo',
+        companyName: newCompanyName,
+        stage: newStage,
+        territory: user?.territory || '',
+        contactName: newContactName || null,
+        phone: newContactPhone || null,
+        email: newContactEmail || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        archived: false,
+        ...DEFAULT_NURTURE_FIELDS,
+      };
+      const savedLead = await createLeadInFirestore(leadData);
+      dispatch(addLead(savedLead));
+      toast({
+        title: "Company added",
+        description: `${newCompanyName} has been saved.`,
+      });
+      setNewCompanyName('');
+      setNewStage('suspect');
+      setNewContactName('');
+      setNewContactPhone('');
+      setNewContactEmail('');
+      setMatchingArchivedLead(null);
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving lead:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save company. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getLeadsByStage = (stage: Stage) => {

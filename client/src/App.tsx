@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Switch, Route } from 'wouter';
-import { Provider } from 'react-redux';
-import { store } from './store';
+import { Provider, useDispatch } from 'react-redux';
+import { store, setLeads } from './store';
 import { queryClient } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -18,6 +18,7 @@ import TasksPage from '@/pages/tasks';
 import DailyPlanPage from '@/pages/daily-plan';
 import SettingsPage from '@/pages/settings';
 import NotFound from '@/pages/not-found';
+import { fetchLeads } from '@/lib/firestoreService';
 
 function Router() {
   return (
@@ -37,6 +38,21 @@ function Router() {
 
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    async function loadLeads() {
+      try {
+        const leads = await fetchLeads();
+        if (leads.length > 0) {
+          dispatch(setLeads(leads));
+        }
+      } catch (error) {
+        console.error('Error loading leads from Firestore:', error);
+      }
+    }
+    loadLeads();
+  }, [dispatch]);
 
   const sidebarStyle = {
     '--sidebar-width': '16rem',
