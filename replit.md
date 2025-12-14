@@ -59,11 +59,19 @@ shared/           # Shared code between client/server
 ### Key Features
 1. **Pipeline (Kanban Board)**: Drag-and-drop lead management across sales stages
 2. **Lead Management**: Expandable cards with quick actions, activity logging
-3. **Nurture System**: Active and passive nurture modes with cadence automation
-4. **Activity Tracking**: One-click logging for calls, emails, meetings, drop-ins
-5. **Traffic Light Status**: Visual indicators for lead follow-up urgency
-6. **Momentum Scoring**: Daily/weekly metrics tracking against targets
-7. **AI Agent Panel**: Context-aware AI assistance (placeholder for OpenAI integration)
+3. **Hierarchical Territories**: Region/Area system (e.g., Brisbane → North/South/East/West) with linked filters
+4. **Nurture System**: Active and passive nurture modes with cadence automation
+5. **Activity Tracking**: One-click logging for calls, emails, meetings, drop-ins
+6. **Traffic Light Status**: Visual indicators for lead follow-up urgency
+7. **Momentum Scoring**: Daily/weekly metrics tracking against targets
+8. **AI Agent Panel**: Context-aware AI assistance (placeholder for OpenAI integration)
+
+### Territory System
+- **Configuration**: `client/src/lib/territoryConfig.ts` - Central source of truth for regions and areas
+- **Regions**: Brisbane (with areas), Gold Coast, Logan
+- **Lead Fields**: regionId, regionName, areaId, areaName, territoryKey
+- **Filtering**: Pipeline page has linked Region/Area dropdowns (area resets when region changes)
+- **Migration**: `client/src/lib/migrateTerritories.ts` contains utilities to migrate old territory strings
 
 ### Build and Development
 - Development: `npm run dev` (runs tsx for server with Vite middleware)
