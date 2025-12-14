@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -19,17 +19,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (loading) {
+  useEffect(() => {
+    if (!loading && user) {
+      setLocation('/');
+    }
+  }, [loading, user, setLocation]);
+
+  if (loading || user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
-  }
-
-  if (user) {
-    setLocation('/');
-    return null;
   }
 
   async function handleGoogleSignIn() {

@@ -46,6 +46,12 @@ function AppLayout() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
+    if (!loading && !user) {
+      setLocation('/login');
+    }
+  }, [loading, user, setLocation]);
+
+  useEffect(() => {
     async function loadLeads() {
       if (!orgId) return;
       try {
@@ -62,17 +68,12 @@ function AppLayout() {
     }
   }, [dispatch, user, orgId]);
 
-  if (loading) {
+  if (loading || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
-  }
-
-  if (!user) {
-    setLocation('/login');
-    return null;
   }
 
   const sidebarStyle = {
