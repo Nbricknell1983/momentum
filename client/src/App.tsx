@@ -42,33 +42,37 @@ function ProtectedRoutes() {
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const dispatch = useDispatch();
-  const { user, orgId, loading } = useAuth();
+  const { user, orgId, loading, authReady } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
     if (!loading && !user) {
+      console.log('[App] No user, redirecting to login');
       setLocation('/login');
     }
   }, [loading, user, setLocation]);
 
   useEffect(() => {
     async function loadLeads() {
-      if (!orgId) return;
+      if (!authReady || !orgId) {
+        console.log('[App] Skipping lead fetch - authReady:', authReady, 'orgId:', orgId);
+        return;
+      }
+      console.log('[App] Auth ready, fetching leads for org:', orgId);
       try {
         const leads = await fetchLeads(orgId);
-        if (leads.length > 0) {
-          dispatch(setLeads(leads));
-        }
+        console.log('[App] Fetched', leads.length, 'leads');
+        dispatch(setLeads(leads));
       } catch (error) {
-        console.error('Error loading leads from Firestore:', error);
+        console.error('[App] Error loading leads from Firestore:', error);
       }
     }
-    if (user && orgId) {
+    if (authReady && user && orgId) {
       loadLeads();
     }
-  }, [dispatch, user, orgId]);
+  }, [dispatch, user, orgId, authReady]);
 
-  if (loading || !user) {
+  if (loading || !user || !authReady) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

@@ -1,5 +1,24 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection } from './firebase';
+import { auth } from './firebase';
 import type { Lead, Activity } from './types';
+
+function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
+  const currentUser = auth.currentUser;
+  const logData = {
+    operation,
+    path,
+    uid: currentUser?.uid || 'NO_USER',
+    orgId: orgId || 'NO_ORG',
+    success,
+    timestamp: new Date().toISOString(),
+  };
+  
+  if (success) {
+    console.log('[Firestore]', operation, 'SUCCESS', logData);
+  } else {
+    console.error('[Firestore]', operation, 'DENIED/FAILED', logData, error);
+  }
+}
 
 function convertTimestampToDate(data: any): any {
   if (data === null || data === undefined) return data;
@@ -39,108 +58,196 @@ function removeUndefinedFields(obj: any): any {
   return result;
 }
 
-export async function fetchLeads(orgId: string): Promise<Lead[]> {
+function checkAuthReady(orgId: string | null, operation: string, path: string): boolean {
+  const currentUser = auth.currentUser;
+  
+  if (!currentUser) {
+    console.error('[Firestore] BLOCKED:', operation, '- No authenticated user. Path:', path);
+    logFirestoreOperation(operation, path, orgId, false, new Error('No authenticated user'));
+    return false;
+  }
+  
   if (!orgId) {
-    console.warn('fetchLeads called without orgId');
+    console.error('[Firestore] BLOCKED:', operation, '- No orgId. Path:', path, 'uid:', currentUser.uid);
+    logFirestoreOperation(operation, path, orgId, false, new Error('No orgId'));
+    return false;
+  }
+  
+  return true;
+}
+
+export async function fetchLeads(orgId: string): Promise<Lead[]> {
+  const path = `orgs/${orgId}/leads`;
+  
+  if (!checkAuthReady(orgId, 'READ', path)) {
     return [];
   }
+  
   try {
     const leadsRef = collection(db, 'orgs', orgId, 'leads');
     const q = query(leadsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
+    const leads = snapshot.docs.map(doc => ({
       id: doc.id,
       ...convertTimestampToDate(doc.data()),
     })) as Lead[];
-  } catch (error) {
-    console.error('Error fetching leads:', error);
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return leads;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    
+    if (error.code === 'permission-denied') {
+      console.error('[Firestore] Permission denied for READ on', path);
+      console.error('[Firestore] Current user uid:', auth.currentUser?.uid);
+      console.error('[Firestore] Requested orgId:', orgId);
+    }
+    
     return [];
   }
 }
 
 export async function fetchLead(orgId: string, id: string): Promise<Lead | null> {
-  if (!orgId) {
-    console.warn('fetchLead called without orgId');
+  const path = `orgs/${orgId}/leads/${id}`;
+  
+  if (!checkAuthReady(orgId, 'READ', path)) {
     return null;
   }
+  
   try {
     const docRef = doc(db, 'orgs', orgId, 'leads', id);
     const docSnap = await getDoc(docRef);
+    
     if (docSnap.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
       return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as Lead;
     }
+    
+    logFirestoreOperation('READ', path, orgId, true);
     return null;
-  } catch (error) {
-    console.error('Error fetching lead:', error);
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
     return null;
   }
 }
 
 export async function createLead(orgId: string, lead: Omit<Lead, 'id'>): Promise<Lead> {
-  if (!orgId) {
-    throw new Error('Cannot create lead without orgId');
+  const path = `orgs/${orgId}/leads`;
+  
+  if (!checkAuthReady(orgId, 'WRITE', path)) {
+    throw new Error('Cannot create lead: not authenticated or no orgId');
   }
-  const cleanedLead = removeUndefinedFields(lead);
-  const dataToSave = convertDatesToTimestamp({
-    ...cleanedLead,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-  const leadsRef = collection(db, 'orgs', orgId, 'leads');
-  const docRef = await addDoc(leadsRef, dataToSave);
-  return { ...cleanedLead, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Lead;
+  
+  try {
+    const cleanedLead = removeUndefinedFields(lead);
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedLead,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const leadsRef = collection(db, 'orgs', orgId, 'leads');
+    const docRef = await addDoc(leadsRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedLead, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Lead;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    
+    if (error.code === 'permission-denied') {
+      console.error('[Firestore] Permission denied for WRITE on', path);
+      console.error('[Firestore] Current user uid:', auth.currentUser?.uid);
+      console.error('[Firestore] Requested orgId:', orgId);
+    }
+    
+    throw error;
+  }
 }
 
 export async function updateLeadInFirestore(orgId: string, id: string, updates: Partial<Lead>): Promise<void> {
-  if (!orgId) {
-    throw new Error('Cannot update lead without orgId');
+  const path = `orgs/${orgId}/leads/${id}`;
+  
+  if (!checkAuthReady(orgId, 'WRITE', path)) {
+    throw new Error('Cannot update lead: not authenticated or no orgId');
   }
-  const docRef = doc(db, 'orgs', orgId, 'leads', id);
-  const cleanedUpdates = removeUndefinedFields(updates);
-  const dataToUpdate = convertDatesToTimestamp({
-    ...cleanedUpdates,
-    updatedAt: new Date(),
-  });
-  await updateDoc(docRef, dataToUpdate);
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'leads', id);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp({
+      ...cleanedUpdates,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
 }
 
 export async function deleteLeadFromFirestore(orgId: string, id: string): Promise<void> {
-  if (!orgId) {
-    throw new Error('Cannot delete lead without orgId');
+  const path = `orgs/${orgId}/leads/${id}`;
+  
+  if (!checkAuthReady(orgId, 'DELETE', path)) {
+    throw new Error('Cannot delete lead: not authenticated or no orgId');
   }
-  const docRef = doc(db, 'orgs', orgId, 'leads', id);
-  await deleteDoc(docRef);
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'leads', id);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
 }
 
 export async function fetchActivities(orgId: string, leadId: string): Promise<Activity[]> {
-  if (!orgId) {
-    console.warn('fetchActivities called without orgId');
+  const path = `orgs/${orgId}/activities`;
+  
+  if (!checkAuthReady(orgId, 'READ', path)) {
     return [];
   }
+  
   try {
     const activitiesRef = collection(db, 'orgs', orgId, 'activities');
     const q = query(activitiesRef, where('leadId', '==', leadId), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
+    const activities = snapshot.docs.map(doc => ({
       id: doc.id,
       ...convertTimestampToDate(doc.data()),
     })) as Activity[];
-  } catch (error) {
-    console.error('Error fetching activities:', error);
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return activities;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
     return [];
   }
 }
 
 export async function createActivity(orgId: string, activity: Omit<Activity, 'id'>): Promise<Activity> {
-  if (!orgId) {
-    throw new Error('Cannot create activity without orgId');
+  const path = `orgs/${orgId}/activities`;
+  
+  if (!checkAuthReady(orgId, 'WRITE', path)) {
+    throw new Error('Cannot create activity: not authenticated or no orgId');
   }
-  const cleanedActivity = removeUndefinedFields(activity);
-  const dataToSave = convertDatesToTimestamp({
-    ...cleanedActivity,
-    createdAt: new Date(),
-  });
-  const activitiesRef = collection(db, 'orgs', orgId, 'activities');
-  const docRef = await addDoc(activitiesRef, dataToSave);
-  return { ...cleanedActivity, id: docRef.id, createdAt: new Date() } as Activity;
+  
+  try {
+    const cleanedActivity = removeUndefinedFields(activity);
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedActivity,
+      createdAt: new Date(),
+    });
+    const activitiesRef = collection(db, 'orgs', orgId, 'activities');
+    const docRef = await addDoc(activitiesRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedActivity, id: docRef.id, createdAt: new Date() } as Activity;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
 }
