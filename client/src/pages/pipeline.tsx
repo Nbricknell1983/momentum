@@ -8,13 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setRegionFilter, setAreaFilter } from '@/store';
-import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS } from '@/lib/types';
+import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setRegionFilter, setAreaFilter, addClient, archiveLead } from '@/store';
+import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS, Client, DEFAULT_CLIENT_FIELDS } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, isAreaRequiredForRegion, validateTerritorySelection } from '@/lib/territoryConfig';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { createLead as createLeadInFirestore, updateLeadInFirestore } from '@/lib/firestoreService';
+import { createLead as createLeadInFirestore, updateLeadInFirestore, createClient as createClientInFirestore, createClientHistoryEntry } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -97,13 +97,89 @@ export default function PipelinePage() {
       const stage = over.id as Stage;
       if (STAGE_ORDER.includes(stage)) {
         const leadId = active.id as string;
-        dispatch(updateLeadStage({ leadId, stage }));
-        try {
-          if (orgId && authReady) {
-            await updateLeadInFirestore(orgId, leadId, { stage, updatedAt: new Date() }, authReady);
+        const lead = leads.find(l => l.id === leadId);
+        
+        // Handle conversion to client when moved to "won" stage
+        if (stage === 'won' && lead && orgId && authReady) {
+          try {
+            // Create client from lead data - spread defaults first, then override with lead values
+            const clientData: Omit<Client, 'id'> = {
+              ...DEFAULT_CLIENT_FIELDS,
+              userId: lead.userId,
+              businessName: lead.companyName,
+              primaryContactName: lead.contactName || '',
+              phone: lead.phone,
+              email: lead.email,
+              address: lead.address,
+              regionId: lead.regionId,
+              regionName: lead.regionName,
+              areaId: lead.areaId,
+              areaName: lead.areaName,
+              territoryKey: lead.territoryKey,
+              ownerId: lead.userId,
+              sourceType: 'deal',
+              sourceDealId: lead.id,
+              totalMRR: lead.mrr || 0,
+              notes: lead.notes,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              archived: false,
+            };
+            
+            const savedClient = await createClientInFirestore(orgId, clientData, authReady);
+            dispatch(addClient(savedClient));
+            
+            // Create client history entry
+            await createClientHistoryEntry(orgId, savedClient.id, {
+              clientId: savedClient.id,
+              type: 'converted',
+              summary: `Converted from deal: ${lead.companyName}`,
+              userId: authUser?.uid,
+              metadata: { sourceDealId: lead.id, sourceCompanyName: lead.companyName },
+              createdAt: new Date(),
+            }, authReady);
+            
+            // Archive the lead
+            await updateLeadInFirestore(orgId, leadId, { stage: 'won', archived: true, updatedAt: new Date() }, authReady);
+            dispatch(archiveLead(leadId));
+            dispatch(updateLeadStage({ leadId, stage: 'won' }));
+            
+            toast({
+              title: "Deal Won!",
+              description: (
+                <span>
+                  {lead.companyName} is now a client.{' '}
+                  <a 
+                    href={`/clients?openId=${savedClient.id}`} 
+                    className="underline font-medium"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setLocation(`/clients?openId=${savedClient.id}`);
+                    }}
+                  >
+                    View Client
+                  </a>
+                </span>
+              ),
+            });
+          } catch (error) {
+            console.error('Error converting lead to client:', error);
+            toast({
+              title: "Error",
+              description: "Failed to convert deal to client. Please try again.",
+              variant: "destructive",
+            });
           }
-        } catch (error) {
-          console.error('Error updating lead stage in Firestore:', error);
+        } else {
+          // Normal stage update
+          dispatch(updateLeadStage({ leadId, stage }));
+          try {
+            if (orgId && authReady) {
+              await updateLeadInFirestore(orgId, leadId, { stage, updatedAt: new Date() }, authReady);
+            }
+          } catch (error) {
+            console.error('Error updating lead stage in Firestore:', error);
+          }
         }
       }
     }
