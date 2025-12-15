@@ -1,0 +1,237 @@
+Build a Strategy capability directly inside Clients → Client Details so every paying client always has a clear, client-readable growth plan, backed by AI, and converted into executable actions.
+Add a new top-level tab in Clients → Client Details called Strategy, with four sub-tabs:
+* Overview (Gap View) — client-facing “where you are / gap / where we’re taking you / what’s next,” with optional radar chart + tooltips + explainer.
+* Plan (30/60/90) — the active roadmap and milestones (auto-generated and refreshable).
+* Insights (Assets + Keywords + Competitors) — optional but automatic analysis of website/GBP/social + keyword demand/gaps + competitor benchmarks (cached).
+* Content (Drafts + Approvals) — AI-generated drafts with an approval queue and cadence rules tied to products.
+This Strategy section must be fully usable on its own (no dependency on Pipeline, Daily Planner, or other pages), while still writing to shared records (History, Action Queue, Deliverables) so execution stays connected across the system.
+Core principle: Strategy is never created without context. Persist a required businessProfile (what + where) on the client record and enforce: no strategy, content, or next-best-action output may be generated unless it references businessProfile. Any change to businessProfile triggers a full strategy refresh and produces new Action Queue items automatically.
+
+1) ADD STRATEGY TAB TO CLIENTS PAGE
+Add a new tab in Clients → Client Details named Strategy with 4 sub-tabs:
+* Overview (Gap View)
+* Plan (30/60/90)
+* Insights (Assets + Keywords + Competitors)
+* Content (Drafts + Approvals)
+This Strategy section must be usable without any other pages.
+
+2) CLIENT BUSINESS PROFILE (WHAT + WHERE) IS REQUIRED CONTEXT
+Add a persistent businessProfile object to:
+orgs/{orgId}/clients/{clientId}
+Fields:
+
+businessProfile: {
+  industry: "",
+  primaryServices: [],
+  secondaryServices: [],
+  primaryLocations: [],
+  secondaryLocations: [],
+  serviceAreaType: "local" | "regional" | "multi-location",
+  idealJobType: "",
+  averageJobValue: null,
+  seasonalityNotes: null
+}
+Rules:
+* No strategy, content, or NBA can be generated without referencing businessProfile.
+* Any update to businessProfile triggers a full strategy refresh + new Action Queue items.
+
+3) STRATEGY KICKOFF WIZARD (MINIMUM USER INPUT, NO THINKING)
+In Clients → Strategy, add a button:
+“Start / Refresh Strategy”
+Wizard must be 6 steps max, designed to be completed in 2–4 minutes:
+1. Confirm industry (prefill from businessProfile if exists)
+2. Confirm primary + secondary services (multi-select + add custom)
+3. Confirm primary + secondary locations (multi-select + add suburbs)
+4. Choose ONE primary goal:
+    * Map Pack (Top 3)
+    * More Calls/Leads
+    * Organic Rankings
+    * Lower CPL / Better Lead Quality
+5. Optional URLs (no blocking validation):
+    * websiteUrl
+    * gbpUrl (or placeId)
+    * facebookUrl
+    * instagramUrl
+6. “What’s working / not working” (multi-select + optional notes)
+On submit:
+* Save answers into a strategySession record (see section 6)
+* Immediately queue an AI strategy generation job (server-side)
+
+4) AUTO-STRATEGY CREATION (NO CLIENT LEFT WITHOUT STRATEGY)
+If client.strategyStatus is null OR no active strategyPlan exists:
+Within 24 hours of client creation (or immediately on Deal→Won conversion), AI must:
+* Create a baseline Strategy Plan
+* Create Action Queue items from that plan
+* Write Client History: “Baseline strategy auto-generated”
+
+5) ASSET ANALYSIS (WEBSITE + GBP + SOCIAL) OPTIONAL BUT AUTOMATIC IF URLS PROVIDED
+Add an Insights engine that runs server-side when URLs exist:
+* Website: fetch HTML + key pages, extract titles/headings/body, detect service/location coverage and conversion elements
+* GBP: fetch key profile signals (category/services/photos/posts frequency if available; otherwise store “unknown”)
+* Social: fetch recent public posts only (frequency + themes; no private data)
+Store results under: orgs/{orgId}/clients/{clientId}/insights/{insightId}
+Each insight write must also create a History event: “Assets analysed: website/gbp/social”
+Cache insights:
+* Website insights cache 7 days
+* GBP insights cache 3 days
+* Social insights cache 7 days
+
+6) STRATEGY STORAGE (PLANS + SESSIONS)
+Create these subcollections:
+A) Strategy Sessions (inputs + Q/A) orgs/{orgId}/clients/{clientId}/strategySessions/{sessionId}
+Fields:
+* createdAt, userId
+* wizardAnswers (all answers captured)
+* assetLinks (urls)
+* notes
+B) Strategy Plans (AI output + roadmap + OKRs) orgs/{orgId}/clients/{clientId}/strategyPlans/{planId}
+Fields (minimum):
+
+{
+  "status": "active" | "superseded",
+  "createdAt": "...",
+  "goal": { "primaryGoal": "", "definitionOfSuccess": "" },
+  "currentState": { "summary": "", "scores": { } },
+  "targetState": { "summary": "", "scores": { } },
+  "gapSummary": "",
+  "channelPlan": {
+    "gbp": { "objective": "", "krs": [], "initiatives": [] },
+    "website": { "objective": "", "krs": [], "initiatives": [] },
+    "seo": { "objective": "", "krs": [], "initiatives": [] },
+    "ppc": { "objective": "", "krs": [], "initiatives": [] }
+  },
+  "roadmap_30_60_90": {
+    "d30": [],
+    "d60": [],
+    "d90": []
+  },
+  "nextSteps": []
+}
+Rule:
+* Only one plan can be status=active per client. Creating a new one must mark the old one superseded.
+
+7) KEYWORD DEMAND + KEYWORD GAP (API-DRIVEN, STORED, REUSABLE)
+Add optional “Market Research” inside Insights:
+orgs/{orgId}/clients/{clientId}/marketResearch/{reportId}
+It must support two modes:
+* Google-first mode: Search Console + Keyword Planner (if connected)
+* External provider mode (configurable): DataForSEO (if keys exist)
+Outputs to store:
+* keywordClusters (service + location combos)
+* volumes (range acceptable if Google returns ranges)
+* intent labels (commercial/local/info)
+* detected gaps:
+    * “high demand but no page/supporting content”
+    * “wrong intent covered”
+    * “missing suburb/service coverage”
+Every “gap” must generate at least one Strategy initiative and at least one Action Queue item.
+Cache marketResearch 14–30 days.
+
+8) COMPETITOR MAPPING (LOCAL + OPTIONAL SERP)
+Inside marketResearch, add competitor mapping:
+* Local competitor set from Places/GBP category + radius (or from user-provided competitors)
+* Compare:
+    * review count vs client
+    * posting cadence signals (if available)
+    * category/service completeness signals (if available)
+Store as:
+* competitorList [{ name, placeId, websiteUrl, signals }]
+* competitorBenchmarks used to calculate targetState and gapSummary
+
+9) STRATEGY MUST AUTO-GENERATE EXECUTABLE ACTIONS (NON-OPTIONAL)
+When a Strategy Plan is created or refreshed:
+* Create Action Queue items for every initiative and nextStep
+* Attach:
+    * targetType="client"
+    * targetId=clientId
+    * suggestedActionType
+    * dueAt
+    * priorityScore
+    * nepqQuestions (3)
+    * reason + whyBullets
+Also create:
+* Deliverables/milestones where appropriate (website/seo work)
+Write History:
+* “Strategy applied: actions created”
+* “Strategy applied: deliverables created” (if applicable)
+
+10) AI CLIENT GROWTH ORCHESTRATOR (AUTONOMOUS STRATEGY MAINTENANCE)
+Add a continuous server-side orchestrator that runs without the user initiating it:
+Schedules:
+* Daily: check for missing strategy, overdue deliverables, upcoming review dates
+* Weekly: strategy drift detection + content cadence checks
+* Monthly: refresh market research if enabled and cache expired
+Responsibilities:
+1. Ensure every client always has an active strategy plan
+2. Detect strategy drift (activity completion vs plan, deliverable stalls, declining health trend)
+3. Regenerate strategy when drift detected (or flag “needs_review” and create a corrective Action Queue call)
+4. Generate content drafts automatically when cadence requires it (see section 11)
+5. Always push the next best execution steps into Action Queue
+The user’s role is approval and execution, not planning.
+
+11) AUTONOMOUS CONTENT CADENCE (DRAFTS + APPROVAL QUEUE)
+Create: orgs/{orgId}/clients/{clientId}/contentDrafts/{draftId}
+Draft types:
+* seoBlog
+* gbpPost
+* facebookPost
+* landingPageOutline
+* reviewRequestTemplates
+Cadence rules (examples; configurable per product/cadenceTier):
+* SEO product and no blog drafted in 30 days → generate blog draft
+* GBP product and no GBP post drafted in 14 days → generate GBP post draft
+* New target keyword cluster added → generate supporting content draft
+Every draft must:
+* be stored in DB
+* write Client History (“Draft generated: type”)
+* create Action Queue item: “Review and approve draft”
+Approval actions:
+* Approve → mark draft approved, log Activity, create “publish” task if needed
+* Reject → require reason, suppress regeneration 7 days
+
+12) STRATEGY “GAP VIEW” (CLIENT-FACING WORDS + VISUALS)
+Inside Strategy → Overview, create a Gap View:
+* “Where you are now” (scores + plain-language bullets)
+* “The gap” (one paragraph, no jargon)
+* “Where we are taking you” (targetState summary)
+* “What’s next” (top 3 actions from Action Queue)
+Include a radar/spider chart only if:
+* it has tooltips (desktop hover + mobile tap)
+* it includes a “What am I looking at?” explainer panel
+* it displays “Biggest gap” sentence below the chart
+Chart axes must be client-readable (max 6):
+* GBP Strength
+* Reviews & Trust
+* Local Coverage (services/locations)
+* Website Conversion
+* Content Momentum
+* Competitive Position
+
+13) SHAREABLE STRATEGY LINK + QR CODE
+Add a share feature:
+* Generates a read-only share link to the client’s Strategy Gap View
+* Generates and stores a QR code image for that link
+Storage:
+* orgs/{orgId}/clients/{clientId}/share/{shareId}
+* fields: token, createdAt, expiresAt (optional), permissions=readOnly
+* store qrCodeUrl (or base64)
+Rules:
+* share view is read-only
+* no org data leak; token scopes only to that client’s strategy view
+
+14) STRICT AI OUTPUT REQUIREMENTS (RELIABILITY)
+All AI strategy generation must:
+* run server-side
+* output strict JSON only matching the Strategy Plan schema
+* include a modelVersion
+* include assumptions[] when data is missing (e.g., no GBP URL)
+* never hallucinate volumes; if volumes unknown, label as “unknown” or “range”
+
+15) ACCEPTANCE TESTS (STRATEGY ONLY)
+Pass/fail criteria:
+1. Every client has an active strategy plan within 24h (or immediately after kickoff)
+2. Strategy refresh creates Action Queue tasks automatically
+3. If URLs exist, assets are analysed and reflected in currentState/gap
+4. Content drafts are auto-generated by cadence and queued for approval
+5. Drift detection creates corrective actions weekly if execution stalls
+6. Share link + QR opens a clean client-readable gap view with tooltips/explainer

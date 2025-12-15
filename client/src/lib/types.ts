@@ -666,6 +666,53 @@ export type DeliverableStatus = 'not_started' | 'in_progress' | 'blocked' | 'com
 export type StrategyStatus = 'not_started' | 'in_progress' | 'completed' | 'needs_review';
 export type ChannelStatus = 'not_started' | 'in_progress' | 'live' | 'paused';
 export type CadenceTier = 'high_touch' | 'standard' | 'low_touch';
+export type ServiceAreaType = 'local' | 'regional' | 'multi-location';
+export type StrategyPlanStatus = 'active' | 'superseded';
+export type ContentDraftType = 'seoBlog' | 'gbpPost' | 'facebookPost' | 'landingPageOutline' | 'reviewRequestTemplate';
+export type ContentDraftStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'published';
+export type PrimaryGoal = 'map_pack' | 'more_leads' | 'organic_rankings' | 'lower_cpl';
+
+export interface BusinessProfile {
+  industry: string;
+  primaryServices: string[];
+  secondaryServices: string[];
+  primaryLocations: string[];
+  secondaryLocations: string[];
+  serviceAreaType: ServiceAreaType;
+  idealJobType: string;
+  averageJobValue: number | null;
+  seasonalityNotes: string | null;
+  primaryGoal: PrimaryGoal | null;
+  websiteUrl?: string;
+  gbpUrl?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  workingWell: string[];
+  notWorkingWell: string[];
+  additionalNotes?: string;
+}
+
+export const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
+  industry: '',
+  primaryServices: [],
+  secondaryServices: [],
+  primaryLocations: [],
+  secondaryLocations: [],
+  serviceAreaType: 'local',
+  idealJobType: '',
+  averageJobValue: null,
+  seasonalityNotes: null,
+  primaryGoal: null,
+  workingWell: [],
+  notWorkingWell: [],
+};
+
+export const PRIMARY_GOAL_LABELS: Record<PrimaryGoal, string> = {
+  map_pack: 'Map Pack (Top 3)',
+  more_leads: 'More Calls/Leads',
+  organic_rankings: 'Organic Rankings',
+  lower_cpl: 'Lower CPL / Better Lead Quality',
+};
 
 export interface Product {
   id: string;
@@ -699,7 +746,9 @@ export interface Client {
   territoryKey?: string;
   ownerId: string;
   products: Product[];
+  businessProfile: BusinessProfile | null;
   strategyStatus: StrategyStatus;
+  activeStrategyPlanId?: string;
   lastStrategyReviewAt?: Date;
   nextStrategyReviewAt?: Date;
   healthStatus: HealthStatus;
@@ -733,6 +782,22 @@ export interface Deliverable {
   updatedAt: Date;
 }
 
+export interface WizardAnswers {
+  industry: string;
+  primaryServices: string[];
+  primaryLocations: string[];
+  serviceAreaType: ServiceAreaType;
+  idealJobType: string;
+  averageJobValue: number | null;
+  seasonalityNotes: string | null;
+  primaryGoal: PrimaryGoal | null;
+  websiteUrl?: string;
+  gbpUrl?: string;
+  workingWell: string[];
+  notWorkingWell: string[];
+  additionalNotes?: string;
+}
+
 export interface StrategySession {
   id: string;
   clientId: string;
@@ -741,12 +806,50 @@ export interface StrategySession {
   agenda: string;
   notes: string;
   actionItems: string[];
+  wizardAnswers?: WizardAnswers;
+  assetLinks?: {
+    websiteUrl?: string;
+    gbpUrl?: string;
+    facebookUrl?: string;
+    instagramUrl?: string;
+  };
   createdAt: Date;
+}
+
+export interface ChannelPlan {
+  channel: 'website' | 'gbp' | 'seo' | 'ppc' | 'social';
+  objective: string;
+  keyResults: string[];
+  tactics: string[];
+}
+
+export interface RoadmapMilestone {
+  id: string;
+  title: string;
+  description: string;
+  phase: '30' | '60' | '90';
+  channel: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  completedAt?: Date;
 }
 
 export interface StrategyPlan {
   id: string;
   clientId: string;
+  status: StrategyPlanStatus;
+  goal: PrimaryGoal | null;
+  currentState: {
+    summary: string;
+    strengths: string[];
+    weaknesses: string[];
+  };
+  targetState: {
+    summary: string;
+    outcomes: string[];
+  };
+  gapSummary: string;
+  channelPlan: ChannelPlan[];
+  roadmap_30_60_90: RoadmapMilestone[];
   coreStrategy: string;
   channelOKRs: { channel: string; objective: string; keyResults: string[] }[];
   roadmap30: string[];
@@ -755,6 +858,20 @@ export interface StrategyPlan {
   initiatives: string[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface ContentDraft {
+  id: string;
+  clientId: string;
+  strategyPlanId: string;
+  type: ContentDraftType;
+  title: string;
+  content: string;
+  status: ContentDraftStatus;
+  feedback?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt?: Date;
 }
 
 export interface ClientHistory {

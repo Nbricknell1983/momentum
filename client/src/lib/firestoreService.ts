@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft } from './types';
 import { calculateClientHealth } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -1048,6 +1048,178 @@ export async function deleteStrategyPlan(orgId: string, clientId: string, authRe
     logFirestoreOperation('DELETE', path, orgId, true);
   } catch (error: any) {
     logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Content Draft Functions
+// ============================================
+
+export async function fetchContentDrafts(orgId: string, clientId: string, authReady: boolean = false): Promise<ContentDraft[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/contentDrafts`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const draftsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'contentDrafts');
+    const q = query(draftsRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const drafts = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as ContentDraft[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return drafts;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createContentDraft(orgId: string, clientId: string, draft: Omit<ContentDraft, 'id'>, authReady: boolean = false): Promise<ContentDraft> {
+  const path = `orgs/${orgId}/clients/${clientId}/contentDrafts`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create content draft: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedDraft = removeUndefinedFields(draft);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedDraft,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const draftsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'contentDrafts');
+    const docRef = await addDoc(draftsRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedDraft, id: docRef.id, createdAt: now, updatedAt: now } as ContentDraft;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateContentDraft(orgId: string, clientId: string, draftId: string, updates: Partial<ContentDraft>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/contentDrafts/${draftId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update content draft: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'contentDrafts', draftId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp({
+      ...cleanedUpdates,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function deleteContentDraft(orgId: string, clientId: string, draftId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/contentDrafts/${draftId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete content draft: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'contentDrafts', draftId);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Strategy Plans Collection (versioned)
+// ============================================
+
+export async function fetchStrategyPlans(orgId: string, clientId: string, authReady: boolean = false): Promise<StrategyPlan[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyPlans`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const plansRef = collection(db, 'orgs', orgId, 'clients', clientId, 'strategyPlans');
+    const q = query(plansRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const plans = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as StrategyPlan[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return plans;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createStrategyPlanVersioned(orgId: string, clientId: string, plan: Omit<StrategyPlan, 'id'>, authReady: boolean = false): Promise<StrategyPlan> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyPlans`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create strategy plan: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedPlan = removeUndefinedFields(plan);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedPlan,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const plansRef = collection(db, 'orgs', orgId, 'clients', clientId, 'strategyPlans');
+    const docRef = await addDoc(plansRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedPlan, id: docRef.id, createdAt: now, updatedAt: now } as StrategyPlan;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateStrategyPlanVersioned(orgId: string, clientId: string, planId: string, updates: Partial<StrategyPlan>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyPlans/${planId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update strategy plan: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyPlans', planId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp({
+      ...cleanedUpdates,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
     throw error;
   }
 }

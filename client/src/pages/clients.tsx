@@ -347,6 +347,7 @@ export default function ClientsPage() {
         territoryKey: territoryFields.territoryKey,
         ownerId: authUser?.uid || user?.id || 'demo',
         products: [],
+        businessProfile: null,
         strategyStatus: 'not_started' as StrategyStatus,
         healthStatus: 'green',
         churnRiskScore: 0,
@@ -752,7 +753,7 @@ export default function ClientsPage() {
                                   <div className="flex items-center gap-2 min-w-0">
                                     {deliverableStatusIcons[deliverable.status]}
                                     <span className="font-medium text-sm truncate">{deliverable.title}</span>
-                                    <Badge variant="outline" size="sm">{deliverable.productType}</Badge>
+                                    <Badge variant="outline">{deliverable.productType}</Badge>
                                   </div>
                                   <Select
                                     value={deliverable.status}
