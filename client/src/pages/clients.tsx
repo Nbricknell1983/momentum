@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown } from 'lucide-react';
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,9 +16,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -94,6 +95,10 @@ export default function ClientsPage() {
   const [savingWizard, setSavingWizard] = useState(false);
   const [generatingStrategy, setGeneratingStrategy] = useState<string | null>(null);
 
+  const [clientContentDrafts, setClientContentDrafts] = useState<Record<string, ContentDraft[]>>({});
+  const [loadingContentDrafts, setLoadingContentDrafts] = useState<string | null>(null);
+  const [updatingDraft, setUpdatingDraft] = useState<string | null>(null);
+
   const searchString = useSearch();
 
   useEffect(() => {
@@ -135,6 +140,39 @@ export default function ClientsPage() {
         .finally(() => setLoadingStrategy(null));
     }
   }, [expandedClientId, orgId, authReady]);
+
+  useEffect(() => {
+    if (expandedClientId && orgId && authReady && clientContentDrafts[expandedClientId] === undefined) {
+      setLoadingContentDrafts(expandedClientId);
+      fetchContentDrafts(orgId, expandedClientId, authReady)
+        .then(drafts => {
+          setClientContentDrafts(prev => ({ ...prev, [expandedClientId]: drafts }));
+        })
+        .finally(() => setLoadingContentDrafts(null));
+    }
+  }, [expandedClientId, orgId, authReady]);
+
+  const handleUpdateDraftStatus = async (clientId: string, draftId: string, newStatus: ContentDraftStatus, feedback?: string) => {
+    if (!orgId) return;
+    setUpdatingDraft(draftId);
+    try {
+      const updates: Partial<ContentDraft> = { status: newStatus };
+      if (feedback) updates.feedback = feedback;
+      if (newStatus === 'published') updates.publishedAt = new Date();
+      
+      await updateContentDraft(orgId, clientId, draftId, updates, authReady);
+      setClientContentDrafts(prev => ({
+        ...prev,
+        [clientId]: prev[clientId]?.map(d => d.id === draftId ? { ...d, ...updates, updatedAt: new Date() } : d) || [],
+      }));
+      toast({ title: "Draft updated", description: `Content has been ${newStatus === 'approved' ? 'approved' : newStatus === 'rejected' ? 'rejected' : 'updated'}.` });
+    } catch (error) {
+      console.error('Error updating draft:', error);
+      toast({ title: "Error", description: "Failed to update draft.", variant: "destructive" });
+    } finally {
+      setUpdatingDraft(null);
+    }
+  };
 
   const handleAddSession = async (clientId: string) => {
     if (!newSessionAgenda.trim()) {
@@ -1380,27 +1418,330 @@ export default function ClientsPage() {
                             </TabsContent>
 
                             <TabsContent value="plan" className="space-y-4">
-                              <div className="p-4 border rounded-md text-center text-muted-foreground">
-                                <TrendingUp className="h-8 w-8 mx-auto mb-2" />
-                                <p className="font-medium">30/60/90 Day Roadmap</p>
-                                <p className="text-sm">Complete the Strategy Wizard to generate your marketing roadmap.</p>
-                              </div>
+                              {clientStrategyPlan[client.id] ? (
+                                <div className="space-y-4">
+                                  {/* Core Strategy */}
+                                  <div className="p-4 border rounded-md bg-primary/5">
+                                    <h4 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                                      <Target className="h-5 w-5" />
+                                      Core Strategy
+                                    </h4>
+                                    <p className="text-sm">{clientStrategyPlan[client.id]?.coreStrategy}</p>
+                                  </div>
+
+                                  {/* 30/60/90 Roadmap Phases */}
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* 30 Days */}
+                                    <div className="p-4 border rounded-md">
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <Badge variant="default">30 Days</Badge>
+                                        <span className="text-sm font-medium">Foundation</span>
+                                      </div>
+                                      <ul className="space-y-2">
+                                        {clientStrategyPlan[client.id]?.roadmap30?.map((item: string, idx: number) => (
+                                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                                            <Check className="h-4 w-4 mt-0.5 text-muted-foreground/50 flex-shrink-0" />
+                                            {item}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+
+                                    {/* 60 Days */}
+                                    <div className="p-4 border rounded-md">
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <Badge variant="secondary">60 Days</Badge>
+                                        <span className="text-sm font-medium">Growth</span>
+                                      </div>
+                                      <ul className="space-y-2">
+                                        {clientStrategyPlan[client.id]?.roadmap60?.map((item: string, idx: number) => (
+                                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                                            <Check className="h-4 w-4 mt-0.5 text-muted-foreground/50 flex-shrink-0" />
+                                            {item}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+
+                                    {/* 90 Days */}
+                                    <div className="p-4 border rounded-md">
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <Badge variant="outline">90 Days</Badge>
+                                        <span className="text-sm font-medium">Scale</span>
+                                      </div>
+                                      <ul className="space-y-2">
+                                        {clientStrategyPlan[client.id]?.roadmap90?.map((item: string, idx: number) => (
+                                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                                            <Check className="h-4 w-4 mt-0.5 text-muted-foreground/50 flex-shrink-0" />
+                                            {item}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+
+                                  {/* Detailed Milestones */}
+                                  {clientStrategyPlan[client.id]?.roadmap_30_60_90 && clientStrategyPlan[client.id]!.roadmap_30_60_90.length > 0 && (
+                                    <div className="p-4 border rounded-md">
+                                      <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                        <Calendar className="h-4 w-4" />
+                                        Milestone Tracker
+                                      </h4>
+                                      <div className="space-y-2">
+                                        {clientStrategyPlan[client.id]?.roadmap_30_60_90?.map((milestone: { id: string; title: string; description: string; phase: string; channel: string; status: string }, idx: number) => (
+                                          <div key={milestone.id || idx} className="flex items-center gap-3 p-2 rounded-md hover-elevate">
+                                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                                              milestone.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                                              milestone.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                                              'bg-muted text-muted-foreground'
+                                            }`}>
+                                              {milestone.phase}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium truncate">{milestone.title}</p>
+                                              <p className="text-xs text-muted-foreground truncate">{milestone.description}</p>
+                                            </div>
+                                            <Badge variant="outline">{milestone.channel}</Badge>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Key Initiatives */}
+                                  {clientStrategyPlan[client.id]?.initiatives && clientStrategyPlan[client.id]!.initiatives.length > 0 && (
+                                    <div className="p-4 border rounded-md">
+                                      <h4 className="font-semibold mb-3">Key Initiatives</h4>
+                                      <div className="flex flex-wrap gap-2">
+                                        {clientStrategyPlan[client.id]?.initiatives?.map((initiative: string, idx: number) => (
+                                          <Badge key={idx} variant="secondary">{initiative}</Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="p-4 border rounded-md text-center text-muted-foreground">
+                                  <TrendingUp className="h-8 w-8 mx-auto mb-2" />
+                                  <p className="font-medium">30/60/90 Day Roadmap</p>
+                                  <p className="text-sm">Complete the Strategy Wizard and generate a strategy to see your marketing roadmap.</p>
+                                </div>
+                              )}
                             </TabsContent>
 
                             <TabsContent value="insights" className="space-y-4">
-                              <div className="p-4 border rounded-md text-center text-muted-foreground">
-                                <Lightbulb className="h-8 w-8 mx-auto mb-2" />
-                                <p className="font-medium">Gap Analysis & Insights</p>
-                                <p className="text-sm">Complete the Strategy Wizard to see competitive gaps and opportunities.</p>
-                              </div>
+                              {clientStrategyPlan[client.id] ? (
+                                <div className="space-y-6">
+                                  {/* Gap Summary */}
+                                  <div className="p-4 border rounded-md bg-muted/30">
+                                    <h4 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                                      <Lightbulb className="h-5 w-5 text-amber-500" />
+                                      Gap Analysis Summary
+                                    </h4>
+                                    <p className="text-sm text-muted-foreground">{clientStrategyPlan[client.id]?.gapSummary}</p>
+                                  </div>
+
+                                  {/* Radar Chart */}
+                                  <div className="p-4 border rounded-md">
+                                    <h4 className="font-semibold mb-4">Channel Readiness Assessment</h4>
+                                    <div className="h-72">
+                                      <ResponsiveContainer width="100%" height="100%">
+                                        <RadarChart data={[
+                                          { channel: 'Website', current: client.channelStatus.website === 'live' ? 90 : client.channelStatus.website === 'in_progress' ? 50 : 20, target: 90 },
+                                          { channel: 'GBP', current: client.channelStatus.gbp === 'live' ? 90 : client.channelStatus.gbp === 'in_progress' ? 50 : 20, target: 85 },
+                                          { channel: 'SEO', current: client.channelStatus.seo === 'live' ? 90 : client.channelStatus.seo === 'in_progress' ? 50 : 20, target: 80 },
+                                          { channel: 'PPC', current: client.channelStatus.ppc === 'live' ? 90 : client.channelStatus.ppc === 'in_progress' ? 50 : 20, target: 75 },
+                                          { channel: 'Content', current: 30, target: 70 },
+                                        ]}>
+                                          <PolarGrid />
+                                          <PolarAngleAxis dataKey="channel" tick={{ fontSize: 12 }} />
+                                          <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                                          <Radar name="Current State" dataKey="current" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.3} />
+                                          <Radar name="Target State" dataKey="target" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
+                                          <Legend />
+                                        </RadarChart>
+                                      </ResponsiveContainer>
+                                    </div>
+                                  </div>
+
+                                  {/* Current vs Target State */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="p-4 border rounded-md">
+                                      <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                        <ArrowDown className="h-4 w-4 text-amber-500" />
+                                        Current State
+                                      </h4>
+                                      <p className="text-sm text-muted-foreground mb-3">{clientStrategyPlan[client.id]?.currentState?.summary}</p>
+                                      <div className="space-y-2">
+                                        <div>
+                                          <span className="text-xs font-medium text-green-600">Strengths:</span>
+                                          <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
+                                            {clientStrategyPlan[client.id]?.currentState?.strengths?.map((s: string, idx: number) => (
+                                              <li key={idx}>{s}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                        <div>
+                                          <span className="text-xs font-medium text-red-600">Weaknesses:</span>
+                                          <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
+                                            {clientStrategyPlan[client.id]?.currentState?.weaknesses?.map((w: string, idx: number) => (
+                                              <li key={idx}>{w}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="p-4 border rounded-md">
+                                      <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                        <ArrowUp className="h-4 w-4 text-green-500" />
+                                        Target State (90 Days)
+                                      </h4>
+                                      <p className="text-sm text-muted-foreground mb-3">{clientStrategyPlan[client.id]?.targetState?.summary}</p>
+                                      <div>
+                                        <span className="text-xs font-medium text-primary">Expected Outcomes:</span>
+                                        <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
+                                          {clientStrategyPlan[client.id]?.targetState?.outcomes?.map((o: string, idx: number) => (
+                                            <li key={idx}>{o}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Channel OKRs */}
+                                  {clientStrategyPlan[client.id]?.channelOKRs && clientStrategyPlan[client.id]!.channelOKRs.length > 0 && (
+                                    <div className="p-4 border rounded-md">
+                                      <h4 className="font-semibold mb-3">Channel Objectives & Key Results</h4>
+                                      <div className="space-y-3">
+                                        {clientStrategyPlan[client.id]?.channelOKRs?.map((okr: { channel: string; objective: string; keyResults: string[] }, idx: number) => (
+                                          <div key={idx} className="p-3 bg-muted/30 rounded-md">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <Badge variant="outline" size="sm">{okr.channel}</Badge>
+                                              <span className="text-sm font-medium">{okr.objective}</span>
+                                            </div>
+                                            <ul className="list-disc list-inside text-xs text-muted-foreground ml-2">
+                                              {okr.keyResults?.map((kr: string, krIdx: number) => (
+                                                <li key={krIdx}>{kr}</li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="p-4 border rounded-md text-center text-muted-foreground">
+                                  <Lightbulb className="h-8 w-8 mx-auto mb-2" />
+                                  <p className="font-medium">Gap Analysis & Insights</p>
+                                  <p className="text-sm">Complete the Strategy Wizard and generate a strategy to see competitive gaps and opportunities.</p>
+                                </div>
+                              )}
                             </TabsContent>
 
                             <TabsContent value="content" className="space-y-4">
-                              <div className="p-4 border rounded-md text-center text-muted-foreground">
-                                <PenTool className="h-8 w-8 mx-auto mb-2" />
-                                <p className="font-medium">Content Drafts</p>
-                                <p className="text-sm">AI-generated content for review will appear here.</p>
-                              </div>
+                              {loadingContentDrafts === client.id ? (
+                                <div className="flex items-center justify-center p-8">
+                                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                              ) : clientContentDrafts[client.id]?.length > 0 ? (
+                                <div className="space-y-4">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <h4 className="font-semibold">Content Approval Queue</h4>
+                                    <Badge variant="outline" size="sm">
+                                      {clientContentDrafts[client.id]?.filter(d => d.status === 'pending_approval').length || 0} pending
+                                    </Badge>
+                                  </div>
+                                  
+                                  <div className="space-y-3">
+                                    {clientContentDrafts[client.id]?.map((draft) => (
+                                      <div key={draft.id} className="p-4 border rounded-md space-y-3" data-testid={`content-draft-${draft.id}`}>
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <Badge variant={
+                                                draft.status === 'approved' ? 'default' :
+                                                draft.status === 'rejected' ? 'destructive' :
+                                                draft.status === 'published' ? 'default' :
+                                                draft.status === 'pending_approval' ? 'secondary' : 'outline'
+                                              } size="sm">
+                                                {draft.status === 'pending_approval' ? 'Pending' : 
+                                                 draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
+                                              </Badge>
+                                              <Badge variant="outline" size="sm">{draft.type}</Badge>
+                                            </div>
+                                            <h5 className="font-medium">{draft.title}</h5>
+                                            <p className="text-sm text-muted-foreground mt-1 line-clamp-3">{draft.content}</p>
+                                          </div>
+                                        </div>
+                                        
+                                        {draft.feedback && (
+                                          <div className="p-2 bg-muted/50 rounded text-sm">
+                                            <span className="text-muted-foreground">Feedback:</span> {draft.feedback}
+                                          </div>
+                                        )}
+                                        
+                                        <div className="flex items-center gap-2 pt-2 border-t">
+                                          {draft.status === 'pending_approval' && (
+                                            <>
+                                              <Button
+                                                size="sm"
+                                                variant="default"
+                                                onClick={() => handleUpdateDraftStatus(client.id, draft.id, 'approved')}
+                                                disabled={updatingDraft === draft.id}
+                                                data-testid={`button-approve-draft-${draft.id}`}
+                                              >
+                                                {updatingDraft === draft.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
+                                                Approve
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                onClick={() => handleUpdateDraftStatus(client.id, draft.id, 'rejected')}
+                                                disabled={updatingDraft === draft.id}
+                                                data-testid={`button-reject-draft-${draft.id}`}
+                                              >
+                                                <X className="h-3 w-3 mr-1" />
+                                                Reject
+                                              </Button>
+                                            </>
+                                          )}
+                                          {draft.status === 'approved' && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() => handleUpdateDraftStatus(client.id, draft.id, 'published')}
+                                              disabled={updatingDraft === draft.id}
+                                              data-testid={`button-publish-draft-${draft.id}`}
+                                            >
+                                              {updatingDraft === draft.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
+                                              Mark Published
+                                            </Button>
+                                          )}
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => navigator.clipboard.writeText(draft.content)}
+                                            data-testid={`button-copy-draft-${draft.id}`}
+                                          >
+                                            <Copy className="h-3 w-3 mr-1" />
+                                            Copy
+                                          </Button>
+                                          <span className="text-xs text-muted-foreground ml-auto">
+                                            {new Date(draft.createdAt).toLocaleDateString()}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-4 border rounded-md text-center text-muted-foreground">
+                                  <PenTool className="h-8 w-8 mx-auto mb-2" />
+                                  <p className="font-medium">No Content Drafts</p>
+                                  <p className="text-sm">AI-generated content for review will appear here after strategy generation.</p>
+                                </div>
+                              )}
                             </TabsContent>
                           </Tabs>
                         </TabsContent>
