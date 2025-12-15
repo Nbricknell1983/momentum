@@ -430,13 +430,21 @@ export interface DailyDebrief {
   submittedAt?: Date;
 }
 
+export type RouteStopType = 'lead' | 'client';
+export type RouteActionType = 'dropin' | 'meeting';
+
 export interface RouteStop {
   id: string;
-  leadId: string;
+  targetType: RouteStopType;
+  leadId?: string;
+  clientId?: string;
   companyName: string;
   address: string;
+  phone?: string;
+  actionType: RouteActionType;
   priority: number;
   estimatedTime?: string;
+  notes?: string;
   completed: boolean;
 }
 

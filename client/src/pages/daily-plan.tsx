@@ -3,7 +3,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { 
   Target, Clock, CheckCircle2, Sparkles, Play, Lock, MapPin, 
   Phone, Building2, MessageSquare, Calendar, Users, RefreshCw,
-  ChevronRight, X, AlertTriangle, Zap, Trophy, Focus
+  ChevronRight, X, AlertTriangle, Zap, Trophy, Focus, Plus,
+  Navigation, Trash2, GripVertical, Handshake
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,17 +16,21 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { RootState } from '@/store';
 import { 
   completeAction, skipAction, completeRouteStop, addRouteStop, addActionToQueue,
   removeRouteStop, submitDebrief, setDailyPlanSummary, markQueuesInitialized,
-  setNBAQueue, toggleFocusMode
+  setNBAQueue, toggleFocusMode, reorderRouteStops
 } from '@/store';
 import ActionQueueCard from '@/components/ActionQueueCard';
 import { 
-  DailyPlan, DailyPlanSummary, ActionQueueItem, TimeBlock, RouteStop,
+  DailyPlan, DailyPlanSummary, ActionQueueItem, TimeBlock, RouteStop, RouteActionType,
   TIME_BLOCK_LABELS, ACTION_TYPE_LABELS, URGENCY_LABELS, BATTLE_SCORE_POINTS,
-  getTrafficLightStatus, Lead
+  getTrafficLightStatus, Lead, Client
 } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -34,6 +39,7 @@ export default function DailyPlanPage() {
   const { toast } = useToast();
   const dailyPlan = useSelector((state: RootState) => state.app.dailyPlan);
   const leads = useSelector((state: RootState) => state.app.leads);
+  const clients = useSelector((state: RootState) => state.app.clients);
   
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isDebriefOpen, setIsDebriefOpen] = useState(false);
@@ -45,6 +51,11 @@ export default function DailyPlanPage() {
     improvements?: string[];
     tomorrowsFocus?: string;
   } | null>(null);
+
+  const [isAddStopOpen, setIsAddStopOpen] = useState(false);
+  const [addStopTab, setAddStopTab] = useState<'leads' | 'clients'>('leads');
+  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+  const [selectedActionType, setSelectedActionType] = useState<RouteActionType>('dropin');
 
   if (!dailyPlan) {
     return (
@@ -82,9 +93,12 @@ export default function DailyPlanPage() {
     routeLeads.forEach((lead, i) => {
       dispatch(addRouteStop({
         id: `stop-${lead.id}`,
+        targetType: 'lead',
         leadId: lead.id,
         companyName: lead.companyName,
         address: lead.address || '',
+        phone: lead.phone,
+        actionType: 'dropin',
         priority: i + 1,
         completed: false,
       }));
@@ -224,6 +238,81 @@ export default function DailyPlanPage() {
   const handleCompleteRouteStop = (stopId: string) => {
     dispatch(completeRouteStop(stopId));
   };
+
+  const handleAddRouteStop = () => {
+    if (!selectedTargetId) {
+      toast({ title: 'Error', description: 'Please select a lead or client.', variant: 'destructive' });
+      return;
+    }
+    const existingIds = dailyPlan.routeStops.map(s => s.leadId || s.clientId);
+    if (existingIds.includes(selectedTargetId)) {
+      toast({ title: 'Already added', description: 'This stop is already in your route.', variant: 'destructive' });
+      return;
+    }
+    if (addStopTab === 'leads') {
+      const lead = leads.find(l => l.id === selectedTargetId);
+      if (!lead || !lead.address) {
+        toast({ title: 'Error', description: 'Lead has no address.', variant: 'destructive' });
+        return;
+      }
+      dispatch(addRouteStop({
+        id: `stop-${lead.id}-${Date.now()}`,
+        targetType: 'lead',
+        leadId: lead.id,
+        companyName: lead.companyName,
+        address: lead.address,
+        phone: lead.phone,
+        actionType: selectedActionType,
+        priority: dailyPlan.routeStops.length + 1,
+        completed: false,
+      }));
+    } else {
+      const client = clients.find(c => c.id === selectedTargetId);
+      if (!client || !client.address) {
+        toast({ title: 'Error', description: 'Client has no address.', variant: 'destructive' });
+        return;
+      }
+      dispatch(addRouteStop({
+        id: `stop-${client.id}-${Date.now()}`,
+        targetType: 'client',
+        clientId: client.id,
+        companyName: client.businessName,
+        address: client.address,
+        phone: client.phone,
+        actionType: selectedActionType,
+        priority: dailyPlan.routeStops.length + 1,
+        completed: false,
+      }));
+    }
+    setSelectedTargetId('');
+    setIsAddStopOpen(false);
+    toast({ title: 'Stop added', description: 'Route stop added to your plan.' });
+  };
+
+  const handleRemoveRouteStop = (stopId: string) => {
+    dispatch(removeRouteStop(stopId));
+  };
+
+  const handleOpenGoogleMaps = () => {
+    const pendingStops = dailyPlan.routeStops.filter(s => !s.completed);
+    if (pendingStops.length === 0) {
+      toast({ title: 'No stops', description: 'Add stops to your route first.', variant: 'destructive' });
+      return;
+    }
+    const addresses = pendingStops.map(s => encodeURIComponent(s.address));
+    const origin = addresses[0];
+    const destination = addresses[addresses.length - 1];
+    const waypoints = addresses.slice(1, -1).join('|');
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+    if (waypoints) {
+      url += `&waypoints=${waypoints}`;
+    }
+    url += '&travelmode=driving';
+    window.open(url, '_blank');
+  };
+
+  const leadsWithAddress = leads.filter(l => !l.archived && l.address);
+  const clientsWithAddress = clients.filter(c => !c.archived && c.address);
 
   const getActionIcon = (type: string) => {
     switch (type) {
@@ -586,17 +675,38 @@ export default function DailyPlanPage() {
         <div className="space-y-6">
           {/* Route Plan */}
           <Card className="p-6">
-            <h2 className="font-semibold mb-4 flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Route Plan
-            </h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Door knocking route for today
-            </p>
+            <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+              <h2 className="font-semibold flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Route Plan
+              </h2>
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setIsAddStopOpen(true)}
+                  data-testid="button-add-route-stop"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Stop
+                </Button>
+                {dailyPlan.routeStops.filter(s => !s.completed).length > 0 && (
+                  <Button 
+                    size="sm" 
+                    variant="default"
+                    onClick={handleOpenGoogleMaps}
+                    data-testid="button-open-directions"
+                  >
+                    <Navigation className="h-4 w-4 mr-1" />
+                    Get Directions
+                  </Button>
+                )}
+              </div>
+            </div>
             <div className="space-y-2">
               {dailyPlan.routeStops.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">
-                  No stops planned. Add leads with addresses to build a route.
+                  No stops planned. Add leads or clients to build a route.
                 </p>
               ) : (
                 dailyPlan.routeStops.map((stop, index) => (
@@ -611,21 +721,41 @@ export default function DailyPlanPage() {
                       {index + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`font-medium text-sm truncate ${stop.completed ? 'line-through' : ''}`}>
-                        {stop.companyName}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className={`font-medium text-sm truncate ${stop.completed ? 'line-through' : ''}`}>
+                          {stop.companyName}
+                        </p>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {stop.actionType === 'meeting' ? 'Meeting' : 'Drop-in'}
+                        </Badge>
+                        {stop.targetType === 'client' && (
+                          <Badge variant="secondary" className="text-xs shrink-0">Client</Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">{stop.address}</p>
                     </div>
-                    {!stop.completed && (
-                      <Button 
-                        size="icon" 
-                        variant="ghost"
-                        onClick={() => handleCompleteRouteStop(stop.id)}
-                        data-testid={`button-complete-stop-${stop.id}`}
-                      >
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!stop.completed && (
+                        <>
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={() => handleCompleteRouteStop(stop.id)}
+                            data-testid={`button-complete-stop-${stop.id}`}
+                          >
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          </Button>
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={() => handleRemoveRouteStop(stop.id)}
+                            data-testid={`button-remove-stop-${stop.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
@@ -764,6 +894,90 @@ export default function DailyPlanPage() {
               data-testid="button-submit-debrief"
             >
               Submit Debrief
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Route Stop Dialog */}
+      <Dialog open={isAddStopOpen} onOpenChange={setIsAddStopOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Add Route Stop
+            </DialogTitle>
+            <DialogDescription>
+              Select a lead or client to add to your route.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Tabs value={addStopTab} onValueChange={(v) => { setAddStopTab(v as 'leads' | 'clients'); setSelectedTargetId(''); }}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="leads" data-testid="tab-leads">
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Leads ({leadsWithAddress.length})
+                </TabsTrigger>
+                <TabsTrigger value="clients" data-testid="tab-clients">
+                  <Users className="h-4 w-4 mr-2" />
+                  Clients ({clientsWithAddress.length})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="leads" className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Select Lead</Label>
+                  <Select value={selectedTargetId} onValueChange={setSelectedTargetId}>
+                    <SelectTrigger data-testid="select-lead">
+                      <SelectValue placeholder="Choose a lead..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {leadsWithAddress.map(lead => (
+                        <SelectItem key={lead.id} value={lead.id}>
+                          {lead.companyName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+              <TabsContent value="clients" className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Select Client</Label>
+                  <Select value={selectedTargetId} onValueChange={setSelectedTargetId}>
+                    <SelectTrigger data-testid="select-client">
+                      <SelectValue placeholder="Choose a client..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientsWithAddress.map(client => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.businessName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <div className="space-y-2">
+              <Label>Action Type</Label>
+              <Select value={selectedActionType} onValueChange={(v) => setSelectedActionType(v as RouteActionType)}>
+                <SelectTrigger data-testid="select-action-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dropin">Drop-in Visit</SelectItem>
+                  <SelectItem value="meeting">Scheduled Meeting</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddStopOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddRouteStop} disabled={!selectedTargetId} data-testid="button-confirm-add-stop">
+              Add to Route
             </Button>
           </DialogFooter>
         </DialogContent>
