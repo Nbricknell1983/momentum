@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
 import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend } from 'recharts';
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,9 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -121,6 +121,59 @@ function ConfidenceBadge({ status, size = 'sm' }: { status: AnalysisStatus; size
       {style.icon}
       {label}
     </Badge>
+  );
+}
+
+// Custom Tooltip for Spider Chart
+interface ChartDataPoint {
+  channel: string;
+  current: number;
+  target: number;
+  evidenceStatus: AnalysisStatus;
+  insightChannel: InsightChannel;
+}
+
+function SpiderChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ChartDataPoint }> }) {
+  if (!active || !payload || payload.length === 0) return null;
+  
+  const data = payload[0].payload;
+  const statusLabel = ANALYSIS_STATUS_LABELS[data.evidenceStatus];
+  const style = confidenceBadgeStyles[data.evidenceStatus];
+  const gap = data.target - data.current;
+  const gapText = gap > 0 ? `${gap} points below target` : gap < 0 ? `${Math.abs(gap)} points above target` : 'On target';
+  
+  return (
+    <div className="bg-popover border rounded-md shadow-md p-3 min-w-[180px]" data-testid="spider-chart-tooltip">
+      <div className="font-semibold mb-2">{data.channel}</div>
+      <div className="space-y-1.5 text-sm">
+        <div className="flex justify-between gap-4">
+          <span className="text-muted-foreground">Current:</span>
+          <span className="font-medium">{data.current}%</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-muted-foreground">Target:</span>
+          <span className="font-medium">{data.target}%</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-muted-foreground">Gap:</span>
+          <span className={`font-medium ${gap > 20 ? 'text-red-500' : gap > 0 ? 'text-amber-500' : 'text-green-500'}`}>
+            {gapText}
+          </span>
+        </div>
+        <div className="pt-1.5 border-t mt-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">Evidence:</span>
+            <Badge 
+              variant={style.variant} 
+              className={`${style.className} text-[10px] px-1.5 py-0 gap-1 font-normal`}
+            >
+              {style.icon}
+              {data.evidenceStatus === 'assumed' ? 'Assumed' : data.evidenceStatus === 'evidence_provided' ? 'Evidence' : 'Verified'}
+            </Badge>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -243,6 +296,10 @@ export default function ClientsPage() {
   const [savingInsight, setSavingInsight] = useState<string | null>(null);
   const [editingInsight, setEditingInsight] = useState<{clientId: string, channel: InsightChannel, urls: string, pastedText: string, notes: string} | null>(null);
 
+  const [clientEvidenceTasks, setClientEvidenceTasks] = useState<Record<string, EvidenceTask[]>>({});
+  const [loadingEvidenceTasks, setLoadingEvidenceTasks] = useState<string | null>(null);
+  const [savingEvidenceTask, setSavingEvidenceTask] = useState<string | null>(null);
+
   const searchString = useSearch();
 
   useEffect(() => {
@@ -309,6 +366,74 @@ export default function ClientsPage() {
         .finally(() => setLoadingInsights(null));
     }
   }, [expandedClientId, orgId, authReady]);
+
+  useEffect(() => {
+    if (expandedClientId && orgId && authReady && clientEvidenceTasks[expandedClientId] === undefined) {
+      setLoadingEvidenceTasks(expandedClientId);
+      fetchEvidenceTasks(orgId, expandedClientId, authReady)
+        .then(tasks => {
+          setClientEvidenceTasks(prev => ({ ...prev, [expandedClientId]: tasks }));
+        })
+        .finally(() => setLoadingEvidenceTasks(null));
+    }
+  }, [expandedClientId, orgId, authReady]);
+
+  const handleCreateEvidenceTask = async (clientId: string, task: string, channel: InsightChannel, definition: string, impactMetric: string) => {
+    if (!orgId) return;
+    setSavingEvidenceTask('new');
+    try {
+      const taskData: Omit<EvidenceTask, 'id'> = {
+        clientId,
+        task,
+        channel,
+        definition,
+        evidenceRequired: ['screenshot', 'url'],
+        evidenceProvided: [],
+        status: 'pending',
+        impactMetric,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const saved = await createEvidenceTask(orgId, clientId, taskData, authReady);
+      setClientEvidenceTasks(prev => ({
+        ...prev,
+        [clientId]: [saved, ...(prev[clientId] || [])],
+      }));
+      toast({ title: "Task created", description: "Evidence task has been added." });
+    } catch (error) {
+      console.error('Error creating evidence task:', error);
+      toast({ title: "Error", description: "Failed to create task.", variant: "destructive" });
+    } finally {
+      setSavingEvidenceTask(null);
+    }
+  };
+
+  const handleUpdateEvidenceTaskStatus = async (clientId: string, taskId: string, newStatus: EvidenceTaskStatus) => {
+    if (!orgId) return;
+    setSavingEvidenceTask(taskId);
+    try {
+      const updates: Partial<EvidenceTask> = { 
+        status: newStatus,
+        updatedAt: new Date(),
+      };
+      if (newStatus === 'completed') updates.completedAt = new Date();
+      if (newStatus === 'verified') updates.verifiedAt = new Date();
+      
+      await updateEvidenceTask(orgId, clientId, taskId, updates, authReady);
+      setClientEvidenceTasks(prev => ({
+        ...prev,
+        [clientId]: (prev[clientId] || []).map(t => 
+          t.id === taskId ? { ...t, ...updates } : t
+        ),
+      }));
+      toast({ title: "Task updated", description: `Task marked as ${newStatus}.` });
+    } catch (error) {
+      console.error('Error updating evidence task:', error);
+      toast({ title: "Error", description: "Failed to update task.", variant: "destructive" });
+    } finally {
+      setSavingEvidenceTask(null);
+    }
+  };
 
   const handleSaveChannelInsight = async (clientId: string, channel: InsightChannel, urls: string, pastedText: string, notes: string) => {
     if (!orgId) return;
@@ -2021,17 +2146,48 @@ export default function ClientsPage() {
                                     <div className="h-72">
                                       <ResponsiveContainer width="100%" height="100%">
                                         <RadarChart data={[
-                                          { channel: 'Website', current: client.channelStatus.website === 'live' ? 90 : client.channelStatus.website === 'in_progress' ? 50 : 20, target: 90 },
-                                          { channel: 'GBP', current: client.channelStatus.gbp === 'live' ? 90 : client.channelStatus.gbp === 'in_progress' ? 50 : 20, target: 85 },
-                                          { channel: 'SEO', current: client.channelStatus.seo === 'live' ? 90 : client.channelStatus.seo === 'in_progress' ? 50 : 20, target: 80 },
-                                          { channel: 'PPC', current: client.channelStatus.ppc === 'live' ? 90 : client.channelStatus.ppc === 'in_progress' ? 50 : 20, target: 75 },
-                                          { channel: 'Content', current: 30, target: 70 },
+                                          { 
+                                            channel: 'Website', 
+                                            current: client.channelStatus.website === 'live' ? 90 : client.channelStatus.website === 'in_progress' ? 50 : 20, 
+                                            target: 90,
+                                            evidenceStatus: getChannelConfidenceStatus('website', clientChannelInsights[client.id] || []),
+                                            insightChannel: 'website' as InsightChannel
+                                          },
+                                          { 
+                                            channel: 'GBP', 
+                                            current: client.channelStatus.gbp === 'live' ? 90 : client.channelStatus.gbp === 'in_progress' ? 50 : 20, 
+                                            target: 85,
+                                            evidenceStatus: getChannelConfidenceStatus('gbp', clientChannelInsights[client.id] || []),
+                                            insightChannel: 'gbp' as InsightChannel
+                                          },
+                                          { 
+                                            channel: 'SEO', 
+                                            current: client.channelStatus.seo === 'live' ? 90 : client.channelStatus.seo === 'in_progress' ? 50 : 20, 
+                                            target: 80,
+                                            evidenceStatus: getChannelConfidenceStatus('seo', clientChannelInsights[client.id] || []),
+                                            insightChannel: 'seo' as InsightChannel
+                                          },
+                                          { 
+                                            channel: 'PPC', 
+                                            current: client.channelStatus.ppc === 'live' ? 90 : client.channelStatus.ppc === 'in_progress' ? 50 : 20, 
+                                            target: 75,
+                                            evidenceStatus: getChannelConfidenceStatus('ppc', clientChannelInsights[client.id] || []),
+                                            insightChannel: 'ppc' as InsightChannel
+                                          },
+                                          { 
+                                            channel: 'Content', 
+                                            current: 30, 
+                                            target: 70,
+                                            evidenceStatus: getChannelConfidenceStatus('content', clientChannelInsights[client.id] || []),
+                                            insightChannel: 'content' as InsightChannel
+                                          },
                                         ]}>
                                           <PolarGrid />
                                           <PolarAngleAxis dataKey="channel" tick={{ fontSize: 12 }} />
                                           <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
                                           <Radar name="Current State" dataKey="current" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.3} />
                                           <Radar name="Target State" dataKey="target" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
+                                          <Tooltip content={<SpiderChartTooltip />} />
                                           <Legend />
                                         </RadarChart>
                                       </ResponsiveContainer>
@@ -2122,6 +2278,150 @@ export default function ClientsPage() {
                                       </div>
                                     </div>
                                   )}
+
+                                  {/* Evidence-Driven Tasks */}
+                                  <div className="p-4 border rounded-md">
+                                    <div className="flex items-center justify-between gap-2 mb-3">
+                                      <h4 className="font-semibold flex items-center gap-2">
+                                        <Target className="h-4 w-4" />
+                                        Evidence-Driven Tasks
+                                      </h4>
+                                      {loadingEvidenceTasks === client.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                      ) : (
+                                        <Badge variant="outline">
+                                          {(clientEvidenceTasks[client.id] || []).filter(t => t.status !== 'verified').length} active
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    
+                                    {loadingEvidenceTasks === client.id ? (
+                                      <div className="flex items-center justify-center p-4">
+                                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                      </div>
+                                    ) : (clientEvidenceTasks[client.id] || []).length > 0 ? (
+                                      <div className="space-y-2">
+                                        {(clientEvidenceTasks[client.id] || []).map((task) => (
+                                          <div 
+                                            key={task.id} 
+                                            className={`p-3 rounded-md border ${
+                                              task.status === 'verified' ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' :
+                                              task.status === 'completed' ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800' :
+                                              task.status === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' :
+                                              'bg-muted/30 border-border'
+                                            }`}
+                                            data-testid={`evidence-task-${task.id}`}
+                                          >
+                                            <div className="flex items-start justify-between gap-2">
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center flex-wrap gap-2 mb-1">
+                                                  <Badge 
+                                                    variant={
+                                                      task.status === 'verified' ? 'default' :
+                                                      task.status === 'completed' ? 'secondary' :
+                                                      task.status === 'in_progress' ? 'outline' : 'outline'
+                                                    }
+                                                    className={
+                                                      task.status === 'verified' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                      task.status === 'completed' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                      task.status === 'in_progress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                                                      ''
+                                                    }
+                                                  >
+                                                    {task.status === 'verified' && <CheckCircle className="h-3 w-3 mr-1" />}
+                                                    {task.status === 'completed' && <Check className="h-3 w-3 mr-1" />}
+                                                    {task.status === 'in_progress' && <Clock className="h-3 w-3 mr-1" />}
+                                                    {task.status === 'pending' && <CircleDot className="h-3 w-3 mr-1" />}
+                                                    {task.status.replace('_', ' ')}
+                                                  </Badge>
+                                                  <Badge variant="outline">{INSIGHT_CHANNEL_LABELS[task.channel]}</Badge>
+                                                </div>
+                                                <p className="text-sm font-medium">{task.task}</p>
+                                                {task.definition && (
+                                                  <p className="text-xs text-muted-foreground mt-1">{task.definition}</p>
+                                                )}
+                                                {task.impactMetric && (
+                                                  <p className="text-xs text-muted-foreground mt-1">
+                                                    <span className="font-medium">Impact:</span> {task.impactMetric}
+                                                  </p>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-1 flex-shrink-0">
+                                                {task.status === 'pending' && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleUpdateEvidenceTaskStatus(client.id, task.id, 'in_progress')}
+                                                    disabled={savingEvidenceTask === task.id}
+                                                    data-testid={`button-start-task-${task.id}`}
+                                                  >
+                                                    {savingEvidenceTask === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                                                  </Button>
+                                                )}
+                                                {task.status === 'in_progress' && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleUpdateEvidenceTaskStatus(client.id, task.id, 'completed')}
+                                                    disabled={savingEvidenceTask === task.id}
+                                                    data-testid={`button-complete-task-${task.id}`}
+                                                  >
+                                                    {savingEvidenceTask === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                                  </Button>
+                                                )}
+                                                {task.status === 'completed' && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="default"
+                                                    onClick={() => handleUpdateEvidenceTaskStatus(client.id, task.id, 'verified')}
+                                                    disabled={savingEvidenceTask === task.id}
+                                                    data-testid={`button-verify-task-${task.id}`}
+                                                  >
+                                                    {savingEvidenceTask === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                                                    Verify
+                                                  </Button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-center text-muted-foreground py-4">
+                                        <Target className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                        <p className="text-sm">No evidence tasks yet.</p>
+                                        <p className="text-xs">Tasks will be generated from strategy gaps or can be added manually.</p>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Quick Add Task from Gap */}
+                                    {clientStrategyPlan[client.id]?.gapSummary && (
+                                      <div className="mt-3 pt-3 border-t">
+                                        <p className="text-xs text-muted-foreground mb-2">Quick add task from identified gap:</p>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            const gap = clientStrategyPlan[client.id]?.gapSummary || '';
+                                            if (gap) {
+                                              handleCreateEvidenceTask(
+                                                client.id,
+                                                `Address gap: ${gap.slice(0, 100)}${gap.length > 100 ? '...' : ''}`,
+                                                'website',
+                                                gap,
+                                                'Improve overall strategy confidence'
+                                              );
+                                            }
+                                          }}
+                                          disabled={savingEvidenceTask === 'new'}
+                                          data-testid={`button-add-gap-task-${client.id}`}
+                                        >
+                                          {savingEvidenceTask === 'new' ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                                          Create Task from Gap
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="p-4 border rounded-md text-center text-muted-foreground">
