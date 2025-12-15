@@ -1,0 +1,220 @@
+BUILD INSTRUCTION — STRATEGY KICKOFF WIZARD STATE CONTRACT (SINGLE SOURCE OF TRUTH)
+Goal
+
+Stop fields “not saving” across Steps 1–6 by enforcing one canonical wizard state object, with fixed key names, fixed data types, and a single save pipeline into Firestore.
+
+Non-negotiable Rules
+
+Every input in every step must read/write to wizardAnswers only (no step-local state that isn’t merged).
+
+All list fields must be stored as arrays (string[]) and must default to [] (never undefined).
+
+On every step transition (Next/Back), persist state in-memory AND (optionally) as a draft doc so refresh doesn’t lose progress.
+
+On final submit, write:
+
+clients/{clientId}.businessProfile (context)
+
+strategySessions/{sessionId}.wizardAnswers (full Q/A)
+
+then enqueue strategy job
+
+1) Canonical Wizard State Shape (Contract)
+
+Use this exact TypeScript-like schema (keys + types are strict):
+
+type StrategyWizardAnswers = {
+  // Step 1: Business Basics
+  industry: string;                         // e.g., "Electrician"
+  primaryServices: string[];                // ["Switchboard upgrades", "Emergency electrician"]
+  secondaryServices: string[];              // optional
+  serviceAreaType: "local" | "regional" | "multi-location";
+  primaryLocations: string[];               // ["Logan", "Springwood"]
+  secondaryLocations: string[];             // optional
+  idealJobType: string;                     // optional text
+  averageJobValue: number | null;           // optional
+  seasonalityNotes: string | null;          // optional
+
+  // Step 2: Goal
+  primaryGoal:
+    | "mapPackTop3"
+    | "moreCallsLeads"
+    | "organicRankings"
+    | "lowerCplBetterQuality";
+  definitionOfSuccess: string;              // short sentence (can be "")
+
+  // Step 3: Current Marketing
+  whatsWorking: string[];                   // bullet items
+  whatsNotWorking: string[];                // bullet items
+  notes: string;                            // optional free text (can be "")
+
+  // Step 4: Assets (optional URLs)
+  assetLinks: {
+    websiteUrl: string;                     // "" if none
+    gbpUrl: string;                         // "" if none
+    placeId: string;                        // "" if none
+    facebookUrl: string;                    // "" if none
+    instagramUrl: string;                   // "" if none
+  };
+
+  // Step 5: Competitors (optional)
+  competitors: {
+    provided: { name: string; websiteUrl: string; placeId: string }[]; // defaults []
+  };
+
+  // Step 6: Confirmation / prefs (optional)
+  preferences: {
+    cadenceTier: "light" | "standard" | "aggressive"; // default "standard"
+    productsEnabled: {
+      gbp: boolean;
+      website: boolean;
+      seo: boolean;
+      ppc: boolean;
+    };
+  };
+};
+
+Default Values (must be used on wizard start)
+const DEFAULT_WIZARD_ANSWERS: StrategyWizardAnswers = {
+  industry: "",
+  primaryServices: [],
+  secondaryServices: [],
+  serviceAreaType: "local",
+  primaryLocations: [],
+  secondaryLocations: [],
+  idealJobType: "",
+  averageJobValue: null,
+  seasonalityNotes: null,
+
+  primaryGoal: "moreCallsLeads",
+  definitionOfSuccess: "",
+
+  whatsWorking: [],
+  whatsNotWorking: [],
+  notes: "",
+
+  assetLinks: {
+    websiteUrl: "",
+    gbpUrl: "",
+    placeId: "",
+    facebookUrl: "",
+    instagramUrl: "",
+  },
+
+  competitors: { provided: [] },
+
+  preferences: {
+    cadenceTier: "standard",
+    productsEnabled: { gbp: true, website: true, seo: true, ppc: false },
+  },
+};
+
+2) Firestore Write Contract (where each part saves)
+A) Always update Client businessProfile (context)
+
+On final submit (and optionally after Step 1), write to:
+
+orgs/{orgId}/clients/{clientId}
+
+{
+  "businessProfile": {
+    "industry": "...",
+    "primaryServices": ["..."],
+    "secondaryServices": ["..."],
+    "primaryLocations": ["..."],
+    "secondaryLocations": ["..."],
+    "serviceAreaType": "local|regional|multi-location",
+    "idealJobType": "...",
+    "averageJobValue": 1234,
+    "seasonalityNotes": "..."
+  }
+}
+
+B) Strategy session record (full Q/A)
+
+Create:
+
+orgs/{orgId}/clients/{clientId}/strategySessions/{sessionId}
+
+{
+  "createdAt": "...",
+  "userId": "...",
+  "wizardAnswers": { ...FULL StrategyWizardAnswers... },
+  "assetLinks": { ...wizardAnswers.assetLinks... },
+  "notes": "...wizardAnswers.notes..."
+}
+
+C) Queue server-side job
+
+Create job doc (choose ONE pattern, not both):
+
+orgs/{orgId}/strategyJobs/{jobId} OR
+
+orgs/{orgId}/clients/{clientId}/strategyJobs/{jobId}
+
+Job payload must include:
+
+clientId
+
+sessionId
+
+orgId
+
+requestedByUserId
+
+createdAt
+
+status: "queued"
+
+3) UI Binding Requirements (prevents “not saving”)
+
+For every input in each step:
+
+value comes from wizardAnswers.<key>
+
+onChange updates wizardAnswers.<key>
+
+Multi-entry fields (chips)
+
+These must always produce arrays:
+
+primaryServices, secondaryServices
+
+primaryLocations, secondaryLocations
+
+whatsWorking, whatsNotWorking
+
+On Next, if there is a pending typed value, it must be committed into the array.
+
+Also enforce:
+
+trim whitespace
+
+prevent duplicates (case-insensitive)
+
+4) Draft persistence (recommended)
+
+To prevent losing progress if the dialog closes, create a draft doc:
+
+orgs/{orgId}/clients/{clientId}/strategySessions/{draftSessionId}
+
+with:
+
+status: "draft"
+
+wizardAnswers
+and update it on each Next/Back.
+
+On final submit, mark draft as submitted or create a new “submitted” session.
+
+5) Acceptance Tests (must pass)
+
+Step 1: Add Primary Services + Primary Locations → Next → Back → chips persist.
+
+Step 3: Add multiple “What’s working / not working” → Next → Back → persists.
+
+Close wizard mid-way → reopen → values restored from draft.
+
+Final submit creates strategySession with full wizardAnswers and updates client.businessProfile.
+
+No runtime errors from .length or .map() on missing arrays.
