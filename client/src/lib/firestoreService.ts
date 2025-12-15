@@ -234,6 +234,30 @@ export async function fetchActivities(orgId: string, leadId: string, authReady: 
   }
 }
 
+export async function fetchAllActivities(orgId: string, authReady: boolean = false): Promise<Activity[]> {
+  const path = `orgs/${orgId}/activities`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const activitiesRef = collection(db, 'orgs', orgId, 'activities');
+    const q = query(activitiesRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const activities = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as Activity[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return activities;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
 export async function createActivity(orgId: string, activity: Omit<Activity, 'id'>, authReady: boolean = false): Promise<Activity> {
   const path = `orgs/${orgId}/activities`;
   

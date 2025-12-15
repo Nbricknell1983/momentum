@@ -1,0 +1,150 @@
+Build a persistent Activity Logging system and fix Deal deletion so deleted deals do not reappear on refresh.
+
+Goals:
+
+When a deal is deleted, it must be deleted in the database (not just removed from UI state). After refresh it must remain deleted.
+
+The Deal card buttons “Log Call / Log Email / Log SMS / Log Meeting / Log Drop-in” must work on click and write a new activity record to the database.
+
+Dashboard counters (Calls Today, Emails Today, SMS Today, Meetings Today, Drop-ins Today) must be computed from the activity records stored in the database so the dashboard remains accurate after refresh and across devices/users.
+
+Data model (database collections):
+
+orgs/{orgId}/deals/{dealId}
+Fields include: title/name, stage, value, createdAt, updatedAt, ownerId, etc.
+
+orgs/{orgId}/activities/{activityId}
+Required fields:
+
+orgId (string)
+
+dealId (string)
+
+type (enum string): "call" | "email" | "sms" | "meeting" | "dropin"
+
+createdAt (server timestamp)
+Optional fields:
+
+notes (string)
+
+userId (string)
+
+Deal deletion (must persist):
+
+Replace any “UI-only” delete logic with a real database delete.
+
+On clicking Delete for a deal:
+
+call database delete for orgs/{orgId}/deals/{dealId}
+
+on success remove the deal from local state/store
+
+on failure show an error toast and do not remove from UI
+
+Ensure the deals list is populated from the database and reloaded on refresh.
+
+If soft delete is used instead of hard delete, implement isDeleted: true and deletedAt fields and ensure all deal queries exclude deleted deals. Prefer hard delete for simplicity.
+
+Fix Log buttons on deal cards:
+
+On each Deal card, the following buttons must be clickable:
+
+Log Call
+
+Log Email
+
+Log SMS
+
+Log Meeting
+
+Log Drop-in
+
+When a button is clicked:
+
+create a new document under orgs/{orgId}/activities
+
+set fields:
+
+orgId: current org
+
+dealId: current deal id
+
+type: corresponding activity type
+
+createdAt: server timestamp
+
+userId: current logged in user id (if available)
+
+Immediately reflect the increment in the UI (optimistic update is fine) but the source of truth is the database write.
+
+Add console logging and visible toast feedback for success/failure:
+
+success: “Logged call/email/sms/meeting/drop-in”
+
+failure: “Failed to log activity” plus the error message
+
+Dashboard stats (database-driven):
+
+Dashboard must query orgs/{orgId}/activities and compute TODAY counts by type.
+
+Define “today” as local day start (00:00) to now, based on the user’s local timezone.
+
+Implement the following counters:
+
+Calls Today = count of activities where type == "call" and createdAt >= startOfToday
+
+Emails Today = count where type == "email" and createdAt >= startOfToday
+
+SMS Today = count where type == "sms" and createdAt >= startOfToday
+
+Meetings Today = count where type == "meeting" and createdAt >= startOfToday
+
+Drop-ins Today = count where type == "dropin" and createdAt >= startOfToday
+
+The dashboard must update automatically when a new activity is logged (real-time subscription if supported; otherwise refresh after write).
+
+UI requirements:
+
+The Deal card buttons must match the current style and remain in the same location.
+
+Each button should show a badge count (optional) for that deal’s activities today. If implementing per-deal counts, compute by filtering activities where dealId matches and createdAt >= startOfToday and type matches.
+
+Ensure buttons are not blocked by overlays: verify pointer events and z-index so clicks always register.
+
+Permissions / security:
+
+Ensure authenticated users in an org can:
+
+read/write/delete deals in orgs/{orgId}/deals
+
+read/write activities in orgs/{orgId}/activities
+
+If rules currently block deletes or activity writes, update them accordingly.
+
+Acceptance tests:
+
+Create a deal, refresh the page: deal remains.
+
+Delete the deal, refresh the page: deal does not come back.
+
+Click Log Call on a deal:
+
+a new activity record is created in the database
+
+dashboard Calls Today increments
+
+Repeat for Log Email/SMS/Meeting/Drop-in:
+
+each writes correct activity type to database
+
+dashboard counters update correctly
+
+Confirm the dashboard counters remain correct after a full hard refresh.
+
+Implementation notes:
+
+Use server timestamps for createdAt to avoid client clock issues.
+
+All writes must be awaited and error-handled (no silent failures).
+
+Keep all data consistent across UI state and database state.

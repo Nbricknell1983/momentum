@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Switch, Route, useLocation } from 'wouter';
 import { Provider, useDispatch } from 'react-redux';
-import { store, setLeads } from './store';
+import { store, setLeads, setActivities } from './store';
 import { queryClient } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -20,7 +20,7 @@ import DailyPlanPage from '@/pages/daily-plan';
 import SettingsPage from '@/pages/settings';
 import LoginPage from '@/pages/login';
 import NotFound from '@/pages/not-found';
-import { fetchLeads } from '@/lib/firestoreService';
+import { fetchLeads, fetchAllActivities } from '@/lib/firestoreService';
 import { Loader2 } from 'lucide-react';
 
 function ProtectedRoutes() {
@@ -53,22 +53,26 @@ function AppLayout() {
   }, [authReady, user, setLocation]);
 
   useEffect(() => {
-    async function loadLeads() {
+    async function loadData() {
       if (!authReady || !orgId) {
-        console.log('[App] Skipping lead fetch - authReady:', authReady, 'orgId:', orgId);
+        console.log('[App] Skipping data fetch - authReady:', authReady, 'orgId:', orgId);
         return;
       }
-      console.log('[App] Auth ready, fetching leads for org:', orgId);
+      console.log('[App] Auth ready, fetching data for org:', orgId);
       try {
-        const leads = await fetchLeads(orgId, true);
-        console.log('[App] Fetched', leads.length, 'leads');
+        const [leads, activities] = await Promise.all([
+          fetchLeads(orgId, true),
+          fetchAllActivities(orgId, true),
+        ]);
+        console.log('[App] Fetched', leads.length, 'leads and', activities.length, 'activities');
         dispatch(setLeads(leads));
+        dispatch(setActivities(activities));
       } catch (error) {
-        console.error('[App] Error loading leads from Firestore:', error);
+        console.error('[App] Error loading data from Firestore:', error);
       }
     }
     if (authReady && user && orgId) {
-      loadLeads();
+      loadData();
     }
   }, [dispatch, user, orgId, authReady]);
 

@@ -33,6 +33,20 @@ export default function DashboardPage() {
 
   const targets = user?.targets || { calls: 25, doors: 5, meetings: 3, followups: 15, proposals: 2, deals: 1 };
 
+  const todayActivityCounts = useMemo(() => {
+    const todayActivities = activities.filter(a => {
+      const createdAt = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+      return isToday(createdAt);
+    });
+    return {
+      calls: todayActivities.filter(a => a.type === 'call').length,
+      emails: todayActivities.filter(a => a.type === 'email').length,
+      sms: todayActivities.filter(a => a.type === 'sms').length,
+      meetings: todayActivities.filter(a => a.type === 'meeting').length,
+      dropins: todayActivities.filter(a => a.type === 'dropin').length,
+    };
+  }, [activities]);
+
   const activityTargets: ActivityTargets = useMemo(() => ({
     calls: targets.calls,
     sms: Math.round(targets.followups * 0.5),
@@ -112,14 +126,14 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Calls Today"
-          value={todayMetrics.calls}
+          value={todayActivityCounts.calls}
           target={targets.calls}
-          change={todayMetrics.calls > 0 ? Math.round((todayMetrics.calls / targets.calls) * 100) - 100 : 0}
+          change={todayActivityCounts.calls > 0 ? Math.round((todayActivityCounts.calls / targets.calls) * 100) - 100 : 0}
           icon={<Phone className="h-5 w-5" />}
         />
         <StatCard
           title="Meetings"
-          value={todayMetrics.meetings}
+          value={todayActivityCounts.meetings}
           target={targets.meetings}
           icon={<Users className="h-5 w-5" />}
         />

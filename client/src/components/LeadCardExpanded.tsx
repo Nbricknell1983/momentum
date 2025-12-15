@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, Archive, Trash2, Heart, HeartOff } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, Archive, Trash2, Heart, HeartOff, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus, NURTURE_STATUS_LABELS } from '@/lib/types';
-import { countActivitiesByType } from '@/lib/mockData';
 import { updateLead, updateLeadStage, addActivity, archiveLead, deleteLead, enrollInNurture, removeFromNurture } from '@/store';
 import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '@/contexts/AuthContext';
+import { deleteLeadFromFirestore, createActivity } from '@/lib/firestoreService';
+import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -156,10 +158,21 @@ function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
 
 export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCardExpandedProps) {
   const dispatch = useDispatch();
+  const { orgId, authReady } = useAuth();
+  const { toast } = useToast();
+  const activities = useSelector((state: RootState) => state.app.activities);
   const [isRecording, setIsRecording] = useState(false);
   const [lastLoggedActivity, setLastLoggedActivity] = useState<{ type: ActivityType; id: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isLoggingActivity, setIsLoggingActivity] = useState<ActivityType | null>(null);
 
-  const activityCounts = countActivitiesByType(lead.id);
+  const activityCounts = activities
+    .filter(a => a.leadId === lead.id)
+    .reduce((counts, a) => {
+      counts[a.type] = (counts[a.type] || 0) + 1;
+      return counts;
+    }, {} as Record<ActivityType, number>);
+  
   const trafficStatus = getTrafficLightStatus(lead);
 
   const handleStageChange = (stage: Stage) => {
@@ -174,17 +187,30 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
     }
   };
 
-  const handleLogActivity = (type: ActivityType) => {
-    const activityId = uuidv4();
-    dispatch(addActivity({
-      id: activityId,
-      userId: lead.userId,
-      leadId: lead.id,
-      type,
-      createdAt: new Date(),
-    }));
-    setLastLoggedActivity({ type, id: activityId });
-    setTimeout(() => setLastLoggedActivity(null), 5000);
+  const handleLogActivity = async (type: ActivityType) => {
+    if (!orgId || !authReady) {
+      toast({ title: 'Error', description: 'Not authenticated', variant: 'destructive' });
+      return;
+    }
+    
+    setIsLoggingActivity(type);
+    try {
+      const activityData = {
+        userId: lead.userId,
+        leadId: lead.id,
+        type,
+        createdAt: new Date(),
+      };
+      const savedActivity = await createActivity(orgId, activityData, authReady);
+      dispatch(addActivity(savedActivity));
+      setLastLoggedActivity({ type, id: savedActivity.id });
+      setTimeout(() => setLastLoggedActivity(null), 5000);
+    } catch (error) {
+      console.error('[LeadCardExpanded] Error logging activity:', error);
+      toast({ title: 'Error', description: 'Failed to log activity', variant: 'destructive' });
+    } finally {
+      setIsLoggingActivity(null);
+    }
   };
 
   const handleUpdateField = (field: keyof Lead, value: any) => {
@@ -195,8 +221,23 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
     dispatch(archiveLead(lead.id));
   };
 
-  const handleDelete = () => {
-    dispatch(deleteLead(lead.id));
+  const handleDelete = async () => {
+    if (!orgId || !authReady) {
+      toast({ title: 'Error', description: 'Not authenticated', variant: 'destructive' });
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      await deleteLeadFromFirestore(orgId, lead.id, authReady);
+      dispatch(deleteLead(lead.id));
+      toast({ title: 'Deleted', description: 'Deal deleted successfully' });
+    } catch (error) {
+      console.error('[LeadCardExpanded] Error deleting lead:', error);
+      toast({ title: 'Error', description: 'Failed to delete deal', variant: 'destructive' });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const toggleRecording = () => {
@@ -205,8 +246,9 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   };
 
   const ActivityButton = ({ type, label }: { type: ActivityType; label: string }) => {
-    const count = activityCounts[type];
+    const count = activityCounts[type] || 0;
     const justLogged = lastLoggedActivity?.type === type;
+    const isLoading = isLoggingActivity === type;
     
     const colorClasses: Record<string, string> = {
       call: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
@@ -223,9 +265,10 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
           size="sm"
           className={`gap-1.5 ${colorClasses[type] || ''}`}
           onClick={() => handleLogActivity(type)}
+          disabled={isLoading}
           data-testid={`button-log-${type}-${lead.id}`}
         >
-          {label}
+          {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : label}
           <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1">
             {count}
           </Badge>
@@ -489,7 +532,9 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <button className="text-sm underline text-red-600">Delete</button>
+                <button className="text-sm underline text-red-600" disabled={isDeleting}>
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -499,8 +544,11 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+                    {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Delete
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

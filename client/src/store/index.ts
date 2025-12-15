@@ -95,6 +95,9 @@ const appSlice = createSlice({
         lead.updatedAt = new Date();
       }
     },
+    setActivities(state, action: PayloadAction<Activity[]>) {
+      state.activities = action.payload;
+    },
     addActivity(state, action: PayloadAction<Activity>) {
       state.activities.push(action.payload);
       // Update lead's lastActivityAt and lastContactDate
@@ -467,6 +470,7 @@ export const {
   addLead,
   deleteLead,
   archiveLead,
+  setActivities,
   addActivity,
   setTasks,
   updateTask,
