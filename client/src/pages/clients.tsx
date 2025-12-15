@@ -43,6 +43,62 @@ const deliverableStatusIcons: Record<DeliverableStatus, React.ReactNode> = {
   completed: <Check className="h-4 w-4 text-green-500" />,
 };
 
+// Normalizer for StrategyPlan - ensures all arrays/objects have safe defaults
+function normalizeStrategyPlan(rawPlan: StrategyPlan | null | undefined): StrategyPlan | null {
+  if (!rawPlan) return null;
+  return {
+    ...rawPlan,
+    id: rawPlan.id || '',
+    clientId: rawPlan.clientId || '',
+    status: rawPlan.status || 'active',
+    goal: rawPlan.goal || null,
+    coreStrategy: rawPlan.coreStrategy || '',
+    gapSummary: rawPlan.gapSummary || '',
+    currentState: {
+      summary: rawPlan.currentState?.summary || '',
+      strengths: rawPlan.currentState?.strengths || [],
+      weaknesses: rawPlan.currentState?.weaknesses || [],
+    },
+    targetState: {
+      summary: rawPlan.targetState?.summary || '',
+      outcomes: rawPlan.targetState?.outcomes || [],
+    },
+    channelPlan: rawPlan.channelPlan || [],
+    channelOKRs: rawPlan.channelOKRs || [],
+    roadmap30: rawPlan.roadmap30 || [],
+    roadmap60: rawPlan.roadmap60 || [],
+    roadmap90: rawPlan.roadmap90 || [],
+    roadmap_30_60_90: rawPlan.roadmap_30_60_90 || [],
+    initiatives: rawPlan.initiatives || [],
+    createdAt: rawPlan.createdAt || new Date(),
+    updatedAt: rawPlan.updatedAt || new Date(),
+  };
+}
+
+// Normalizer for BusinessProfile - ensures all arrays/strings have safe defaults
+function normalizeBusinessProfile(rawProfile: BusinessProfile | null | undefined): BusinessProfile {
+  if (!rawProfile) return { ...DEFAULT_BUSINESS_PROFILE };
+  return {
+    industry: rawProfile.industry || '',
+    primaryServices: rawProfile.primaryServices || [],
+    secondaryServices: rawProfile.secondaryServices || [],
+    primaryLocations: rawProfile.primaryLocations || [],
+    secondaryLocations: rawProfile.secondaryLocations || [],
+    serviceAreaType: rawProfile.serviceAreaType || 'local',
+    idealJobType: rawProfile.idealJobType || '',
+    averageJobValue: rawProfile.averageJobValue ?? null,
+    seasonalityNotes: rawProfile.seasonalityNotes ?? null,
+    primaryGoal: rawProfile.primaryGoal ?? null,
+    websiteUrl: rawProfile.websiteUrl || '',
+    gbpUrl: rawProfile.gbpUrl || '',
+    facebookUrl: rawProfile.facebookUrl || '',
+    instagramUrl: rawProfile.instagramUrl || '',
+    workingWell: rawProfile.workingWell || [],
+    notWorkingWell: rawProfile.notWorkingWell || [],
+    additionalNotes: rawProfile.additionalNotes || '',
+  };
+}
+
 export default function ClientsPage() {
   const dispatch = useDispatch();
   const clients = useSelector((state: RootState) => state.app.clients);
@@ -472,13 +528,15 @@ export default function ClientsPage() {
         strategyStatus: 'in_progress' as StrategyStatus,
       }, authReady);
       
-      dispatch(updateClient({
-        id: wizardClientId,
-        updates: {
+      const clientToUpdate = clients.find(c => c.id === wizardClientId);
+      if (clientToUpdate) {
+        dispatch(updateClient({
+          ...clientToUpdate,
           businessProfile: wizardData,
           strategyStatus: 'in_progress' as StrategyStatus,
-        },
-      }));
+          updatedAt: new Date(),
+        }));
+      }
       
       toast({ title: "Strategy saved", description: "Business profile has been captured." });
       closeWizard();
@@ -524,11 +582,10 @@ export default function ClientsPage() {
       }, authReady);
       
       dispatch(updateClient({
-        id: client.id,
-        updates: {
-          strategyStatus: 'completed' as StrategyStatus,
-          activeStrategyPlanId: savedPlan.id,
-        },
+        ...client,
+        strategyStatus: 'completed' as StrategyStatus,
+        activeStrategyPlanId: savedPlan.id,
+        updatedAt: new Date(),
       }));
       
       // Auto-generate Action Queue items from roadmap milestones
@@ -1109,7 +1166,7 @@ export default function ClientsPage() {
                                       <span className="text-muted-foreground">Industry:</span> {client.businessProfile.industry}
                                     </div>
                                     <div>
-                                      <span className="text-muted-foreground">Business Type:</span> {client.businessProfile.businessType}
+                                      <span className="text-muted-foreground">Service Area:</span> {client.businessProfile.serviceAreaType}
                                     </div>
                                     {client.businessProfile.primaryGoal && (
                                       <div className="col-span-2">
@@ -1163,11 +1220,11 @@ export default function ClientsPage() {
                                     <div className="space-y-2">
                                       <h6 className="text-sm font-medium text-muted-foreground">Current State</h6>
                                       <p className="text-sm">{clientStrategyPlan[client.id]?.currentState?.summary}</p>
-                                      {clientStrategyPlan[client.id]?.currentState?.strengths?.length > 0 && (
+                                      {(clientStrategyPlan[client.id]?.currentState?.strengths ?? []).length > 0 && (
                                         <div>
                                           <span className="text-xs font-medium text-green-600">Strengths:</span>
                                           <ul className="text-xs mt-1 space-y-1">
-                                            {clientStrategyPlan[client.id]?.currentState?.strengths?.map((s, i) => (
+                                            {(clientStrategyPlan[client.id]?.currentState?.strengths ?? []).map((s, i) => (
                                               <li key={i} className="flex items-start gap-1">
                                                 <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
                                                 {s}
@@ -1180,11 +1237,11 @@ export default function ClientsPage() {
                                     <div className="space-y-2">
                                       <h6 className="text-sm font-medium text-muted-foreground">Target State</h6>
                                       <p className="text-sm">{clientStrategyPlan[client.id]?.targetState?.summary}</p>
-                                      {clientStrategyPlan[client.id]?.targetState?.outcomes?.length > 0 && (
+                                      {(clientStrategyPlan[client.id]?.targetState?.outcomes ?? []).length > 0 && (
                                         <div>
                                           <span className="text-xs font-medium text-blue-600">Outcomes:</span>
                                           <ul className="text-xs mt-1 space-y-1">
-                                            {clientStrategyPlan[client.id]?.targetState?.outcomes?.map((o, i) => (
+                                            {(clientStrategyPlan[client.id]?.targetState?.outcomes ?? []).map((o, i) => (
                                               <li key={i} className="flex items-start gap-1">
                                                 <Target className="h-3 w-3 text-blue-500 mt-0.5 flex-shrink-0" />
                                                 {o}
@@ -1455,25 +1512,25 @@ export default function ClientsPage() {
                                     <div className="space-y-3 border rounded-md p-4 bg-muted/20">
                                       <div>
                                         <h5 className="font-medium mb-2">Agenda</h5>
-                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.agenda?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{(aiToolResult.agenda ?? []).map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
                                       </div>
                                       <div>
                                         <h5 className="font-medium mb-2">Key Talking Points</h5>
-                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.keyTalkingPoints?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{(aiToolResult.keyTalkingPoints ?? []).map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
                                       </div>
                                       <div>
                                         <h5 className="font-medium mb-2">Questions to Ask</h5>
-                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.questionsToAsk?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{(aiToolResult.questionsToAsk ?? []).map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
                                       </div>
-                                      {aiToolResult.upsellOpportunities?.length > 0 && (
+                                      {(aiToolResult.upsellOpportunities ?? []).length > 0 && (
                                         <div>
                                           <h5 className="font-medium mb-2">Upsell Opportunities</h5>
-                                          <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.upsellOpportunities.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                          <ul className="list-disc list-inside text-sm space-y-1">{(aiToolResult.upsellOpportunities ?? []).map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
                                         </div>
                                       )}
                                       <div>
                                         <h5 className="font-medium mb-2">Proposed Next Steps</h5>
-                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.nextStepsToPropose?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{(aiToolResult.nextStepsToPropose ?? []).map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
                                       </div>
                                     </div>
                                   )}
@@ -1506,7 +1563,7 @@ export default function ClientsPage() {
                                         <span className="text-sm font-medium">Foundation</span>
                                       </div>
                                       <ul className="space-y-2">
-                                        {clientStrategyPlan[client.id]?.roadmap30?.map((item: string, idx: number) => (
+                                        {(clientStrategyPlan[client.id]?.roadmap30 ?? []).map((item: string, idx: number) => (
                                           <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                                             <Check className="h-4 w-4 mt-0.5 text-muted-foreground/50 flex-shrink-0" />
                                             {item}
@@ -1522,7 +1579,7 @@ export default function ClientsPage() {
                                         <span className="text-sm font-medium">Growth</span>
                                       </div>
                                       <ul className="space-y-2">
-                                        {clientStrategyPlan[client.id]?.roadmap60?.map((item: string, idx: number) => (
+                                        {(clientStrategyPlan[client.id]?.roadmap60 ?? []).map((item: string, idx: number) => (
                                           <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                                             <Check className="h-4 w-4 mt-0.5 text-muted-foreground/50 flex-shrink-0" />
                                             {item}
@@ -1538,7 +1595,7 @@ export default function ClientsPage() {
                                         <span className="text-sm font-medium">Scale</span>
                                       </div>
                                       <ul className="space-y-2">
-                                        {clientStrategyPlan[client.id]?.roadmap90?.map((item: string, idx: number) => (
+                                        {(clientStrategyPlan[client.id]?.roadmap90 ?? []).map((item: string, idx: number) => (
                                           <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                                             <Check className="h-4 w-4 mt-0.5 text-muted-foreground/50 flex-shrink-0" />
                                             {item}
@@ -1549,14 +1606,14 @@ export default function ClientsPage() {
                                   </div>
 
                                   {/* Detailed Milestones */}
-                                  {clientStrategyPlan[client.id]?.roadmap_30_60_90 && clientStrategyPlan[client.id]!.roadmap_30_60_90.length > 0 && (
+                                  {(clientStrategyPlan[client.id]?.roadmap_30_60_90 ?? []).length > 0 && (
                                     <div className="p-4 border rounded-md">
                                       <h4 className="font-semibold mb-3 flex items-center gap-2">
                                         <Calendar className="h-4 w-4" />
                                         Milestone Tracker
                                       </h4>
                                       <div className="space-y-2">
-                                        {clientStrategyPlan[client.id]?.roadmap_30_60_90?.map((milestone: { id: string; title: string; description: string; phase: string; channel: string; status: string }, idx: number) => (
+                                        {(clientStrategyPlan[client.id]?.roadmap_30_60_90 ?? []).map((milestone: { id: string; title: string; description: string; phase: string; channel: string; status: string }, idx: number) => (
                                           <div key={milestone.id || idx} className="flex items-center gap-3 p-2 rounded-md hover-elevate">
                                             <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium ${
                                               milestone.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
@@ -1577,11 +1634,11 @@ export default function ClientsPage() {
                                   )}
 
                                   {/* Key Initiatives */}
-                                  {clientStrategyPlan[client.id]?.initiatives && clientStrategyPlan[client.id]!.initiatives.length > 0 && (
+                                  {(clientStrategyPlan[client.id]?.initiatives ?? []).length > 0 && (
                                     <div className="p-4 border rounded-md">
                                       <h4 className="font-semibold mb-3">Key Initiatives</h4>
                                       <div className="flex flex-wrap gap-2">
-                                        {clientStrategyPlan[client.id]?.initiatives?.map((initiative: string, idx: number) => (
+                                        {(clientStrategyPlan[client.id]?.initiatives ?? []).map((initiative: string, idx: number) => (
                                           <Badge key={idx} variant="secondary">{initiative}</Badge>
                                         ))}
                                       </div>
@@ -1644,7 +1701,7 @@ export default function ClientsPage() {
                                         <div>
                                           <span className="text-xs font-medium text-green-600">Strengths:</span>
                                           <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
-                                            {clientStrategyPlan[client.id]?.currentState?.strengths?.map((s: string, idx: number) => (
+                                            {(clientStrategyPlan[client.id]?.currentState?.strengths ?? []).map((s: string, idx: number) => (
                                               <li key={idx}>{s}</li>
                                             ))}
                                           </ul>
@@ -1652,7 +1709,7 @@ export default function ClientsPage() {
                                         <div>
                                           <span className="text-xs font-medium text-red-600">Weaknesses:</span>
                                           <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
-                                            {clientStrategyPlan[client.id]?.currentState?.weaknesses?.map((w: string, idx: number) => (
+                                            {(clientStrategyPlan[client.id]?.currentState?.weaknesses ?? []).map((w: string, idx: number) => (
                                               <li key={idx}>{w}</li>
                                             ))}
                                           </ul>
@@ -1668,7 +1725,7 @@ export default function ClientsPage() {
                                       <div>
                                         <span className="text-xs font-medium text-primary">Expected Outcomes:</span>
                                         <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
-                                          {clientStrategyPlan[client.id]?.targetState?.outcomes?.map((o: string, idx: number) => (
+                                          {(clientStrategyPlan[client.id]?.targetState?.outcomes ?? []).map((o: string, idx: number) => (
                                             <li key={idx}>{o}</li>
                                           ))}
                                         </ul>
@@ -1677,18 +1734,18 @@ export default function ClientsPage() {
                                   </div>
 
                                   {/* Channel OKRs */}
-                                  {clientStrategyPlan[client.id]?.channelOKRs && clientStrategyPlan[client.id]!.channelOKRs.length > 0 && (
+                                  {(clientStrategyPlan[client.id]?.channelOKRs ?? []).length > 0 && (
                                     <div className="p-4 border rounded-md">
                                       <h4 className="font-semibold mb-3">Channel Objectives & Key Results</h4>
                                       <div className="space-y-3">
-                                        {clientStrategyPlan[client.id]?.channelOKRs?.map((okr: { channel: string; objective: string; keyResults: string[] }, idx: number) => (
+                                        {(clientStrategyPlan[client.id]?.channelOKRs ?? []).map((okr: { channel: string; objective: string; keyResults: string[] }, idx: number) => (
                                           <div key={idx} className="p-3 bg-muted/30 rounded-md">
                                             <div className="flex items-center gap-2 mb-1">
-                                              <Badge variant="outline" size="sm">{okr.channel}</Badge>
+                                              <Badge variant="outline">{okr.channel}</Badge>
                                               <span className="text-sm font-medium">{okr.objective}</span>
                                             </div>
                                             <ul className="list-disc list-inside text-xs text-muted-foreground ml-2">
-                                              {okr.keyResults?.map((kr: string, krIdx: number) => (
+                                              {(okr.keyResults ?? []).map((kr: string, krIdx: number) => (
                                                 <li key={krIdx}>{kr}</li>
                                               ))}
                                             </ul>
@@ -1712,17 +1769,17 @@ export default function ClientsPage() {
                                 <div className="flex items-center justify-center p-8">
                                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                                 </div>
-                              ) : clientContentDrafts[client.id]?.length > 0 ? (
+                              ) : (clientContentDrafts[client.id] ?? []).length > 0 ? (
                                 <div className="space-y-4">
                                   <div className="flex items-center justify-between gap-2">
                                     <h4 className="font-semibold">Content Approval Queue</h4>
-                                    <Badge variant="outline" size="sm">
-                                      {clientContentDrafts[client.id]?.filter(d => d.status === 'pending_approval').length || 0} pending
+                                    <Badge variant="outline">
+                                      {(clientContentDrafts[client.id] ?? []).filter(d => d.status === 'pending_approval').length} pending
                                     </Badge>
                                   </div>
                                   
                                   <div className="space-y-3">
-                                    {clientContentDrafts[client.id]?.map((draft) => (
+                                    {(clientContentDrafts[client.id] ?? []).map((draft) => (
                                       <div key={draft.id} className="p-4 border rounded-md space-y-3" data-testid={`content-draft-${draft.id}`}>
                                         <div className="flex items-start justify-between gap-2">
                                           <div className="flex-1">
@@ -1732,11 +1789,11 @@ export default function ClientsPage() {
                                                 draft.status === 'rejected' ? 'destructive' :
                                                 draft.status === 'published' ? 'default' :
                                                 draft.status === 'pending_approval' ? 'secondary' : 'outline'
-                                              } size="sm">
+                                              }>
                                                 {draft.status === 'pending_approval' ? 'Pending' : 
                                                  draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
                                               </Badge>
-                                              <Badge variant="outline" size="sm">{draft.type}</Badge>
+                                              <Badge variant="outline">{draft.type}</Badge>
                                             </div>
                                             <h5 className="font-medium">{draft.title}</h5>
                                             <p className="text-sm text-muted-foreground mt-1 line-clamp-3">{draft.content}</p>

@@ -1,0 +1,141 @@
+Problem
+
+When loading Clients → Strategy, the UI crashes with:
+
+TypeError: Cannot read properties of undefined (reading 'length')
+
+Firestore reads and writes succeed. The crash is purely front-end: the Strategy UI assumes arrays/strings exist and calls .length / .map() on undefined.
+
+Root Cause
+
+Some strategy fields are missing or not yet generated (e.g. roadmap_30_60_90.d30, nextSteps, channelPlan.*.initiatives, businessProfile.primaryServices, etc.). The UI must treat missing fields as empty arrays/empty strings.
+
+Fix Requirements (Non-negotiable)
+
+No .length or .map() may be called on optional fields without a fallback.
+
+Strategy tab must render safely even when:
+
+strategyPlan is missing
+
+strategyPlan is an empty collection
+
+fields inside strategy plan are missing
+
+businessProfile is missing or partially filled
+
+Add a single “empty state” when strategy data is not ready:
+
+“No strategy yet — click Start / Refresh Strategy”
+
+Implementation (must-do)
+
+Wherever Strategy UI reads data, implement a normalization layer that returns a safe object shape with defaults.
+
+A) Create a normalizer function
+
+Create a helper:
+
+normalizeStrategyPlan(rawPlan) -> plan
+
+Defaults must be:
+
+goal.primaryGoal = ""
+
+goal.definitionOfSuccess = ""
+
+currentState.summary = ""
+
+currentState.scores = {}
+
+targetState.summary = ""
+
+targetState.scores = {}
+
+gapSummary = ""
+
+channelPlan.gbp.krs = [], initiatives = []
+
+channelPlan.website.krs = [], initiatives = []
+
+channelPlan.seo.krs = [], initiatives = []
+
+channelPlan.ppc.krs = [], initiatives = []
+
+roadmap_30_60_90.d30 = []
+
+roadmap_30_60_90.d60 = []
+
+roadmap_30_60_90.d90 = []
+
+nextSteps = []
+
+Any missing nested object must be replaced with {} or [] to avoid undefined access.
+
+B) Normalize businessProfile too
+
+Create:
+
+normalizeBusinessProfile(rawProfile) -> profile
+
+Defaults must be:
+
+industry = ""
+
+primaryServices = []
+
+secondaryServices = []
+
+primaryLocations = []
+
+secondaryLocations = []
+
+serviceAreaType = "local"
+
+idealJobType = ""
+
+averageJobValue = null
+
+seasonalityNotes = null
+
+C) Update UI to only render using normalized data
+
+In Strategy tab, do:
+
+const plan = normalizeStrategyPlan(rawPlan)
+
+const bp = normalizeBusinessProfile(client.businessProfile)
+
+Then in rendering:
+
+Use (array ?? []).map(...)
+
+Use (array ?? []).length
+
+Never call .length on something optional directly.
+
+Guard Rails (must add)
+
+Add a null-safe wrapper around Strategy tab loading states:
+
+If rawPlan is null/undefined and no docs exist, show empty state and “Start / Refresh Strategy” button.
+
+Add an error boundary or try/catch around Strategy rendering to prevent entire app crash.
+
+Acceptance Tests
+
+Strategy tab loads without crashing when:
+
+Client has no businessProfile
+
+Client has businessProfile but no strategy plan
+
+Strategy plan exists but some arrays are missing
+
+Strategy plan exists but roadmap_30_60_90 missing
+
+Confirm no console error: Cannot read properties of undefined (reading 'length')
+
+Optional (but recommended)
+
+Log a warning if any expected array field is missing before normalization so we can see data quality issues, but do not crash.
