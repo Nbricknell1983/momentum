@@ -92,6 +92,7 @@ export default function ClientsPage() {
   const [wizardClientId, setWizardClientId] = useState<string | null>(null);
   const [wizardData, setWizardData] = useState<BusinessProfile>({ ...DEFAULT_BUSINESS_PROFILE });
   const [savingWizard, setSavingWizard] = useState(false);
+  const [generatingStrategy, setGeneratingStrategy] = useState<string | null>(null);
 
   const searchString = useSearch();
 
@@ -446,6 +447,56 @@ export default function ClientsPage() {
       toast({ title: "Error", description: "Failed to save strategy data.", variant: "destructive" });
     } finally {
       setSavingWizard(false);
+    }
+  };
+
+  const handleGenerateStrategy = async (client: Client) => {
+    if (!client.businessProfile || !orgId) {
+      toast({ title: "Missing Information", description: "Please complete the strategy wizard first.", variant: "destructive" });
+      return;
+    }
+    setGeneratingStrategy(client.id);
+    try {
+      const response = await fetch('/api/clients/ai/generate-strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client, businessProfile: client.businessProfile }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to generate strategy');
+      const strategyData = await response.json();
+      
+      const planToSave = {
+        clientId: client.id,
+        status: 'active' as const,
+        goal: client.businessProfile.primaryGoal,
+        ...strategyData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      const savedPlan = await saveStrategyPlan(orgId, client.id, planToSave, authReady);
+      setClientStrategyPlan(prev => ({ ...prev, [client.id]: savedPlan }));
+      
+      await updateClientInFirestore(orgId, client.id, {
+        strategyStatus: 'completed' as StrategyStatus,
+        activeStrategyPlanId: savedPlan.id,
+      }, authReady);
+      
+      dispatch(updateClient({
+        id: client.id,
+        updates: {
+          strategyStatus: 'completed' as StrategyStatus,
+          activeStrategyPlanId: savedPlan.id,
+        },
+      }));
+      
+      toast({ title: "Strategy Generated", description: "AI strategy plan has been created and saved." });
+    } catch (error) {
+      console.error('Error generating strategy:', error);
+      toast({ title: "Error", description: "Failed to generate strategy.", variant: "destructive" });
+    } finally {
+      setGeneratingStrategy(null);
     }
   };
 
@@ -959,6 +1010,87 @@ export default function ClientsPage() {
                                         <span className="text-muted-foreground">Primary Goal:</span> {PRIMARY_GOAL_LABELS[client.businessProfile.primaryGoal]}
                                       </div>
                                     )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Generate Strategy Button */}
+                              {client.businessProfile && (
+                                <div className="flex items-center justify-between gap-4 p-4 border rounded-md">
+                                  <div className="space-y-1">
+                                    <span className="font-medium flex items-center gap-2">
+                                      <Sparkles className="h-4 w-4" />
+                                      AI Strategy Plan
+                                    </span>
+                                    <p className="text-sm text-muted-foreground">
+                                      {clientStrategyPlan[client.id] ? 'Strategy plan generated and saved' : 'Generate a comprehensive 90-day marketing strategy'}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    onClick={() => handleGenerateStrategy(client)}
+                                    disabled={generatingStrategy === client.id}
+                                    data-testid={`button-generate-strategy-${client.id}`}
+                                  >
+                                    {generatingStrategy === client.id ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        Generating...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Sparkles className="h-4 w-4 mr-2" />
+                                        {clientStrategyPlan[client.id] ? 'Regenerate' : 'Generate Strategy'}
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+                              )}
+
+                              {/* Display Generated Strategy */}
+                              {clientStrategyPlan[client.id] && (
+                                <div className="p-4 border rounded-md space-y-4">
+                                  <div className="space-y-2">
+                                    <h5 className="font-medium">Core Strategy</h5>
+                                    <p className="text-sm">{clientStrategyPlan[client.id]?.coreStrategy}</p>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                      <h6 className="text-sm font-medium text-muted-foreground">Current State</h6>
+                                      <p className="text-sm">{clientStrategyPlan[client.id]?.currentState?.summary}</p>
+                                      {clientStrategyPlan[client.id]?.currentState?.strengths?.length > 0 && (
+                                        <div>
+                                          <span className="text-xs font-medium text-green-600">Strengths:</span>
+                                          <ul className="text-xs mt-1 space-y-1">
+                                            {clientStrategyPlan[client.id]?.currentState?.strengths?.map((s, i) => (
+                                              <li key={i} className="flex items-start gap-1">
+                                                <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
+                                                {s}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="space-y-2">
+                                      <h6 className="text-sm font-medium text-muted-foreground">Target State</h6>
+                                      <p className="text-sm">{clientStrategyPlan[client.id]?.targetState?.summary}</p>
+                                      {clientStrategyPlan[client.id]?.targetState?.outcomes?.length > 0 && (
+                                        <div>
+                                          <span className="text-xs font-medium text-blue-600">Outcomes:</span>
+                                          <ul className="text-xs mt-1 space-y-1">
+                                            {clientStrategyPlan[client.id]?.targetState?.outcomes?.map((o, i) => (
+                                              <li key={i} className="flex items-start gap-1">
+                                                <Target className="h-3 w-3 text-blue-500 mt-0.5 flex-shrink-0" />
+                                                {o}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-sm text-muted-foreground italic border-l-2 border-muted pl-3">
+                                    {clientStrategyPlan[client.id]?.gapSummary}
                                   </div>
                                 </div>
                               )}

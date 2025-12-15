@@ -510,5 +510,102 @@ Be specific and actionable. Focus on retention and growth.`;
     }
   });
 
+  // Generate AI Strategy Plan
+  app.post("/api/clients/ai/generate-strategy", async (req, res) => {
+    try {
+      const { client, businessProfile } = req.body;
+      
+      if (!client || !businessProfile) {
+        return res.status(400).json({ error: "Client and business profile are required" });
+      }
+
+      const prompt = `You are a digital marketing strategist creating a comprehensive 90-day strategy for a local service business.
+
+Client Business: ${client.businessName}
+Industry: ${businessProfile.industry || 'Local Services'}
+Primary Services: ${businessProfile.primaryServices?.join(', ') || 'N/A'}
+Primary Locations: ${businessProfile.primaryLocations?.join(', ') || 'N/A'}
+Service Area Type: ${businessProfile.serviceAreaType || 'local'}
+Primary Goal: ${businessProfile.primaryGoal || 'more_leads'}
+Ideal Job Type: ${businessProfile.idealJobType || 'N/A'}
+Average Job Value: $${businessProfile.averageJobValue || 'Unknown'}
+Website: ${businessProfile.websiteUrl || 'N/A'}
+Google Business Profile: ${businessProfile.gbpUrl || 'N/A'}
+What's Working: ${businessProfile.workingWell?.join(', ') || 'Nothing specified'}
+What's Not Working: ${businessProfile.notWorkingWell?.join(', ') || 'Nothing specified'}
+Seasonality Notes: ${businessProfile.seasonalityNotes || 'None'}
+Additional Notes: ${businessProfile.additionalNotes || 'None'}
+
+Generate a comprehensive strategy plan in JSON format:
+{
+  "coreStrategy": "One sentence core strategy statement that encapsulates the overall approach",
+  "currentState": {
+    "summary": "2-3 sentence assessment of current digital presence",
+    "strengths": ["Strength 1", "Strength 2", "Strength 3"],
+    "weaknesses": ["Weakness 1", "Weakness 2", "Weakness 3"]
+  },
+  "targetState": {
+    "summary": "2-3 sentence vision of where they should be in 90 days",
+    "outcomes": ["Measurable outcome 1", "Measurable outcome 2", "Measurable outcome 3"]
+  },
+  "gapSummary": "Brief explanation of the gap between current and target state",
+  "channelPlan": [
+    {
+      "channel": "gbp",
+      "objective": "Clear objective for this channel",
+      "keyResults": ["KR1", "KR2"],
+      "tactics": ["Tactic 1", "Tactic 2", "Tactic 3"]
+    },
+    {
+      "channel": "seo",
+      "objective": "Clear objective for this channel",
+      "keyResults": ["KR1", "KR2"],
+      "tactics": ["Tactic 1", "Tactic 2", "Tactic 3"]
+    },
+    {
+      "channel": "website",
+      "objective": "Clear objective for this channel",
+      "keyResults": ["KR1", "KR2"],
+      "tactics": ["Tactic 1", "Tactic 2", "Tactic 3"]
+    }
+  ],
+  "roadmap_30_60_90": [
+    {"id": "m1", "title": "Milestone title", "description": "What will be done", "phase": "30", "channel": "gbp", "status": "pending"},
+    {"id": "m2", "title": "Milestone title", "description": "What will be done", "phase": "30", "channel": "seo", "status": "pending"},
+    {"id": "m3", "title": "Milestone title", "description": "What will be done", "phase": "60", "channel": "website", "status": "pending"},
+    {"id": "m4", "title": "Milestone title", "description": "What will be done", "phase": "60", "channel": "gbp", "status": "pending"},
+    {"id": "m5", "title": "Milestone title", "description": "What will be done", "phase": "90", "channel": "seo", "status": "pending"},
+    {"id": "m6", "title": "Milestone title", "description": "What will be done", "phase": "90", "channel": "social", "status": "pending"}
+  ],
+  "channelOKRs": [
+    {"channel": "GBP", "objective": "Objective statement", "keyResults": ["KR1", "KR2"]},
+    {"channel": "SEO", "objective": "Objective statement", "keyResults": ["KR1", "KR2"]},
+    {"channel": "Website", "objective": "Objective statement", "keyResults": ["KR1", "KR2"]}
+  ],
+  "roadmap30": ["Action 1 for first 30 days", "Action 2", "Action 3"],
+  "roadmap60": ["Action 1 for days 31-60", "Action 2", "Action 3"],
+  "roadmap90": ["Action 1 for days 61-90", "Action 2", "Action 3"],
+  "initiatives": ["Key initiative 1", "Key initiative 2", "Key initiative 3"]
+}
+
+Focus on practical, achievable actions for a local service business. Tailor recommendations to their specific industry and goals.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 3000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const strategy = JSON.parse(content);
+      
+      res.json(strategy);
+    } catch (error) {
+      console.error("Error generating strategy:", error);
+      res.status(500).json({ error: "Failed to generate strategy plan" });
+    }
+  });
+
   return httpServer;
 }
