@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel } from './types';
 import { calculateClientHealth } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -1210,6 +1210,235 @@ export async function updateStrategyPlanVersioned(orgId: string, clientId: strin
   
   try {
     const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyPlans', planId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp({
+      ...cleanedUpdates,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Channel Insights Functions (Evidence-Driven)
+// ============================================
+
+export async function fetchChannelInsights(orgId: string, clientId: string, authReady: boolean = false): Promise<ChannelInsight[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/insights`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const insightsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'insights');
+    const q = query(insightsRef, orderBy('updatedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const insights = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as ChannelInsight[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return insights;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function fetchChannelInsight(orgId: string, clientId: string, channel: InsightChannel, authReady: boolean = false): Promise<ChannelInsight | null> {
+  const path = `orgs/${orgId}/clients/${clientId}/insights/${channel}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'insights', channel);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as ChannelInsight;
+    }
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return null;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function saveChannelInsight(orgId: string, clientId: string, insight: Omit<ChannelInsight, 'id'>, authReady: boolean = false): Promise<ChannelInsight> {
+  const path = `orgs/${orgId}/clients/${clientId}/insights/${insight.channel}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save channel insight: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedInsight = removeUndefinedFields(insight);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedInsight,
+      updatedAt: now,
+      createdAt: insight.createdAt || now,
+    });
+    
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'insights', insight.channel);
+    
+    const { setDoc } = await import('./firebase');
+    await setDoc(docRef, dataToSave, { merge: true });
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+    return { ...cleanedInsight, id: insight.channel, createdAt: insight.createdAt || now, updatedAt: now } as ChannelInsight;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Analytics Snapshots Functions
+// ============================================
+
+export async function fetchAnalyticsSnapshots(orgId: string, clientId: string, authReady: boolean = false): Promise<AnalyticsSnapshot[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/analyticsSnapshots`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const snapshotsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'analyticsSnapshots');
+    const q = query(snapshotsRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const snapshots = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as AnalyticsSnapshot[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return snapshots;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createAnalyticsSnapshot(orgId: string, clientId: string, snapshot: Omit<AnalyticsSnapshot, 'id'>, authReady: boolean = false): Promise<AnalyticsSnapshot> {
+  const path = `orgs/${orgId}/clients/${clientId}/analyticsSnapshots`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create analytics snapshot: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedSnapshot = removeUndefinedFields(snapshot);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedSnapshot,
+      createdAt: now,
+    });
+    const snapshotsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'analyticsSnapshots');
+    const docRef = await addDoc(snapshotsRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedSnapshot, id: docRef.id, createdAt: now } as AnalyticsSnapshot;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function deleteAnalyticsSnapshot(orgId: string, clientId: string, snapshotId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/analyticsSnapshots/${snapshotId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete analytics snapshot: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'analyticsSnapshots', snapshotId);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Evidence Tasks Functions
+// ============================================
+
+export async function fetchEvidenceTasks(orgId: string, clientId: string, authReady: boolean = false): Promise<EvidenceTask[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/evidenceTasks`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const tasksRef = collection(db, 'orgs', orgId, 'clients', clientId, 'evidenceTasks');
+    const q = query(tasksRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const tasks = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as EvidenceTask[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return tasks;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createEvidenceTask(orgId: string, clientId: string, task: Omit<EvidenceTask, 'id'>, authReady: boolean = false): Promise<EvidenceTask> {
+  const path = `orgs/${orgId}/clients/${clientId}/evidenceTasks`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create evidence task: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedTask = removeUndefinedFields(task);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedTask,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const tasksRef = collection(db, 'orgs', orgId, 'clients', clientId, 'evidenceTasks');
+    const docRef = await addDoc(tasksRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedTask, id: docRef.id, createdAt: now, updatedAt: now } as EvidenceTask;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateEvidenceTask(orgId: string, clientId: string, taskId: string, updates: Partial<EvidenceTask>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/evidenceTasks/${taskId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update evidence task: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'evidenceTasks', taskId);
     const cleanedUpdates = removeUndefinedFields(updates);
     const dataToUpdate = convertDatesToTimestamp({
       ...cleanedUpdates,

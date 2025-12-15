@@ -885,6 +885,274 @@ export interface ClientHistory {
   metadata?: Record<string, any>;
 }
 
+// ============================================
+// Evidence-Driven Strategy Types
+// ============================================
+
+export type InsightChannel = 'website' | 'seo' | 'gbp' | 'content' | 'ppc' | 'analytics';
+export type AnalysisStatus = 'assumed' | 'evidence_provided' | 'verified';
+export type EvidenceConfidence = 'low' | 'medium' | 'high';
+
+export const ANALYSIS_STATUS_LABELS: Record<AnalysisStatus, string> = {
+  assumed: 'Assumed (no evidence)',
+  evidence_provided: 'Evidence Provided',
+  verified: 'Verified by Analysis',
+};
+
+export const INSIGHT_CHANNEL_LABELS: Record<InsightChannel, string> = {
+  website: 'Website',
+  seo: 'SEO',
+  gbp: 'Google Business Profile',
+  content: 'Content',
+  ppc: 'PPC/Paid Ads',
+  analytics: 'Analytics',
+};
+
+export interface EvidenceItem {
+  id: string;
+  type: 'screenshot' | 'url' | 'text' | 'note';
+  url?: string;
+  label: string;
+  content?: string;
+  createdAt: Date;
+}
+
+export interface ChannelEvidence {
+  screenshots: EvidenceItem[];
+  urls: string[];
+  pastedText: string;
+  notes: string;
+}
+
+export interface AIAnalysis {
+  summary: string;
+  score: number;
+  confidence: EvidenceConfidence;
+  reasoning: string[];
+  gaps: string[];
+  recommendations: string[];
+  analyzedAt: Date;
+}
+
+export interface ChannelInsight {
+  id: string;
+  clientId: string;
+  channel: InsightChannel;
+  analysisStatus: AnalysisStatus;
+  evidence: ChannelEvidence;
+  providedBy: string | null;
+  providedAt: Date | null;
+  aiAnalysis: AIAnalysis | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const DEFAULT_CHANNEL_EVIDENCE: ChannelEvidence = {
+  screenshots: [],
+  urls: [],
+  pastedText: '',
+  notes: '',
+};
+
+export const DEFAULT_CHANNEL_INSIGHT = (channel: InsightChannel, clientId: string): Omit<ChannelInsight, 'id'> => ({
+  clientId,
+  channel,
+  analysisStatus: 'assumed',
+  evidence: { ...DEFAULT_CHANNEL_EVIDENCE },
+  providedBy: null,
+  providedAt: null,
+  aiAnalysis: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+// Analytics Snapshot for manual input
+export interface AnalyticsSnapshot {
+  id: string;
+  clientId: string;
+  dateRange: string;
+  sessions: number | null;
+  users: number | null;
+  conversions: number | null;
+  conversionRate: number | null;
+  topPages: string[];
+  topKeywords: string[];
+  notes: string;
+  screenshotUrl?: string;
+  createdAt: Date;
+}
+
+export interface AnalyticsComparison {
+  previousSnapshot: AnalyticsSnapshot | null;
+  currentSnapshot: AnalyticsSnapshot;
+  changes: {
+    sessions: { value: number; percent: number } | null;
+    conversions: { value: number; percent: number } | null;
+  };
+  aiInsights: string[];
+  recommendations: string[];
+  generatedAt: Date;
+}
+
+// Evidence-Driven Task (replaces generic tasks)
+export type EvidenceTaskStatus = 'pending' | 'in_progress' | 'completed' | 'verified';
+
+export interface EvidenceTask {
+  id: string;
+  clientId: string;
+  task: string;
+  channel: InsightChannel;
+  definition: string;
+  evidenceRequired: ('screenshot' | 'text' | 'url')[];
+  evidenceProvided: EvidenceItem[];
+  status: EvidenceTaskStatus;
+  impactMetric: string;
+  aiValidation?: {
+    validated: boolean;
+    feedback: string;
+    validatedAt: Date;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date;
+  verifiedAt?: Date;
+}
+
+// Strategy Wizard Answers - Canonical Type (per spec)
+export interface StrategyWizardAnswers {
+  // Step 1: Business Basics
+  industry: string;
+  primaryServices: string[];
+  secondaryServices: string[];
+  serviceAreaType: ServiceAreaType;
+  primaryLocations: string[];
+  secondaryLocations: string[];
+  idealJobType: string;
+  averageJobValue: number | null;
+  seasonalityNotes: string | null;
+
+  // Step 2: Goal
+  primaryGoal: PrimaryGoal | null;
+  definitionOfSuccess: string;
+
+  // Step 3: Current Marketing
+  whatsWorking: string[];
+  whatsNotWorking: string[];
+  notes: string;
+
+  // Step 4: Assets
+  assetLinks: {
+    websiteUrl: string;
+    gbpUrl: string;
+    placeId: string;
+    facebookUrl: string;
+    instagramUrl: string;
+  };
+
+  // Step 5: Competitors
+  competitors: {
+    provided: { name: string; websiteUrl: string; placeId: string }[];
+  };
+
+  // Step 6: Preferences
+  preferences: {
+    cadenceTier: CadenceTier;
+    productsEnabled: { gbp: boolean; website: boolean; seo: boolean; ppc: boolean };
+  };
+
+  // Analytics baseline (optional)
+  analyticsBaseline: AnalyticsSnapshot | null;
+}
+
+export const DEFAULT_STRATEGY_WIZARD_ANSWERS: StrategyWizardAnswers = {
+  industry: '',
+  primaryServices: [],
+  secondaryServices: [],
+  serviceAreaType: 'local',
+  primaryLocations: [],
+  secondaryLocations: [],
+  idealJobType: '',
+  averageJobValue: null,
+  seasonalityNotes: null,
+  primaryGoal: null,
+  definitionOfSuccess: '',
+  whatsWorking: [],
+  whatsNotWorking: [],
+  notes: '',
+  assetLinks: {
+    websiteUrl: '',
+    gbpUrl: '',
+    placeId: '',
+    facebookUrl: '',
+    instagramUrl: '',
+  },
+  competitors: {
+    provided: [],
+  },
+  preferences: {
+    cadenceTier: 'standard',
+    productsEnabled: { gbp: true, website: true, seo: true, ppc: false },
+  },
+  analyticsBaseline: null,
+};
+
+// Helper to convert legacy BusinessProfile to StrategyWizardAnswers
+export function businessProfileToWizardAnswers(profile: BusinessProfile | null): StrategyWizardAnswers {
+  if (!profile) return { ...DEFAULT_STRATEGY_WIZARD_ANSWERS };
+  return {
+    industry: profile.industry || '',
+    primaryServices: profile.primaryServices || [],
+    secondaryServices: profile.secondaryServices || [],
+    serviceAreaType: profile.serviceAreaType || 'local',
+    primaryLocations: profile.primaryLocations || [],
+    secondaryLocations: profile.secondaryLocations || [],
+    idealJobType: profile.idealJobType || '',
+    averageJobValue: profile.averageJobValue ?? null,
+    seasonalityNotes: profile.seasonalityNotes ?? null,
+    primaryGoal: profile.primaryGoal ?? null,
+    definitionOfSuccess: '',
+    whatsWorking: profile.workingWell || [],
+    whatsNotWorking: profile.notWorkingWell || [],
+    notes: profile.additionalNotes || '',
+    assetLinks: {
+      websiteUrl: profile.websiteUrl || '',
+      gbpUrl: profile.gbpUrl || '',
+      placeId: '',
+      facebookUrl: profile.facebookUrl || '',
+      instagramUrl: profile.instagramUrl || '',
+    },
+    competitors: { provided: [] },
+    preferences: {
+      cadenceTier: 'standard',
+      productsEnabled: { gbp: true, website: true, seo: true, ppc: false },
+    },
+    analyticsBaseline: null,
+  };
+}
+
+// Helper to convert StrategyWizardAnswers back to BusinessProfile for backwards compatibility
+export function wizardAnswersToBusinessProfile(answers: StrategyWizardAnswers): BusinessProfile {
+  return {
+    industry: answers.industry,
+    primaryServices: answers.primaryServices,
+    secondaryServices: answers.secondaryServices,
+    primaryLocations: answers.primaryLocations,
+    secondaryLocations: answers.secondaryLocations,
+    serviceAreaType: answers.serviceAreaType,
+    idealJobType: answers.idealJobType,
+    averageJobValue: answers.averageJobValue,
+    seasonalityNotes: answers.seasonalityNotes,
+    primaryGoal: answers.primaryGoal,
+    websiteUrl: answers.assetLinks.websiteUrl,
+    gbpUrl: answers.assetLinks.gbpUrl,
+    facebookUrl: answers.assetLinks.facebookUrl,
+    instagramUrl: answers.assetLinks.instagramUrl,
+    workingWell: answers.whatsWorking,
+    notWorkingWell: answers.whatsNotWorking,
+    additionalNotes: answers.notes,
+  };
+}
+
 export const HEALTH_STATUS_LABELS: Record<HealthStatus, string> = {
   green: 'Healthy',
   amber: 'At Risk',

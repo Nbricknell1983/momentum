@@ -1,0 +1,252 @@
+Upgrade the existing Strategy system from assumption-based, high-level AI output to an evidence-driven, user-verifiable, action-oriented strategy engine.
+
+The system must:
+
+Allow users to provide evidence manually (screenshots, URLs, pasted data)
+
+Force AI to justify statements using evidence
+
+Allow users to challenge and correct assumptions
+
+Convert strategy into trackable, evidence-validated tasks
+
+Support ongoing analytics snapshots to measure progress over time
+
+No reliance on external APIs is required.
+
+1. CORE CONCEPT: Evidence-First Strategy
+
+All strategic claims must be in one of three states:
+
+Assumed – no evidence provided
+
+Evidence-Backed – user supplied proof
+
+Verified – AI analyzed evidence and locked the score/claim
+
+AI must not present assumptions as facts.
+
+2. DATA MODEL (Firestore)
+Evidence Storage (Per Client, Per Channel)
+/clients/{clientId}/insights/{channel}
+
+
+Where {channel} ∈:
+
+website
+
+seo
+
+gbp
+
+content
+
+ppc
+
+analytics
+
+Example document shape:
+{
+  "channel": "seo",
+  "analysisStatus": "assumed | evidence_provided | verified",
+  "evidence": {
+    "screenshots": [
+      { "url": "...", "label": "Service page structure" }
+    ],
+    "urls": [
+      "https://example.com/air-conditioning-installation"
+    ],
+    "pastedText": "Top keywords: air conditioning Hervey Bay...",
+    "notes": "Client has 9 service pages and 6 suburb pages"
+  },
+  "providedBy": "user",
+  "providedAt": "timestamp",
+  "aiAnalysis": {
+    "summary": "SEO structure exists but lacks internal linking",
+    "score": 61,
+    "confidence": "high"
+  }
+}
+
+3. STRATEGY UI CHANGES (Required)
+A. Evidence Panels (Per Channel)
+
+Add an “Evidence” section to:
+
+Overview
+
+Insights
+
+Plan tabs
+
+Each panel must support:
+
+Screenshot upload
+
+URL input
+
+Paste-in text (analytics, descriptions, keywords)
+
+Notes field
+
+Label clearly:
+
+“Provide evidence to validate or challenge this analysis”
+
+B. Strategy Claims Must Show Confidence
+
+Every strategic statement must display:
+
+🟡 “Assumed (no evidence yet)”
+
+🔵 “Based on provided evidence”
+
+🟢 “Verified by analysis”
+
+Example:
+
+“Limited online visibility”
+Status: Assumed
+→ “Add evidence to verify or correct”
+
+4. CHANNEL READINESS ASSESSMENT (Spider Chart Upgrade)
+Required Enhancements
+
+Each axis (Website, SEO, GBP, Content, PPC) must have:
+
+Hover tooltip explaining why the score exists
+
+Indicator showing Assumed vs Evidence-Backed
+
+Tooltip example:
+
+SEO Score: 61
+Evidence: 9 service pages, 5 location pages
+Gaps: Missing internal links, no schema
+
+If no evidence exists:
+
+“Score based on assumptions — upload evidence to refine”
+
+5. STRATEGY WIZARD FIXES (Critical)
+Wizard State Contract (MANDATORY)
+
+All wizard steps must write to one shared object:
+
+wizardAnswers = {
+  industry: string,
+  primaryServices: string[],
+  serviceAreaType: string,
+  primaryLocations: string[],
+  whatsWorking: string[],
+  whatsNotWorking: string[],
+  goals: string[],
+  analyticsBaseline: object | null
+}
+
+
+Rules:
+
+Arrays must always default to []
+
+No step may write partial or differently named keys
+
+On each step transition, persist to Firestore:
+
+/clients/{clientId}/strategySessions/{sessionId}
+
+6. ACTIONABLE STRATEGY TASKS (Not Generic)
+
+Replace vague tasks like:
+
+“Optimize Google Business Profile”
+
+With evidence-driven tasks:
+
+Task structure:
+{
+  "task": "Rewrite GBP service descriptions",
+  "channel": "gbp",
+  "definition": "Update services to include air conditioning installation keywords",
+  "evidenceRequired": ["screenshot", "text"],
+  "status": "pending | completed | verified",
+  "impactMetric": "GBP visibility score"
+}
+
+
+Task completion requires:
+
+Evidence uploaded
+
+AI validation
+
+Status moves to verified
+
+7. ANALYTICS SNAPSHOTS (No API Required)
+Manual Analytics Input
+
+Allow users to:
+
+Upload GA / GSC screenshots
+
+Paste metrics (sessions, conversions, date range)
+
+Store as:
+
+/clients/{clientId}/insights/analytics/snapshots/{snapshotId}
+
+
+Example:
+
+{
+  "dateRange": "Last 30 days",
+  "sessions": 1243,
+  "conversions": 42,
+  "notes": "Before SEO changes"
+}
+
+8. FEEDBACK LOOP (Strategy That Learns)
+
+When a new analytics snapshot is added:
+
+AI compares against previous snapshot
+
+Strategy updates automatically:
+
+What worked
+
+What didn’t
+
+What to change next
+
+Example output:
+
+“Traffic increased 38%, conversions flat → next focus: conversion optimization”
+
+9. AI BEHAVIOUR RULES (STRICT)
+
+AI must:
+
+Never state assumptions as facts
+
+Always reference evidence when available
+
+Ask for evidence when confidence is low
+
+Re-score channels when evidence changes
+
+Explain why a recommendation exists
+
+10. ACCEPTANCE CRITERIA (Definition of Done)
+
+Users can challenge and correct AI claims
+
+Strategy updates when evidence is added
+
+Tasks are actionable and verifiable
+
+Spider chart is explainable and meaningful
+
+Wizard inputs persist correctly
+
+Analytics can be tracked over time without APIs
