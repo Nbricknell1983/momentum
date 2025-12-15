@@ -14,10 +14,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, selectClient } from '@/store';
+import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
 import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan } from '@/lib/firestoreService';
+import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -85,6 +86,12 @@ export default function ClientsPage() {
 
   const [activeClientTab, setActiveClientTab] = useState<string>('details');
   const [activeStrategySubTab, setActiveStrategySubTab] = useState<string>('overview');
+
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [wizardClientId, setWizardClientId] = useState<string | null>(null);
+  const [wizardData, setWizardData] = useState<BusinessProfile>({ ...DEFAULT_BUSINESS_PROFILE });
+  const [savingWizard, setSavingWizard] = useState(false);
 
   const searchString = useSearch();
 
@@ -391,6 +398,74 @@ export default function ClientsPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openWizard = (client: Client) => {
+    setWizardClientId(client.id);
+    setWizardData(client.businessProfile || { ...DEFAULT_BUSINESS_PROFILE });
+    setWizardStep(1);
+    setIsWizardOpen(true);
+  };
+
+  const closeWizard = () => {
+    setIsWizardOpen(false);
+    setWizardStep(1);
+    setWizardClientId(null);
+    setWizardData({ ...DEFAULT_BUSINESS_PROFILE });
+  };
+
+  const handleWizardNext = () => {
+    if (wizardStep < 6) setWizardStep(wizardStep + 1);
+  };
+
+  const handleWizardBack = () => {
+    if (wizardStep > 1) setWizardStep(wizardStep - 1);
+  };
+
+  const handleWizardSave = async () => {
+    if (!wizardClientId || !orgId) return;
+    setSavingWizard(true);
+    try {
+      await updateClientInFirestore(orgId, wizardClientId, {
+        businessProfile: wizardData,
+        strategyStatus: 'in_progress' as StrategyStatus,
+      }, authReady);
+      
+      dispatch(updateClient({
+        id: wizardClientId,
+        updates: {
+          businessProfile: wizardData,
+          strategyStatus: 'in_progress' as StrategyStatus,
+        },
+      }));
+      
+      toast({ title: "Strategy saved", description: "Business profile has been captured." });
+      closeWizard();
+    } catch (error) {
+      console.error('Error saving wizard:', error);
+      toast({ title: "Error", description: "Failed to save strategy data.", variant: "destructive" });
+    } finally {
+      setSavingWizard(false);
+    }
+  };
+
+  const updateWizardField = <K extends keyof BusinessProfile>(field: K, value: BusinessProfile[K]) => {
+    setWizardData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const addToWizardArray = (field: 'primaryServices' | 'secondaryServices' | 'primaryLocations' | 'secondaryLocations' | 'workingWell' | 'notWorkingWell', value: string) => {
+    if (!value.trim()) return;
+    setWizardData(prev => ({
+      ...prev,
+      [field]: [...(prev[field] || []), value.trim()],
+    }));
+  };
+
+  const removeFromWizardArray = (field: 'primaryServices' | 'secondaryServices' | 'primaryLocations' | 'secondaryLocations' | 'workingWell' | 'notWorkingWell', index: number) => {
+    setWizardData(prev => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index),
+    }));
   };
 
   const formatMRR = (mrr: number) => {
@@ -851,16 +926,17 @@ export default function ClientsPage() {
                                     <Target className="h-5 w-5 text-muted-foreground" />
                                     <span className="font-medium">Strategy Status</span>
                                   </div>
-                                  <Badge variant={client.strategyStatus === 'active' ? 'default' : 'secondary'}>
+                                  <Badge variant={client.strategyStatus === 'completed' ? 'default' : 'secondary'}>
                                     {client.strategyStatus === 'not_started' ? 'Not Started' : 
-                                     client.strategyStatus === 'discovery' ? 'Discovery' :
-                                     client.strategyStatus === 'planning' ? 'Planning' :
-                                     client.strategyStatus === 'active' ? 'Active' : 'Paused'}
+                                     client.strategyStatus === 'in_progress' ? 'In Progress' :
+                                     client.strategyStatus === 'completed' ? 'Completed' :
+                                     client.strategyStatus === 'needs_review' ? 'Needs Review' : 'Unknown'}
                                   </Badge>
                                 </div>
                                 <Button 
                                   variant="default" 
                                   className="gap-2"
+                                  onClick={() => openWizard(client)}
                                   data-testid={`button-start-strategy-${client.id}`}
                                 >
                                   <Play className="h-4 w-4" />
@@ -1216,6 +1292,324 @@ export default function ClientsPage() {
           )}
         </div>
       </ScrollArea>
+
+      <Dialog open={isWizardOpen} onOpenChange={(open) => { if (!open) closeWizard(); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Strategy Kickoff Wizard - Step {wizardStep} of 6
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex gap-1 mb-4">
+            {[1, 2, 3, 4, 5, 6].map((step) => (
+              <div
+                key={step}
+                className={`h-2 flex-1 rounded ${step <= wizardStep ? 'bg-primary' : 'bg-muted'}`}
+              />
+            ))}
+          </div>
+
+          <div className="space-y-4 py-2">
+            {wizardStep === 1 && (
+              <div className="space-y-4">
+                <h3 className="font-medium">Business Basics</h3>
+                <div className="space-y-2">
+                  <Label>Industry</Label>
+                  <Input
+                    value={wizardData.industry}
+                    onChange={(e) => updateWizardField('industry', e.target.value)}
+                    placeholder="e.g., Plumbing, Roofing, HVAC..."
+                    data-testid="input-wizard-industry"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Primary Services</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add a service..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          addToWizardArray('primaryServices', (e.target as HTMLInputElement).value);
+                          (e.target as HTMLInputElement).value = '';
+                        }
+                      }}
+                      data-testid="input-wizard-service"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {wizardData.primaryServices.map((s, i) => (
+                      <Badge key={i} variant="secondary" className="gap-1">
+                        {s}
+                        <X className="h-3 w-3 cursor-pointer" onClick={() => removeFromWizardArray('primaryServices', i)} />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Service Area Type</Label>
+                  <Select value={wizardData.serviceAreaType} onValueChange={(val) => updateWizardField('serviceAreaType', val as ServiceAreaType)}>
+                    <SelectTrigger data-testid="select-wizard-area-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="local">Local (Single city/suburb)</SelectItem>
+                      <SelectItem value="regional">Regional (Multiple suburbs)</SelectItem>
+                      <SelectItem value="multi-location">Multi-location</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Primary Service Locations</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add a location..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          addToWizardArray('primaryLocations', (e.target as HTMLInputElement).value);
+                          (e.target as HTMLInputElement).value = '';
+                        }
+                      }}
+                      data-testid="input-wizard-location"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {wizardData.primaryLocations.map((l, i) => (
+                      <Badge key={i} variant="secondary" className="gap-1">
+                        {l}
+                        <X className="h-3 w-3 cursor-pointer" onClick={() => removeFromWizardArray('primaryLocations', i)} />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 2 && (
+              <div className="space-y-4">
+                <h3 className="font-medium">Digital Presence</h3>
+                <div className="space-y-2">
+                  <Label>Website URL</Label>
+                  <Input
+                    value={wizardData.websiteUrl || ''}
+                    onChange={(e) => updateWizardField('websiteUrl', e.target.value)}
+                    placeholder="https://..."
+                    data-testid="input-wizard-website"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Google Business Profile URL</Label>
+                  <Input
+                    value={wizardData.gbpUrl || ''}
+                    onChange={(e) => updateWizardField('gbpUrl', e.target.value)}
+                    placeholder="https://maps.google.com/..."
+                    data-testid="input-wizard-gbp"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Facebook Page URL</Label>
+                  <Input
+                    value={wizardData.facebookUrl || ''}
+                    onChange={(e) => updateWizardField('facebookUrl', e.target.value)}
+                    placeholder="https://facebook.com/..."
+                    data-testid="input-wizard-facebook"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Instagram URL</Label>
+                  <Input
+                    value={wizardData.instagramUrl || ''}
+                    onChange={(e) => updateWizardField('instagramUrl', e.target.value)}
+                    placeholder="https://instagram.com/..."
+                    data-testid="input-wizard-instagram"
+                  />
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 3 && (
+              <div className="space-y-4">
+                <h3 className="font-medium">Current Marketing</h3>
+                <div className="space-y-2">
+                  <Label>What's working well?</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add something that's working..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          addToWizardArray('workingWell', (e.target as HTMLInputElement).value);
+                          (e.target as HTMLInputElement).value = '';
+                        }
+                      }}
+                      data-testid="input-wizard-working"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {wizardData.workingWell.map((w, i) => (
+                      <Badge key={i} variant="default" className="gap-1">
+                        {w}
+                        <X className="h-3 w-3 cursor-pointer" onClick={() => removeFromWizardArray('workingWell', i)} />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>What's not working?</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add something that needs improvement..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          addToWizardArray('notWorkingWell', (e.target as HTMLInputElement).value);
+                          (e.target as HTMLInputElement).value = '';
+                        }
+                      }}
+                      data-testid="input-wizard-not-working"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {wizardData.notWorkingWell.map((w, i) => (
+                      <Badge key={i} variant="destructive" className="gap-1">
+                        {w}
+                        <X className="h-3 w-3 cursor-pointer" onClick={() => removeFromWizardArray('notWorkingWell', i)} />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 4 && (
+              <div className="space-y-4">
+                <h3 className="font-medium">Goals</h3>
+                <div className="space-y-2">
+                  <Label>Primary Goal</Label>
+                  <Select value={wizardData.primaryGoal || ''} onValueChange={(val) => updateWizardField('primaryGoal', val as PrimaryGoal)}>
+                    <SelectTrigger data-testid="select-wizard-goal">
+                      <SelectValue placeholder="Select primary goal..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="map_pack">Map Pack (Top 3)</SelectItem>
+                      <SelectItem value="more_leads">More Calls/Leads</SelectItem>
+                      <SelectItem value="organic_rankings">Organic Rankings</SelectItem>
+                      <SelectItem value="lower_cpl">Lower CPL / Better Lead Quality</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ideal Job Type</Label>
+                  <Input
+                    value={wizardData.idealJobType}
+                    onChange={(e) => updateWizardField('idealJobType', e.target.value)}
+                    placeholder="e.g., Hot water replacements, commercial jobs..."
+                    data-testid="input-wizard-ideal-job"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Average Job Value ($)</Label>
+                  <Input
+                    type="number"
+                    value={wizardData.averageJobValue || ''}
+                    onChange={(e) => updateWizardField('averageJobValue', e.target.value ? Number(e.target.value) : null)}
+                    placeholder="e.g., 500"
+                    data-testid="input-wizard-job-value"
+                  />
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 5 && (
+              <div className="space-y-4">
+                <h3 className="font-medium">Challenges & Notes</h3>
+                <div className="space-y-2">
+                  <Label>Seasonality Notes</Label>
+                  <Textarea
+                    value={wizardData.seasonalityNotes || ''}
+                    onChange={(e) => updateWizardField('seasonalityNotes', e.target.value)}
+                    placeholder="Any seasonal patterns in their business..."
+                    data-testid="input-wizard-seasonality"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Additional Notes</Label>
+                  <Textarea
+                    value={wizardData.additionalNotes || ''}
+                    onChange={(e) => updateWizardField('additionalNotes', e.target.value)}
+                    placeholder="Any other important information..."
+                    data-testid="input-wizard-notes"
+                  />
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 6 && (
+              <div className="space-y-4">
+                <h3 className="font-medium">Review & Confirm</h3>
+                <div className="space-y-3 text-sm border rounded-md p-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><span className="text-muted-foreground">Industry:</span> {wizardData.industry || '-'}</div>
+                    <div><span className="text-muted-foreground">Area Type:</span> {wizardData.serviceAreaType}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Services:</span> {wizardData.primaryServices.join(', ') || '-'}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Locations:</span> {wizardData.primaryLocations.join(', ') || '-'}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Website:</span> {wizardData.websiteUrl || '-'}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Goal:</span> {wizardData.primaryGoal ? PRIMARY_GOAL_LABELS[wizardData.primaryGoal] : '-'}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Ideal Job:</span> {wizardData.idealJobType || '-'}
+                  </div>
+                  {wizardData.averageJobValue && (
+                    <div>
+                      <span className="text-muted-foreground">Avg Job Value:</span> ${wizardData.averageJobValue}
+                    </div>
+                  )}
+                  {wizardData.workingWell.length > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Working Well:</span> {wizardData.workingWell.join(', ')}
+                    </div>
+                  )}
+                  {wizardData.notWorkingWell.length > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Not Working:</span> {wizardData.notWorkingWell.join(', ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-between gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={closeWizard} data-testid="button-wizard-cancel">
+              Cancel
+            </Button>
+            <div className="flex gap-2">
+              {wizardStep > 1 && (
+                <Button variant="outline" onClick={handleWizardBack} data-testid="button-wizard-back">
+                  Back
+                </Button>
+              )}
+              {wizardStep < 6 ? (
+                <Button onClick={handleWizardNext} data-testid="button-wizard-next">
+                  Next
+                </Button>
+              ) : (
+                <Button onClick={handleWizardSave} disabled={savingWizard} data-testid="button-wizard-save">
+                  {savingWizard ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Save Strategy
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
