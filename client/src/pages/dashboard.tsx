@@ -1,13 +1,17 @@
+import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import { Phone, Users, FileText, DollarSign, Target, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Phone, Users, FileText, DollarSign, Target, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import StatCard from '@/components/StatCard';
 import TrafficLight from '@/components/TrafficLight';
+import MomentumScoreCard from '@/components/MomentumScoreCard';
+import MomentumCoach from '@/components/MomentumCoach';
 import { RootState } from '@/store';
 import { getTrafficLightStatus, STAGE_LABELS } from '@/lib/types';
-import { format, isToday, isPast } from 'date-fns';
+import { calculateMomentum, calculateRollingAverage, detectTrendAlert, getMomentumStatusColor } from '@/lib/momentumEngine';
+import type { ActivityTargets } from '@/lib/momentumEngine';
+import { format, isToday } from 'date-fns';
 import {
   LineChart,
   Line,
@@ -18,38 +22,63 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  ReferenceLine,
 } from 'recharts';
 
 export default function DashboardPage() {
   const user = useSelector((state: RootState) => state.app.user);
   const leads = useSelector((state: RootState) => state.app.leads);
+  const activities = useSelector((state: RootState) => state.app.activities);
   const dailyMetrics = useSelector((state: RootState) => state.app.dailyMetrics);
-  const tasks = useSelector((state: RootState) => state.app.tasks);
 
-  // Get today's metrics
+  const targets = user?.targets || { calls: 25, doors: 5, meetings: 3, followups: 15, proposals: 2, deals: 1 };
+
+  const activityTargets: ActivityTargets = useMemo(() => ({
+    calls: targets.calls,
+    sms: Math.round(targets.followups * 0.5),
+    emails: Math.round(targets.followups * 0.3),
+    dropins: targets.doors,
+    meetings: targets.meetings,
+  }), [targets]);
+
+  const previousScores = useMemo(() => 
+    dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse(),
+  [dailyMetrics]);
+
+  const momentum = useMemo(() => 
+    calculateMomentum(leads, activities, activityTargets, previousScores),
+  [leads, activities, activityTargets, previousScores]);
+
   const todayMetrics = dailyMetrics.find(m => isToday(new Date(m.date))) || {
     calls: 0, doors: 0, meetings: 0, followups: 0, proposals: 0, deals: 0, momentumScore: 0
   };
 
-  // Calculate weekly momentum
-  const weeklyMomentum = dailyMetrics.slice(0, 7).reduce((sum, m) => sum + m.momentumScore, 0);
-  const avgMomentum = dailyMetrics.length > 0 
-    ? Math.round(weeklyMomentum / Math.min(dailyMetrics.length, 7)) 
-    : 0;
+  const trendData = useMemo(() => {
+    const scores = dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse();
+    const rollingAvg = calculateRollingAverage(scores, 3);
+    
+    return dailyMetrics.slice(0, 7).reverse().map((m, i) => ({
+      date: format(new Date(m.date), 'EEE'),
+      score: m.momentumScore,
+      avg: rollingAvg[i] || m.momentumScore,
+      status: m.momentumScore >= 80 ? 'healthy' : m.momentumScore >= 65 ? 'stable' : m.momentumScore >= 50 ? 'at_risk' : 'critical',
+    }));
+  }, [dailyMetrics]);
 
-  // Get overdue leads
+  const trendAlert = useMemo(() => 
+    detectTrendAlert(dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse()),
+  [dailyMetrics]);
+
   const overdueLeads = leads.filter(lead => {
     if (lead.archived || !lead.nextContactDate) return false;
     return getTrafficLightStatus(lead) === 'red';
   }).slice(0, 5);
 
-  // Get due today leads
   const dueTodayLeads = leads.filter(lead => {
     if (lead.archived || !lead.nextContactDate) return false;
     return isToday(new Date(lead.nextContactDate));
   });
 
-  // Pipeline funnel data
   const funnelData = [
     { stage: 'Suspect', count: leads.filter(l => l.stage === 'suspect' && !l.archived).length },
     { stage: 'Contacted', count: leads.filter(l => l.stage === 'contacted' && !l.archived).length },
@@ -60,22 +89,12 @@ export default function DashboardPage() {
     { stage: 'Won', count: leads.filter(l => l.stage === 'won' && !l.archived).length },
   ];
 
-  // Momentum trend data
-  const trendData = dailyMetrics.slice(0, 7).reverse().map(m => ({
-    date: format(new Date(m.date), 'EEE'),
-    score: m.momentumScore,
-  }));
-
-  // Calculate total won MRR
   const wonMrr = leads
     .filter(l => l.stage === 'won' && !l.archived && l.mrr)
     .reduce((sum, l) => sum + (l.mrr || 0), 0);
 
-  const targets = user?.targets || { calls: 25, doors: 5, meetings: 3, followups: 15, proposals: 2, deals: 1 };
-
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
-      {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-dashboard-title">Dashboard</h1>
@@ -84,13 +103,12 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="gap-2 text-base py-1 px-3">
             <Target className="h-4 w-4" />
-            <span className="font-mono font-bold">{avgMomentum}</span>
-            <span className="text-muted-foreground">Avg Momentum</span>
+            <span className="font-mono font-bold" style={{ color: momentum.statusColor }}>{momentum.score}</span>
+            <span className="text-muted-foreground">Momentum</span>
           </Badge>
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Calls Today"
@@ -118,42 +136,85 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Momentum Trend */}
+        <MomentumScoreCard momentum={momentum} showBreakdown={true} />
+        <MomentumCoach momentum={momentum} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="font-semibold">Momentum Trend</h2>
-            <Badge variant="secondary">Last 7 Days</Badge>
+            <div className="flex items-center gap-2">
+              {trendAlert.alert && (
+                <Badge variant="destructive" className="gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {trendAlert.type === 'downtrend' ? 'Downtrend' : 'Flatline'}
+                </Badge>
+              )}
+              <Badge variant="secondary">Last 7 Days</Badge>
+            </div>
           </div>
-          <div className="h-64">
+          <div className="h-64" data-testid="momentum-trend-chart">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="date" className="text-xs" />
-                <YAxis className="text-xs" />
+                <YAxis domain={[0, 100]} className="text-xs" />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
+                  formatter={(value: number, name: string) => [
+                    value,
+                    name === 'avg' ? '3-Day Avg' : 'Score'
+                  ]}
+                />
+                <ReferenceLine y={80} stroke="hsl(142, 76%, 36%)" strokeDasharray="5 5" label={{ value: 'Healthy', position: 'right', fontSize: 10 }} />
+                <ReferenceLine y={65} stroke="hsl(48, 96%, 53%)" strokeDasharray="5 5" label={{ value: 'Stable', position: 'right', fontSize: 10 }} />
+                <ReferenceLine y={50} stroke="hsl(25, 95%, 53%)" strokeDasharray="5 5" label={{ value: 'At Risk', position: 'right', fontSize: 10 }} />
+                <Line
+                  type="monotone"
+                  dataKey="avg"
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  dot={false}
                 />
                 <Line
                   type="monotone"
                   dataKey="score"
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--primary))' }}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    const color = getMomentumStatusColor(
+                      payload.score >= 80 ? 'healthy' : 
+                      payload.score >= 65 ? 'stable' : 
+                      payload.score >= 50 ? 'at_risk' : 'critical'
+                    );
+                    return (
+                      <circle
+                        key={payload.date}
+                        cx={cx}
+                        cy={cy}
+                        r={5}
+                        fill={color}
+                        stroke="white"
+                        strokeWidth={2}
+                      />
+                    );
+                  }}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
-        {/* Pipeline Funnel */}
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="font-semibold">Pipeline Funnel</h2>
             <Badge variant="secondary">{leads.filter(l => !l.archived).length} Total</Badge>
           </div>
@@ -177,11 +238,9 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Bottom Row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Due Today */}
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="font-semibold">Due Today</h2>
             <Badge variant="default">{dueTodayLeads.length}</Badge>
           </div>
@@ -205,9 +264,8 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* Overdue */}
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-500" />
               <h2 className="font-semibold">Overdue</h2>

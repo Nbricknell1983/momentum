@@ -564,3 +564,23 @@ export function createDefaultDailyPlan(date: Date): DailyPlan {
     isQueuesInitialized: false,
   };
 }
+
+// Re-export momentum types from momentumEngine
+export type { 
+  MomentumStatus, 
+  MomentumBreakdown, 
+  MomentumResult, 
+  ActivityCounts, 
+  ActivityTargets,
+  CoachingContext 
+} from './momentumEngine';
+
+export { 
+  getMomentumStatus, 
+  getMomentumStatusLabel, 
+  getMomentumStatusColor,
+  calculateMomentum,
+  calculateRollingAverage,
+  detectTrendAlert,
+  buildCoachingPrompt
+} from './momentumEngine';

@@ -217,5 +217,38 @@ Be encouraging but honest. If they missed targets, acknowledge it but focus on s
     }
   });
 
+  // ============================================
+  // Momentum Coach API
+  // ============================================
+  
+  app.post("/api/momentum/coach", async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({ error: "Prompt is required" });
+      }
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { 
+            role: "system", 
+            content: "You are a sales coach in the style of Jeb Blount from 'Fanatical Prospecting'. Be firm, direct, and focus on inputs that drive outcomes. Never be generic or motivational. Be specific and actionable. Use phrases like 'Replacement before celebration', 'Inputs drive outcomes', 'Future pipeline protection'."
+          },
+          { role: "user", content: prompt }
+        ],
+        max_completion_tokens: 500,
+      });
+
+      const advice = response.choices[0]?.message?.content || "Focus on your prospecting activities. Inputs drive outcomes.";
+      
+      res.json({ advice });
+    } catch (error) {
+      console.error("Error generating coaching advice:", error);
+      res.status(500).json({ error: "Failed to generate coaching advice" });
+    }
+  });
+
   return httpServer;
 }
