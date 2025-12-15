@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2 } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,9 +14,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -68,6 +68,14 @@ export default function ClientsPage() {
   const [newDeliverableNotes, setNewDeliverableNotes] = useState('');
   const [savingDeliverable, setSavingDeliverable] = useState(false);
 
+  const [clientStrategySessions, setClientStrategySessions] = useState<Record<string, StrategySession[]>>({});
+  const [clientStrategyPlan, setClientStrategyPlan] = useState<Record<string, StrategyPlan | null>>({});
+  const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
+  const [isAddSessionOpen, setIsAddSessionOpen] = useState(false);
+  const [newSessionAgenda, setNewSessionAgenda] = useState('');
+  const [newSessionNotes, setNewSessionNotes] = useState('');
+  const [savingSession, setSavingSession] = useState(false);
+
   const searchString = useSearch();
 
   useEffect(() => {
@@ -94,6 +102,70 @@ export default function ClientsPage() {
         .finally(() => setLoadingDeliverables(null));
     }
   }, [expandedClientId, orgId, authReady]);
+
+  useEffect(() => {
+    if (expandedClientId && orgId && authReady && clientStrategySessions[expandedClientId] === undefined) {
+      setLoadingStrategy(expandedClientId);
+      Promise.all([
+        fetchStrategySessions(orgId, expandedClientId, authReady),
+        fetchStrategyPlan(orgId, expandedClientId, authReady),
+      ])
+        .then(([sessions, plan]) => {
+          setClientStrategySessions(prev => ({ ...prev, [expandedClientId]: sessions }));
+          setClientStrategyPlan(prev => ({ ...prev, [expandedClientId]: plan }));
+        })
+        .finally(() => setLoadingStrategy(null));
+    }
+  }, [expandedClientId, orgId, authReady]);
+
+  const handleAddSession = async (clientId: string) => {
+    if (!newSessionAgenda.trim()) {
+      toast({ title: "Validation Error", description: "Agenda is required.", variant: "destructive" });
+      return;
+    }
+    setSavingSession(true);
+    try {
+      if (!orgId) throw new Error('Organization not found');
+      const sessionData: Omit<StrategySession, 'id'> = {
+        clientId,
+        sessionDate: new Date(),
+        attendees: [],
+        agenda: newSessionAgenda.trim(),
+        notes: newSessionNotes.trim() || '',
+        actionItems: [],
+        createdAt: new Date(),
+      };
+      const saved = await createStrategySession(orgId, clientId, sessionData, authReady);
+      setClientStrategySessions(prev => ({
+        ...prev,
+        [clientId]: [saved, ...(prev[clientId] || [])],
+      }));
+      toast({ title: "Session added", description: "Strategy session has been created." });
+      setNewSessionAgenda('');
+      setNewSessionNotes('');
+      setIsAddSessionOpen(false);
+    } catch (error) {
+      console.error('Error creating strategy session:', error);
+      toast({ title: "Error", description: "Failed to create session.", variant: "destructive" });
+    } finally {
+      setSavingSession(false);
+    }
+  };
+
+  const handleDeleteSession = async (clientId: string, sessionId: string) => {
+    if (!orgId) return;
+    try {
+      await deleteStrategySession(orgId, clientId, sessionId, authReady);
+      setClientStrategySessions(prev => ({
+        ...prev,
+        [clientId]: prev[clientId]?.filter(s => s.id !== sessionId) || [],
+      }));
+      toast({ title: "Session deleted", description: "Strategy session has been removed." });
+    } catch (error) {
+      console.error('Error deleting strategy session:', error);
+      toast({ title: "Error", description: "Failed to delete session.", variant: "destructive" });
+    }
+  };
 
   const handleAddDeliverable = async (clientId: string) => {
     if (!newDeliverableTitle.trim() || !newDeliverableProduct.trim()) {
@@ -672,6 +744,126 @@ export default function ClientsPage() {
                                 )}
                               </div>
                             ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-3 pt-2 border-t">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-medium flex items-center gap-2">
+                            <Target className="h-4 w-4" />
+                            Strategy Sessions
+                          </h4>
+                          <Dialog open={isAddSessionOpen && expandedClientId === client.id} onOpenChange={(open) => {
+                            setIsAddSessionOpen(open);
+                            if (!open) {
+                              setNewSessionAgenda('');
+                              setNewSessionNotes('');
+                            }
+                          }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm" data-testid={`button-add-session-${client.id}`}>
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add Session
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Add Strategy Session</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="session-agenda">Agenda</Label>
+                                  <Textarea
+                                    id="session-agenda"
+                                    value={newSessionAgenda}
+                                    onChange={(e) => setNewSessionAgenda(e.target.value)}
+                                    placeholder="What topics will be discussed..."
+                                    data-testid="input-session-agenda"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="session-notes">Notes (optional)</Label>
+                                  <Textarea
+                                    id="session-notes"
+                                    value={newSessionNotes}
+                                    onChange={(e) => setNewSessionNotes(e.target.value)}
+                                    placeholder="Additional notes..."
+                                    data-testid="input-session-notes"
+                                  />
+                                </div>
+                                <Button onClick={() => handleAddSession(client.id)} className="w-full" disabled={savingSession} data-testid="button-confirm-session">
+                                  {savingSession ? 'Saving...' : 'Add Session'}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                        
+                        {loadingStrategy === client.id ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : (clientStrategySessions[client.id]?.length || 0) === 0 ? (
+                          <p className="text-sm text-muted-foreground py-2">No strategy sessions yet</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {clientStrategySessions[client.id]?.map(session => (
+                              <div key={session.id} className="border rounded-md p-3 space-y-2" data-testid={`session-${session.id}`}>
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">{formatDate(session.sessionDate)}</span>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteSession(client.id, session.id)}
+                                    data-testid={`button-delete-session-${session.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="flex items-start gap-2">
+                                    <FileText className="h-3 w-3 mt-1 text-muted-foreground" />
+                                    <span className="text-sm">{session.agenda}</span>
+                                  </div>
+                                  {session.notes && (
+                                    <p className="text-xs text-muted-foreground pl-5">{session.notes}</p>
+                                  )}
+                                </div>
+                                {session.actionItems.length > 0 && (
+                                  <div className="pt-1">
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">Action Items:</p>
+                                    <ul className="text-xs text-muted-foreground list-disc list-inside">
+                                      {session.actionItems.map((item, idx) => (
+                                        <li key={idx}>{item}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {clientStrategyPlan[client.id] && (
+                          <div className="border rounded-md p-3 space-y-2 mt-3 bg-muted/20" data-testid={`strategy-plan-${client.id}`}>
+                            <h5 className="text-sm font-medium">Strategy Plan</h5>
+                            {clientStrategyPlan[client.id]?.coreStrategy && (
+                              <p className="text-sm text-muted-foreground">{clientStrategyPlan[client.id]?.coreStrategy}</p>
+                            )}
+                            {(clientStrategyPlan[client.id]?.roadmap30?.length || 0) > 0 && (
+                              <div className="pt-1">
+                                <p className="text-xs font-medium">30-Day Roadmap:</p>
+                                <ul className="text-xs text-muted-foreground list-disc list-inside">
+                                  {clientStrategyPlan[client.id]?.roadmap30.map((item, idx) => (
+                                    <li key={idx}>{item}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

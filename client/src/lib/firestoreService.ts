@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan } from './types';
 import { calculateClientHealth } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -877,6 +877,172 @@ export async function deleteDeliverable(orgId: string, clientId: string, deliver
   
   try {
     const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'deliverables', deliverableId);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Strategy Session Functions
+// ============================================
+
+export async function fetchStrategySessions(orgId: string, clientId: string, authReady: boolean = false): Promise<StrategySession[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategySessions`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const sessionsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'strategySessions');
+    const q = query(sessionsRef, orderBy('sessionDate', 'desc'));
+    const snapshot = await getDocs(q);
+    const sessions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as StrategySession[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return sessions;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createStrategySession(orgId: string, clientId: string, session: Omit<StrategySession, 'id'>, authReady: boolean = false): Promise<StrategySession> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategySessions`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create strategy session: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedSession = removeUndefinedFields(session);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedSession,
+      createdAt: now,
+    });
+    const sessionsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'strategySessions');
+    const docRef = await addDoc(sessionsRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedSession, id: docRef.id, createdAt: now } as StrategySession;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateStrategySession(orgId: string, clientId: string, sessionId: string, updates: Partial<StrategySession>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategySessions/${sessionId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update strategy session: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategySessions', sessionId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp(cleanedUpdates);
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function deleteStrategySession(orgId: string, clientId: string, sessionId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategySessions/${sessionId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete strategy session: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategySessions', sessionId);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Strategy Plan Functions
+// ============================================
+
+export async function fetchStrategyPlan(orgId: string, clientId: string, authReady: boolean = false): Promise<StrategyPlan | null> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyPlan`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyPlan', 'current');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as StrategyPlan;
+    }
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return null;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function saveStrategyPlan(orgId: string, clientId: string, plan: Omit<StrategyPlan, 'id'>, authReady: boolean = false): Promise<StrategyPlan> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyPlan/current`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save strategy plan: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedPlan = removeUndefinedFields(plan);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedPlan,
+      updatedAt: now,
+      createdAt: plan.createdAt || now,
+    });
+    
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyPlan', 'current');
+    
+    const { setDoc } = await import('./firebase');
+    await setDoc(docRef, dataToSave, { merge: true });
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+    return { ...cleanedPlan, id: 'current', createdAt: plan.createdAt || now, updatedAt: now } as StrategyPlan;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function deleteStrategyPlan(orgId: string, clientId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyPlan/current`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete strategy plan: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyPlan', 'current');
     await deleteDoc(docRef);
     
     logFirestoreOperation('DELETE', path, orgId, true);
