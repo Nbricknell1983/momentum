@@ -17,9 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -157,6 +157,11 @@ export default function ClientsPage() {
   const [updatingDraft, setUpdatingDraft] = useState<string | null>(null);
   const [shareDialogClientId, setShareDialogClientId] = useState<string | null>(null);
 
+  const [clientChannelInsights, setClientChannelInsights] = useState<Record<string, ChannelInsight[]>>({});
+  const [loadingInsights, setLoadingInsights] = useState<string | null>(null);
+  const [savingInsight, setSavingInsight] = useState<string | null>(null);
+  const [editingInsight, setEditingInsight] = useState<{clientId: string, channel: InsightChannel, urls: string, pastedText: string, notes: string} | null>(null);
+
   const searchString = useSearch();
 
   useEffect(() => {
@@ -209,6 +214,105 @@ export default function ClientsPage() {
         .finally(() => setLoadingContentDrafts(null));
     }
   }, [expandedClientId, orgId, authReady]);
+
+  useEffect(() => {
+    // Reset editing state when client changes
+    setEditingInsight(null);
+    
+    if (expandedClientId && orgId && authReady && clientChannelInsights[expandedClientId] === undefined) {
+      setLoadingInsights(expandedClientId);
+      fetchChannelInsights(orgId, expandedClientId, authReady)
+        .then(insights => {
+          setClientChannelInsights(prev => ({ ...prev, [expandedClientId]: insights }));
+        })
+        .finally(() => setLoadingInsights(null));
+    }
+  }, [expandedClientId, orgId, authReady]);
+
+  const handleSaveChannelInsight = async (clientId: string, channel: InsightChannel, urls: string, pastedText: string, notes: string) => {
+    if (!orgId) return;
+    setSavingInsight(channel);
+    try {
+      const existingInsight = clientChannelInsights[clientId]?.find(i => i.channel === channel);
+      const urlList = urls.split('\n').map(u => u.trim()).filter(u => u);
+      const hasEvidence = urlList.length > 0 || pastedText.trim() || notes.trim();
+      // Preserve verified status if already set; otherwise determine from evidence
+      let newStatus: AnalysisStatus;
+      if (existingInsight?.analysisStatus === 'verified' && hasEvidence) {
+        newStatus = 'verified'; // Keep verified if there's still evidence
+      } else {
+        newStatus = hasEvidence ? 'evidence_provided' : 'assumed';
+      }
+      
+      const insightData = {
+        clientId,
+        channel,
+        analysisStatus: newStatus,
+        evidence: {
+          screenshots: existingInsight?.evidence?.screenshots || [],
+          urls: urlList,
+          pastedText: pastedText.trim(),
+          notes: notes.trim(),
+        },
+        providedBy: hasEvidence ? (authUser?.uid || null) : null,
+        providedAt: hasEvidence ? new Date() : null,
+        aiAnalysis: existingInsight?.aiAnalysis || null,
+        createdAt: existingInsight?.createdAt || new Date(),
+        updatedAt: new Date(),
+      };
+      
+      const saved = await saveChannelInsight(orgId, clientId, insightData, authReady);
+      setClientChannelInsights(prev => {
+        const existing = prev[clientId] || [];
+        const idx = existing.findIndex(i => i.channel === channel);
+        if (idx >= 0) {
+          return { ...prev, [clientId]: [...existing.slice(0, idx), saved, ...existing.slice(idx + 1)] };
+        }
+        return { ...prev, [clientId]: [...existing, saved] };
+      });
+      setEditingInsight(null);
+      toast({ title: "Evidence saved", description: `${INSIGHT_CHANNEL_LABELS[channel]} evidence has been updated.` });
+    } catch (error) {
+      console.error('Error saving channel insight:', error);
+      toast({ title: "Error", description: "Failed to save evidence.", variant: "destructive" });
+    } finally {
+      setSavingInsight(null);
+    }
+  };
+
+  const handleMarkInsightVerified = async (clientId: string, channel: InsightChannel) => {
+    if (!orgId) return;
+    setSavingInsight(channel);
+    try {
+      const existingInsight = clientChannelInsights[clientId]?.find(i => i.channel === channel);
+      if (!existingInsight) {
+        toast({ title: "Error", description: "No evidence to verify.", variant: "destructive" });
+        return;
+      }
+      
+      const insightData = {
+        ...existingInsight,
+        analysisStatus: 'verified' as AnalysisStatus,
+        updatedAt: new Date(),
+      };
+      
+      const saved = await saveChannelInsight(orgId, clientId, insightData, authReady);
+      setClientChannelInsights(prev => {
+        const existing = prev[clientId] || [];
+        const idx = existing.findIndex(i => i.channel === channel);
+        if (idx >= 0) {
+          return { ...prev, [clientId]: [...existing.slice(0, idx), saved, ...existing.slice(idx + 1)] };
+        }
+        return { ...prev, [clientId]: [...existing, saved] };
+      });
+      toast({ title: "Verified", description: `${INSIGHT_CHANNEL_LABELS[channel]} has been marked as verified.` });
+    } catch (error) {
+      console.error('Error verifying channel insight:', error);
+      toast({ title: "Error", description: "Failed to verify.", variant: "destructive" });
+    } finally {
+      setSavingInsight(null);
+    }
+  };
 
   const handleUpdateDraftStatus = async (clientId: string, draftId: string, newStatus: ContentDraftStatus, feedback?: string) => {
     if (!orgId) return;
@@ -1672,6 +1776,162 @@ export default function ClientsPage() {
                                       Gap Analysis Summary
                                     </h4>
                                     <p className="text-sm text-muted-foreground">{clientStrategyPlan[client.id]?.gapSummary}</p>
+                                  </div>
+
+                                  {/* Evidence Panels */}
+                                  <div className="p-4 border rounded-md">
+                                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                                      <FileText className="h-5 w-5 text-blue-500" />
+                                      Channel Evidence
+                                    </h4>
+                                    <p className="text-sm text-muted-foreground mb-4">
+                                      Add evidence for each channel to improve strategy accuracy. Provide URLs, paste relevant text, or add notes.
+                                    </p>
+                                    
+                                    {loadingInsights === client.id ? (
+                                      <div className="flex items-center justify-center p-4">
+                                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-3">
+                                        {(['website', 'seo', 'gbp', 'content', 'ppc', 'analytics'] as InsightChannel[]).map((channel) => {
+                                          const insight = clientChannelInsights[client.id]?.find(i => i.channel === channel);
+                                          const isEditing = editingInsight?.clientId === client.id && editingInsight?.channel === channel;
+                                          // Safe access with defaults for evidence
+                                          const evidenceUrls = insight?.evidence?.urls || [];
+                                          const evidencePastedText = insight?.evidence?.pastedText || '';
+                                          const evidenceNotes = insight?.evidence?.notes || '';
+                                          const hasEvidence = evidenceUrls.length > 0 || evidencePastedText || evidenceNotes;
+                                          const canVerify = hasEvidence && insight?.analysisStatus === 'evidence_provided';
+                                          
+                                          return (
+                                            <div key={channel} className="p-3 border rounded-md bg-background" data-testid={`evidence-panel-${channel}-${client.id}`}>
+                                              <div className="flex items-center justify-between gap-2 mb-2">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="font-medium text-sm">{INSIGHT_CHANNEL_LABELS[channel]}</span>
+                                                  <Badge 
+                                                    variant={insight?.analysisStatus === 'verified' ? 'default' : insight?.analysisStatus === 'evidence_provided' ? 'secondary' : 'outline'}
+                                                    className="text-xs"
+                                                  >
+                                                    {insight ? ANALYSIS_STATUS_LABELS[insight.analysisStatus] : 'Assumed'}
+                                                  </Badge>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                  {canVerify && !isEditing && (
+                                                    <Button
+                                                      variant="outline"
+                                                      size="sm"
+                                                      onClick={() => handleMarkInsightVerified(client.id, channel)}
+                                                      disabled={savingInsight === channel}
+                                                      data-testid={`button-verify-evidence-${channel}-${client.id}`}
+                                                    >
+                                                      {savingInsight === channel ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                                                      Verify
+                                                    </Button>
+                                                  )}
+                                                  {!isEditing && (
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      onClick={() => setEditingInsight({
+                                                        clientId: client.id,
+                                                        channel,
+                                                        urls: evidenceUrls.join('\n'),
+                                                        pastedText: evidencePastedText,
+                                                        notes: evidenceNotes,
+                                                      })}
+                                                      data-testid={`button-edit-evidence-${channel}-${client.id}`}
+                                                    >
+                                                      {hasEvidence ? 'Edit' : 'Add Evidence'}
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                              
+                                              {isEditing ? (
+                                                <div className="space-y-3 mt-2">
+                                                  <div>
+                                                    <Label className="text-xs">URLs (one per line)</Label>
+                                                    <Textarea
+                                                      placeholder="https://example.com/page..."
+                                                      className="mt-1 text-sm"
+                                                      rows={2}
+                                                      value={editingInsight.urls}
+                                                      onChange={(e) => setEditingInsight({...editingInsight, urls: e.target.value})}
+                                                      data-testid={`input-urls-${channel}-${client.id}`}
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <Label className="text-xs">Pasted Text (from reports, tools, etc.)</Label>
+                                                    <Textarea
+                                                      placeholder="Paste relevant text from analytics, SEO tools, etc..."
+                                                      className="mt-1 text-sm"
+                                                      rows={3}
+                                                      value={editingInsight.pastedText}
+                                                      onChange={(e) => setEditingInsight({...editingInsight, pastedText: e.target.value})}
+                                                      data-testid={`input-text-${channel}-${client.id}`}
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <Label className="text-xs">Notes</Label>
+                                                    <Textarea
+                                                      placeholder="Additional observations or notes..."
+                                                      className="mt-1 text-sm"
+                                                      rows={2}
+                                                      value={editingInsight.notes}
+                                                      onChange={(e) => setEditingInsight({...editingInsight, notes: e.target.value})}
+                                                      data-testid={`input-notes-${channel}-${client.id}`}
+                                                    />
+                                                  </div>
+                                                  <div className="flex items-center gap-2 pt-2">
+                                                    <Button
+                                                      size="sm"
+                                                      onClick={() => handleSaveChannelInsight(client.id, channel, editingInsight.urls, editingInsight.pastedText, editingInsight.notes)}
+                                                      disabled={savingInsight === channel}
+                                                      data-testid={`button-save-evidence-${channel}-${client.id}`}
+                                                    >
+                                                      {savingInsight === channel ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+                                                      Save
+                                                    </Button>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="ghost"
+                                                      onClick={() => setEditingInsight(null)}
+                                                      data-testid={`button-cancel-evidence-${channel}-${client.id}`}
+                                                    >
+                                                      Cancel
+                                                    </Button>
+                                                  </div>
+                                                </div>
+                                              ) : hasEvidence ? (
+                                                <div className="text-xs text-muted-foreground space-y-1">
+                                                  {evidenceUrls.length > 0 && (
+                                                    <div className="flex items-start gap-1">
+                                                      <ExternalLink className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                                      <span>{evidenceUrls.length} URL(s)</span>
+                                                    </div>
+                                                  )}
+                                                  {evidencePastedText && (
+                                                    <div className="flex items-start gap-1">
+                                                      <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                                      <span className="line-clamp-1">{evidencePastedText.substring(0, 100)}...</span>
+                                                    </div>
+                                                  )}
+                                                  {evidenceNotes && (
+                                                    <div className="flex items-start gap-1">
+                                                      <PenTool className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                                      <span className="line-clamp-1">{evidenceNotes.substring(0, 100)}...</span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ) : (
+                                                <p className="text-xs text-muted-foreground">No evidence provided yet.</p>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
 
                                   {/* Radar Chart */}
