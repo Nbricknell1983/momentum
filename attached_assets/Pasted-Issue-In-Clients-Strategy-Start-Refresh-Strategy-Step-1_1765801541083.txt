@@ -1,0 +1,131 @@
+Issue
+
+In Clients → Strategy → Start / Refresh Strategy → Step 1, the inputs:
+
+Primary Services
+
+Primary Service Locations
+
+are not persisting (not saved into businessProfile and not included in strategySessions.wizardAnswers). Industry and Service Area Type appear to save, but these two “chip/multi-entry” fields do not.
+
+The console warning about DialogContent / aria-describedby is unrelated and should not block saving.
+
+Expected Behaviour (Non-negotiable)
+
+When the user adds items to:
+
+Primary Services
+
+Primary Service Locations
+and clicks Next, those values must be written to both:
+
+Client doc:
+orgs/{orgId}/clients/{clientId}.businessProfile.primaryServices
+orgs/{orgId}/clients/{clientId}.businessProfile.primaryLocations
+
+Strategy session record:
+orgs/{orgId}/clients/{clientId}/strategySessions/{sessionId}.wizardAnswers.primaryServices
+orgs/{orgId}/clients/{clientId}/strategySessions/{sessionId}.wizardAnswers.primaryLocations
+
+Root Cause (likely)
+
+These two fields are “multi-value” inputs (chips/tag input) but are not wired to the wizard’s state reducer / form controller. Common failure modes:
+
+The input updates local component state only, not wizard state
+
+The onChange handler returns a string event, but the wizard expects string[]
+
+The “Add” action is not committing the typed value into the array before Next
+
+Field keys mismatch (primaryService vs primaryServices, primaryLocation vs primaryLocations)
+
+The Next button submits wizardAnswers that omit these arrays
+
+Implementation Requirements
+A) Use a single source of truth for wizard values
+
+Step 1 must read/write from wizardAnswers (or the shared wizard form state). Do not keep a separate local state that isn’t merged on submit.
+
+Required canonical keys:
+
+industry: string
+
+primaryServices: string[]
+
+primaryLocations: string[]
+
+serviceAreaType: "local" | "regional" | "multi-location"
+
+B) Ensure multi-entry inputs commit values correctly
+
+For each “Add a service…” and “Add a location…” input:
+
+Typing + Enter should add the value to the array
+
+Clicking an “Add” suggestion should add to the array
+
+Removing a chip should remove from the array
+
+Duplicates should be prevented (case-insensitive)
+
+Trim whitespace and ignore empty strings
+
+Example logic:
+
+setWizardAnswers(prev => ({ ...prev, primaryServices: uniq([...prev.primaryServices, cleaned]) }))
+
+C) Next button must not proceed unless these are saved to state
+
+Before moving to Step 2, ensure:
+
+wizardAnswers.primaryServices reflects the chip list
+
+wizardAnswers.primaryLocations reflects the chip list
+
+D) On submit (final step), write both destinations
+
+When the wizard finishes (or on Step 1 “Next” if you save progressively):
+
+Update client businessProfile:
+
+businessProfile.primaryServices = wizardAnswers.primaryServices
+
+businessProfile.primaryLocations = wizardAnswers.primaryLocations
+
+also persist industry, serviceAreaType as already working
+
+Create/update strategySession:
+
+wizardAnswers.primaryServices
+
+wizardAnswers.primaryLocations
+
+Validation (lightweight)
+
+Do not hard-block the wizard, but show inline helper text if empty:
+
+“Add at least one primary service”
+
+“Add at least one primary location”
+
+Still allow Next (per “minimum user input, no thinking”), but ensure empty arrays are saved as [] (never undefined).
+
+Acceptance Tests
+
+Add two primary services, click Next, return to Step 1 → services still displayed as chips.
+
+Add two primary locations, click Next, return to Step 1 → locations still displayed.
+
+Refresh page, re-open wizard → values are prefilled from client.businessProfile.
+
+Confirm Firestore contains:
+
+clients/{clientId}.businessProfile.primaryServices as string[]
+
+clients/{clientId}.businessProfile.primaryLocations as string[]
+
+strategySessions/{sessionId}.wizardAnswers.primaryServices and .primaryLocations
+
+Note on the warning
+
+Warning: Missing Description or aria-describedby for DialogContent is UI accessibility only. Fix separately later; it is not related to saving.

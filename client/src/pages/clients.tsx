@@ -655,11 +655,19 @@ export default function ClientsPage() {
   };
 
   const addToWizardArray = (field: 'primaryServices' | 'secondaryServices' | 'primaryLocations' | 'secondaryLocations' | 'workingWell' | 'notWorkingWell', value: string) => {
-    if (!value.trim()) return;
-    setWizardData(prev => ({
-      ...prev,
-      [field]: [...(prev[field] || []), value.trim()],
-    }));
+    const cleaned = value.trim();
+    if (!cleaned) return;
+    setWizardData(prev => {
+      const existing = prev[field] || [];
+      // Prevent duplicates (case-insensitive)
+      if (existing.some(item => item.toLowerCase() === cleaned.toLowerCase())) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [field]: [...existing, cleaned],
+      };
+    });
   };
 
   const removeFromWizardArray = (field: 'primaryServices' | 'secondaryServices' | 'primaryLocations' | 'secondaryLocations' | 'workingWell' | 'notWorkingWell', index: number) => {
@@ -1926,16 +1934,38 @@ export default function ClientsPage() {
                   <Label>Primary Services</Label>
                   <div className="flex gap-2">
                     <Input
+                      id="wizard-service-input"
                       placeholder="Add a service..."
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          addToWizardArray('primaryServices', (e.target as HTMLInputElement).value);
-                          (e.target as HTMLInputElement).value = '';
+                          e.preventDefault();
+                          const input = e.target as HTMLInputElement;
+                          addToWizardArray('primaryServices', input.value);
+                          input.value = '';
                         }
                       }}
                       data-testid="input-wizard-service"
                     />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        const input = document.getElementById('wizard-service-input') as HTMLInputElement;
+                        if (input) {
+                          addToWizardArray('primaryServices', input.value);
+                          input.value = '';
+                          input.focus();
+                        }
+                      }}
+                      data-testid="button-add-service"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
                   </div>
+                  {wizardData.primaryServices.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Add at least one primary service</p>
+                  )}
                   <div className="flex flex-wrap gap-1">
                     {wizardData.primaryServices.map((s, i) => (
                       <Badge key={i} variant="secondary" className="gap-1">
@@ -1962,16 +1992,38 @@ export default function ClientsPage() {
                   <Label>Primary Service Locations</Label>
                   <div className="flex gap-2">
                     <Input
+                      id="wizard-location-input"
                       placeholder="Add a location..."
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          addToWizardArray('primaryLocations', (e.target as HTMLInputElement).value);
-                          (e.target as HTMLInputElement).value = '';
+                          e.preventDefault();
+                          const input = e.target as HTMLInputElement;
+                          addToWizardArray('primaryLocations', input.value);
+                          input.value = '';
                         }
                       }}
                       data-testid="input-wizard-location"
                     />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        const input = document.getElementById('wizard-location-input') as HTMLInputElement;
+                        if (input) {
+                          addToWizardArray('primaryLocations', input.value);
+                          input.value = '';
+                          input.focus();
+                        }
+                      }}
+                      data-testid="button-add-location"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
                   </div>
+                  {wizardData.primaryLocations.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Add at least one primary location</p>
+                  )}
                   <div className="flex flex-wrap gap-1">
                     {wizardData.primaryLocations.map((l, i) => (
                       <Badge key={i} variant="secondary" className="gap-1">
