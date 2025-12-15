@@ -789,47 +789,83 @@ export const CADENCE_TIER_DAYS: Record<CadenceTier, number> = {
   low_touch: 30,
 };
 
-export function calculateChurnRiskScore(client: Client): number {
+export interface ClientHealthResult {
+  churnRiskScore: number;
+  healthStatus: HealthStatus;
+  healthReasons: string[];
+}
+
+export function calculateClientHealth(client: Client): ClientHealthResult {
   let score = 0;
+  const reasons: string[] = [];
   const now = new Date();
   
-  // +20 if no contact in preferred cadence period
+  // +20/+35 if no contact or overdue
   if (client.lastContactDate) {
     const daysSinceContact = Math.floor((now.getTime() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24));
-    if (daysSinceContact > client.preferredContactCadenceDays) {
-      score += 20;
-    }
     if (daysSinceContact > client.preferredContactCadenceDays * 2) {
-      score += 15;
+      score += 35;
+      reasons.push(`Severely overdue for contact (${daysSinceContact} days since last contact)`);
+    } else if (daysSinceContact > client.preferredContactCadenceDays) {
+      score += 20;
+      reasons.push(`Overdue for contact (${daysSinceContact} days since last contact)`);
     }
   } else {
     score += 25;
+    reasons.push('No contact date recorded');
   }
-  
-  // +15 if any deliverable is blocked
-  // (This would need deliverables to be checked - simplified here)
   
   // +10 if strategy needs review
   if (client.strategyStatus === 'needs_review') {
     score += 10;
+    reasons.push('Strategy needs review');
   }
   
   // +20 if no strategy started
   if (client.strategyStatus === 'not_started') {
     score += 20;
+    reasons.push('No strategy plan started');
   }
   
   // +5 per paused product
   const pausedProducts = client.products.filter(p => p.status === 'paused').length;
-  score += pausedProducts * 5;
+  if (pausedProducts > 0) {
+    score += pausedProducts * 5;
+    reasons.push(`${pausedProducts} product(s) paused`);
+  }
+  
+  // +10 if no active products
+  const activeProducts = client.products.filter(p => p.status === 'active').length;
+  if (activeProducts === 0 && client.products.length === 0) {
+    score += 10;
+    reasons.push('No products assigned');
+  }
   
   // -10 if all channels live
   const allChannelsLive = Object.values(client.channelStatus).every(s => s === 'live');
-  if (allChannelsLive) {
+  if (allChannelsLive && Object.keys(client.channelStatus).length > 0) {
     score -= 10;
   }
   
-  return Math.max(0, Math.min(100, score));
+  // Check for channels not started
+  const channelsNotStarted = Object.entries(client.channelStatus).filter(([, status]) => status === 'not_started');
+  if (channelsNotStarted.length === Object.keys(client.channelStatus).length) {
+    score += 5;
+    reasons.push('No channels have been started');
+  }
+  
+  const finalScore = Math.max(0, Math.min(100, score));
+  const healthStatus = getClientHealthStatus(finalScore);
+  
+  return {
+    churnRiskScore: finalScore,
+    healthStatus,
+    healthReasons: reasons,
+  };
+}
+
+export function calculateChurnRiskScore(client: Client): number {
+  return calculateClientHealth(client).churnRiskScore;
 }
 
 export function getClientHealthStatus(churnRiskScore: number): HealthStatus {

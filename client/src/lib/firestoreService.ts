@@ -1,6 +1,7 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit } from './firebase';
 import { auth } from './firebase';
 import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory } from './types';
+import { calculateClientHealth } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
   const currentUser = auth.currentUser;
@@ -575,10 +576,20 @@ export async function fetchClients(orgId: string, authReady: boolean = false): P
     const clientsRef = collection(db, 'orgs', orgId, 'clients');
     const q = query(clientsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
-    const clients = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...convertTimestampToDate(doc.data()),
-    })) as Client[];
+    const clients = snapshot.docs.map(doc => {
+      const clientData = {
+        id: doc.id,
+        ...convertTimestampToDate(doc.data()),
+      } as Client;
+      // Recalculate health on load to ensure it's current
+      const healthResult = calculateClientHealth(clientData);
+      return {
+        ...clientData,
+        churnRiskScore: healthResult.churnRiskScore,
+        healthStatus: healthResult.healthStatus,
+        healthReasons: healthResult.healthReasons,
+      };
+    });
     
     logFirestoreOperation('READ', path, orgId, true);
     return clients;
@@ -601,7 +612,15 @@ export async function fetchClient(orgId: string, id: string, authReady: boolean 
     
     if (docSnap.exists()) {
       logFirestoreOperation('READ', path, orgId, true);
-      return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as Client;
+      const clientData = { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as Client;
+      // Recalculate health on load to ensure it's current
+      const healthResult = calculateClientHealth(clientData);
+      return {
+        ...clientData,
+        churnRiskScore: healthResult.churnRiskScore,
+        healthStatus: healthResult.healthStatus,
+        healthReasons: healthResult.healthReasons,
+      };
     }
     
     logFirestoreOperation('READ', path, orgId, true);
@@ -658,6 +677,23 @@ export async function updateClientInFirestore(orgId: string, id: string, updates
     logFirestoreOperation('WRITE', path, orgId, false, error);
     throw error;
   }
+}
+
+export async function recalculateClientHealth(orgId: string, client: Client, authReady: boolean = false): Promise<Client> {
+  const healthResult = calculateClientHealth(client);
+  const updates = {
+    churnRiskScore: healthResult.churnRiskScore,
+    healthStatus: healthResult.healthStatus,
+    healthReasons: healthResult.healthReasons,
+    updatedAt: new Date(),
+  };
+  
+  await updateClientInFirestore(orgId, client.id, updates, authReady);
+  
+  return {
+    ...client,
+    ...updates,
+  };
 }
 
 export async function deleteClientFromFirestore(orgId: string, id: string, authReady: boolean = false): Promise<void> {
