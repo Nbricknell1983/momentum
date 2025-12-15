@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable } from './types';
 import { calculateClientHealth } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -763,6 +763,125 @@ export async function createClientHistoryEntry(
     return { ...cleanedEntry, id: docRef.id, createdAt: new Date() } as ClientHistory;
   } catch (error: any) {
     logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Deliverables (Project Tracking) Functions
+// ============================================
+
+export async function fetchDeliverables(orgId: string, clientId: string, authReady: boolean = false): Promise<Deliverable[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/deliverables`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const deliverablesRef = collection(db, 'orgs', orgId, 'clients', clientId, 'deliverables');
+    const q = query(deliverablesRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const deliverables = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as Deliverable[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return deliverables;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function fetchDeliverable(orgId: string, clientId: string, deliverableId: string, authReady: boolean = false): Promise<Deliverable | null> {
+  const path = `orgs/${orgId}/clients/${clientId}/deliverables/${deliverableId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'deliverables', deliverableId);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as Deliverable;
+    }
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return null;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function createDeliverable(orgId: string, clientId: string, deliverable: Omit<Deliverable, 'id'>, authReady: boolean = false): Promise<Deliverable> {
+  const path = `orgs/${orgId}/clients/${clientId}/deliverables`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create deliverable: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedDeliverable = removeUndefinedFields(deliverable);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedDeliverable,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const deliverablesRef = collection(db, 'orgs', orgId, 'clients', clientId, 'deliverables');
+    const docRef = await addDoc(deliverablesRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedDeliverable, id: docRef.id, createdAt: now, updatedAt: now } as Deliverable;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateDeliverable(orgId: string, clientId: string, deliverableId: string, updates: Partial<Deliverable>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/deliverables/${deliverableId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update deliverable: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'deliverables', deliverableId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp({
+      ...cleanedUpdates,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function deleteDeliverable(orgId: string, clientId: string, deliverableId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/deliverables/${deliverableId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete deliverable: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'deliverables', deliverableId);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
     throw error;
   }
 }

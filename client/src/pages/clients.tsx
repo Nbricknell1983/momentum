@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -28,6 +30,13 @@ const healthBadgeVariant: Record<HealthStatus, 'default' | 'secondary' | 'destru
   green: 'default',
   amber: 'secondary',
   red: 'destructive',
+};
+
+const deliverableStatusIcons: Record<DeliverableStatus, React.ReactNode> = {
+  not_started: <CircleDot className="h-4 w-4 text-muted-foreground" />,
+  in_progress: <Clock className="h-4 w-4 text-blue-500" />,
+  blocked: <AlertCircle className="h-4 w-4 text-red-500" />,
+  completed: <Check className="h-4 w-4 text-green-500" />,
 };
 
 export default function ClientsPage() {
@@ -51,6 +60,14 @@ export default function ClientsPage() {
   const [newAreaId, setNewAreaId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  const [clientDeliverables, setClientDeliverables] = useState<Record<string, Deliverable[]>>({});
+  const [loadingDeliverables, setLoadingDeliverables] = useState<string | null>(null);
+  const [isAddDeliverableOpen, setIsAddDeliverableOpen] = useState(false);
+  const [newDeliverableTitle, setNewDeliverableTitle] = useState('');
+  const [newDeliverableProduct, setNewDeliverableProduct] = useState('');
+  const [newDeliverableNotes, setNewDeliverableNotes] = useState('');
+  const [savingDeliverable, setSavingDeliverable] = useState(false);
+
   const searchString = useSearch();
 
   useEffect(() => {
@@ -66,6 +83,85 @@ export default function ClientsPage() {
       }
     }
   }, [searchString, clients]);
+
+  useEffect(() => {
+    if (expandedClientId && orgId && authReady && !clientDeliverables[expandedClientId]) {
+      setLoadingDeliverables(expandedClientId);
+      fetchDeliverables(orgId, expandedClientId, authReady)
+        .then(deliverables => {
+          setClientDeliverables(prev => ({ ...prev, [expandedClientId]: deliverables }));
+        })
+        .finally(() => setLoadingDeliverables(null));
+    }
+  }, [expandedClientId, orgId, authReady]);
+
+  const handleAddDeliverable = async (clientId: string) => {
+    if (!newDeliverableTitle.trim() || !newDeliverableProduct.trim()) {
+      toast({ title: "Validation Error", description: "Title and product type are required.", variant: "destructive" });
+      return;
+    }
+    setSavingDeliverable(true);
+    try {
+      if (!orgId) throw new Error('Organization not found');
+      const deliverableData: Omit<Deliverable, 'id'> = {
+        clientId,
+        productType: newDeliverableProduct.trim(),
+        title: newDeliverableTitle.trim(),
+        status: 'not_started',
+        milestones: [],
+        notes: newDeliverableNotes || undefined,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const saved = await createDeliverable(orgId, clientId, deliverableData, authReady);
+      setClientDeliverables(prev => ({
+        ...prev,
+        [clientId]: [saved, ...(prev[clientId] || [])],
+      }));
+      toast({ title: "Deliverable added", description: `${newDeliverableTitle} has been created.` });
+      setNewDeliverableTitle('');
+      setNewDeliverableProduct('');
+      setNewDeliverableNotes('');
+      setIsAddDeliverableOpen(false);
+    } catch (error) {
+      console.error('Error creating deliverable:', error);
+      toast({ title: "Error", description: "Failed to create deliverable.", variant: "destructive" });
+    } finally {
+      setSavingDeliverable(false);
+    }
+  };
+
+  const handleUpdateDeliverableStatus = async (clientId: string, deliverableId: string, newStatus: DeliverableStatus) => {
+    if (!orgId) return;
+    try {
+      await updateDeliverable(orgId, clientId, deliverableId, { status: newStatus }, authReady);
+      setClientDeliverables(prev => ({
+        ...prev,
+        [clientId]: prev[clientId]?.map(d => d.id === deliverableId ? { ...d, status: newStatus, updatedAt: new Date() } : d) || [],
+      }));
+    } catch (error) {
+      console.error('Error updating deliverable:', error);
+      toast({ title: "Error", description: "Failed to update deliverable.", variant: "destructive" });
+    }
+  };
+
+  const handleToggleMilestone = async (clientId: string, deliverableId: string, milestoneId: string, completed: boolean) => {
+    if (!orgId) return;
+    const deliverable = clientDeliverables[clientId]?.find(d => d.id === deliverableId);
+    if (!deliverable) return;
+    const updatedMilestones = deliverable.milestones.map(m =>
+      m.id === milestoneId ? { ...m, completed, completedAt: completed ? new Date() : undefined } : m
+    );
+    try {
+      await updateDeliverable(orgId, clientId, deliverableId, { milestones: updatedMilestones }, authReady);
+      setClientDeliverables(prev => ({
+        ...prev,
+        [clientId]: prev[clientId]?.map(d => d.id === deliverableId ? { ...d, milestones: updatedMilestones } : d) || [],
+      }));
+    } catch (error) {
+      console.error('Error updating milestone:', error);
+    }
+  };
 
   const availableFilterAreas = regionFilter !== 'all' ? getAreasForRegion(regionFilter) : [];
   const availableNewClientAreas = newRegionId ? getAreasForRegion(newRegionId) : [];
@@ -454,6 +550,131 @@ export default function ClientsPage() {
                           <p className="text-sm text-muted-foreground">{client.notes}</p>
                         </div>
                       )}
+
+                      <div className="space-y-3 pt-2 border-t">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-medium flex items-center gap-2">
+                            <Package className="h-4 w-4" />
+                            Deliverables
+                          </h4>
+                          <Dialog open={isAddDeliverableOpen && expandedClientId === client.id} onOpenChange={(open) => {
+                            setIsAddDeliverableOpen(open);
+                            if (!open) {
+                              setNewDeliverableTitle('');
+                              setNewDeliverableProduct('');
+                              setNewDeliverableNotes('');
+                            }
+                          }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm" data-testid={`button-add-deliverable-${client.id}`}>
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Add Deliverable</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="deliverable-title">Title</Label>
+                                  <Input
+                                    id="deliverable-title"
+                                    value={newDeliverableTitle}
+                                    onChange={(e) => setNewDeliverableTitle(e.target.value)}
+                                    placeholder="e.g., Website Launch"
+                                    data-testid="input-deliverable-title"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="deliverable-product">Product Type</Label>
+                                  <Input
+                                    id="deliverable-product"
+                                    value={newDeliverableProduct}
+                                    onChange={(e) => setNewDeliverableProduct(e.target.value)}
+                                    placeholder="e.g., Website, SEO, PPC"
+                                    data-testid="input-deliverable-product"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="deliverable-notes">Notes (optional)</Label>
+                                  <Textarea
+                                    id="deliverable-notes"
+                                    value={newDeliverableNotes}
+                                    onChange={(e) => setNewDeliverableNotes(e.target.value)}
+                                    placeholder="Additional notes..."
+                                    data-testid="input-deliverable-notes"
+                                  />
+                                </div>
+                                <Button onClick={() => handleAddDeliverable(client.id)} className="w-full" disabled={savingDeliverable} data-testid="button-confirm-deliverable">
+                                  {savingDeliverable ? 'Saving...' : 'Add Deliverable'}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                        
+                        {loadingDeliverables === client.id ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : (clientDeliverables[client.id]?.length || 0) === 0 ? (
+                          <p className="text-sm text-muted-foreground py-2">No deliverables yet</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {clientDeliverables[client.id]?.map(deliverable => (
+                              <div key={deliverable.id} className="border rounded-md p-3 space-y-2" data-testid={`deliverable-${deliverable.id}`}>
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {deliverableStatusIcons[deliverable.status]}
+                                    <span className="font-medium text-sm truncate">{deliverable.title}</span>
+                                    <Badge variant="outline" size="sm">{deliverable.productType}</Badge>
+                                  </div>
+                                  <Select
+                                    value={deliverable.status}
+                                    onValueChange={(val) => handleUpdateDeliverableStatus(client.id, deliverable.id, val as DeliverableStatus)}
+                                  >
+                                    <SelectTrigger className="w-32 h-8" data-testid={`select-status-${deliverable.id}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="not_started">Not Started</SelectItem>
+                                      <SelectItem value="in_progress">In Progress</SelectItem>
+                                      <SelectItem value="blocked">Blocked</SelectItem>
+                                      <SelectItem value="completed">Completed</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                {deliverable.blocker && (
+                                  <p className="text-xs text-red-500 flex items-center gap-1">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Blocker: {deliverable.blocker}
+                                  </p>
+                                )}
+                                {deliverable.milestones.length > 0 && (
+                                  <div className="space-y-1 pt-1">
+                                    {deliverable.milestones.map(milestone => (
+                                      <div key={milestone.id} className="flex items-center gap-2 text-sm">
+                                        <Checkbox
+                                          checked={milestone.completed}
+                                          onCheckedChange={(checked) => handleToggleMilestone(client.id, deliverable.id, milestone.id, !!checked)}
+                                          data-testid={`checkbox-milestone-${milestone.id}`}
+                                        />
+                                        <span className={milestone.completed ? 'line-through text-muted-foreground' : ''}>
+                                          {milestone.title}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {deliverable.notes && (
+                                  <p className="text-xs text-muted-foreground">{deliverable.notes}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       <div className="flex gap-2 pt-2">
                         <Button variant="outline" size="sm" data-testid={`button-contact-${client.id}`}>
