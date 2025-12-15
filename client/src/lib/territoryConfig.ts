@@ -34,6 +34,16 @@ export const TERRITORY_CONFIG: Region[] = [
     name: 'Logan',
     areas: [],
   },
+  {
+    id: 'fraser-coast',
+    name: 'Fraser Coast',
+    areas: [],
+  },
+  {
+    id: 'other',
+    name: 'Other',
+    areas: [],
+  },
 ];
 
 // Helper functions for territory operations
