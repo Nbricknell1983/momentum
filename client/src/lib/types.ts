@@ -12,7 +12,7 @@ export type Stage =
   | 'lost'
   | 'nurture';
 
-export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'dropin' | 'followup' | 'proposal' | 'deal';
+export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'dropin' | 'followup' | 'proposal' | 'deal' | 'nba_completed' | 'nba_dismissed';
 
 export type TaskStatus = 'pending' | 'completed' | 'snoozed';
 
@@ -158,6 +158,7 @@ export interface Activity {
   outcome?: string;
   createdAt: Date;
   nextContactDate?: Date;
+  metadata?: Record<string, any>;
 }
 
 export interface Task {
@@ -563,6 +564,84 @@ export function createDefaultDailyPlan(date: Date): DailyPlan {
     hasProspectingBlock: true,
     isQueuesInitialized: false,
   };
+}
+
+// ============================================
+// NBA (Next Best Action) System Types
+// ============================================
+
+export type NBAActionType = 'call' | 'sms' | 'email' | 'meeting' | 'dropin' | 'proposal' | 'followup' | 'research';
+
+export type NBAActionStatus = 'open' | 'done' | 'dismissed';
+
+export interface NBAAction {
+  id: string;
+  targetType: 'lead' | 'deal';
+  targetId: string;
+  title: string;
+  suggestedActionType: NBAActionType;
+  suggestedMessage: string;
+  suggestedEmail: { subject: string; body: string } | null;
+  nepqQuestions: [string, string, string];
+  reason: string;
+  whyBullets: string[];
+  suggestedNextStep: string;
+  priorityScore: number;
+  points: number;
+  dueAt: Date | null;
+  status: NBAActionStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  aiModelVersion: string;
+  suppressUntil: Date | null;
+  dismissedReason: string | null;
+  dismissedAt: Date | null;
+  fingerprint: string;
+}
+
+export interface FocusModeSettings {
+  enabled: boolean;
+  topActionIds: string[];
+  startedAt: Date | null;
+  updatedAt: Date | null;
+}
+
+export interface LeadHistory {
+  id: string;
+  leadId: string;
+  type: 'created' | 'stage_change' | 'activity' | 'action_queue' | 'note' | 'edit' | 'deleted';
+  summary: string;
+  createdAt: Date;
+  userId?: string;
+  userName?: string;
+  metadata?: Record<string, any>;
+}
+
+export const NBA_ACTION_POINTS: Record<NBAActionType, number> = {
+  call: 5,
+  sms: 3,
+  email: 3,
+  meeting: 8,
+  dropin: 8,
+  proposal: 6,
+  followup: 5,
+  research: 2,
+};
+
+export const NBA_ACTION_LABELS: Record<NBAActionType, string> = {
+  call: 'Call',
+  sms: 'SMS',
+  email: 'Email',
+  meeting: 'Meeting',
+  dropin: 'Drop-in',
+  proposal: 'Proposal',
+  followup: 'Follow-up',
+  research: 'Research',
+};
+
+// Generate fingerprint for NBA action deduplication
+export function generateNBAFingerprint(targetId: string, actionType: NBAActionType): string {
+  return `${targetId}-${actionType}-${new Date().toISOString().split('T')[0]}`;
 }
 
 // Re-export momentum types from momentumEngine

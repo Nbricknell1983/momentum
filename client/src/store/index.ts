@@ -1,5 +1,5 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, DailyPlan, ActionQueueItem, TimeBlock, DailyPlanSummary, DailyDebrief, RouteStop, createDefaultDailyPlan, BATTLE_SCORE_POINTS, ActionType } from '@/lib/types';
+import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, DailyPlan, ActionQueueItem, TimeBlock, DailyPlanSummary, DailyDebrief, RouteStop, createDefaultDailyPlan, BATTLE_SCORE_POINTS, ActionType, NBAAction, FocusModeSettings, NBAActionStatus } from '@/lib/types';
 import { mockLeads, mockActivities, mockTasks, mockDailyMetrics, mockUser } from '@/lib/mockData';
 
 // todo: remove mock functionality - replace with Firebase
@@ -21,6 +21,8 @@ interface AppState {
   regionFilter: string | 'all';
   areaFilter: string | 'all';
   nurtureTab: 'active' | 'passive';
+  nbaQueue: NBAAction[];
+  focusMode: FocusModeSettings | null;
 }
 
 const initialState: AppState = {
@@ -40,6 +42,8 @@ const initialState: AppState = {
   regionFilter: 'all',
   areaFilter: 'all',
   nurtureTab: 'active',
+  nbaQueue: [],
+  focusMode: null,
 };
 
 const appSlice = createSlice({
@@ -459,6 +463,85 @@ const appSlice = createSlice({
         state.dailyPlan.battleScoreEarned += action.payload;
       }
     },
+
+    // ============================================
+    // NBA (Next Best Action) Actions
+    // ============================================
+    
+    setNBAQueue(state, action: PayloadAction<NBAAction[]>) {
+      state.nbaQueue = action.payload;
+    },
+    
+    addNBAAction(state, action: PayloadAction<NBAAction>) {
+      state.nbaQueue.push(action.payload);
+      state.nbaQueue.sort((a, b) => b.priorityScore - a.priorityScore);
+    },
+    
+    updateNBAAction(state, action: PayloadAction<{ id: string; updates: Partial<NBAAction> }>) {
+      const index = state.nbaQueue.findIndex(a => a.id === action.payload.id);
+      if (index !== -1) {
+        state.nbaQueue[index] = { ...state.nbaQueue[index], ...action.payload.updates, updatedAt: new Date() };
+      }
+    },
+    
+    removeNBAAction(state, action: PayloadAction<string>) {
+      state.nbaQueue = state.nbaQueue.filter(a => a.id !== action.payload);
+    },
+    
+    completeNBAAction(state, action: PayloadAction<string>) {
+      const nbaAction = state.nbaQueue.find(a => a.id === action.payload);
+      if (nbaAction && nbaAction.status === 'open') {
+        nbaAction.status = 'done';
+        nbaAction.updatedAt = new Date();
+      }
+    },
+    
+    dismissNBAAction(state, action: PayloadAction<{ id: string; reason: string }>) {
+      const nbaAction = state.nbaQueue.find(a => a.id === action.payload.id);
+      if (nbaAction && nbaAction.status === 'open') {
+        nbaAction.status = 'dismissed';
+        nbaAction.dismissedReason = action.payload.reason;
+        nbaAction.dismissedAt = new Date();
+        const suppressUntil = new Date();
+        suppressUntil.setHours(suppressUntil.getHours() + 48);
+        nbaAction.suppressUntil = suppressUntil;
+        nbaAction.updatedAt = new Date();
+      }
+    },
+    
+    setFocusMode(state, action: PayloadAction<FocusModeSettings | null>) {
+      state.focusMode = action.payload;
+    },
+    
+    toggleFocusMode(state) {
+      if (state.focusMode) {
+        if (state.focusMode.enabled) {
+          state.focusMode = { ...state.focusMode, enabled: false, updatedAt: new Date() };
+        } else {
+          const topThree = state.nbaQueue
+            .filter(a => a.status === 'open')
+            .slice(0, 3)
+            .map(a => a.id);
+          state.focusMode = {
+            enabled: true,
+            topActionIds: topThree,
+            startedAt: new Date(),
+            updatedAt: new Date(),
+          };
+        }
+      } else {
+        const topThree = state.nbaQueue
+          .filter(a => a.status === 'open')
+          .slice(0, 3)
+          .map(a => a.id);
+        state.focusMode = {
+          enabled: true,
+          topActionIds: topThree,
+          startedAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
+    },
   },
 });
 
@@ -511,6 +594,14 @@ export const {
   markQueuesInitialized,
   updateDailyTargets,
   addBattleScore,
+  setNBAQueue,
+  addNBAAction,
+  updateNBAAction,
+  removeNBAAction,
+  completeNBAAction,
+  dismissNBAAction,
+  setFocusMode,
+  toggleFocusMode,
 } = appSlice.actions;
 
 export const store = configureStore({

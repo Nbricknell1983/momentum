@@ -1,6 +1,6 @@
-import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection } from './firebase';
+import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
   const currentUser = auth.currentUser;
@@ -278,6 +278,284 @@ export async function createActivity(orgId: string, activity: Omit<Activity, 'id
     return { ...cleanedActivity, id: docRef.id, createdAt: new Date() } as Activity;
   } catch (error: any) {
     logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// NBA (Next Best Action) Queue Functions
+// ============================================
+
+export async function fetchNBAQueue(orgId: string, authReady: boolean = false): Promise<NBAAction[]> {
+  const path = `orgs/${orgId}/actionQueue`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const queueRef = collection(db, 'orgs', orgId, 'actionQueue');
+    const q = query(
+      queueRef, 
+      where('status', '==', 'open'),
+      orderBy('priorityScore', 'desc'),
+      limit(50)
+    );
+    const snapshot = await getDocs(q);
+    const actions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as NBAAction[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return actions;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function fetchNBAAction(orgId: string, actionId: string, authReady: boolean = false): Promise<NBAAction | null> {
+  const path = `orgs/${orgId}/actionQueue/${actionId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'actionQueue', actionId);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as NBAAction;
+    }
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return null;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function createNBAAction(orgId: string, action: Omit<NBAAction, 'id'>, authReady: boolean = false): Promise<NBAAction> {
+  const path = `orgs/${orgId}/actionQueue`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create NBA action: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedAction = removeUndefinedFields(action);
+    const now = new Date();
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedAction,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const queueRef = collection(db, 'orgs', orgId, 'actionQueue');
+    const docRef = await addDoc(queueRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedAction, id: docRef.id, createdAt: now, updatedAt: now } as NBAAction;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateNBAAction(orgId: string, actionId: string, updates: Partial<NBAAction>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/actionQueue/${actionId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update NBA action: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'actionQueue', actionId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp({
+      ...cleanedUpdates,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function completeNBAAction(orgId: string, actionId: string, authReady: boolean = false): Promise<void> {
+  await updateNBAAction(orgId, actionId, {
+    status: 'done',
+    updatedAt: new Date(),
+  }, authReady);
+}
+
+export async function dismissNBAAction(orgId: string, actionId: string, reason: string, authReady: boolean = false): Promise<void> {
+  const suppressUntil = new Date();
+  suppressUntil.setHours(suppressUntil.getHours() + 48);
+  
+  await updateNBAAction(orgId, actionId, {
+    status: 'dismissed',
+    dismissedReason: reason,
+    dismissedAt: new Date(),
+    suppressUntil,
+    updatedAt: new Date(),
+  }, authReady);
+}
+
+export async function deleteNBAAction(orgId: string, actionId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/actionQueue/${actionId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete NBA action: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'actionQueue', actionId);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function checkNBADuplicate(orgId: string, fingerprint: string, authReady: boolean = false): Promise<boolean> {
+  const path = `orgs/${orgId}/actionQueue`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return false;
+  }
+  
+  try {
+    const queueRef = collection(db, 'orgs', orgId, 'actionQueue');
+    const q = query(queueRef, where('fingerprint', '==', fingerprint), limit(1));
+    const snapshot = await getDocs(q);
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return !snapshot.empty;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return false;
+  }
+}
+
+// ============================================
+// Lead History Functions
+// ============================================
+
+export async function fetchLeadHistory(orgId: string, leadId: string, authReady: boolean = false): Promise<LeadHistory[]> {
+  const path = `orgs/${orgId}/leads/${leadId}/history`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const historyRef = collection(db, 'orgs', orgId, 'leads', leadId, 'history');
+    const q = query(historyRef, orderBy('createdAt', 'desc'), limit(100));
+    const snapshot = await getDocs(q);
+    const history = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as LeadHistory[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return history;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createLeadHistoryEntry(
+  orgId: string, 
+  leadId: string, 
+  entry: Omit<LeadHistory, 'id'>, 
+  authReady: boolean = false
+): Promise<LeadHistory> {
+  const path = `orgs/${orgId}/leads/${leadId}/history`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create history entry: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedEntry = removeUndefinedFields(entry);
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedEntry,
+      createdAt: new Date(),
+    });
+    const historyRef = collection(db, 'orgs', orgId, 'leads', leadId, 'history');
+    const docRef = await addDoc(historyRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedEntry, id: docRef.id, createdAt: new Date() } as LeadHistory;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Focus Mode Settings Functions
+// ============================================
+
+export async function fetchFocusModeSettings(userId: string, authReady: boolean = false): Promise<FocusModeSettings | null> {
+  const path = `users/${userId}/settings/focusMode`;
+  
+  if (!authReady) {
+    console.error('[Firestore] BLOCKED: READ - authReady is false. Path:', path);
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'users', userId, 'settings', 'focusMode');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      console.log('[Firestore] READ SUCCESS', { path, userId });
+      return convertTimestampToDate(docSnap.data()) as FocusModeSettings;
+    }
+    
+    return null;
+  } catch (error: any) {
+    console.error('[Firestore] READ FAILED', { path, userId, error });
+    return null;
+  }
+}
+
+export async function saveFocusModeSettings(
+  userId: string, 
+  settings: FocusModeSettings, 
+  authReady: boolean = false
+): Promise<void> {
+  const path = `users/${userId}/settings/focusMode`;
+  
+  if (!authReady) {
+    throw new Error('Cannot save focus mode: not authenticated');
+  }
+  
+  try {
+    const docRef = doc(db, 'users', userId, 'settings', 'focusMode');
+    const dataToSave = convertDatesToTimestamp({
+      ...settings,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToSave).catch(async () => {
+      const { setDoc } = await import('./firebase');
+      await setDoc(docRef, dataToSave);
+    });
+    
+    console.log('[Firestore] WRITE SUCCESS', { path, userId });
+  } catch (error: any) {
+    console.error('[Firestore] WRITE FAILED', { path, userId, error });
     throw error;
   }
 }

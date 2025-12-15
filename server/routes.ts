@@ -218,6 +218,124 @@ Be encouraging but honest. If they missed targets, acknowledge it but focus on s
   });
 
   // ============================================
+  // NBA (Next Best Action) API
+  // ============================================
+
+  app.post("/api/nba/generate", async (req, res) => {
+    try {
+      const { leads, activitiesMap, dailyTargets, existingFingerprints = [] } = req.body;
+      
+      if (!leads || !Array.isArray(leads)) {
+        return res.status(400).json({ error: "leads array is required" });
+      }
+      
+      const { generateNBAQueue } = await import("./nbaEngine");
+      
+      const activityMapConverted = new Map<string, any[]>();
+      if (activitiesMap && typeof activitiesMap === 'object') {
+        Object.entries(activitiesMap).forEach(([key, value]) => {
+          activityMapConverted.set(key, value as any[]);
+        });
+      }
+      
+      const targets = dailyTargets || {
+        calls: { target: 25, completed: 0 },
+        meetings: { target: 2, completed: 0 },
+        proposals: { target: 1, completed: 0 }
+      };
+      
+      const recommendations = generateNBAQueue(
+        leads,
+        activityMapConverted,
+        targets,
+        existingFingerprints,
+        10
+      );
+      
+      res.json({ recommendations });
+    } catch (error) {
+      console.error("Error generating NBA queue:", error);
+      res.status(500).json({ error: "Failed to generate NBA recommendations" });
+    }
+  });
+
+  app.post("/api/nba/ai-enhance", async (req, res) => {
+    try {
+      const { lead, activities, dailyTargets, timezone } = req.body;
+      
+      if (!lead) {
+        return res.status(400).json({ error: "lead is required" });
+      }
+      
+      const { buildAIPrompt, generateNBARecommendation, parseAIResponse } = await import("./nbaEngine");
+      
+      const targets = dailyTargets || {
+        calls: { target: 25, completed: 0 },
+        meetings: { target: 2, completed: 0 },
+        proposals: { target: 1, completed: 0 }
+      };
+      
+      const fallback = generateNBARecommendation({
+        lead,
+        activities: activities || [],
+        dailyTargets: targets,
+        existingFingerprints: []
+      });
+      
+      if (!fallback) {
+        return res.status(400).json({ error: "Cannot generate recommendation for this lead" });
+      }
+      
+      const prompt = buildAIPrompt({ lead, activities: activities || [], dailyTargets: targets, timezone });
+      
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 800,
+        response_format: { type: "json_object" },
+      });
+      
+      const content = response.choices[0]?.message?.content || "{}";
+      const enhanced = parseAIResponse(content, lead, fallback);
+      
+      res.json({ recommendation: enhanced });
+    } catch (error) {
+      console.error("Error AI-enhancing NBA recommendation:", error);
+      res.status(500).json({ error: "Failed to enhance NBA recommendation" });
+    }
+  });
+
+  app.post("/api/nba/single", async (req, res) => {
+    try {
+      const { lead, activities, dailyTargets, existingFingerprints = [] } = req.body;
+      
+      if (!lead) {
+        return res.status(400).json({ error: "lead is required" });
+      }
+      
+      const { generateNBARecommendation } = await import("./nbaEngine");
+      
+      const targets = dailyTargets || {
+        calls: { target: 25, completed: 0 },
+        meetings: { target: 2, completed: 0 },
+        proposals: { target: 1, completed: 0 }
+      };
+      
+      const recommendation = generateNBARecommendation({
+        lead,
+        activities: activities || [],
+        dailyTargets: targets,
+        existingFingerprints
+      });
+      
+      res.json({ recommendation });
+    } catch (error) {
+      console.error("Error generating single NBA:", error);
+      res.status(500).json({ error: "Failed to generate NBA recommendation" });
+    }
+  });
+
+  // ============================================
   // Momentum Coach API
   // ============================================
   

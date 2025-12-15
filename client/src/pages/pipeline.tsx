@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useLocation, useSearch } from 'wouter';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { Plus, Filter, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,25 @@ export default function PipelinePage() {
   const [showArchivedWarning, setShowArchivedWarning] = useState(false);
   const [matchingArchivedLead, setMatchingArchivedLead] = useState<Lead | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
+
+  useEffect(() => {
+    if (leads.length === 0) return;
+    
+    const params = new URLSearchParams(searchString);
+    const openType = params.get('openType');
+    const openId = params.get('openId');
+    
+    if (openType === 'lead' && openId) {
+      const matchingLead = leads.find(l => l.id === openId);
+      if (matchingLead) {
+        setExpandedLeadId(openId);
+        window.history.replaceState(null, '', '/pipeline');
+      }
+    }
+  }, [searchString, leads]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -132,9 +152,9 @@ export default function PipelinePage() {
         areaId: territoryFields.areaId,
         areaName: territoryFields.areaName,
         territoryKey: territoryFields.territoryKey,
-        contactName: newContactName || null,
-        phone: newContactPhone || null,
-        email: newContactEmail || null,
+        contactName: newContactName || undefined,
+        phone: newContactPhone || undefined,
+        email: newContactEmail || undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,
@@ -230,9 +250,9 @@ export default function PipelinePage() {
         areaId: territoryFields.areaId,
         areaName: territoryFields.areaName,
         territoryKey: territoryFields.territoryKey,
-        contactName: newContactName || null,
-        phone: newContactPhone || null,
-        email: newContactEmail || null,
+        contactName: newContactName || undefined,
+        phone: newContactPhone || undefined,
+        email: newContactEmail || undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,

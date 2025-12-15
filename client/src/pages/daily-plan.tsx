@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { 
   Target, Clock, CheckCircle2, Sparkles, Play, Lock, MapPin, 
   Phone, Building2, MessageSquare, Calendar, Users, RefreshCw,
-  ChevronRight, X, AlertTriangle, Zap, Trophy
+  ChevronRight, X, AlertTriangle, Zap, Trophy, Focus
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,8 +18,10 @@ import { Separator } from '@/components/ui/separator';
 import { RootState } from '@/store';
 import { 
   completeAction, skipAction, completeRouteStop, addRouteStop, addActionToQueue,
-  removeRouteStop, submitDebrief, setDailyPlanSummary, markQueuesInitialized 
+  removeRouteStop, submitDebrief, setDailyPlanSummary, markQueuesInitialized,
+  setNBAQueue, toggleFocusMode
 } from '@/store';
+import ActionQueueCard from '@/components/ActionQueueCard';
 import { 
   DailyPlan, DailyPlanSummary, ActionQueueItem, TimeBlock, RouteStop,
   TIME_BLOCK_LABELS, ACTION_TYPE_LABELS, URGENCY_LABELS, BATTLE_SCORE_POINTS,
@@ -36,6 +38,8 @@ export default function DailyPlanPage() {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isDebriefOpen, setIsDebriefOpen] = useState(false);
   const [isGeneratingDebrief, setIsGeneratingDebrief] = useState(false);
+  const [isGeneratingNBA, setIsGeneratingNBA] = useState(false);
+  const focusMode = useSelector((state: RootState) => state.app.focusMode);
   const [debriefResult, setDebriefResult] = useState<{
     aiReview?: string;
     improvements?: string[];
@@ -157,6 +161,33 @@ export default function DailyPlanPage() {
       toast({ title: 'Error', description: 'Failed to generate debrief.', variant: 'destructive' });
     } finally {
       setIsGeneratingDebrief(false);
+    }
+  };
+
+  const handleGenerateNBAQueue = async () => {
+    setIsGeneratingNBA(true);
+    try {
+      const activeLeads = leads.filter(l => !l.archived && l.stage !== 'won' && l.stage !== 'lost');
+      const response = await fetch('/api/nba/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leads: activeLeads.slice(0, 50),
+          dailyTargets: {
+            calls: dailyPlan.targets.prospecting.calls,
+            meetings: dailyPlan.targets.prospecting.meetingsBooked,
+            proposals: { target: 2, completed: 0 },
+          },
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to generate NBA queue');
+      const data = await response.json();
+      dispatch(setNBAQueue(data.queue || []));
+      toast({ title: 'Actions generated', description: `${data.queue?.length || 0} recommended actions ready.` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to generate action queue.', variant: 'destructive' });
+    } finally {
+      setIsGeneratingNBA(false);
     }
   };
 
@@ -516,71 +547,39 @@ export default function DailyPlanPage() {
           </Card>
         </div>
 
-        {/* Center Column - Action Queue */}
+        {/* Center Column - NBA Action Queue */}
         <div className="space-y-6">
-          <Card className="p-6">
-            <h2 className="font-semibold mb-4 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Action Queue
-            </h2>
-            <ScrollArea className="h-[500px]">
-              <div className="space-y-2 pr-4">
-                {dailyPlan.actionQueue.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    No actions in queue
-                  </p>
-                ) : (
-                  dailyPlan.actionQueue.map(action => (
-                    <div 
-                      key={action.id} 
-                      className={`flex items-center gap-3 p-3 rounded-lg ${
-                        action.status === 'completed' ? 'bg-muted/30 opacity-60' :
-                        action.status === 'skipped' ? 'bg-muted/30 opacity-40' : 'bg-muted/50'
-                      }`}
-                      data-testid={`action-${action.id}`}
-                    >
-                      <div className={`shrink-0 ${getUrgencyColor(action.urgency)}`}>
-                        {getActionIcon(action.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-medium text-sm truncate ${
-                          action.status !== 'pending' ? 'line-through' : ''
-                        }`}>
-                          {action.title}
-                        </p>
-                        {action.subtitle && (
-                          <p className="text-xs text-muted-foreground truncate">{action.subtitle}</p>
-                        )}
-                      </div>
-                      <Badge variant="outline" className="text-xs shrink-0">
-                        +{action.battleScorePoints}
-                      </Badge>
-                      {action.status === 'pending' && (
-                        <div className="flex items-center gap-1">
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            onClick={() => handleCompleteAction(action.id)}
-                            data-testid={`button-complete-${action.id}`}
-                          >
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          </Button>
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            onClick={() => handleSkipAction(action.id)}
-                            data-testid={`button-skip-${action.id}`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </Card>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              size="sm"
+              variant={focusMode?.enabled ? "default" : "outline"}
+              onClick={() => dispatch(toggleFocusMode())}
+              data-testid="button-toggle-focus"
+            >
+              <Focus className="h-4 w-4 mr-1" />
+              {focusMode?.enabled ? 'Exit Focus Mode' : 'Focus Mode'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleGenerateNBAQueue}
+              disabled={isGeneratingNBA}
+              data-testid="button-generate-nba"
+            >
+              {isGeneratingNBA ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin mr-1" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  Generate Actions
+                </>
+              )}
+            </Button>
+          </div>
+          <ActionQueueCard maxItems={10} />
         </div>
 
         {/* Right Column - Route Plan & Debrief */}

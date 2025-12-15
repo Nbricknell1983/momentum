@@ -1,0 +1,429 @@
+Build an AI-driven “Next Best Action” (NBA) system that links the Action Queue (located in the Daily Planner page) to Pipeline leads/deals (located on a separate Pipeline page), recommends the highest-leverage next step using AI + deterministic rules, and lets the rep execute the action from a phone (tap-to-call, tap-to-text, tap-to-email) with suggested copy prefilled. All actions must log back into Activities, Deal/Lead History, and Dashboard counters. Add a “Why this action” expand panel to each queue row and add a Focus Mode that locks the rep into the top 3 actions until done.
+
+CRITICAL ARCHITECTURE REQUIREMENT (DAILY PLANNER vs PIPELINE PAGES)
+
+Action Queue is displayed/managed on the Daily Planner page.
+
+Deals/Leads are managed on the Pipeline page.
+
+This separation must NOT break linking or logging.
+Requirements:
+
+Every Action Queue item must store targetType + targetId pointing to a Pipeline record.
+
+Clicking an Action Queue row must deep-link to the Pipeline page and auto-open the linked record.
+
+Use a URL param pattern such as:
+
+#/pipeline?openType=deal&openId={targetId}
+
+#/pipeline?openType=lead&openId={targetId}
+
+Pipeline page must read URL params on load and:
+
+find the matching record in state
+
+auto-expand/open that card
+
+scroll it into view
+
+Logging Done from Action Queue (Daily Planner) must still write Activities + History under the linked record and update Dashboard counters.
+
+Stage changes or activity logs done on the Pipeline page must immediately affect NBA ranking and Action Queue ordering on the Daily Planner page (real-time subscription preferred).
+
+OBJECTIVES
+
+Every Action Queue item links to a specific Pipeline record (leadId or dealId).
+
+Generate NBA recommendations using AI + rules based on pipeline data and recent activity/history.
+
+Auto-refresh Action Queue when pipeline/activity/history changes, without duplicates.
+
+Completing an Action Queue item logs an activity (and optionally a stage change) and writes an audit event to Deal/Lead History.
+
+Mobile-first execution from Action Queue:
+
+CALL → opens phone dialer
+
+SMS → opens SMS composer with body prefilled
+
+EMAIL → opens email composer with subject/body prefilled
+
+MEETING/DROP-IN → opens booking/calendar flow with notes
+
+RESEARCH → opens a research task view and allows marking done
+
+Add “Why this action” accordion per row (reason, bullets, NEPQ questions, suggested copy).
+
+Add Focus Mode: show only top 3 priority actions until done/dismissed (with dismiss reason required).
+
+DATABASE / COLLECTIONS
+A) Pipeline (existing)
+
+orgs/{orgId}/leads/{leadId}
+
+orgs/{orgId}/deals/{dealId}
+Required fields in leads/deals:
+
+stage (string)
+
+ownerId/repId (string)
+
+nextContactDate (timestamp or null)
+
+lastContactAt (timestamp or null; derived from activities or stored)
+
+estimatedValue/value (number or null)
+
+contactName (string or null)
+
+phone (string or null)
+
+email (string or null)
+
+doNotCall (boolean optional)
+
+preferredContactMethod (string optional)
+
+nepqLabel (string optional)
+
+businessName/name (string)
+
+B) Activities ledger (source of truth for dashboard counters)
+
+orgs/{orgId}/activities/{activityId}
+Fields:
+
+targetType: "lead" | "deal"
+
+targetId: string
+
+type: "call" | "sms" | "email" | "meeting" | "dropin" | "proposal" | "followup" | "research" (add research if needed)
+
+createdAt: server timestamp
+
+userId: string (optional)
+
+notes: string (optional)
+
+C) Deal/Lead History (audit trail per record, immutable create-only)
+
+orgs/{orgId}/deals/{dealId}/history/{eventId}
+
+orgs/{orgId}/leads/{leadId}/history/{eventId}
+Fields:
+
+type: "created" | "stage_change" | "activity" | "action_queue" | "note" | "edit" | "deleted"
+
+summary: string
+
+createdAt: server timestamp
+
+userId/userName: optional
+
+metadata: object
+Rules:
+
+History events must be create-only (no updates/deletes).
+
+D) Action Queue (new)
+
+orgs/{orgId}/actionQueue/{actionId}
+Fields:
+
+targetType: "lead" | "deal"
+
+targetId: string
+
+title: string
+
+suggestedActionType: "call" | "sms" | "email" | "meeting" | "dropin" | "proposal" | "followup" | "research"
+
+suggestedMessage: string
+
+suggestedEmail: { subject: string, body: string } | null (required when actionType=email)
+
+nepqQuestions: [string, string, string]
+
+reason: string
+
+whyBullets: string[] (3–5 bullets)
+
+suggestedNextStep: string (micro-commitment line; optional)
+
+priorityScore: number (0–100)
+
+points: number
+
+dueAt: timestamp|null
+
+status: "open" | "done" | "dismissed"
+
+createdAt: server timestamp
+
+updatedAt: server timestamp
+
+aiModelVersion: string
+
+suppressUntil: timestamp|null (48h suppression after dismissal)
+
+dismissedReason: string|null
+
+dismissedAt: timestamp|null
+
+fingerprint: string (hash of suggestedActionType + targetId + key inputs to prevent duplicates)
+
+E) Focus Mode settings (per-user preferred)
+
+users/{uid}/settings/focusMode
+Fields:
+
+enabled: boolean
+
+topActionIds: string[] (exactly 3 if available)
+
+startedAt: server timestamp|null
+
+updatedAt: server timestamp|null
+
+AI RECOMMENDATION ENGINE (SERVER-SIDE)
+Create a server-side AI function (Cloud Function/backend) that recommends the single best next action for a given lead/deal. Do not expose API key client-side.
+
+AI INPUTS MUST INCLUDE
+
+nowLocal + timezone
+
+rep dailyTargets and todaySoFar (calls/meetings/proposals)
+
+lead/deal summary: businessName, contactName, stage, estimatedValue, nextContactDate, lastContactAt, nepqLabel, notes, doNotCall, preferredContactMethod, phone/email availability
+
+last 10 activities (type + timestamp + notes)
+
+last 10 history events (stage changes + major actions)
+
+optional pipeline health summary (counts per stage)
+
+AI OUTPUT MUST BE STRICT JSON ONLY (no markdown/text)
+Schema:
+{
+"suggestedActionType": "call"|"sms"|"email"|"meeting"|"dropin"|"proposal"|"followup"|"research",
+"title": "string",
+"reason": "string",
+"whyBullets": ["string","string","string"],
+"suggestedMessage": "string",
+"suggestedEmail": { "subject": "string", "body": "string" },
+"nepqQuestions": ["string","string","string"],
+"suggestedNextStep": "string",
+"priorityScore": 0-100,
+"points": number,
+"dueAt": "ISO8601 or null",
+"safetyChecks": {
+"requiresPhone": boolean,
+"requiresEmail": boolean,
+"missingFields": ["string"]
+}
+}
+Rules:
+
+suggestedEmail populated only if suggestedActionType == "email" (otherwise null/omit).
+
+Provide exactly 3 NEPQ questions.
+
+Do not invent facts; missing info → choose “research” and list missingFields.
+
+HYBRID SCORING (RULES + AI)
+Compute baseline priorityScore with deterministic rules; allow AI to adjust within 0–100.
+Required rules:
+
+Overdue follow-up: now > nextContactDate AND no activity since → +30
+
+Stage urgency:
+
+Proposal Sent and no follow-up in 2 days → +25
+
+Contacted and no activity in 3 days → +20
+
+Value weighting: higher value → up to +15
+
+Stagnation: same stage > 7 days → +15
+
+Activity balance:
+
+behind call target → prefer call unless doNotCall
+
+behind meeting target → prefer meeting-setting actions
+
+Points mapping:
+
+call 5, sms 3, email 3, meeting 8, dropin 8, proposal 6, followup 5, research 2 (or 0)
+
+Caching:
+
+Cache per targetId for 30–60 minutes unless record/activity/history changes.
+
+ACTION QUEUE POPULATION & AUTO-REFRESH
+
+On Daily Planner load and on relevant data changes (lead/deal updates, activity write, stage change, history write), generate/update queue.
+
+Maintain top 10 open items sorted by priorityScore DESC then dueAt ASC (nulls last).
+
+Only generate actions for:
+
+active records (not won/lost)
+
+contact method available where required; otherwise generate research
+
+no existing open item with same fingerprint for that targetId
+
+Prevent duplicates using fingerprint and/or “one open per targetId” rule.
+
+If dismissed: do not re-suggest same action type for 48h unless material change occurs; use suppressUntil.
+
+ACTION QUEUE UI (DAILY PLANNER, MOBILE-FIRST)
+Each Action Queue row must display:
+
+title
+
+contact name / business name
+
+points badge
+
+controls: Done (tick), Dismiss (X), Copy
+
+Primary action button by suggestedActionType:
+
+call → Call
+
+sms → Text
+
+email → Email
+
+meeting/dropin → Book
+
+research → Research
+
+Clicking the row opens the linked Pipeline record by navigating with URL params:
+
+#/pipeline?openType={targetType}&openId={targetId}
+
+Pipeline page must:
+
+Read openType/openId params
+
+Auto-open the matching lead/deal card
+
+Scroll into view
+
+Clear params optionally after open to prevent repeat.
+
+Deep links (URL encode all text):
+
+Call: href="tel:{phone}"
+
+SMS: href="sms:{phone}?&body={encodedMessage}" (support ?body= fallback), plus Copy text fallback
+
+Email: href="mailto:{email}?subject={encodedSubject}&body={encodedBody}", plus Copy email body fallback
+
+Book: open modal or calendar create, prefill title/notes/location.
+
+IMPORTANT LOGGING RULE
+
+tel/sms/mailto/calendar launch does NOT auto-log.
+
+User must tap Done to confirm completion.
+
+DONE / DISMISS BEHAVIOUR (LOGGING + AUDIT)
+Done:
+
+actionQueue.status="done" + updatedAt server timestamp
+
+write Activities:
+
+targetType/targetId
+
+type mapped from suggestedActionType
+
+createdAt server timestamp
+
+notes: “Action Queue: {title}”
+
+write Deal/Lead History:
+
+type="action_queue"
+
+summary: “Action Queue completed: Logged {type}”
+
+metadata: { actionId, suggestedActionType, priorityScore, points, focusMode: boolean }
+
+Dashboard counters update from Activities.
+
+Dismiss:
+
+status="dismissed", suppressUntil=now+48h, dismissedAt server timestamp
+
+dismissedReason required if Focus Mode enabled
+
+write History:
+
+type="action_queue"
+
+summary: “Action Queue dismissed”
+
+metadata: { actionId, suggestedActionType, dismissedReason, focusMode: boolean }
+
+DASHBOARD ACCURACY
+Dashboard counts computed from orgs/{orgId}/activities where createdAt >= startOfToday (local time). Update after Done (real-time preferred).
+
+“WHY THIS ACTION” EXPAND PANEL (ACCORDION PER ROW)
+Add a “Why” toggle/chevron per row. Expand shows:
+
+reason + whyBullets
+
+suggested copy (SMS text / Call opener / Email subject+body)
+
+NEPQ questions (exactly 3)
+
+dueAt + priorityScore
+
+Copy buttons for SMS/email/call opener (mobile-compatible)
+
+FOCUS MODE (TOP 3 LOCK)
+Add Focus Mode toggle on Daily Planner Action Queue card.
+When enabled:
+
+select top 3 open actions, store in users/{uid}/settings/focusMode.topActionIds
+
+show ONLY those 3 items
+
+show progress “Focus Mode: X/3 remaining”
+
+when one is Done/Dismissed, pull next best open action into the top 3
+
+Dismiss in Focus Mode requires a reason (mandatory input)
+
+show “Focus Mode complete” when finished, offer “Refill Top 3”
+
+Edge cases:
+
+If phone/email missing, disable relevant primary action and prompt “Add phone/email”; avoid selecting such actions in Focus Mode unless research.
+
+If doNotCall true, never generate call.
+
+AI PROMPTS (STORE SERVER-SIDE)
+System prompt and user template must enforce strict JSON output, include whyBullets, nepqQuestions, suggestedNextStep, and suggestedEmail only for email actions (as previously specified).
+
+ACCEPTANCE TESTS
+
+Action Queue in Daily Planner links to Pipeline record and opens it via URL params.
+
+Pipeline page auto-opens the specified record and scrolls into view.
+
+Queue generates top 10 items without duplicates and respects suppressUntil.
+
+Why panel works and copy buttons work on mobile.
+
+Call/Text/Email deep links work and do not auto-log.
+
+Done logs Activities + History and dashboard counts remain correct after refresh.
+
+Focus Mode locks to top 3 and refills as items are completed/dismissed; dismiss requires reason.
