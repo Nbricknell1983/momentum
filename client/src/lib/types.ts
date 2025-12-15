@@ -12,7 +12,7 @@ export type Stage =
   | 'lost'
   | 'nurture';
 
-export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'dropin' | 'followup' | 'proposal' | 'deal' | 'nba_completed' | 'nba_dismissed';
+export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'dropin' | 'followup' | 'proposal' | 'deal' | 'nba_completed' | 'nba_dismissed' | 'stage_change';
 
 export type TaskStatus = 'pending' | 'completed' | 'snoozed';
 
@@ -152,7 +152,8 @@ export interface Lead {
 export interface Activity {
   id: string;
   userId: string;
-  leadId: string;
+  leadId?: string;
+  clientId?: string;
   type: ActivityType;
   notes?: string;
   outcome?: string;
@@ -248,6 +249,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   deal: 'Deal',
   nba_completed: 'NBA Completed',
   nba_dismissed: 'NBA Dismissed',
+  stage_change: 'Stage Change',
 };
 
 export function getTrafficLightStatus(lead: Lead): TrafficLightStatus {

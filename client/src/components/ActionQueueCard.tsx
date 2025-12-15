@@ -26,7 +26,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { RootState } from '@/store';
 import { completeNBAAction, dismissNBAAction } from '@/store';
-import { NBAAction, NBAActionType, NBA_ACTION_LABELS, Lead } from '@/lib/types';
+import { NBAAction, NBAActionType, NBA_ACTION_LABELS, Lead, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { 
   completeNBAAction as completeNBAActionFirestore, 
@@ -51,6 +51,7 @@ export default function ActionQueueCard({
   
   const nbaQueue = useSelector((state: RootState) => state.app.nbaQueue);
   const leads = useSelector((state: RootState) => state.app.leads);
+  const clients = useSelector((state: RootState) => state.app.clients);
   const focusMode = useSelector((state: RootState) => state.app.focusMode);
   const { orgId, authReady, user } = useAuth();
   
@@ -69,8 +70,28 @@ export default function ActionQueueCard({
 
   const displayActions = focusMode?.enabled ? focusActions : openActions;
 
-  const getLeadForAction = (action: NBAAction): Lead | undefined => {
-    return leads.find(l => l.id === action.targetId);
+  const getTargetForAction = (action: NBAAction): { companyName: string; contactName?: string; phone?: string; email?: string } | undefined => {
+    if (action.targetType === 'client') {
+      const client = clients?.find(c => c.id === action.targetId);
+      if (client) {
+        return {
+          companyName: client.businessName,
+          contactName: client.primaryContactName,
+          phone: client.phone,
+          email: client.email,
+        };
+      }
+    }
+    const lead = leads.find(l => l.id === action.targetId);
+    if (lead) {
+      return {
+        companyName: lead.companyName,
+        contactName: lead.contactName,
+        phone: lead.phone,
+        email: lead.email,
+      };
+    }
+    return undefined;
   };
 
   const getActionIcon = (type: NBAActionType) => {
@@ -101,26 +122,26 @@ export default function ActionQueueCard({
     }
   };
 
-  const handlePrimaryAction = (action: NBAAction, lead: Lead | undefined) => {
-    if (!lead) return;
+  const handlePrimaryAction = (action: NBAAction, target: { phone?: string; email?: string } | undefined) => {
+    if (!target) return;
     
     switch (action.suggestedActionType) {
       case 'call':
-        if (lead.phone) {
-          window.location.href = `tel:${lead.phone}`;
+        if (target.phone) {
+          window.location.href = `tel:${target.phone}`;
         }
         break;
       case 'sms':
-        if (lead.phone) {
+        if (target.phone) {
           const message = encodeURIComponent(action.suggestedMessage || '');
-          window.location.href = `sms:${lead.phone}?body=${message}`;
+          window.location.href = `sms:${target.phone}?body=${message}`;
         }
         break;
       case 'email':
-        if (lead.email) {
+        if (target.email) {
           const subject = encodeURIComponent(action.suggestedEmail?.subject || '');
           const body = encodeURIComponent(action.suggestedEmail?.body || action.suggestedMessage || '');
-          window.location.href = `mailto:${lead.email}?subject=${subject}&body=${body}`;
+          window.location.href = `mailto:${target.email}?subject=${subject}&body=${body}`;
         }
         break;
       case 'meeting':
@@ -149,10 +170,11 @@ export default function ActionQueueCard({
       try {
         await completeNBAActionFirestore(orgId, action.id, authReady);
         
-        if (action.targetType === 'lead' && action.targetId && user) {
+        if (action.targetId && user) {
           await createActivity(orgId, {
             userId: user.uid,
-            leadId: action.targetId,
+            leadId: action.targetType === 'lead' ? action.targetId : undefined,
+            clientId: action.targetType === 'client' ? action.targetId : undefined,
             type: 'nba_completed',
             notes: `Completed action: ${action.title}`,
             metadata: {
@@ -182,10 +204,11 @@ export default function ActionQueueCard({
         try {
           await dismissNBAActionFirestore(orgId, action.id, reason, authReady);
           
-          if (action.targetType === 'lead' && action.targetId && user) {
+          if (action.targetId && user) {
             await createActivity(orgId, {
               userId: user.uid,
-              leadId: action.targetId,
+              leadId: action.targetType === 'lead' ? action.targetId : undefined,
+              clientId: action.targetType === 'client' ? action.targetId : undefined,
               type: 'nba_dismissed',
               notes: `Dismissed action: ${action.title}`,
               metadata: {
@@ -216,10 +239,11 @@ export default function ActionQueueCard({
         try {
           await dismissNBAActionFirestore(orgId, dismissingAction.id, reason, authReady);
           
-          if (dismissingAction.targetType === 'lead' && dismissingAction.targetId && user) {
+          if (dismissingAction.targetId && user) {
             await createActivity(orgId, {
               userId: user.uid,
-              leadId: dismissingAction.targetId,
+              leadId: dismissingAction.targetType === 'lead' ? dismissingAction.targetId : undefined,
+              clientId: dismissingAction.targetType === 'client' ? dismissingAction.targetId : undefined,
               type: 'nba_dismissed',
               notes: `Dismissed action: ${dismissingAction.title}`,
               metadata: {
@@ -290,7 +314,7 @@ export default function ActionQueueCard({
         <ScrollArea className="h-[500px]">
           <div className="space-y-3 pr-2">
             {displayActions.map((action, index) => {
-              const lead = getLeadForAction(action);
+              const target = getTargetForAction(action);
               const isExpanded = expandedId === action.id;
               
               return (
@@ -316,8 +340,8 @@ export default function ActionQueueCard({
                                 {action.title}
                               </p>
                               <p className="text-xs text-muted-foreground truncate">
-                                {lead?.companyName || 'Unknown business'}
-                                {lead?.contactName && ` • ${lead.contactName}`}
+                                {target?.companyName || 'Unknown business'}
+                                {target?.contactName && ` • ${target.contactName}`}
                               </p>
                             </div>
                             <Badge variant="outline" className="shrink-0 text-xs">
@@ -328,11 +352,11 @@ export default function ActionQueueCard({
                           <div className="flex items-center gap-2 mt-3 flex-wrap">
                             <Button
                               size="sm"
-                              onClick={() => handlePrimaryAction(action, lead)}
+                              onClick={() => handlePrimaryAction(action, target)}
                               disabled={
-                                (action.suggestedActionType === 'call' && !lead?.phone) ||
-                                (action.suggestedActionType === 'sms' && !lead?.phone) ||
-                                (action.suggestedActionType === 'email' && !lead?.email)
+                                (action.suggestedActionType === 'call' && !target?.phone) ||
+                                (action.suggestedActionType === 'sms' && !target?.phone) ||
+                                (action.suggestedActionType === 'email' && !target?.email)
                               }
                               data-testid={`button-action-${action.id}`}
                             >

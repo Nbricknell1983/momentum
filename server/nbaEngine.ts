@@ -4,9 +4,27 @@ export type NBAActionType = 'call' | 'sms' | 'email' | 'meeting' | 'dropin' | 'p
 
 export type NBAActionStatus = 'open' | 'done' | 'dismissed';
 
+// Client type for NBA engine (matches frontend Client type)
+export interface ClientForNBA {
+  id: string;
+  businessName: string;
+  primaryContactName: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  healthStatus: 'green' | 'amber' | 'red';
+  churnRiskScore: number;
+  strategyStatus: 'not_started' | 'in_progress' | 'completed' | 'needs_review';
+  totalMRR: number;
+  lastContactDate?: Date;
+  nextContactDate?: Date;
+  preferredContactCadenceDays: number;
+  notes?: string;
+}
+
 export interface NBAAction {
   id: string;
-  targetType: 'lead' | 'deal';
+  targetType: 'lead' | 'deal' | 'client';
   targetId: string;
   title: string;
   suggestedActionType: NBAActionType;
@@ -54,7 +72,7 @@ export interface NBAEngineInput {
 }
 
 export interface NBARecommendation {
-  targetType: 'lead' | 'deal';
+  targetType: 'lead' | 'deal' | 'client';
   targetId: string;
   title: string;
   suggestedActionType: NBAActionType;
@@ -610,4 +628,278 @@ export function parseAIResponse(
       aiModelVersion: 'fallback'
     };
   }
+}
+
+// ============================================
+// Client NBA Recommendation Functions
+// ============================================
+
+export interface ClientNBAEngineInput {
+  client: ClientForNBA;
+  existingFingerprints: string[];
+}
+
+function generateClientFingerprint(clientId: string, actionType: NBAActionType): string {
+  return `client-${clientId}-${actionType}-${new Date().toISOString().split('T')[0]}`;
+}
+
+export function calculateClientPriorityScore(client: ClientForNBA): number {
+  let score = 0;
+  const now = new Date();
+  
+  // High priority if health status is red or amber
+  if (client.healthStatus === 'red') {
+    score += 40;
+  } else if (client.healthStatus === 'amber') {
+    score += 25;
+  }
+  
+  // High churn risk
+  if (client.churnRiskScore >= 70) {
+    score += 30;
+  } else if (client.churnRiskScore >= 50) {
+    score += 15;
+  }
+  
+  // Contact overdue
+  if (client.lastContactDate) {
+    const daysSinceContact = Math.floor((now.getTime() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceContact > client.preferredContactCadenceDays * 2) {
+      score += 25;
+    } else if (daysSinceContact > client.preferredContactCadenceDays) {
+      score += 15;
+    }
+  } else {
+    score += 20;
+  }
+  
+  // Strategy needs attention
+  if (client.strategyStatus === 'needs_review') {
+    score += 10;
+  } else if (client.strategyStatus === 'not_started') {
+    score += 15;
+  }
+  
+  // High MRR clients get more priority
+  if (client.totalMRR >= 5000) {
+    score += 10;
+  } else if (client.totalMRR >= 2000) {
+    score += 5;
+  }
+  
+  return Math.min(100, Math.max(0, score));
+}
+
+export function selectClientActionType(client: ClientForNBA): NBAActionType {
+  const hasPhone = !!client.phone;
+  const hasEmail = !!client.email;
+  
+  if (!hasPhone && !hasEmail) {
+    return 'research';
+  }
+  
+  // Red health status - urgent call needed
+  if (client.healthStatus === 'red') {
+    return hasPhone ? 'call' : 'email';
+  }
+  
+  // Strategy needs review - schedule meeting
+  if (client.strategyStatus === 'needs_review' || client.strategyStatus === 'not_started') {
+    return 'meeting';
+  }
+  
+  // Amber status - check in
+  if (client.healthStatus === 'amber') {
+    return hasPhone ? 'call' : 'email';
+  }
+  
+  // Regular check-in
+  return hasPhone ? 'call' : 'email';
+}
+
+function generateClientTitle(client: ClientForNBA, actionType: NBAActionType): string {
+  const contactName = client.primaryContactName || client.businessName;
+  
+  switch (actionType) {
+    case 'call':
+      return `Check in with ${contactName}`;
+    case 'email':
+      return `Send update to ${contactName}`;
+    case 'meeting':
+      return `Schedule review with ${contactName}`;
+    case 'dropin':
+      return `Visit ${contactName}`;
+    case 'followup':
+      return `Follow up with ${contactName}`;
+    default:
+      return `Contact ${contactName}`;
+  }
+}
+
+function generateClientReason(client: ClientForNBA, priorityScore: number): string {
+  if (client.healthStatus === 'red') {
+    return `Critical: ${client.businessName} health status is red. Immediate attention required.`;
+  }
+  
+  if (client.healthStatus === 'amber') {
+    return `At-risk: ${client.businessName} needs proactive engagement to prevent churn.`;
+  }
+  
+  if (client.strategyStatus === 'needs_review') {
+    return `${client.businessName} strategy needs review to ensure alignment with goals.`;
+  }
+  
+  if (priorityScore >= 50) {
+    return `High priority check-in needed for ${client.businessName}.`;
+  }
+  
+  return `Regular check-in with ${client.businessName} to maintain relationship.`;
+}
+
+function generateClientWhyBullets(client: ClientForNBA): string[] {
+  const bullets: string[] = [];
+  const now = new Date();
+  
+  // Health status
+  if (client.healthStatus === 'red') {
+    bullets.push('Health status: Critical - requires immediate attention');
+  } else if (client.healthStatus === 'amber') {
+    bullets.push('Health status: At risk - proactive engagement needed');
+  } else {
+    bullets.push('Health status: Healthy');
+  }
+  
+  // Churn risk
+  if (client.churnRiskScore >= 70) {
+    bullets.push(`High churn risk score: ${client.churnRiskScore}%`);
+  } else if (client.churnRiskScore >= 50) {
+    bullets.push(`Moderate churn risk score: ${client.churnRiskScore}%`);
+  }
+  
+  // Last contact
+  if (client.lastContactDate) {
+    const days = Math.floor((now.getTime() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24));
+    bullets.push(`Last contact: ${days} days ago`);
+  } else {
+    bullets.push('No contact recorded yet');
+  }
+  
+  // MRR
+  if (client.totalMRR > 0) {
+    bullets.push(`Monthly value: $${client.totalMRR.toLocaleString()}`);
+  }
+  
+  // Strategy status
+  if (client.strategyStatus === 'needs_review') {
+    bullets.push('Strategy needs review');
+  } else if (client.strategyStatus === 'not_started') {
+    bullets.push('Strategy not yet started');
+  }
+  
+  return bullets.slice(0, 5);
+}
+
+function generateClientMessage(client: ClientForNBA, actionType: NBAActionType): string {
+  const contactName = client.primaryContactName || 'there';
+  const businessName = client.businessName;
+  
+  switch (actionType) {
+    case 'call':
+      return `Hi ${contactName}, this is [Your Name]. I wanted to check in on how things are going with ${businessName}. Do you have a few minutes?`;
+    case 'email':
+      return `Hi ${contactName},\n\nI wanted to check in and see how things are going at ${businessName}. Is there anything you need from us?\n\nBest regards`;
+    case 'meeting':
+      return `Hi ${contactName}, I'd like to schedule a strategy review for ${businessName}. When would work best for you?`;
+    default:
+      return `Checking in with ${businessName}.`;
+  }
+}
+
+function getClientMissingFields(client: ClientForNBA, actionType: NBAActionType): string[] {
+  const missing: string[] = [];
+  
+  if (['call'].includes(actionType) && !client.phone) {
+    missing.push('phone');
+  }
+  
+  if (actionType === 'email' && !client.email) {
+    missing.push('email');
+  }
+  
+  return missing;
+}
+
+export function generateClientNBARecommendation(input: ClientNBAEngineInput): NBARecommendation | null {
+  const { client, existingFingerprints } = input;
+  
+  const actionType = selectClientActionType(client);
+  const fingerprint = generateClientFingerprint(client.id, actionType);
+  
+  if (existingFingerprints.includes(fingerprint)) {
+    return null;
+  }
+  
+  const priorityScore = calculateClientPriorityScore(client);
+  const points = ACTION_POINTS[actionType];
+  
+  const missingFields = getClientMissingFields(client, actionType);
+  const finalActionType = missingFields.length > 0 && 
+    (missingFields.includes('phone') || missingFields.includes('email')) 
+    ? 'research' 
+    : actionType;
+  
+  const dueAt = client.nextContactDate ? new Date(client.nextContactDate) : null;
+  
+  return {
+    targetType: 'client',
+    targetId: client.id,
+    title: generateClientTitle(client, finalActionType),
+    suggestedActionType: finalActionType,
+    suggestedMessage: generateClientMessage(client, finalActionType),
+    suggestedEmail: finalActionType === 'email' ? {
+      subject: `Checking in - ${client.businessName}`,
+      body: generateClientMessage(client, 'email')
+    } : null,
+    nepqQuestions: [
+      "How has your experience been with our services so far?",
+      "What challenges are you currently facing that we could help with?",
+      "What goals are you working towards this quarter?"
+    ],
+    reason: generateClientReason(client, priorityScore),
+    whyBullets: generateClientWhyBullets(client),
+    suggestedNextStep: 'Schedule next check-in based on cadence',
+    priorityScore,
+    points: ACTION_POINTS[finalActionType],
+    dueAt,
+    fingerprint: generateClientFingerprint(client.id, finalActionType),
+    safetyChecks: {
+      requiresPhone: ['call'].includes(finalActionType),
+      requiresEmail: finalActionType === 'email',
+      missingFields
+    }
+  };
+}
+
+export function generateClientNBAQueue(
+  clients: ClientForNBA[],
+  existingFingerprints: string[],
+  limit: number = 10
+): NBARecommendation[] {
+  const recommendations: NBARecommendation[] = [];
+  
+  for (const client of clients) {
+    const recommendation = generateClientNBARecommendation({
+      client,
+      existingFingerprints
+    });
+    
+    if (recommendation) {
+      recommendations.push(recommendation);
+      existingFingerprints.push(recommendation.fingerprint);
+    }
+  }
+  
+  recommendations.sort((a, b) => b.priorityScore - a.priorityScore);
+  
+  return recommendations.slice(0, limit);
 }

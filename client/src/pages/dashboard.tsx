@@ -1,16 +1,14 @@
 import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import { Phone, Users, FileText, DollarSign, Target, AlertTriangle } from 'lucide-react';
+import { Phone, Users, FileText, DollarSign, Target, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import StatCard from '@/components/StatCard';
-import TrafficLight from '@/components/TrafficLight';
 import MomentumScoreCard from '@/components/MomentumScoreCard';
 import MomentumCoach from '@/components/MomentumCoach';
 import { RootState } from '@/store';
-import { getTrafficLightStatus, STAGE_LABELS } from '@/lib/types';
-import { calculateMomentum, calculateRollingAverage, detectTrendAlert, getMomentumStatusColor } from '@/lib/momentumEngine';
-import type { ActivityTargets } from '@/lib/momentumEngine';
+import { calculateRollingAverage, detectTrendAlert, getMomentumStatusColor, getMomentumStatus, getMomentumStatusLabel } from '@/lib/momentumEngine';
+import type { ActivityTargets, MomentumResult } from '@/lib/momentumEngine';
 import { format, isToday } from 'date-fns';
 import {
   LineChart,
@@ -27,7 +25,6 @@ import {
 
 export default function DashboardPage() {
   const user = useSelector((state: RootState) => state.app.user);
-  const leads = useSelector((state: RootState) => state.app.leads);
   const activities = useSelector((state: RootState) => state.app.activities);
   const dailyMetrics = useSelector((state: RootState) => state.app.dailyMetrics);
 
@@ -59,9 +56,101 @@ export default function DashboardPage() {
     dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse(),
   [dailyMetrics]);
 
-  const momentum = useMemo(() => 
-    calculateMomentum(leads, activities, activityTargets, previousScores),
-  [leads, activities, activityTargets, previousScores]);
+  const momentum = useMemo((): MomentumResult => {
+    const ACTIVITY_WEIGHTS: Record<string, number> = {
+      call: 1.0, sms: 0.6, email: 0.4, dropin: 1.2, meeting: 0.5
+    };
+    const EARLY_STAGES = ['suspect', 'contacted', 'engaged'];
+    const MID_STAGES = ['qualified', 'discovery'];
+    const LATE_STAGES = ['proposal', 'verbal_commit', 'won'];
+    const ALL_STAGES = [...EARLY_STAGES, ...MID_STAGES, ...LATE_STAGES];
+    
+    const todayActivities = activities.filter(a => {
+      const createdAt = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+      return isToday(createdAt);
+    });
+    
+    let weightedSum = 0;
+    let targetSum = 0;
+    
+    Object.entries(activityTargets).forEach(([type, target]) => {
+      const count = todayActivities.filter(a => a.type === type).length;
+      const weight = ACTIVITY_WEIGHTS[type] || 0.5;
+      weightedSum += Math.min(count / Math.max(target, 1), 1.5) * weight;
+      targetSum += weight;
+    });
+    
+    const activityScore = targetSum > 0 ? (weightedSum / targetSum) * 100 : 50;
+    
+    const stageChanges = activities.filter(a => a.type === 'stage_change');
+    const newDealsCreated = activities.filter(a => a.type === 'deal').length;
+    const dealsRemoved = stageChanges.filter(a => 
+      a.metadata?.newStage === 'won' || a.metadata?.newStage === 'lost'
+    ).length;
+    
+    let replacementRate: number;
+    let replacementScore: number;
+    if (newDealsCreated === 0 && dealsRemoved === 0) {
+      replacementRate = 100;
+      replacementScore = 75;
+    } else if (dealsRemoved === 0) {
+      replacementRate = 200;
+      replacementScore = 100;
+    } else {
+      replacementRate = (newDealsCreated / dealsRemoved) * 100;
+      if (replacementRate >= 120) replacementScore = 100;
+      else if (replacementRate >= 100) replacementScore = 90;
+      else if (replacementRate >= 80) replacementScore = 70;
+      else if (replacementRate >= 60) replacementScore = 50;
+      else replacementScore = 30;
+    }
+    
+    const earlyStageCount = stageChanges.filter(a => EARLY_STAGES.includes(a.metadata?.newStage as string)).length;
+    const midStageCount = stageChanges.filter(a => MID_STAGES.includes(a.metadata?.newStage as string)).length;
+    const lateStageCount = stageChanges.filter(a => LATE_STAGES.includes(a.metadata?.newStage as string)).length;
+    const totalStageCount = earlyStageCount + midStageCount + lateStageCount;
+    
+    let earlyStagePercent: number;
+    let lateStagePercent: number;
+    let pipelineHealthScore: number;
+    
+    if (totalStageCount === 0) {
+      earlyStagePercent = 50;
+      lateStagePercent = 50;
+      pipelineHealthScore = 75;
+    } else {
+      earlyStagePercent = Math.round((earlyStageCount / totalStageCount) * 100);
+      lateStagePercent = Math.round(((midStageCount + lateStageCount) / totalStageCount) * 100);
+      const idealEarlyPercent = 50;
+      const balancePenalty = Math.abs(earlyStagePercent - idealEarlyPercent);
+      pipelineHealthScore = Math.max(0, Math.min(100, 100 - balancePenalty));
+    }
+    
+    const rawScore = Math.round(replacementScore * 0.33 + activityScore * 0.34 + pipelineHealthScore * 0.33);
+    const score = Math.max(0, Math.min(100, rawScore));
+    const status = getMomentumStatus(score);
+    
+    const prevAvg = previousScores.length > 0 ? previousScores.reduce((a, b) => a + b, 0) / previousScores.length : score;
+    const trend = score > prevAvg + 5 ? 'up' : score < prevAvg - 5 ? 'down' : 'flat';
+    
+    const minScore = Math.min(replacementScore, activityScore, pipelineHealthScore);
+    const constraint = minScore === replacementScore ? 'replacement' : minScore === activityScore ? 'activity' : 'pipeline';
+    
+    return {
+      score,
+      status,
+      statusLabel: getMomentumStatusLabel(status),
+      statusColor: getMomentumStatusColor(status),
+      breakdown: {
+        replacementScore, replacementRate: Math.round(replacementRate), newDealsCreated, dealsRemoved,
+        activityScore: Math.round(activityScore), activityIndex: weightedSum, targetActivityIndex: targetSum,
+        pipelineHealthScore, earlyStagePercent, lateStagePercent,
+        adjustments: []
+      },
+      constraint,
+      trend
+    };
+  }, [activities, activityTargets, previousScores]);
 
   const todayMetrics = dailyMetrics.find(m => isToday(new Date(m.date))) || {
     calls: 0, doors: 0, meetings: 0, followups: 0, proposals: 0, deals: 0, momentumScore: 0
@@ -83,29 +172,50 @@ export default function DashboardPage() {
     detectTrendAlert(dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse()),
   [dailyMetrics]);
 
-  const overdueLeads = leads.filter(lead => {
-    if (lead.archived || !lead.nextContactDate) return false;
-    return getTrafficLightStatus(lead) === 'red';
-  }).slice(0, 5);
+  const recentActivities = useMemo(() => {
+    return [...activities]
+      .sort((a, b) => {
+        const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+        const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+        return dateB.getTime() - dateA.getTime();
+      })
+      .slice(0, 5);
+  }, [activities]);
 
-  const dueTodayLeads = leads.filter(lead => {
-    if (lead.archived || !lead.nextContactDate) return false;
-    return isToday(new Date(lead.nextContactDate));
-  });
+  const todayCompletedActions = useMemo(() => {
+    return activities.filter(a => {
+      const createdAt = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+      return isToday(createdAt) && a.type === 'nba_completed';
+    });
+  }, [activities]);
 
-  const funnelData = [
-    { stage: 'Suspect', count: leads.filter(l => l.stage === 'suspect' && !l.archived).length },
-    { stage: 'Contacted', count: leads.filter(l => l.stage === 'contacted' && !l.archived).length },
-    { stage: 'Engaged', count: leads.filter(l => l.stage === 'engaged' && !l.archived).length },
-    { stage: 'Qualified', count: leads.filter(l => l.stage === 'qualified' && !l.archived).length },
-    { stage: 'Discovery', count: leads.filter(l => l.stage === 'discovery' && !l.archived).length },
-    { stage: 'Proposal', count: leads.filter(l => l.stage === 'proposal' && !l.archived).length },
-    { stage: 'Won', count: leads.filter(l => l.stage === 'won' && !l.archived).length },
-  ];
+  const funnelData = useMemo(() => {
+    const stageChanges = activities.filter(a => a.type === 'stage_change');
+    const stageCounts: Record<string, number> = {};
+    
+    stageChanges.forEach(a => {
+      const newStage = a.metadata?.newStage as string;
+      if (newStage) {
+        stageCounts[newStage] = (stageCounts[newStage] || 0) + 1;
+      }
+    });
+    
+    return [
+      { stage: 'Suspect', count: stageCounts['suspect'] || 0 },
+      { stage: 'Contacted', count: stageCounts['contacted'] || 0 },
+      { stage: 'Engaged', count: stageCounts['engaged'] || 0 },
+      { stage: 'Qualified', count: stageCounts['qualified'] || 0 },
+      { stage: 'Discovery', count: stageCounts['discovery'] || 0 },
+      { stage: 'Proposal', count: stageCounts['proposal'] || 0 },
+      { stage: 'Won', count: stageCounts['won'] || 0 },
+    ];
+  }, [activities]);
 
-  const wonMrr = leads
-    .filter(l => l.stage === 'won' && !l.archived && l.mrr)
-    .reduce((sum, l) => sum + (l.mrr || 0), 0);
+  const wonMrr = useMemo(() => {
+    return activities
+      .filter(a => a.type === 'deal' || (a.type === 'stage_change' && a.metadata?.newStage === 'won'))
+      .reduce((sum, a) => sum + (Number(a.metadata?.mrr) || 0), 0);
+  }, [activities]);
 
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
@@ -230,7 +340,7 @@ export default function DashboardPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="font-semibold">Pipeline Funnel</h2>
-            <Badge variant="secondary">{leads.filter(l => !l.archived).length} Total</Badge>
+            <Badge variant="secondary">{funnelData.reduce((sum, d) => sum + d.count, 0)} Stage Changes</Badge>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -255,22 +365,24 @@ export default function DashboardPage() {
       <div className="grid lg:grid-cols-2 gap-6">
         <Card className="p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="font-semibold">Due Today</h2>
-            <Badge variant="default">{dueTodayLeads.length}</Badge>
+            <h2 className="font-semibold">Completed Today</h2>
+            <Badge variant="default">{todayCompletedActions.length}</Badge>
           </div>
           <div className="space-y-3">
-            {dueTodayLeads.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No leads due today</p>
+            {todayCompletedActions.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No completed actions today</p>
             ) : (
-              dueTodayLeads.slice(0, 5).map(lead => (
-                <div key={lead.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`due-today-${lead.id}`}>
-                  <TrafficLight status="amber" size="sm" />
+              todayCompletedActions.slice(0, 5).map(activity => (
+                <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`completed-action-${activity.id}`}>
+                  <CheckCircle className="h-4 w-4 text-green-500" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{lead.companyName}</p>
-                    <p className="text-xs text-muted-foreground">{STAGE_LABELS[lead.stage]}</p>
+                    <p className="font-medium text-sm truncate">{activity.notes || 'Action completed'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'h:mm a')}
+                    </p>
                   </div>
-                  {lead.mrr && (
-                    <Badge variant="outline" className="text-xs">${lead.mrr}</Badge>
+                  {activity.metadata?.points && (
+                    <Badge variant="outline" className="text-xs">+{activity.metadata.points}</Badge>
                   )}
                 </div>
               ))
@@ -281,27 +393,23 @@ export default function DashboardPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-              <h2 className="font-semibold">Overdue</h2>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <h2 className="font-semibold">Recent Activity</h2>
             </div>
-            <Badge variant="destructive">{overdueLeads.length}</Badge>
+            <Badge variant="secondary">{recentActivities.length}</Badge>
           </div>
           <div className="space-y-3">
-            {overdueLeads.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No overdue leads</p>
+            {recentActivities.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No recent activity</p>
             ) : (
-              overdueLeads.map(lead => (
-                <div key={lead.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`overdue-${lead.id}`}>
-                  <TrafficLight status="red" size="sm" />
+              recentActivities.map(activity => (
+                <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`recent-activity-${activity.id}`}>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{lead.companyName}</p>
+                    <p className="font-medium text-sm truncate capitalize">{activity.type.replace('_', ' ')}</p>
                     <p className="text-xs text-muted-foreground">
-                      Due {lead.nextContactDate && format(new Date(lead.nextContactDate), 'MMM d')}
+                      {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'MMM d, h:mm a')}
                     </p>
                   </div>
-                  {lead.mrr && (
-                    <Badge variant="outline" className="text-xs">${lead.mrr}</Badge>
-                  )}
                 </div>
               ))
             )}
