@@ -520,6 +520,92 @@ export default function ClientsPage() {
     };
   };
 
+  // Generate strategy feedback insights based on evidence and analytics
+  const generateStrategyFeedback = (
+    clientId: string,
+    channelInsights: ChannelInsight[],
+    analyticsSnapshots: AnalyticsSnapshot[],
+    evidenceTasks: EvidenceTask[],
+    strategyPlan: StrategyPlan | null
+  ): { type: 'success' | 'warning' | 'action'; message: string; channel?: InsightChannel }[] => {
+    const feedback: { type: 'success' | 'warning' | 'action'; message: string; channel?: InsightChannel }[] = [];
+    
+    // Analytics-based feedback
+    const comparison = getSnapshotComparison(analyticsSnapshots);
+    if (comparison) {
+      if (comparison.sessions && comparison.sessions.percent > 20) {
+        feedback.push({ type: 'success', message: `Sessions up ${comparison.sessions.percent.toFixed(0)}% - SEO/content strategy is working. Consider doubling down on successful tactics.` });
+      } else if (comparison.sessions && comparison.sessions.percent < -10) {
+        feedback.push({ type: 'warning', message: `Sessions down ${Math.abs(comparison.sessions.percent).toFixed(0)}% - Review recent changes and check for technical issues.` });
+      }
+      
+      if (comparison.conversions && comparison.conversions.percent > 15) {
+        feedback.push({ type: 'success', message: `Conversions up ${comparison.conversions.percent.toFixed(0)}% - Great progress toward lead generation goals!` });
+      } else if (comparison.conversions && comparison.conversions.percent < -15) {
+        feedback.push({ type: 'warning', message: `Conversions down ${Math.abs(comparison.conversions.percent).toFixed(0)}% - Check landing pages and CTAs, consider A/B testing.` });
+      }
+      
+      if (comparison.conversionRate && comparison.conversionRate.percent < -20) {
+        feedback.push({ type: 'action', message: `Conversion rate dropped significantly. Traffic quality may be declining - review traffic sources.` });
+      }
+    }
+    
+    // Evidence coverage feedback
+    const channels: InsightChannel[] = ['website', 'seo', 'gbp', 'content', 'ppc', 'analytics'];
+    const verifiedChannels = channelInsights.filter(i => i.analysisStatus === 'verified').map(i => i.channel);
+    const evidenceChannels = channelInsights.filter(i => i.analysisStatus === 'evidence_provided').map(i => i.channel);
+    const assumedChannels = channels.filter(c => !verifiedChannels.includes(c) && !evidenceChannels.includes(c));
+    
+    if (verifiedChannels.length >= 4) {
+      feedback.push({ type: 'success', message: `Strong evidence coverage! ${verifiedChannels.length}/6 channels verified - strategy recommendations are high-confidence.` });
+    } else if (assumedChannels.length >= 4) {
+      feedback.push({ type: 'action', message: `Low evidence coverage. ${assumedChannels.length}/6 channels still assumed. Add evidence to improve strategy accuracy.` });
+    }
+    
+    // Evidence recently provided - suggest verification
+    evidenceChannels.forEach(channel => {
+      const insight = channelInsights.find(i => i.channel === channel);
+      if (insight && insight.providedAt) {
+        const daysSinceProvided = Math.floor((Date.now() - new Date(insight.providedAt).getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSinceProvided <= 7) {
+          feedback.push({ type: 'action', message: `${INSIGHT_CHANNEL_LABELS[channel]} evidence added recently - review and verify to update confidence.`, channel });
+        }
+      }
+    });
+    
+    // Evidence tasks feedback
+    const completedTasks = evidenceTasks.filter(t => t.status === 'completed').length;
+    const verifiedTasks = evidenceTasks.filter(t => t.status === 'verified').length;
+    const pendingTasks = evidenceTasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
+    
+    if (completedTasks > 0 && completedTasks > verifiedTasks) {
+      feedback.push({ type: 'action', message: `${completedTasks - verifiedTasks} completed task(s) awaiting verification. Verify to confirm strategy impact.` });
+    }
+    
+    if (pendingTasks > 3) {
+      feedback.push({ type: 'warning', message: `${pendingTasks} evidence tasks pending. Consider prioritizing key tasks to build strategy confidence.` });
+    }
+    
+    // Strategy-specific feedback based on goal
+    if (strategyPlan?.goal) {
+      const websiteInsight = channelInsights.find(i => i.channel === 'website');
+      const gbpInsight = channelInsights.find(i => i.channel === 'gbp');
+      const seoInsight = channelInsights.find(i => i.channel === 'seo');
+      
+      if (strategyPlan.goal === 'map_pack' && gbpInsight?.analysisStatus === 'assumed') {
+        feedback.push({ type: 'action', message: `Map Pack goal set but GBP evidence is assumed. Add GBP evidence to validate strategy.`, channel: 'gbp' });
+      }
+      if (strategyPlan.goal === 'organic_rankings' && seoInsight?.analysisStatus === 'assumed') {
+        feedback.push({ type: 'action', message: `Organic rankings goal set but SEO evidence is assumed. Add keyword/ranking data.`, channel: 'seo' });
+      }
+      if (strategyPlan.goal === 'more_leads' && websiteInsight?.analysisStatus === 'assumed') {
+        feedback.push({ type: 'action', message: `Lead generation goal set but website evidence is assumed. Add conversion data.`, channel: 'website' });
+      }
+    }
+    
+    return feedback.slice(0, 5); // Limit to 5 most relevant insights
+  };
+
   const handleSaveChannelInsight = async (clientId: string, channel: InsightChannel, urls: string, pastedText: string, notes: string) => {
     if (!orgId) return;
     setSavingInsight(channel);
@@ -2732,6 +2818,69 @@ export default function ClientsPage() {
                                     </>
                                   )}
                                 </div>
+
+                                  {/* Strategy Feedback Loop */}
+                                  <div className="p-4 border rounded-md bg-gradient-to-br from-primary/5 to-transparent">
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <Sparkles className="h-4 w-4 text-primary" />
+                                      <h5 className="font-medium">Strategy Feedback Loop</h5>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mb-3">
+                                      Real-time insights based on evidence and analytics changes to help refine your strategy.
+                                    </p>
+                                    
+                                    {(() => {
+                                      const feedbackItems = generateStrategyFeedback(
+                                        client.id,
+                                        clientChannelInsights[client.id] || [],
+                                        clientAnalyticsSnapshots[client.id] || [],
+                                        clientEvidenceTasks[client.id] || [],
+                                        clientStrategyPlan[client.id] || null
+                                      );
+                                      
+                                      if (feedbackItems.length === 0) {
+                                        return (
+                                          <div className="text-center text-muted-foreground py-3">
+                                            <CheckCircle className="h-5 w-5 mx-auto mb-1 opacity-50" />
+                                            <p className="text-xs">No actionable feedback at this time.</p>
+                                            <p className="text-xs">Add evidence or analytics snapshots to receive insights.</p>
+                                          </div>
+                                        );
+                                      }
+                                      
+                                      return (
+                                        <div className="space-y-2" data-testid="strategy-feedback-loop">
+                                          {feedbackItems.map((item, idx) => (
+                                            <div 
+                                              key={idx} 
+                                              className={`p-2.5 rounded-md text-sm flex items-start gap-2 ${
+                                                item.type === 'success' ? 'bg-green-100/50 dark:bg-green-900/20 text-green-800 dark:text-green-300' :
+                                                item.type === 'warning' ? 'bg-amber-100/50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300' :
+                                                'bg-blue-100/50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300'
+                                              }`}
+                                              data-testid={`feedback-item-${item.type}-${idx}`}
+                                            >
+                                              {item.type === 'success' ? (
+                                                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                              ) : item.type === 'warning' ? (
+                                                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                              ) : (
+                                                <Target className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                              )}
+                                              <div className="flex-1">
+                                                <span>{item.message}</span>
+                                                {item.channel && (
+                                                  <Badge variant="outline" className="ml-2 text-[10px] py-0">
+                                                    {INSIGHT_CHANNEL_LABELS[item.channel]}
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="p-4 border rounded-md text-center text-muted-foreground">
