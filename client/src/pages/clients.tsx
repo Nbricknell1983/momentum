@@ -43,6 +43,87 @@ const deliverableStatusIcons: Record<DeliverableStatus, React.ReactNode> = {
   completed: <Check className="h-4 w-4 text-green-500" />,
 };
 
+// Confidence badge styling based on analysis status
+const confidenceBadgeStyles: Record<AnalysisStatus, { variant: 'default' | 'secondary' | 'outline'; className: string; icon: React.ReactNode }> = {
+  assumed: { variant: 'outline', className: 'text-muted-foreground border-dashed', icon: <AlertCircle className="h-3 w-3" /> },
+  evidence_provided: { variant: 'secondary', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', icon: <FileText className="h-3 w-3" /> },
+  verified: { variant: 'default', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: <CheckCircle className="h-3 w-3" /> },
+};
+
+// Helper to get overall confidence level from channel insights
+function getOverallConfidenceStatus(channelInsights: ChannelInsight[]): AnalysisStatus {
+  if (!channelInsights || channelInsights.length === 0) return 'assumed';
+  
+  const hasVerified = channelInsights.some(i => i.analysisStatus === 'verified');
+  if (hasVerified) return 'verified';
+  
+  const hasEvidence = channelInsights.some(i => i.analysisStatus === 'evidence_provided');
+  if (hasEvidence) return 'evidence_provided';
+  
+  return 'assumed';
+}
+
+// Get confidence status for a specific channel type from channel OKR
+function getChannelConfidenceStatus(channelName: string, channelInsights: ChannelInsight[]): AnalysisStatus {
+  if (!channelInsights || channelInsights.length === 0) return 'assumed';
+  
+  // Comprehensive map of channel plan names to insight channel types
+  const channelMap: Record<string, InsightChannel> = {
+    'website': 'website',
+    'web': 'website',
+    'site': 'website',
+    'gbp': 'gbp',
+    'google business': 'gbp',
+    'google business profile': 'gbp',
+    'business profile': 'gbp',
+    'local': 'gbp',
+    'seo': 'seo',
+    'organic': 'seo',
+    'search': 'seo',
+    'ppc': 'ppc',
+    'paid': 'ppc',
+    'ads': 'ppc',
+    'google ads': 'ppc',
+    'paid ads': 'ppc',
+    'social': 'content',
+    'content': 'content',
+    'blog': 'content',
+    'social media': 'content',
+    'analytics': 'analytics',
+    'data': 'analytics',
+    'reporting': 'analytics',
+    'email': 'content',
+  };
+  
+  const normalizedName = channelName.toLowerCase().trim();
+  const insightChannel = channelMap[normalizedName];
+  
+  // If no mapping found, return overall confidence instead of defaulting to website
+  if (!insightChannel) {
+    return getOverallConfidenceStatus(channelInsights);
+  }
+  
+  const insight = channelInsights.find(i => i.channel === insightChannel);
+  return insight?.analysisStatus || 'assumed';
+}
+
+// Confidence Badge Component
+function ConfidenceBadge({ status, size = 'sm' }: { status: AnalysisStatus; size?: 'sm' | 'xs' }) {
+  const style = confidenceBadgeStyles[status];
+  const label = status === 'assumed' ? 'Assumed' : status === 'evidence_provided' ? 'Evidence' : 'Verified';
+  
+  return (
+    <Badge 
+      variant={style.variant} 
+      className={`${style.className} ${size === 'xs' ? 'text-[10px] px-1 py-0' : 'text-xs px-1.5 py-0.5'} gap-1 font-normal`}
+      data-testid={`badge-confidence-${status}`}
+    >
+      {style.icon}
+      {label}
+    </Badge>
+  );
+}
+
 // Normalizer for StrategyPlan - ensures all arrays/objects have safe defaults
 function normalizeStrategyPlan(rawPlan: StrategyPlan | null | undefined): StrategyPlan | null {
   if (!rawPlan) return null;
@@ -1960,23 +2041,32 @@ export default function ClientsPage() {
                                   {/* Current vs Target State */}
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="p-4 border rounded-md">
-                                      <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                        <ArrowDown className="h-4 w-4 text-amber-500" />
-                                        Current State
-                                      </h4>
+                                      <div className="flex items-center justify-between gap-2 mb-3">
+                                        <h4 className="font-semibold flex items-center gap-2">
+                                          <ArrowDown className="h-4 w-4 text-amber-500" />
+                                          Current State
+                                        </h4>
+                                        <ConfidenceBadge status={getOverallConfidenceStatus(clientChannelInsights[client.id] || [])} size="xs" />
+                                      </div>
                                       <p className="text-sm text-muted-foreground mb-3">{clientStrategyPlan[client.id]?.currentState?.summary}</p>
                                       <div className="space-y-2">
                                         <div>
-                                          <span className="text-xs font-medium text-green-600">Strengths:</span>
-                                          <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-xs font-medium text-green-600">Strengths:</span>
+                                            <ConfidenceBadge status={getOverallConfidenceStatus(clientChannelInsights[client.id] || [])} size="xs" />
+                                          </div>
+                                          <ul className="list-disc list-inside text-xs text-muted-foreground">
                                             {(clientStrategyPlan[client.id]?.currentState?.strengths ?? []).map((s: string, idx: number) => (
                                               <li key={idx}>{s}</li>
                                             ))}
                                           </ul>
                                         </div>
                                         <div>
-                                          <span className="text-xs font-medium text-red-600">Weaknesses:</span>
-                                          <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-xs font-medium text-red-600">Weaknesses:</span>
+                                            <ConfidenceBadge status={getOverallConfidenceStatus(clientChannelInsights[client.id] || [])} size="xs" />
+                                          </div>
+                                          <ul className="list-disc list-inside text-xs text-muted-foreground">
                                             {(clientStrategyPlan[client.id]?.currentState?.weaknesses ?? []).map((w: string, idx: number) => (
                                               <li key={idx}>{w}</li>
                                             ))}
@@ -1985,14 +2075,20 @@ export default function ClientsPage() {
                                       </div>
                                     </div>
                                     <div className="p-4 border rounded-md">
-                                      <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                        <ArrowUp className="h-4 w-4 text-green-500" />
-                                        Target State (90 Days)
-                                      </h4>
+                                      <div className="flex items-center justify-between gap-2 mb-3">
+                                        <h4 className="font-semibold flex items-center gap-2">
+                                          <ArrowUp className="h-4 w-4 text-green-500" />
+                                          Target State (90 Days)
+                                        </h4>
+                                        <ConfidenceBadge status={getOverallConfidenceStatus(clientChannelInsights[client.id] || [])} size="xs" />
+                                      </div>
                                       <p className="text-sm text-muted-foreground mb-3">{clientStrategyPlan[client.id]?.targetState?.summary}</p>
                                       <div>
-                                        <span className="text-xs font-medium text-primary">Expected Outcomes:</span>
-                                        <ul className="list-disc list-inside text-xs text-muted-foreground mt-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-xs font-medium text-foreground">Expected Outcomes:</span>
+                                          <ConfidenceBadge status={getOverallConfidenceStatus(clientChannelInsights[client.id] || [])} size="xs" />
+                                        </div>
+                                        <ul className="list-disc list-inside text-xs text-muted-foreground">
                                           {(clientStrategyPlan[client.id]?.targetState?.outcomes ?? []).map((o: string, idx: number) => (
                                             <li key={idx}>{o}</li>
                                           ))}
@@ -2004,12 +2100,16 @@ export default function ClientsPage() {
                                   {/* Channel OKRs */}
                                   {(clientStrategyPlan[client.id]?.channelOKRs ?? []).length > 0 && (
                                     <div className="p-4 border rounded-md">
-                                      <h4 className="font-semibold mb-3">Channel Objectives & Key Results</h4>
+                                      <div className="flex items-center justify-between gap-2 mb-3">
+                                        <h4 className="font-semibold">Channel Objectives & Key Results</h4>
+                                        <ConfidenceBadge status={getOverallConfidenceStatus(clientChannelInsights[client.id] || [])} size="xs" />
+                                      </div>
                                       <div className="space-y-3">
                                         {(clientStrategyPlan[client.id]?.channelOKRs ?? []).map((okr: { channel: string; objective: string; keyResults: string[] }, idx: number) => (
                                           <div key={idx} className="p-3 bg-muted/30 rounded-md">
-                                            <div className="flex items-center gap-2 mb-1">
+                                            <div className="flex items-center flex-wrap gap-2 mb-1">
                                               <Badge variant="outline">{okr.channel}</Badge>
+                                              <ConfidenceBadge status={getChannelConfidenceStatus(okr.channel, clientChannelInsights[client.id] || [])} size="xs" />
                                               <span className="text-sm font-medium">{okr.objective}</span>
                                             </div>
                                             <ul className="list-disc list-inside text-xs text-muted-foreground ml-2">
