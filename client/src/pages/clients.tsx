@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,8 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
 import { createClient as createClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
@@ -81,6 +82,9 @@ export default function ClientsPage() {
   const [aiToolInput, setAiToolInput] = useState('');
   const [aiToolResult, setAiToolResult] = useState<any>(null);
   const [generatingAI, setGeneratingAI] = useState(false);
+
+  const [activeClientTab, setActiveClientTab] = useState<string>('details');
+  const [activeStrategySubTab, setActiveStrategySubTab] = useState<string>('overview');
 
   const searchString = useSearch();
 
@@ -607,76 +611,94 @@ export default function ClientsPage() {
                     </CardHeader>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <CardContent className="border-t pt-4 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Contact Details</h4>
-                          <div className="space-y-1 text-sm text-muted-foreground">
-                            {client.phone && (
-                              <div className="flex items-center gap-2">
-                                <Phone className="h-3 w-3" />
-                                <a href={`tel:${client.phone}`} className="hover:underline">{client.phone}</a>
-                              </div>
-                            )}
-                            {client.email && (
-                              <div className="flex items-center gap-2">
-                                <Mail className="h-3 w-3" />
-                                <a href={`mailto:${client.email}`} className="hover:underline">{client.email}</a>
-                              </div>
-                            )}
-                            {client.address && (
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-3 w-3" />
-                                <span>{client.address}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                    <CardContent className="border-t pt-4">
+                      <Tabs value={activeClientTab} onValueChange={setActiveClientTab} className="w-full">
+                        <TabsList className="mb-4 w-full justify-start">
+                          <TabsTrigger value="details" data-testid={`tab-details-${client.id}`}>
+                            <Users className="h-4 w-4 mr-2" />
+                            Details
+                          </TabsTrigger>
+                          <TabsTrigger value="deliverables" data-testid={`tab-deliverables-${client.id}`}>
+                            <Package className="h-4 w-4 mr-2" />
+                            Deliverables
+                          </TabsTrigger>
+                          <TabsTrigger value="strategy" data-testid={`tab-strategy-${client.id}`}>
+                            <Target className="h-4 w-4 mr-2" />
+                            Strategy
+                          </TabsTrigger>
+                        </TabsList>
 
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Products</h4>
-                          {client.products.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {client.products.map((product, idx) => (
-                                <Badge key={idx} variant="outline">
-                                  {product.productType}
-                                </Badge>
-                              ))}
+                        <TabsContent value="details" className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-medium">Contact Details</h4>
+                              <div className="space-y-1 text-sm text-muted-foreground">
+                                {client.phone && (
+                                  <div className="flex items-center gap-2">
+                                    <Phone className="h-3 w-3" />
+                                    <a href={`tel:${client.phone}`} className="hover:underline">{client.phone}</a>
+                                  </div>
+                                )}
+                                {client.email && (
+                                  <div className="flex items-center gap-2">
+                                    <Mail className="h-3 w-3" />
+                                    <a href={`mailto:${client.email}`} className="hover:underline">{client.email}</a>
+                                  </div>
+                                )}
+                                {client.address && (
+                                  <div className="flex items-center gap-2">
+                                    <MapPin className="h-3 w-3" />
+                                    <span>{client.address}</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No products</p>
-                          )}
-                        </div>
 
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Activity</h4>
-                          <div className="text-sm text-muted-foreground space-y-1">
-                            <p>Last Contact: {formatDate(client.lastContactDate)}</p>
-                            <p>Next Contact: {formatDate(client.nextContactDate)}</p>
-                            <p>Created: {formatDate(client.createdAt)}</p>
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-medium">Products</h4>
+                              {client.products.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {client.products.map((product, idx) => (
+                                    <Badge key={idx} variant="outline">
+                                      {product.productType}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">No products</p>
+                              )}
+                            </div>
+
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-medium">Activity</h4>
+                              <div className="text-sm text-muted-foreground space-y-1">
+                                <p>Last Contact: {formatDate(client.lastContactDate)}</p>
+                                <p>Next Contact: {formatDate(client.nextContactDate)}</p>
+                                <p>Created: {formatDate(client.createdAt)}</p>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
 
-                      {client.healthReasons.length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Health Reasons</h4>
-                          <ul className="text-sm text-muted-foreground list-disc list-inside">
-                            {client.healthReasons.map((reason, idx) => (
-                              <li key={idx}>{reason}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                          {client.healthReasons.length > 0 && (
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-medium">Health Reasons</h4>
+                              <ul className="text-sm text-muted-foreground list-disc list-inside">
+                                {client.healthReasons.map((reason, idx) => (
+                                  <li key={idx}>{reason}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
 
-                      {client.notes && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Notes</h4>
-                          <p className="text-sm text-muted-foreground">{client.notes}</p>
-                        </div>
-                      )}
+                          {client.notes && (
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-medium">Notes</h4>
+                              <p className="text-sm text-muted-foreground">{client.notes}</p>
+                            </div>
+                          )}
+                        </TabsContent>
 
-                      <div className="space-y-3 pt-2 border-t">
+                        <TabsContent value="deliverables" className="space-y-3">
                         <div className="flex items-center justify-between gap-2">
                           <h4 className="text-sm font-medium flex items-center gap-2">
                             <Package className="h-4 w-4" />
@@ -799,9 +821,73 @@ export default function ClientsPage() {
                             ))}
                           </div>
                         )}
-                      </div>
+                        </TabsContent>
 
-                      <div className="space-y-3 pt-2 border-t">
+                        <TabsContent value="strategy" className="space-y-4">
+                          <Tabs value={activeStrategySubTab} onValueChange={setActiveStrategySubTab} className="w-full">
+                            <TabsList className="mb-4">
+                              <TabsTrigger value="overview" data-testid={`tab-strategy-overview-${client.id}`}>
+                                <LayoutDashboard className="h-4 w-4 mr-2" />
+                                Overview
+                              </TabsTrigger>
+                              <TabsTrigger value="plan" data-testid={`tab-strategy-plan-${client.id}`}>
+                                <TrendingUp className="h-4 w-4 mr-2" />
+                                Plan
+                              </TabsTrigger>
+                              <TabsTrigger value="insights" data-testid={`tab-strategy-insights-${client.id}`}>
+                                <Lightbulb className="h-4 w-4 mr-2" />
+                                Insights
+                              </TabsTrigger>
+                              <TabsTrigger value="content" data-testid={`tab-strategy-content-${client.id}`}>
+                                <PenTool className="h-4 w-4 mr-2" />
+                                Content
+                              </TabsTrigger>
+                            </TabsList>
+
+                            <TabsContent value="overview" className="space-y-4">
+                              <div className="flex items-center justify-between gap-4 p-4 border rounded-md bg-muted/20">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <Target className="h-5 w-5 text-muted-foreground" />
+                                    <span className="font-medium">Strategy Status</span>
+                                  </div>
+                                  <Badge variant={client.strategyStatus === 'active' ? 'default' : 'secondary'}>
+                                    {client.strategyStatus === 'not_started' ? 'Not Started' : 
+                                     client.strategyStatus === 'discovery' ? 'Discovery' :
+                                     client.strategyStatus === 'planning' ? 'Planning' :
+                                     client.strategyStatus === 'active' ? 'Active' : 'Paused'}
+                                  </Badge>
+                                </div>
+                                <Button 
+                                  variant="default" 
+                                  className="gap-2"
+                                  data-testid={`button-start-strategy-${client.id}`}
+                                >
+                                  <Play className="h-4 w-4" />
+                                  {client.strategyStatus === 'not_started' ? 'Start Strategy Wizard' : 'Edit Strategy'}
+                                </Button>
+                              </div>
+
+                              {client.businessProfile && (
+                                <div className="p-4 border rounded-md space-y-3">
+                                  <h5 className="font-medium">Business Profile Summary</h5>
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                      <span className="text-muted-foreground">Industry:</span> {client.businessProfile.industry}
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Business Type:</span> {client.businessProfile.businessType}
+                                    </div>
+                                    {client.businessProfile.primaryGoal && (
+                                      <div className="col-span-2">
+                                        <span className="text-muted-foreground">Primary Goal:</span> {PRIMARY_GOAL_LABELS[client.businessProfile.primaryGoal]}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                      <div className="space-y-3 border-t pt-3">
                         <div className="flex items-center justify-between gap-2">
                           <h4 className="text-sm font-medium flex items-center gap-2">
                             <Target className="h-4 w-4" />
@@ -1083,6 +1169,34 @@ export default function ClientsPage() {
                           </div>
                         </div>
                       </div>
+                            </TabsContent>
+
+                            <TabsContent value="plan" className="space-y-4">
+                              <div className="p-4 border rounded-md text-center text-muted-foreground">
+                                <TrendingUp className="h-8 w-8 mx-auto mb-2" />
+                                <p className="font-medium">30/60/90 Day Roadmap</p>
+                                <p className="text-sm">Complete the Strategy Wizard to generate your marketing roadmap.</p>
+                              </div>
+                            </TabsContent>
+
+                            <TabsContent value="insights" className="space-y-4">
+                              <div className="p-4 border rounded-md text-center text-muted-foreground">
+                                <Lightbulb className="h-8 w-8 mx-auto mb-2" />
+                                <p className="font-medium">Gap Analysis & Insights</p>
+                                <p className="text-sm">Complete the Strategy Wizard to see competitive gaps and opportunities.</p>
+                              </div>
+                            </TabsContent>
+
+                            <TabsContent value="content" className="space-y-4">
+                              <div className="p-4 border rounded-md text-center text-muted-foreground">
+                                <PenTool className="h-8 w-8 mx-auto mb-2" />
+                                <p className="font-medium">Content Drafts</p>
+                                <p className="text-sm">AI-generated content for review will appear here.</p>
+                              </div>
+                            </TabsContent>
+                          </Tabs>
+                        </TabsContent>
+                      </Tabs>
 
                       <div className="flex gap-2 pt-2">
                         <Button variant="outline" size="sm" data-testid={`button-contact-${client.id}`}>
