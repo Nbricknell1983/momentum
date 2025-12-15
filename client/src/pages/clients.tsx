@@ -17,9 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -300,6 +300,21 @@ export default function ClientsPage() {
   const [loadingEvidenceTasks, setLoadingEvidenceTasks] = useState<string | null>(null);
   const [savingEvidenceTask, setSavingEvidenceTask] = useState<string | null>(null);
 
+  const [clientAnalyticsSnapshots, setClientAnalyticsSnapshots] = useState<Record<string, AnalyticsSnapshot[]>>({});
+  const [loadingSnapshots, setLoadingSnapshots] = useState<string | null>(null);
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
+  const [showSnapshotForm, setShowSnapshotForm] = useState(false);
+  const [snapshotFormData, setSnapshotFormData] = useState({
+    dateRange: '',
+    sessions: '',
+    users: '',
+    conversions: '',
+    conversionRate: '',
+    topPages: '',
+    topKeywords: '',
+    notes: '',
+  });
+
   const searchString = useSearch();
 
   useEffect(() => {
@@ -378,6 +393,17 @@ export default function ClientsPage() {
     }
   }, [expandedClientId, orgId, authReady]);
 
+  useEffect(() => {
+    if (expandedClientId && orgId && authReady && clientAnalyticsSnapshots[expandedClientId] === undefined) {
+      setLoadingSnapshots(expandedClientId);
+      fetchAnalyticsSnapshots(orgId, expandedClientId, authReady)
+        .then(snapshots => {
+          setClientAnalyticsSnapshots(prev => ({ ...prev, [expandedClientId]: snapshots }));
+        })
+        .finally(() => setLoadingSnapshots(null));
+    }
+  }, [expandedClientId, orgId, authReady]);
+
   const handleCreateEvidenceTask = async (clientId: string, task: string, channel: InsightChannel, definition: string, impactMetric: string) => {
     if (!orgId) return;
     setSavingEvidenceTask('new');
@@ -433,6 +459,65 @@ export default function ClientsPage() {
     } finally {
       setSavingEvidenceTask(null);
     }
+  };
+
+  const handleCreateAnalyticsSnapshot = async (clientId: string) => {
+    if (!orgId) return;
+    setSavingSnapshot(true);
+    try {
+      const snapshotData: Omit<AnalyticsSnapshot, 'id'> = {
+        clientId,
+        dateRange: snapshotFormData.dateRange,
+        sessions: snapshotFormData.sessions ? parseInt(snapshotFormData.sessions) : null,
+        users: snapshotFormData.users ? parseInt(snapshotFormData.users) : null,
+        conversions: snapshotFormData.conversions ? parseInt(snapshotFormData.conversions) : null,
+        conversionRate: snapshotFormData.conversionRate ? parseFloat(snapshotFormData.conversionRate) : null,
+        topPages: snapshotFormData.topPages ? snapshotFormData.topPages.split('\n').filter(p => p.trim()) : [],
+        topKeywords: snapshotFormData.topKeywords ? snapshotFormData.topKeywords.split('\n').filter(k => k.trim()) : [],
+        notes: snapshotFormData.notes,
+        createdAt: new Date(),
+      };
+      const saved = await createAnalyticsSnapshot(orgId, clientId, snapshotData, authReady);
+      setClientAnalyticsSnapshots(prev => ({
+        ...prev,
+        [clientId]: [saved, ...(prev[clientId] || [])],
+      }));
+      setShowSnapshotForm(false);
+      setSnapshotFormData({
+        dateRange: '',
+        sessions: '',
+        users: '',
+        conversions: '',
+        conversionRate: '',
+        topPages: '',
+        topKeywords: '',
+        notes: '',
+      });
+      toast({ title: "Snapshot saved", description: "Analytics snapshot has been recorded." });
+    } catch (error) {
+      console.error('Error creating analytics snapshot:', error);
+      toast({ title: "Error", description: "Failed to save snapshot.", variant: "destructive" });
+    } finally {
+      setSavingSnapshot(false);
+    }
+  };
+
+  const getSnapshotComparison = (snapshots: AnalyticsSnapshot[]) => {
+    if (snapshots.length < 2) return null;
+    const current = snapshots[0];
+    const previous = snapshots[1];
+    const calcChange = (curr: number | null, prev: number | null) => {
+      if (curr === null || prev === null || prev === 0) return null;
+      const value = curr - prev;
+      const percent = ((curr - prev) / prev) * 100;
+      return { value, percent };
+    };
+    return {
+      sessions: calcChange(current.sessions, previous.sessions),
+      users: calcChange(current.users, previous.users),
+      conversions: calcChange(current.conversions, previous.conversions),
+      conversionRate: calcChange(current.conversionRate, previous.conversionRate),
+    };
   };
 
   const handleSaveChannelInsight = async (clientId: string, channel: InsightChannel, urls: string, pastedText: string, notes: string) => {
@@ -2422,6 +2507,231 @@ export default function ClientsPage() {
                                       </div>
                                     )}
                                   </div>
+
+                                  {/* Analytics Snapshots */}
+                                <div className="p-4 border rounded-md">
+                                  <div className="flex items-center justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <TrendingUp className="h-4 w-4 text-primary" />
+                                      <h5 className="font-medium">Analytics Snapshots</h5>
+                                    </div>
+                                    {loadingSnapshots === client.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Badge variant="outline">
+                                        {(clientAnalyticsSnapshots[client.id] || []).length} recorded
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  {loadingSnapshots === client.id ? (
+                                    <div className="flex justify-center py-4">
+                                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {/* Comparison View */}
+                                      {(clientAnalyticsSnapshots[client.id] || []).length >= 2 && (() => {
+                                        const comparison = getSnapshotComparison(clientAnalyticsSnapshots[client.id] || []);
+                                        if (!comparison) return null;
+                                        return (
+                                          <div className="mb-4 p-3 bg-muted/50 rounded-md">
+                                            <p className="text-xs text-muted-foreground mb-2">Before/After Comparison</p>
+                                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                              {comparison.sessions && (
+                                                <div className="flex items-center gap-1">
+                                                  {comparison.sessions.percent > 0 ? (
+                                                    <ArrowUp className="h-3 w-3 text-green-500" />
+                                                  ) : (
+                                                    <ArrowDown className="h-3 w-3 text-red-500" />
+                                                  )}
+                                                  <span>Sessions: {comparison.sessions.percent > 0 ? '+' : ''}{comparison.sessions.percent.toFixed(1)}%</span>
+                                                </div>
+                                              )}
+                                              {comparison.users && (
+                                                <div className="flex items-center gap-1">
+                                                  {comparison.users.percent > 0 ? (
+                                                    <ArrowUp className="h-3 w-3 text-green-500" />
+                                                  ) : (
+                                                    <ArrowDown className="h-3 w-3 text-red-500" />
+                                                  )}
+                                                  <span>Users: {comparison.users.percent > 0 ? '+' : ''}{comparison.users.percent.toFixed(1)}%</span>
+                                                </div>
+                                              )}
+                                              {comparison.conversions && (
+                                                <div className="flex items-center gap-1">
+                                                  {comparison.conversions.percent > 0 ? (
+                                                    <ArrowUp className="h-3 w-3 text-green-500" />
+                                                  ) : (
+                                                    <ArrowDown className="h-3 w-3 text-red-500" />
+                                                  )}
+                                                  <span>Conversions: {comparison.conversions.percent > 0 ? '+' : ''}{comparison.conversions.percent.toFixed(1)}%</span>
+                                                </div>
+                                              )}
+                                              {comparison.conversionRate && (
+                                                <div className="flex items-center gap-1">
+                                                  {comparison.conversionRate.percent > 0 ? (
+                                                    <ArrowUp className="h-3 w-3 text-green-500" />
+                                                  ) : (
+                                                    <ArrowDown className="h-3 w-3 text-red-500" />
+                                                  )}
+                                                  <span>Conv Rate: {comparison.conversionRate.percent > 0 ? '+' : ''}{comparison.conversionRate.percent.toFixed(1)}%</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* Snapshot History */}
+                                      {(clientAnalyticsSnapshots[client.id] || []).length > 0 ? (
+                                        <div className="space-y-2 mb-3">
+                                          {(clientAnalyticsSnapshots[client.id] || []).slice(0, 3).map((snapshot) => (
+                                            <div key={snapshot.id} className="p-2 border rounded text-sm" data-testid={`snapshot-${snapshot.id}`}>
+                                              <div className="flex items-center justify-between gap-2 mb-1">
+                                                <span className="font-medium">{snapshot.dateRange || 'No date range'}</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                  {new Date(snapshot.createdAt).toLocaleDateString()}
+                                                </span>
+                                              </div>
+                                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                                {snapshot.sessions !== null && <span>Sessions: {snapshot.sessions.toLocaleString()}</span>}
+                                                {snapshot.users !== null && <span>Users: {snapshot.users.toLocaleString()}</span>}
+                                                {snapshot.conversions !== null && <span>Conversions: {snapshot.conversions}</span>}
+                                                {snapshot.conversionRate !== null && <span>Conv Rate: {snapshot.conversionRate}%</span>}
+                                              </div>
+                                              {snapshot.notes && (
+                                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{snapshot.notes}</p>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-center text-muted-foreground py-3 mb-3">
+                                          <p className="text-sm">No analytics snapshots recorded yet.</p>
+                                          <p className="text-xs">Add snapshots to track performance over time.</p>
+                                        </div>
+                                      )}
+
+                                      {/* Add Snapshot Form */}
+                                      {showSnapshotForm ? (
+                                        <div className="space-y-3 p-3 border rounded-md bg-muted/30">
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                              <Label className="text-xs">Date Range</Label>
+                                              <Input
+                                                placeholder="e.g., Dec 1-15, 2025"
+                                                value={snapshotFormData.dateRange}
+                                                onChange={(e) => setSnapshotFormData(prev => ({ ...prev, dateRange: e.target.value }))}
+                                                data-testid="input-snapshot-daterange"
+                                              />
+                                            </div>
+                                            <div>
+                                              <Label className="text-xs">Sessions</Label>
+                                              <Input
+                                                type="number"
+                                                placeholder="e.g., 1500"
+                                                value={snapshotFormData.sessions}
+                                                onChange={(e) => setSnapshotFormData(prev => ({ ...prev, sessions: e.target.value }))}
+                                                data-testid="input-snapshot-sessions"
+                                              />
+                                            </div>
+                                            <div>
+                                              <Label className="text-xs">Users</Label>
+                                              <Input
+                                                type="number"
+                                                placeholder="e.g., 1200"
+                                                value={snapshotFormData.users}
+                                                onChange={(e) => setSnapshotFormData(prev => ({ ...prev, users: e.target.value }))}
+                                                data-testid="input-snapshot-users"
+                                              />
+                                            </div>
+                                            <div>
+                                              <Label className="text-xs">Conversions</Label>
+                                              <Input
+                                                type="number"
+                                                placeholder="e.g., 25"
+                                                value={snapshotFormData.conversions}
+                                                onChange={(e) => setSnapshotFormData(prev => ({ ...prev, conversions: e.target.value }))}
+                                                data-testid="input-snapshot-conversions"
+                                              />
+                                            </div>
+                                            <div>
+                                              <Label className="text-xs">Conversion Rate (%)</Label>
+                                              <Input
+                                                type="number"
+                                                step="0.1"
+                                                placeholder="e.g., 2.5"
+                                                value={snapshotFormData.conversionRate}
+                                                onChange={(e) => setSnapshotFormData(prev => ({ ...prev, conversionRate: e.target.value }))}
+                                                data-testid="input-snapshot-convrate"
+                                              />
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <Label className="text-xs">Top Pages (one per line)</Label>
+                                            <Textarea
+                                              placeholder="/services&#10;/contact&#10;/about"
+                                              value={snapshotFormData.topPages}
+                                              onChange={(e) => setSnapshotFormData(prev => ({ ...prev, topPages: e.target.value }))}
+                                              className="min-h-[60px]"
+                                              data-testid="input-snapshot-toppages"
+                                            />
+                                          </div>
+                                          <div>
+                                            <Label className="text-xs">Top Keywords (one per line)</Label>
+                                            <Textarea
+                                              placeholder="plumber near me&#10;emergency plumber&#10;plumbing services"
+                                              value={snapshotFormData.topKeywords}
+                                              onChange={(e) => setSnapshotFormData(prev => ({ ...prev, topKeywords: e.target.value }))}
+                                              className="min-h-[60px]"
+                                              data-testid="input-snapshot-topkeywords"
+                                            />
+                                          </div>
+                                          <div>
+                                            <Label className="text-xs">Notes</Label>
+                                            <Textarea
+                                              placeholder="Any observations or context..."
+                                              value={snapshotFormData.notes}
+                                              onChange={(e) => setSnapshotFormData(prev => ({ ...prev, notes: e.target.value }))}
+                                              className="min-h-[60px]"
+                                              data-testid="input-snapshot-notes"
+                                            />
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <Button
+                                              size="sm"
+                                              onClick={() => handleCreateAnalyticsSnapshot(client.id)}
+                                              disabled={savingSnapshot || !snapshotFormData.dateRange}
+                                              data-testid="button-save-snapshot"
+                                            >
+                                              {savingSnapshot ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+                                              Save Snapshot
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => setShowSnapshotForm(false)}
+                                              data-testid="button-cancel-snapshot"
+                                            >
+                                              Cancel
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => setShowSnapshotForm(true)}
+                                          data-testid="button-add-snapshot"
+                                        >
+                                          <Plus className="h-3 w-3 mr-1" />
+                                          Add Analytics Snapshot
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                                 </div>
                               ) : (
                                 <div className="p-4 border rounded-md text-center text-muted-foreground">
