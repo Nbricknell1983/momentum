@@ -131,7 +131,8 @@ export default function ActionQueueCard({
         if (onViewLead) {
           onViewLead(action.targetId);
         } else {
-          setLocation(`/pipeline?openType=${action.targetType}&openId=${action.targetId}`);
+          const basePath = action.targetType === 'client' ? '/clients' : '/pipeline';
+          setLocation(`${basePath}?openType=${action.targetType}&openId=${action.targetId}`);
         }
         break;
     }
@@ -248,7 +249,8 @@ export default function ActionQueueCard({
     if (onViewLead) {
       onViewLead(action.targetId);
     } else {
-      setLocation(`/pipeline?openType=${action.targetType}&openId=${action.targetId}`);
+      const basePath = action.targetType === 'client' ? '/clients' : '/pipeline';
+      setLocation(`${basePath}?openType=${action.targetType}&openId=${action.targetId}`);
     }
   };
 

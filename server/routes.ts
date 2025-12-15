@@ -368,5 +368,147 @@ Be encouraging but honest. If they missed targets, acknowledge it but focus on s
     }
   });
 
+  // ============================================
+  // Client AI Tools
+  // ============================================
+
+  app.post("/api/clients/ai/seo-blog", async (req, res) => {
+    try {
+      const { client, topic, keywords } = req.body;
+      
+      if (!client || !topic) {
+        return res.status(400).json({ error: "Client and topic are required" });
+      }
+
+      const prompt = `You are an expert SEO content writer. Generate a blog post for a client.
+
+Client Business: ${client.businessName}
+Products/Services: ${client.products?.map((p: any) => p.productType).join(', ') || 'Marketing services'}
+Topic: ${topic}
+Target Keywords: ${keywords || 'local business, digital marketing'}
+
+Generate a blog post in JSON format:
+{
+  "title": "SEO-optimized title with primary keyword",
+  "metaDescription": "150-160 character meta description with keyword",
+  "outline": ["Section 1", "Section 2", "Section 3", "Section 4"],
+  "content": "Full blog post content with H2 headings marked as ## (800-1200 words)",
+  "suggestedInternalLinks": ["Topic 1 to link to", "Topic 2 to link to"],
+  "callToAction": "Compelling CTA for the business"
+}
+
+Write in a professional but engaging tone. Include the target keywords naturally.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 2000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const blogPost = JSON.parse(content);
+      
+      res.json(blogPost);
+    } catch (error) {
+      console.error("Error generating SEO blog:", error);
+      res.status(500).json({ error: "Failed to generate SEO blog content" });
+    }
+  });
+
+  app.post("/api/clients/ai/facebook-post", async (req, res) => {
+    try {
+      const { client, postType, promotion } = req.body;
+      
+      if (!client) {
+        return res.status(400).json({ error: "Client is required" });
+      }
+
+      const prompt = `You are a social media marketing expert. Create a Facebook post for a client.
+
+Client Business: ${client.businessName}
+Industry/Services: ${client.products?.map((p: any) => p.productType).join(', ') || 'Local business'}
+Post Type: ${postType || 'engagement'}
+${promotion ? `Promotion/Offer: ${promotion}` : ''}
+
+Generate a Facebook post in JSON format:
+{
+  "primaryPost": "Main post text (max 300 chars, engaging, with emoji)",
+  "alternativePost": "Alternative version with different angle",
+  "hashtags": ["#Hashtag1", "#Hashtag2", "#Hashtag3"],
+  "bestTimeToPost": "Suggested posting time and day",
+  "imagePrompt": "Description for an AI image generator or stock photo search",
+  "engagementTip": "Tip to boost engagement on this post"
+}
+
+Make the posts authentic, engaging, and appropriate for the business type.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 800,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const post = JSON.parse(content);
+      
+      res.json(post);
+    } catch (error) {
+      console.error("Error generating Facebook post:", error);
+      res.status(500).json({ error: "Failed to generate Facebook post" });
+    }
+  });
+
+  app.post("/api/clients/ai/meeting-prep", async (req, res) => {
+    try {
+      const { client, meetingType, recentActivities, strategyPlan } = req.body;
+      
+      if (!client) {
+        return res.status(400).json({ error: "Client is required" });
+      }
+
+      const prompt = `You are a client success manager preparing for a client meeting.
+
+Client: ${client.businessName}
+Health Status: ${client.healthStatus} (${client.healthStatus === 'red' ? 'Critical - at risk of churn' : client.healthStatus === 'amber' ? 'Needs attention' : 'Healthy'})
+Products: ${client.products?.map((p: any) => `${p.productType} ($${p.monthlyValue}/mo)`).join(', ') || 'N/A'}
+Total MRR: $${client.totalMRR || 0}
+Last Contact: ${client.lastContactDate ? new Date(client.lastContactDate).toLocaleDateString() : 'Never'}
+Strategy Status: ${client.strategyStatus || 'Not started'}
+Meeting Type: ${meetingType || 'check-in'}
+${strategyPlan ? `Current Strategy: ${strategyPlan.coreStrategy}` : ''}
+${recentActivities?.length ? `Recent Activities: ${recentActivities.slice(0, 3).map((a: any) => a.notes).join('; ')}` : ''}
+
+Generate meeting preparation notes in JSON format:
+{
+  "agenda": ["Agenda item 1", "Agenda item 2", "Agenda item 3"],
+  "keyTalkingPoints": ["Point 1 with context", "Point 2 with context", "Point 3 with context"],
+  "questionsToAsk": ["Question 1 to uncover needs", "Question 2 about satisfaction", "Question 3 about future plans"],
+  "potentialConcerns": ["Concern they might raise", "How to address it"],
+  "upsellOpportunities": ["Opportunity 1", "Opportunity 2"],
+  "successMetricsToHighlight": ["Metric or win to celebrate"],
+  "nextStepsToPropose": ["Proposed next step 1", "Proposed next step 2"]
+}
+
+Be specific and actionable. Focus on retention and growth.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const prep = JSON.parse(content);
+      
+      res.json(prep);
+    } catch (error) {
+      console.error("Error generating meeting prep:", error);
+      res.status(500).json({ error: "Failed to generate meeting preparation" });
+    }
+  });
+
   return httpServer;
 }

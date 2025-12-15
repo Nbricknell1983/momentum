@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2 } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +75,12 @@ export default function ClientsPage() {
   const [newSessionAgenda, setNewSessionAgenda] = useState('');
   const [newSessionNotes, setNewSessionNotes] = useState('');
   const [savingSession, setSavingSession] = useState(false);
+
+  const [isAIToolsOpen, setIsAIToolsOpen] = useState(false);
+  const [aiToolType, setAiToolType] = useState<'seo' | 'facebook' | 'meeting'>('seo');
+  const [aiToolInput, setAiToolInput] = useState('');
+  const [aiToolResult, setAiToolResult] = useState<any>(null);
+  const [generatingAI, setGeneratingAI] = useState(false);
 
   const searchString = useSearch();
 
@@ -164,6 +170,52 @@ export default function ClientsPage() {
     } catch (error) {
       console.error('Error deleting strategy session:', error);
       toast({ title: "Error", description: "Failed to delete session.", variant: "destructive" });
+    }
+  };
+
+  const handleGenerateAIContent = async (client: Client) => {
+    if (!aiToolInput.trim() && aiToolType !== 'meeting') {
+      toast({ title: "Input required", description: "Please enter a topic or details.", variant: "destructive" });
+      return;
+    }
+    setGeneratingAI(true);
+    setAiToolResult(null);
+    try {
+      let endpoint = '';
+      let body: any = { client };
+      
+      switch (aiToolType) {
+        case 'seo':
+          endpoint = '/api/clients/ai/seo-blog';
+          body.topic = aiToolInput;
+          break;
+        case 'facebook':
+          endpoint = '/api/clients/ai/facebook-post';
+          body.postType = 'engagement';
+          body.promotion = aiToolInput || undefined;
+          break;
+        case 'meeting':
+          endpoint = '/api/clients/ai/meeting-prep';
+          body.meetingType = aiToolInput || 'check-in';
+          body.strategyPlan = clientStrategyPlan[client.id];
+          break;
+      }
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      
+      if (!response.ok) throw new Error('Failed to generate content');
+      const data = await response.json();
+      setAiToolResult(data);
+      toast({ title: "Content generated", description: "AI content is ready!" });
+    } catch (error) {
+      console.error('Error generating AI content:', error);
+      toast({ title: "Error", description: "Failed to generate AI content.", variant: "destructive" });
+    } finally {
+      setGeneratingAI(false);
     }
   };
 
@@ -866,6 +918,169 @@ export default function ClientsPage() {
                             )}
                           </div>
                         )}
+
+                        <div className="space-y-3 pt-3 border-t mt-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="text-sm font-medium flex items-center gap-2">
+                              <Sparkles className="h-4 w-4" />
+                              AI Tools
+                            </h4>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Dialog open={isAIToolsOpen && expandedClientId === client.id && aiToolType === 'seo'} onOpenChange={(open) => { if (!open) { setIsAIToolsOpen(false); setAiToolResult(null); setAiToolInput(''); } }}>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={() => { setAiToolType('seo'); setAiToolResult(null); setAiToolInput(''); setIsAIToolsOpen(true); }} data-testid={`button-ai-seo-${client.id}`}>
+                                  <FileText className="h-4 w-4 mr-1" />
+                                  SEO Blog
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5" />
+                                    Generate SEO Blog for {client.businessName}
+                                  </DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 py-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor="seo-topic">Blog Topic</Label>
+                                    <Input
+                                      id="seo-topic"
+                                      value={aiToolInput}
+                                      onChange={(e) => setAiToolInput(e.target.value)}
+                                      placeholder="e.g., Top 10 tips for local SEO..."
+                                      data-testid="input-seo-topic"
+                                    />
+                                  </div>
+                                  <Button onClick={() => handleGenerateAIContent(client)} disabled={generatingAI} className="w-full" data-testid="button-generate-seo">
+                                    {generatingAI ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</> : 'Generate Blog Post'}
+                                  </Button>
+                                  {aiToolResult && (
+                                    <div className="space-y-3 border rounded-md p-4 bg-muted/20">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <h5 className="font-medium">{aiToolResult.title}</h5>
+                                        <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(aiToolResult.content || ''); toast({ title: 'Copied!', description: 'Blog content copied to clipboard.' }); }} data-testid="button-copy-seo">
+                                          <Copy className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">{aiToolResult.metaDescription}</p>
+                                      <div className="text-sm whitespace-pre-wrap">{aiToolResult.content}</div>
+                                      <p className="text-xs text-muted-foreground">CTA: {aiToolResult.callToAction}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+
+                            <Dialog open={isAIToolsOpen && expandedClientId === client.id && aiToolType === 'facebook'} onOpenChange={(open) => { if (!open) { setIsAIToolsOpen(false); setAiToolResult(null); setAiToolInput(''); } }}>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={() => { setAiToolType('facebook'); setAiToolResult(null); setAiToolInput(''); setIsAIToolsOpen(true); }} data-testid={`button-ai-facebook-${client.id}`}>
+                                  <Target className="h-4 w-4 mr-1" />
+                                  Facebook Post
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-lg">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5" />
+                                    Generate Facebook Post for {client.businessName}
+                                  </DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 py-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor="fb-promo">Promotion/Offer (optional)</Label>
+                                    <Input
+                                      id="fb-promo"
+                                      value={aiToolInput}
+                                      onChange={(e) => setAiToolInput(e.target.value)}
+                                      placeholder="e.g., 20% off this weekend..."
+                                      data-testid="input-fb-promo"
+                                    />
+                                  </div>
+                                  <Button onClick={() => handleGenerateAIContent(client)} disabled={generatingAI} className="w-full" data-testid="button-generate-facebook">
+                                    {generatingAI ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</> : 'Generate Post'}
+                                  </Button>
+                                  {aiToolResult && (
+                                    <div className="space-y-3 border rounded-md p-4 bg-muted/20">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <h5 className="font-medium">Primary Post</h5>
+                                        <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(aiToolResult.primaryPost || ''); toast({ title: 'Copied!', description: 'Post copied to clipboard.' }); }} data-testid="button-copy-facebook">
+                                          <Copy className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                      <p className="text-sm">{aiToolResult.primaryPost}</p>
+                                      <div className="flex flex-wrap gap-1">{aiToolResult.hashtags?.map((tag: string, idx: number) => <Badge key={idx} variant="secondary" className="text-xs">{tag}</Badge>)}</div>
+                                      <p className="text-xs text-muted-foreground">Best time: {aiToolResult.bestTimeToPost}</p>
+                                      <p className="text-xs text-muted-foreground">Tip: {aiToolResult.engagementTip}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+
+                            <Dialog open={isAIToolsOpen && expandedClientId === client.id && aiToolType === 'meeting'} onOpenChange={(open) => { if (!open) { setIsAIToolsOpen(false); setAiToolResult(null); setAiToolInput(''); } }}>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={() => { setAiToolType('meeting'); setAiToolResult(null); setAiToolInput('check-in'); setIsAIToolsOpen(true); }} data-testid={`button-ai-meeting-${client.id}`}>
+                                  <Calendar className="h-4 w-4 mr-1" />
+                                  Meeting Prep
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5" />
+                                    Meeting Prep for {client.businessName}
+                                  </DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 py-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor="meeting-type">Meeting Type</Label>
+                                    <Select value={aiToolInput} onValueChange={setAiToolInput}>
+                                      <SelectTrigger data-testid="select-meeting-type">
+                                        <SelectValue placeholder="Select meeting type" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="check-in">Regular Check-in</SelectItem>
+                                        <SelectItem value="strategy">Strategy Review</SelectItem>
+                                        <SelectItem value="upsell">Upsell Discussion</SelectItem>
+                                        <SelectItem value="retention">Retention/Save</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <Button onClick={() => handleGenerateAIContent(client)} disabled={generatingAI} className="w-full" data-testid="button-generate-meeting">
+                                    {generatingAI ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</> : 'Generate Meeting Prep'}
+                                  </Button>
+                                  {aiToolResult && (
+                                    <div className="space-y-3 border rounded-md p-4 bg-muted/20">
+                                      <div>
+                                        <h5 className="font-medium mb-2">Agenda</h5>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.agenda?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                      </div>
+                                      <div>
+                                        <h5 className="font-medium mb-2">Key Talking Points</h5>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.keyTalkingPoints?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                      </div>
+                                      <div>
+                                        <h5 className="font-medium mb-2">Questions to Ask</h5>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.questionsToAsk?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                      </div>
+                                      {aiToolResult.upsellOpportunities?.length > 0 && (
+                                        <div>
+                                          <h5 className="font-medium mb-2">Upsell Opportunities</h5>
+                                          <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.upsellOpportunities.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <h5 className="font-medium mb-2">Proposed Next Steps</h5>
+                                        <ul className="list-disc list-inside text-sm space-y-1">{aiToolResult.nextStepsToPropose?.map((item: string, idx: number) => <li key={idx}>{item}</li>)}</ul>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="flex gap-2 pt-2">

@@ -586,7 +586,7 @@ export type NBAActionStatus = 'open' | 'done' | 'dismissed';
 
 export interface NBAAction {
   id: string;
-  targetType: 'lead' | 'deal';
+  targetType: 'lead' | 'deal' | 'client';
   targetId: string;
   title: string;
   suggestedActionType: NBAActionType;
