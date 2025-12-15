@@ -1,0 +1,249 @@
+1. What “Momentum” Actually Is (Single Source of Truth)
+
+Momentum is a forward-looking score (0–100) that predicts future sales consistency, not past performance.
+
+It is calculated daily using three weighted inputs:
+
+Momentum Score =
+(Replacement Score × 0.40)
++ (Activity Score × 0.35)
++ (Pipeline Health Score × 0.25)
+
+
+This weighting intentionally mirrors Fanatical Prospecting:
+
+Replacement first
+
+Activity second
+
+Pipeline shape third
+
+2. Replacement Score (40%)
+
+Purpose: Protect future revenue.
+
+Calculation
+Replacement Rate = (New Deals Created ÷ Deals Removed) × 100
+
+
+Where:
+
+Deals Removed = Closed Won + Closed Lost + Archived (rolling 7 days)
+
+New Deals Created = New prospects added to pipeline (same window)
+
+Normalisation to Score (0–100)
+Replacement Rate	Replacement Score
+≥120%	100
+100–119%	90
+80–99%	70
+60–79%	50
+<60%	30
+3. Activity Score (35%)
+
+Purpose: Ensure daily inputs never drop below required volume.
+
+Core Inputs
+
+Weighted daily activities:
+
+Calls
+
+SMS
+
+Emails
+
+Drop-ins
+
+Meetings (low weight — outcomes, not inputs)
+
+Activity Index
+Activity Index =
+(Calls × 1.0)
++ (SMS × 0.6)
++ (Emails × 0.4)
++ (Drop-ins × 1.2)
++ (Meetings × 0.5)
+
+Activity Score
+Activity Score = (Actual Activity Index ÷ Target Activity Index) × 100
+
+
+Cap at 100.
+
+4. Pipeline Health Score (25%)
+
+Purpose: Detect clumping, stagnation, and false confidence.
+
+Factors
+
+Stage distribution
+
+Time in stage
+
+Early-stage volume vs late-stage volume
+
+Calculation
+Healthy Pipeline =
+Early Stages (Suspect + Contacted + Engaged) ≥ 55%
+Late Stages (Proposal + Negotiation + Won) ≤ 45%
+
+
+Score adjustments:
+
+−10 if >40% of deals sit in one stage
+
+−10 if avg days-in-stage exceeds historical close velocity
+
+−15 if late-stage heavy but replacement weak
+
+5. Momentum Status Thresholds (Graphs + Labels)
+Momentum Score	Status	Meaning
+80–100	Healthy Momentum	Pipeline expanding
+65–79	Stable, But At Risk	Inputs slipping
+50–64	At Risk	Pipeline contraction likely
+<50	Critical	Revenue gap imminent
+
+These thresholds directly drive:
+
+Graph colouring
+
+Coach tone
+
+Intervention strength
+
+6. Graph Behaviour (How It’s Calculated)
+Momentum Trend Graph
+
+Plots daily Momentum Score
+
+Uses 3-day rolling average to smooth noise
+
+Trend direction matters more than single spikes
+
+AI flags:
+
+Downtrend ≥2 days → risk alert
+
+Flatline at <70 → silent decay warning
+
+7. AI Coaching Logic (This Is the “Jeb Blount” Brain)
+Step 1: Diagnose the Constraint
+
+AI must identify the single bottleneck:
+
+IF Replacement Score < Activity Score
+→ Problem = Not enough new prospects
+
+IF Activity Score < Target
+→ Problem = Insufficient daily inputs
+
+IF Pipeline Health Score < 60
+→ Problem = Stagnation or clumping
+
+Step 2: Prescribe Specific Actions (Not Generic Advice)
+If Replacement Is Weak
+
+AI response:
+
+“You’re removing deals faster than you’re replacing them.”
+
+Prescribed Actions (ranked):
+
+Add X new prospects today
+
+Call cold / dormant leads
+
+Door-knock or list build
+
+AI must not suggest:
+
+Proposals
+
+Admin
+
+CRM clean-up
+
+If Activity Is Weak
+
+AI response:
+
+“Momentum is falling due to insufficient daily inputs.”
+
+Prescribed Actions:
+
+Make {calls_remaining} calls
+
+Send {sms_remaining} follow-ups
+
+Resume paused sequences
+
+If Pipeline Is Stalled
+
+AI response:
+
+“Your pipeline is active but not moving.”
+
+AI pulls from pipeline data and prescribes:
+
+Call leads stuck >X days in stage
+
+Send SMS nudges to warm leads
+
+Schedule follow-ups on proposals
+
+Progress existing deals before adding more
+
+8. Feedback Loop (Critical)
+
+Every AI recommendation must:
+
+Tie to one Momentum component
+
+Predict the impact:
+
+“Completing this will raise Momentum by ~6–8 points.”
+
+Feed actions into Daily Plan
+
+Recalculate Momentum in near-real time
+
+This creates a loop:
+
+Diagnose → Act → Measure → Adjust
+
+9. Language Rules (Jeb Blount Style)
+
+The AI must:
+
+Be firm, not motivational
+
+Focus on inputs
+
+Emphasise future protection
+
+Avoid celebrating wins without replacement
+
+Approved phrases:
+
+“Replacement before celebration”
+
+“Future pipeline protection”
+
+“Inputs drive outcomes”
+
+“You’re borrowing from future revenue”
+
+10. Outcome
+
+With this system:
+
+Graphs are math-driven
+
+Momentum is predictive
+
+Advice is specific and executable
+
+AI behaves like a disciplined sales coach
+
+Sales volume becomes boring, consistent, and predictable
