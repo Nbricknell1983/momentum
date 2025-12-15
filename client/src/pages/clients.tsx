@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,9 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -98,6 +99,7 @@ export default function ClientsPage() {
   const [clientContentDrafts, setClientContentDrafts] = useState<Record<string, ContentDraft[]>>({});
   const [loadingContentDrafts, setLoadingContentDrafts] = useState<string | null>(null);
   const [updatingDraft, setUpdatingDraft] = useState<string | null>(null);
+  const [shareDialogClientId, setShareDialogClientId] = useState<string | null>(null);
 
   const searchString = useSearch();
 
@@ -529,7 +531,60 @@ export default function ClientsPage() {
         },
       }));
       
-      toast({ title: "Strategy Generated", description: "AI strategy plan has been created and saved." });
+      // Auto-generate Action Queue items from roadmap milestones
+      if (strategyData.roadmap_30_60_90 && Array.isArray(strategyData.roadmap_30_60_90)) {
+        const now = new Date();
+        const actionPromises = strategyData.roadmap_30_60_90.slice(0, 5).map((milestone: { id: string; title: string; description: string; phase: string; channel: string }, idx: number) => {
+          // Calculate due date based on phase (30, 60, or 90 days)
+          const phaseDays = milestone.phase === '30' ? 30 : milestone.phase === '60' ? 60 : 90;
+          const dueDate = new Date(now);
+          dueDate.setDate(dueDate.getDate() + phaseDays);
+          
+          // Map channel to action type
+          const channelToActionType: Record<string, NBAActionType> = {
+            'website': 'meeting',
+            'gbp': 'research',
+            'seo': 'research',
+            'ppc': 'meeting',
+            'content': 'email',
+          };
+          const actionType = channelToActionType[milestone.channel?.toLowerCase()] || 'followup';
+          
+          const actionData: Omit<NBAAction, 'id'> = {
+            targetType: 'client',
+            targetId: client.id,
+            title: `[Strategy] ${milestone.title}`,
+            suggestedActionType: actionType,
+            suggestedMessage: milestone.description,
+            suggestedEmail: null,
+            nepqQuestions: ['What progress have you seen?', 'Any blockers we should discuss?', 'What would make this a win?'],
+            reason: `Part of ${milestone.phase}-day strategy roadmap for ${client.businessName}`,
+            whyBullets: [
+              `Phase ${milestone.phase} milestone`,
+              `Channel: ${milestone.channel}`,
+              `From AI-generated strategy plan`,
+            ],
+            suggestedNextStep: `Complete: ${milestone.title}`,
+            priorityScore: 100 - (idx * 10),
+            points: 5,
+            dueAt: dueDate,
+            status: 'open',
+            createdAt: now,
+            updatedAt: now,
+            aiModelVersion: 'strategy-v1',
+            suppressUntil: null,
+            dismissedReason: null,
+            dismissedAt: null,
+            fingerprint: `strategy-${client.id}-${savedPlan.id}-${milestone.id || idx}`,
+          };
+          
+          return createNBAAction(orgId, actionData, authReady);
+        });
+        
+        await Promise.all(actionPromises);
+      }
+      
+      toast({ title: "Strategy Generated", description: "AI strategy plan and action items have been created." });
     } catch (error) {
       console.error('Error generating strategy:', error);
       toast({ title: "Error", description: "Failed to generate strategy.", variant: "destructive" });
@@ -1022,15 +1077,28 @@ export default function ClientsPage() {
                                      client.strategyStatus === 'needs_review' ? 'Needs Review' : 'Unknown'}
                                   </Badge>
                                 </div>
-                                <Button 
-                                  variant="default" 
-                                  className="gap-2"
-                                  onClick={() => openWizard(client)}
-                                  data-testid={`button-start-strategy-${client.id}`}
-                                >
-                                  <Play className="h-4 w-4" />
-                                  {client.strategyStatus === 'not_started' ? 'Start Strategy Wizard' : 'Edit Strategy'}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                  {client.strategyStatus === 'completed' && clientStrategyPlan[client.id] && (
+                                    <Button 
+                                      variant="outline" 
+                                      className="gap-2"
+                                      onClick={() => setShareDialogClientId(client.id)}
+                                      data-testid={`button-share-strategy-${client.id}`}
+                                    >
+                                      <Share2 className="h-4 w-4" />
+                                      Share
+                                    </Button>
+                                  )}
+                                  <Button 
+                                    variant="default" 
+                                    className="gap-2"
+                                    onClick={() => openWizard(client)}
+                                    data-testid={`button-start-strategy-${client.id}`}
+                                  >
+                                    <Play className="h-4 w-4" />
+                                    {client.strategyStatus === 'not_started' ? 'Start Strategy Wizard' : 'Edit Strategy'}
+                                  </Button>
+                                </div>
                               </div>
 
                               {client.businessProfile && (
@@ -2081,6 +2149,85 @@ export default function ClientsPage() {
               )}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share Strategy Dialog */}
+      <Dialog open={shareDialogClientId !== null} onOpenChange={(open) => { if (!open) setShareDialogClientId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-5 w-5" />
+              Share Strategy
+            </DialogTitle>
+          </DialogHeader>
+          
+          {shareDialogClientId && (() => {
+            const shareClient = clients.find(c => c.id === shareDialogClientId);
+            const sharePlan = clientStrategyPlan[shareDialogClientId];
+            const shareUrl = `${window.location.origin}/strategy/${shareDialogClientId}`;
+            
+            return (
+              <div className="space-y-6">
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Share this strategy with <span className="font-medium">{shareClient?.businessName}</span>
+                  </p>
+                </div>
+                
+                <div className="flex justify-center p-4 bg-white rounded-md">
+                  <QRCodeSVG 
+                    value={shareUrl} 
+                    size={180}
+                    level="M"
+                    includeMargin={true}
+                    data-testid="qr-code-strategy"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Shareable Link</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={shareUrl} 
+                      readOnly 
+                      className="font-mono text-xs"
+                      data-testid="input-share-url"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => {
+                        navigator.clipboard.writeText(shareUrl);
+                        toast({ title: "Link copied", description: "Strategy link copied to clipboard." });
+                      }}
+                      data-testid="button-copy-share-url"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between gap-2 pt-2 border-t">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShareDialogClientId(null)}
+                    data-testid="button-close-share-dialog"
+                  >
+                    Close
+                  </Button>
+                  <Button 
+                    variant="default"
+                    onClick={() => window.open(shareUrl, '_blank')}
+                    data-testid="button-open-share-link"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open Link
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
