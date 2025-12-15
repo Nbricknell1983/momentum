@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
   const currentUser = auth.currentUser;
@@ -556,6 +556,177 @@ export async function saveFocusModeSettings(
     console.log('[Firestore] WRITE SUCCESS', { path, userId });
   } catch (error: any) {
     console.error('[Firestore] WRITE FAILED', { path, userId, error });
+    throw error;
+  }
+}
+
+// ============================================
+// Client Management Functions
+// ============================================
+
+export async function fetchClients(orgId: string, authReady: boolean = false): Promise<Client[]> {
+  const path = `orgs/${orgId}/clients`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const clientsRef = collection(db, 'orgs', orgId, 'clients');
+    const q = query(clientsRef, orderBy('updatedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const clients = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as Client[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return clients;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function fetchClient(orgId: string, id: string, authReady: boolean = false): Promise<Client | null> {
+  const path = `orgs/${orgId}/clients/${id}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', id);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as Client;
+    }
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return null;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function createClient(orgId: string, client: Omit<Client, 'id'>, authReady: boolean = false): Promise<Client> {
+  const path = `orgs/${orgId}/clients`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create client: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedClient = removeUndefinedFields(client);
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedClient,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const clientsRef = collection(db, 'orgs', orgId, 'clients');
+    const docRef = await addDoc(clientsRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedClient, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Client;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateClientInFirestore(orgId: string, id: string, updates: Partial<Client>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${id}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update client: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', id);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    const dataToUpdate = convertDatesToTimestamp({
+      ...cleanedUpdates,
+      updatedAt: new Date(),
+    });
+    await updateDoc(docRef, dataToUpdate);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function deleteClientFromFirestore(orgId: string, id: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${id}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete client: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', id);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function fetchClientHistory(orgId: string, clientId: string, authReady: boolean = false): Promise<ClientHistory[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/history`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const historyRef = collection(db, 'orgs', orgId, 'clients', clientId, 'history');
+    const q = query(historyRef, orderBy('createdAt', 'desc'), limit(100));
+    const snapshot = await getDocs(q);
+    const history = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as ClientHistory[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return history;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createClientHistoryEntry(
+  orgId: string, 
+  clientId: string, 
+  entry: Omit<ClientHistory, 'id'>, 
+  authReady: boolean = false
+): Promise<ClientHistory> {
+  const path = `orgs/${orgId}/clients/${clientId}/history`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create client history entry: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedEntry = removeUndefinedFields(entry);
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedEntry,
+      createdAt: new Date(),
+    });
+    const historyRef = collection(db, 'orgs', orgId, 'clients', clientId, 'history');
+    const docRef = await addDoc(historyRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedEntry, id: docRef.id, createdAt: new Date() } as ClientHistory;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
     throw error;
   }
 }

@@ -1,0 +1,485 @@
+Build a Client Management Operating System inside Prospectr that unifies Pipeline + Clients + Daily Planner, powered by a single Action Queue, Route Planner, Client Health system, Delivery tracking, Client Strategy engine, and AI-driven Next Best Action (NBA) logic.
+
+The system must work across three separate pages but remain fully connected through shared database records so execution, logging, and dashboards stay accurate after refresh.
+
+0) PAGE ARCHITECTURE (NON-NEGOTIABLE)
+
+Create three separate sections:
+
+Daily Planner (Execution)
+
+Action Queue
+
+Route Planner
+
+Focus Mode (Top 3 lock)
+
+Pipeline (Acquisition / Prospects)
+
+Leads & Deals that are not yet customers
+
+Stages: Prospecting, Contacted, Proposal Sent, Negotiation, Won, Lost
+
+Clients (Retention & Growth)
+
+Paying customers
+
+Products they have
+
+Delivery tracking
+
+Strategy & AI tools
+
+Health flags (Green / Amber / Red)
+
+⚠️ These pages are separate, but must share data via Action Queue, Activities, and History.
+
+1) DEEP-LINKING BETWEEN PAGES
+
+Every Action Queue item must include:
+
+targetType = "lead" | "deal" | "client"
+
+targetId = record id
+
+Clicking an Action Queue or Route item must navigate and auto-open the correct record:
+
+#/pipeline?openType=lead&openId={id}
+
+#/pipeline?openType=deal&openId={id}
+
+#/clients?openId={clientId}
+
+Pipeline and Clients pages must:
+
+Read URL params on load
+
+Auto-open the matching card
+
+Scroll it into view
+
+2) DATABASE COLLECTIONS (SOURCE OF TRUTH)
+A) Pipeline (existing)
+orgs/{orgId}/leads/{leadId}
+orgs/{orgId}/deals/{dealId}
+
+
+Required fields:
+
+stage
+
+ownerId / repId
+
+nextContactDate
+
+lastContactAt
+
+estimatedValue / value
+
+contactName
+
+phone
+
+email
+
+doNotCall
+
+preferredContactMethod
+
+nepqLabel
+
+businessName / name
+
+address
+
+geo {lat,lng}
+
+B) Clients (new)
+orgs/{orgId}/clients/{clientId}
+
+
+Fields:
+
+businessName
+
+primaryContactName
+
+phone, email
+
+address, geo
+
+ownerId
+
+products: [{ productType, status, monthlyValue, startDate, notes }]
+
+strategyStatus
+
+lastStrategyReviewAt
+
+nextStrategyReviewAt
+
+healthStatus: "green"|"amber"|"red"
+
+churnRiskScore (0–100)
+
+healthReasons []
+
+channelStatus { website, gbp, seo, ppc }
+
+cadenceTier
+
+preferredContactCadenceDays
+
+sourceType: "deal"
+
+sourceDealId
+
+C) Activities (SOURCE OF TRUTH FOR DASHBOARD)
+orgs/{orgId}/activities/{activityId}
+
+
+Fields:
+
+targetType: "lead"|"deal"|"client"
+
+targetId
+
+type: call | sms | email | meeting | dropin | proposal | followup | research | task
+
+createdAt (server timestamp)
+
+userId
+
+notes
+
+metadata (optional)
+
+⚠️ Dashboard counters MUST be calculated ONLY from Activities.
+
+D) History (IMMUTABLE AUDIT TRAIL)
+orgs/{orgId}/leads/{id}/history/{eventId}
+orgs/{orgId}/deals/{id}/history/{eventId}
+orgs/{orgId}/clients/{id}/history/{eventId}
+
+
+Fields:
+
+type
+
+summary
+
+createdAt
+
+userId
+
+metadata
+
+Rules:
+
+History is create-only
+
+No updates or deletes allowed
+
+E) Action Queue
+orgs/{orgId}/actionQueue/{actionId}
+
+
+Fields:
+
+targetType
+
+targetId
+
+title
+
+suggestedActionType
+
+suggestedMessage
+
+suggestedEmail {subject, body} | null
+
+nepqQuestions [3]
+
+reason
+
+whyBullets [3–5]
+
+suggestedNextStep
+
+priorityScore (0–100)
+
+points
+
+dueAt
+
+status: open | done | dismissed
+
+createdAt
+
+updatedAt
+
+aiModelVersion
+
+suppressUntil
+
+dismissedReason
+
+dismissedAt
+
+fingerprint (dedupe)
+
+F) Focus Mode (per user)
+users/{uid}/settings/focusMode
+
+
+Fields:
+
+enabled
+
+topActionIds [3]
+
+startedAt
+
+updatedAt
+
+G) Delivery / Project Tracking
+orgs/{orgId}/clients/{clientId}/deliverables/{deliverableId}
+
+
+Fields:
+
+productType
+
+status
+
+milestones [{ name, status, dueAt, owner }]
+
+nextFollowUpAt
+
+blocker
+
+Overdue milestones must:
+
+Create Action Queue items
+
+Write Client History
+
+Affect Client Health if repeated
+
+H) Strategy
+orgs/{orgId}/clients/{clientId}/strategySessions/{sessionId}
+orgs/{orgId}/clients/{clientId}/strategyPlans/{planId}
+
+
+Strategy Plans must include:
+
+Strategy core
+
+Channel OKRs
+
+30/60/90 roadmap
+
+Initiatives + nextSteps → Action Queue
+
+3) DEAL → CLIENT CONVERSION (CRITICAL)
+
+When a Deal stage changes to Won:
+
+Create a Client record
+
+Copy contact + address + products sold
+
+Set sourceType="deal" and sourceDealId
+
+Write History events on BOTH deal and client
+
+4) CLIENT HEALTH (GREEN / AMBER / RED)
+
+Compute churnRiskScore using rules:
+
+45 days no contact → +25
+
+60 days no contact → +35
+
+No strategy review in 90 days → +20
+
+Delivery blockers → +25
+
+Ads paused / performance drop → +20
+
+SEO/GBP stagnation → +10
+
+Map:
+
+0–29 = Green
+
+30–59 = Amber
+
+60+ = Red
+
+Amber/Red must auto-create:
+
+Action Queue “Retention call”
+
+Client History event
+
+5) AI NEXT BEST ACTION (SERVER-SIDE)
+
+Create server-side AI that:
+
+Generates ONE best next action per record
+
+Uses rules + AI scoring
+
+Outputs strict JSON only
+
+Caches results 30–60 mins
+
+NBA must work for:
+
+Leads
+
+Deals
+
+Clients (retention, delivery, strategy)
+
+6) DAILY PLANNER EXECUTION RULES
+Mobile execution
+
+Call → tel:
+
+SMS → sms:?body=
+
+Email → mailto:?subject=&body=
+
+Book → modal / calendar
+
+Research → task view
+
+⚠️ Executing links does NOT log.
+
+Done (✓)
+
+On Done:
+
+Mark Action Queue done
+
+Write Activities
+
+Write History
+
+Update dashboard (real-time)
+
+Dismiss (✕)
+
+status=dismissed
+
+suppressUntil = now + 48h
+
+dismissedReason required in Focus Mode
+
+Write History
+
+7) ROUTE PLANNER
+
+Route Planner is a filtered view of Action Queue:
+
+Only dropin / meeting
+
+status=open
+
+address + geo exists
+
+due today or overdue
+
+✓ Complete visit:
+
+Marks Action Queue done
+
+Logs Activity + History
+
+Updates dashboard
+
+Manual Add Stop:
+
+Creates or links record
+
+Creates Action Queue item
+
+Re-optimises route instantly
+
+8) AI TOOLS (CLIENT CONTEXT AWARE)
+
+Inside each Client:
+
+SEO Blog Generator
+
+Facebook Post Generator
+
+Meeting Prep + Notes
+
+All outputs must:
+
+Be stored in DB
+
+Write Client History
+
+Generate Action Queue next steps when applicable
+
+9) DASHBOARD ACCURACY
+
+Dashboard counters must:
+
+Be computed ONLY from Activities
+
+Use real-time subscriptions
+
+Persist correctly after refresh
+
+10) PERMISSIONS & DELETES (CRITICAL)
+Firestore rules must allow org members to read/write:
+
+actionQueue
+
+activities
+
+clients
+
+client subcollections
+
+deliverables
+
+strategies
+
+History collections:
+
+allow create ONLY
+
+Delete behaviour
+
+Choose ONE:
+
+Hard delete from DB
+OR
+
+Soft delete with isDeleted=true
+
+All queries MUST exclude deleted records so items never reappear on refresh.
+
+11) ACCEPTANCE TESTS
+
+Deleted items never reappear
+
+Action Queue survives refresh
+
+Log buttons work and update dashboard
+
+Focus Mode locks to top 3
+
+Route Planner updates live
+
+Clients auto-created on deal win
+
+Health flags drive retention actions
+
+Strategy creates executable actions

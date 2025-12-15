@@ -246,6 +246,8 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   followup: 'Follow-up',
   proposal: 'Proposal',
   deal: 'Deal',
+  nba_completed: 'NBA Completed',
+  nba_dismissed: 'NBA Dismissed',
 };
 
 export function getTrafficLightStatus(lead: Lead): TrafficLightStatus {
@@ -643,6 +645,217 @@ export const NBA_ACTION_LABELS: Record<NBAActionType, string> = {
 export function generateNBAFingerprint(targetId: string, actionType: NBAActionType): string {
   return `${targetId}-${actionType}-${new Date().toISOString().split('T')[0]}`;
 }
+
+// ============================================
+// Client Management Types
+// ============================================
+
+export type HealthStatus = 'green' | 'amber' | 'red';
+export type ProductStatus = 'active' | 'paused' | 'cancelled';
+export type DeliverableStatus = 'not_started' | 'in_progress' | 'blocked' | 'completed';
+export type StrategyStatus = 'not_started' | 'in_progress' | 'completed' | 'needs_review';
+export type ChannelStatus = 'not_started' | 'in_progress' | 'live' | 'paused';
+export type CadenceTier = 'high_touch' | 'standard' | 'low_touch';
+
+export interface Product {
+  id: string;
+  productType: string;
+  status: ProductStatus;
+  monthlyValue: number;
+  startDate: Date;
+  endDate?: Date;
+  notes?: string;
+}
+
+export interface ChannelStatuses {
+  website: ChannelStatus;
+  gbp: ChannelStatus;
+  seo: ChannelStatus;
+  ppc: ChannelStatus;
+}
+
+export interface Client {
+  id: string;
+  userId: string;
+  businessName: string;
+  primaryContactName: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  regionId?: string;
+  regionName?: string;
+  areaId?: string | null;
+  areaName?: string | null;
+  territoryKey?: string;
+  ownerId: string;
+  products: Product[];
+  strategyStatus: StrategyStatus;
+  lastStrategyReviewAt?: Date;
+  nextStrategyReviewAt?: Date;
+  healthStatus: HealthStatus;
+  churnRiskScore: number;
+  healthReasons: string[];
+  channelStatus: ChannelStatuses;
+  cadenceTier: CadenceTier;
+  preferredContactCadenceDays: number;
+  sourceType: 'deal' | 'manual';
+  sourceDealId?: string;
+  totalMRR: number;
+  lastContactDate?: Date;
+  nextContactDate?: Date;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  archived: boolean;
+}
+
+export interface Deliverable {
+  id: string;
+  clientId: string;
+  productType: string;
+  title: string;
+  status: DeliverableStatus;
+  milestones: { id: string; title: string; completed: boolean; completedAt?: Date }[];
+  nextFollowUpAt?: Date;
+  blocker?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StrategySession {
+  id: string;
+  clientId: string;
+  sessionDate: Date;
+  attendees: string[];
+  agenda: string;
+  notes: string;
+  actionItems: string[];
+  createdAt: Date;
+}
+
+export interface StrategyPlan {
+  id: string;
+  clientId: string;
+  coreStrategy: string;
+  channelOKRs: { channel: string; objective: string; keyResults: string[] }[];
+  roadmap30: string[];
+  roadmap60: string[];
+  roadmap90: string[];
+  initiatives: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ClientHistory {
+  id: string;
+  clientId: string;
+  type: 'created' | 'converted' | 'activity' | 'health_change' | 'product_change' | 'strategy' | 'note' | 'edit';
+  summary: string;
+  createdAt: Date;
+  userId?: string;
+  userName?: string;
+  metadata?: Record<string, any>;
+}
+
+export const HEALTH_STATUS_LABELS: Record<HealthStatus, string> = {
+  green: 'Healthy',
+  amber: 'At Risk',
+  red: 'Critical',
+};
+
+export const PRODUCT_STATUS_LABELS: Record<ProductStatus, string> = {
+  active: 'Active',
+  paused: 'Paused',
+  cancelled: 'Cancelled',
+};
+
+export const DELIVERABLE_STATUS_LABELS: Record<DeliverableStatus, string> = {
+  not_started: 'Not Started',
+  in_progress: 'In Progress',
+  blocked: 'Blocked',
+  completed: 'Completed',
+};
+
+export const CADENCE_TIER_LABELS: Record<CadenceTier, string> = {
+  high_touch: 'High Touch',
+  standard: 'Standard',
+  low_touch: 'Low Touch',
+};
+
+export const CADENCE_TIER_DAYS: Record<CadenceTier, number> = {
+  high_touch: 7,
+  standard: 14,
+  low_touch: 30,
+};
+
+export function calculateChurnRiskScore(client: Client): number {
+  let score = 0;
+  const now = new Date();
+  
+  // +20 if no contact in preferred cadence period
+  if (client.lastContactDate) {
+    const daysSinceContact = Math.floor((now.getTime() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceContact > client.preferredContactCadenceDays) {
+      score += 20;
+    }
+    if (daysSinceContact > client.preferredContactCadenceDays * 2) {
+      score += 15;
+    }
+  } else {
+    score += 25;
+  }
+  
+  // +15 if any deliverable is blocked
+  // (This would need deliverables to be checked - simplified here)
+  
+  // +10 if strategy needs review
+  if (client.strategyStatus === 'needs_review') {
+    score += 10;
+  }
+  
+  // +20 if no strategy started
+  if (client.strategyStatus === 'not_started') {
+    score += 20;
+  }
+  
+  // +5 per paused product
+  const pausedProducts = client.products.filter(p => p.status === 'paused').length;
+  score += pausedProducts * 5;
+  
+  // -10 if all channels live
+  const allChannelsLive = Object.values(client.channelStatus).every(s => s === 'live');
+  if (allChannelsLive) {
+    score -= 10;
+  }
+  
+  return Math.max(0, Math.min(100, score));
+}
+
+export function getClientHealthStatus(churnRiskScore: number): HealthStatus {
+  if (churnRiskScore < 30) return 'green';
+  if (churnRiskScore < 60) return 'amber';
+  return 'red';
+}
+
+export const DEFAULT_CLIENT_FIELDS = {
+  products: [] as Product[],
+  strategyStatus: 'not_started' as StrategyStatus,
+  healthStatus: 'green' as HealthStatus,
+  churnRiskScore: 0,
+  healthReasons: [] as string[],
+  channelStatus: {
+    website: 'not_started' as ChannelStatus,
+    gbp: 'not_started' as ChannelStatus,
+    seo: 'not_started' as ChannelStatus,
+    ppc: 'not_started' as ChannelStatus,
+  },
+  cadenceTier: 'standard' as CadenceTier,
+  preferredContactCadenceDays: 14,
+  sourceType: 'manual' as const,
+  totalMRR: 0,
+  archived: false,
+};
 
 // Re-export momentum types from momentumEngine
 export type { 

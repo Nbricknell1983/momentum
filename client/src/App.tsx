@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Switch, Route, useLocation } from 'wouter';
 import { Provider, useDispatch } from 'react-redux';
-import { store, setLeads, setActivities } from './store';
+import { store, setLeads, setActivities, setClients } from './store';
 import { queryClient } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -18,9 +18,10 @@ import NurturePage from '@/pages/nurture';
 import TasksPage from '@/pages/tasks';
 import DailyPlanPage from '@/pages/daily-plan';
 import SettingsPage from '@/pages/settings';
+import ClientsPage from '@/pages/clients';
 import LoginPage from '@/pages/login';
 import NotFound from '@/pages/not-found';
-import { fetchLeads, fetchAllActivities } from '@/lib/firestoreService';
+import { fetchLeads, fetchAllActivities, fetchClients } from '@/lib/firestoreService';
 import { Loader2 } from 'lucide-react';
 
 function ProtectedRoutes() {
@@ -29,6 +30,7 @@ function ProtectedRoutes() {
       <Route path="/" component={DashboardPage} />
       <Route path="/pipeline" component={PipelinePage} />
       <Route path="/nurture" component={NurturePage} />
+      <Route path="/clients" component={ClientsPage} />
       <Route path="/list" component={PipelinePage} />
       <Route path="/forecast" component={DashboardPage} />
       <Route path="/daily-plan" component={DailyPlanPage} />
@@ -60,13 +62,15 @@ function AppLayout() {
       }
       console.log('[App] Auth ready, fetching data for org:', orgId);
       try {
-        const [leads, activities] = await Promise.all([
+        const [leads, activities, clients] = await Promise.all([
           fetchLeads(orgId, true),
           fetchAllActivities(orgId, true),
+          fetchClients(orgId, true),
         ]);
-        console.log('[App] Fetched', leads.length, 'leads and', activities.length, 'activities');
+        console.log('[App] Fetched', leads.length, 'leads,', activities.length, 'activities, and', clients.length, 'clients');
         dispatch(setLeads(leads));
         dispatch(setActivities(activities));
+        dispatch(setClients(clients));
       } catch (error) {
         console.error('[App] Error loading data from Firestore:', error);
       }

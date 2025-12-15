@@ -1,5 +1,5 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, DailyPlan, ActionQueueItem, TimeBlock, DailyPlanSummary, DailyDebrief, RouteStop, createDefaultDailyPlan, BATTLE_SCORE_POINTS, ActionType, NBAAction, FocusModeSettings, NBAActionStatus } from '@/lib/types';
+import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, DailyPlan, ActionQueueItem, TimeBlock, DailyPlanSummary, DailyDebrief, RouteStop, createDefaultDailyPlan, BATTLE_SCORE_POINTS, ActionType, NBAAction, FocusModeSettings, NBAActionStatus, Client, HealthStatus } from '@/lib/types';
 import { mockLeads, mockActivities, mockTasks, mockDailyMetrics, mockUser } from '@/lib/mockData';
 
 // todo: remove mock functionality - replace with Firebase
@@ -7,6 +7,7 @@ import { mockLeads, mockActivities, mockTasks, mockDailyMetrics, mockUser } from
 interface AppState {
   user: UserProfile | null;
   leads: Lead[];
+  clients: Client[];
   activities: Activity[];
   tasks: Task[];
   touches: Touch[];
@@ -14,12 +15,15 @@ interface AppState {
   dailyMetrics: DailyMetrics[];
   dailyPlan: DailyPlan | null;
   selectedLeadId: string | null;
+  selectedClientId: string | null;
   isDrawerOpen: boolean;
+  isClientDrawerOpen: boolean;
   searchQuery: string;
   stageFilter: Stage | 'all';
   territoryFilter: string | 'all';
   regionFilter: string | 'all';
   areaFilter: string | 'all';
+  healthFilter: HealthStatus | 'all';
   nurtureTab: 'active' | 'passive';
   nbaQueue: NBAAction[];
   focusMode: FocusModeSettings | null;
@@ -28,6 +32,7 @@ interface AppState {
 const initialState: AppState = {
   user: mockUser,
   leads: mockLeads,
+  clients: [],
   activities: mockActivities,
   tasks: mockTasks,
   touches: [],
@@ -35,12 +40,15 @@ const initialState: AppState = {
   dailyMetrics: mockDailyMetrics,
   dailyPlan: createDefaultDailyPlan(new Date()),
   selectedLeadId: null,
+  selectedClientId: null,
   isDrawerOpen: false,
+  isClientDrawerOpen: false,
   searchQuery: '',
   stageFilter: 'all',
   territoryFilter: 'all',
   regionFilter: 'all',
   areaFilter: 'all',
+  healthFilter: 'all',
   nurtureTab: 'active',
   nbaQueue: [],
   focusMode: null,
@@ -542,6 +550,53 @@ const appSlice = createSlice({
         };
       }
     },
+
+    // ============================================
+    // Client Management Actions
+    // ============================================
+    
+    setClients(state, action: PayloadAction<Client[]>) {
+      state.clients = action.payload;
+    },
+    
+    addClient(state, action: PayloadAction<Client>) {
+      state.clients.push(action.payload);
+    },
+    
+    updateClient(state, action: PayloadAction<Client>) {
+      const index = state.clients.findIndex(c => c.id === action.payload.id);
+      if (index !== -1) {
+        state.clients[index] = action.payload;
+      }
+    },
+    
+    deleteClient(state, action: PayloadAction<string>) {
+      state.clients = state.clients.filter(c => c.id !== action.payload);
+    },
+    
+    archiveClient(state, action: PayloadAction<string>) {
+      const client = state.clients.find(c => c.id === action.payload);
+      if (client) {
+        client.archived = true;
+        client.updatedAt = new Date();
+      }
+    },
+    
+    selectClient(state, action: PayloadAction<string | null>) {
+      state.selectedClientId = action.payload;
+      state.isClientDrawerOpen = action.payload !== null;
+    },
+    
+    toggleClientDrawer(state, action: PayloadAction<boolean>) {
+      state.isClientDrawerOpen = action.payload;
+      if (!action.payload) {
+        state.selectedClientId = null;
+      }
+    },
+    
+    setHealthFilter(state, action: PayloadAction<HealthStatus | 'all'>) {
+      state.healthFilter = action.payload;
+    },
   },
 });
 
@@ -602,6 +657,14 @@ export const {
   dismissNBAAction,
   setFocusMode,
   toggleFocusMode,
+  setClients,
+  addClient,
+  updateClient,
+  deleteClient,
+  archiveClient,
+  selectClient,
+  toggleClientDrawer,
+  setHealthFilter,
 } = appSlice.actions;
 
 export const store = configureStore({
