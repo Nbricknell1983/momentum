@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Target, Clock, CheckCircle2, Sparkles, Play, Lock, MapPin, 
   Phone, Building2, MessageSquare, Calendar, Users, RefreshCw,
-  ChevronRight, X, AlertTriangle, Zap, Trophy, Focus, Plus,
-  Navigation, Trash2, GripVertical, Handshake
+  ChevronRight, ChevronLeft, X, AlertTriangle, Zap, Trophy, Plus,
+  Navigation, Trash2, GripVertical, Handshake, Brain, Loader2
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,964 +20,657 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RootState } from '@/store';
-import { 
-  completeAction, skipAction, completeRouteStop, addRouteStop, addActionToQueue,
-  removeRouteStop, submitDebrief, setDailyPlanSummary, markQueuesInitialized,
-  setNBAQueue, toggleFocusMode, reorderRouteStops
-} from '@/store';
-import ActionQueueCard from '@/components/ActionQueueCard';
-import { 
-  DailyPlan, DailyPlanSummary, ActionQueueItem, TimeBlock, RouteStop, RouteActionType,
-  TIME_BLOCK_LABELS, ACTION_TYPE_LABELS, URGENCY_LABELS, BATTLE_SCORE_POINTS,
-  getTrafficLightStatus, Lead, Client
-} from '@/lib/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
+import { 
+  fetchDailyPlan, upsertDailyPlan, fetchAIBrief, saveAIBrief,
+  fetchPlanTasks, fetchActionRecommendations, fetchLeads, fetchClients
+} from '@/lib/firestoreService';
+import {
+  DailyPlanDoc, AIBrief, PlanTimeBlock, PlanActionRecommendation,
+  formatDateDDMMYYYY, parseDateDDMMYYYY, getTodayDDMMYYYY,
+  PLAN_BLOCK_CATEGORY_LABELS, DEFAULT_PLAN_TIME_BLOCKS, Lead, Client,
+  Task, getTrafficLightStatus
+} from '@/lib/types';
+
+interface DateSelectorProps {
+  selectedDate: string;
+  onDateChange: (date: string) => void;
+}
+
+function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
+  const parsed = parseDateDDMMYYYY(selectedDate);
+  
+  const goToPreviousDay = () => {
+    const prev = new Date(parsed);
+    prev.setDate(prev.getDate() - 1);
+    onDateChange(formatDateDDMMYYYY(prev));
+  };
+  
+  const goToNextDay = () => {
+    const next = new Date(parsed);
+    next.setDate(next.getDate() + 1);
+    onDateChange(formatDateDDMMYYYY(next));
+  };
+  
+  const goToToday = () => {
+    onDateChange(getTodayDDMMYYYY());
+  };
+  
+  const isToday = selectedDate === getTodayDDMMYYYY();
+  const dayName = parsed.toLocaleDateString('en-US', { weekday: 'long' });
+  const formattedDate = parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  
+  return (
+    <div className="flex items-center gap-2" data-testid="date-selector">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={goToPreviousDay}
+        data-testid="button-prev-day"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </Button>
+      
+      <div className="text-center min-w-[200px]">
+        <div className="text-lg font-semibold" data-testid="text-day-name">{dayName}</div>
+        <div className="text-sm text-muted-foreground" data-testid="text-date">{formattedDate}</div>
+        <div className="text-xs text-muted-foreground font-mono" data-testid="text-date-ddmmyyyy">{selectedDate}</div>
+      </div>
+      
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={goToNextDay}
+        data-testid="button-next-day"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </Button>
+      
+      {!isToday && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={goToToday}
+          className="ml-2"
+          data-testid="button-go-today"
+        >
+          Today
+        </Button>
+      )}
+    </div>
+  );
+}
+
+interface AIBriefSectionProps {
+  brief: AIBrief | null;
+  isGenerating: boolean;
+  onGenerate: () => void;
+}
+
+function AIBriefSection({ brief, isGenerating, onGenerate }: AIBriefSectionProps) {
+  if (!brief && !isGenerating) {
+    return (
+      <Card className="p-4" data-testid="card-ai-brief-empty">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" />
+            <span className="font-medium">AI Daily Brief</span>
+          </div>
+          <Button onClick={onGenerate} size="sm" data-testid="button-generate-brief">
+            <Sparkles className="h-4 w-4 mr-2" />
+            Generate Brief
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground mt-2">
+          Get an AI-powered overview of your day with priorities and focus areas.
+        </p>
+      </Card>
+    );
+  }
+
+  if (isGenerating) {
+    return (
+      <Card className="p-4" data-testid="card-ai-brief-loading">
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <span>Generating your daily brief...</span>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-4" data-testid="card-ai-brief">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Brain className="h-5 w-5 text-primary" />
+          <span className="font-medium">Today's Focus</span>
+        </div>
+        <Badge variant="secondary" className="text-xs">
+          AI Generated
+        </Badge>
+      </div>
+      
+      <p className="text-lg font-semibold mb-4" data-testid="text-todays-focus">
+        {brief?.todaysFocus}
+      </p>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+            <Target className="h-4 w-4" />
+            Top 3 Priorities
+          </h4>
+          <ul className="space-y-1">
+            {brief?.focusModeTop3?.map((priority, idx) => (
+              <li key={idx} className="text-sm flex items-start gap-2" data-testid={`text-priority-${idx}`}>
+                <span className="font-bold text-primary">{idx + 1}.</span>
+                {priority}
+              </li>
+            ))}
+          </ul>
+        </div>
+        
+        {brief?.riskList && brief.riskList.length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium mb-2 flex items-center gap-1 text-amber-600">
+              <AlertTriangle className="h-4 w-4" />
+              Risk Areas
+            </h4>
+            <ul className="space-y-1">
+              {brief.riskList.slice(0, 3).map((risk, idx) => (
+                <li key={idx} className="text-sm text-muted-foreground" data-testid={`text-risk-${idx}`}>
+                  {risk.targetName}: {risk.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        
+        <div>
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+            <Clock className="h-4 w-4" />
+            Time Allocation
+          </h4>
+          <ul className="space-y-1">
+            {brief?.suggestedTimeAllocation?.slice(0, 3).map((block, idx) => (
+              <li key={idx} className="text-sm text-muted-foreground" data-testid={`text-time-alloc-${idx}`}>
+                {block.blockName}: {block.suggestedTasks} tasks
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+interface TimeBlockCardProps {
+  block: PlanTimeBlock;
+  tasks: Task[];
+}
+
+function TimeBlockCard({ block, tasks }: TimeBlockCardProps) {
+  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  const progress = block.capacity > 0 ? Math.round((completedTasks / block.capacity) * 100) : 0;
+  
+  return (
+    <Card className="p-3" data-testid={`card-time-block-${block.id}`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          {block.isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+          <span className="font-medium text-sm">{block.name}</span>
+        </div>
+        <Badge variant="outline" size="sm">
+          {block.startTime} - {block.endTime}
+        </Badge>
+      </div>
+      
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+        <span>{PLAN_BLOCK_CATEGORY_LABELS[block.category]}</span>
+        <span>|</span>
+        <span>{completedTasks}/{block.capacity} tasks</span>
+      </div>
+      
+      <Progress value={progress} className="h-1.5" />
+    </Card>
+  );
+}
+
+interface TargetProgressProps {
+  label: string;
+  icon: React.ReactNode;
+  target: number;
+  completed: number;
+}
+
+function TargetProgress({ label, icon, target, completed }: TargetProgressProps) {
+  const percentage = target > 0 ? Math.round((completed / target) * 100) : 0;
+  const isComplete = completed >= target;
+  
+  return (
+    <div className="flex items-center gap-3 p-2" data-testid={`target-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+      <div className={`p-2 rounded-md ${isComplete ? 'bg-green-100 dark:bg-green-900/30' : 'bg-muted'}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-medium">{label}</span>
+          <span className="text-sm font-bold">
+            {completed}/{target}
+          </span>
+        </div>
+        <Progress value={Math.min(percentage, 100)} className="h-1.5" />
+      </div>
+      {isComplete && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+    </div>
+  );
+}
 
 export default function DailyPlanPage() {
-  const dispatch = useDispatch();
   const { toast } = useToast();
-  const dailyPlan = useSelector((state: RootState) => state.app.dailyPlan);
-  const leads = useSelector((state: RootState) => state.app.leads);
-  const clients = useSelector((state: RootState) => state.app.clients);
+  const { user, orgId, authReady } = useAuth();
+  const queryClient = useQueryClient();
+  const userId = user?.uid || '';
   
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDDMMYYYY());
+  const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
   const [isDebriefOpen, setIsDebriefOpen] = useState(false);
-  const [isGeneratingDebrief, setIsGeneratingDebrief] = useState(false);
-  const [isGeneratingNBA, setIsGeneratingNBA] = useState(false);
-  const focusMode = useSelector((state: RootState) => state.app.focusMode);
-  const [debriefResult, setDebriefResult] = useState<{
-    aiReview?: string;
-    improvements?: string[];
-    tomorrowsFocus?: string;
-  } | null>(null);
-
-  const [isAddStopOpen, setIsAddStopOpen] = useState(false);
-  const [addStopTab, setAddStopTab] = useState<'leads' | 'clients'>('leads');
-  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
-  const [selectedActionType, setSelectedActionType] = useState<RouteActionType>('dropin');
-
-  if (!dailyPlan) {
+  
+  const { data: dailyPlan, isLoading: planLoading } = useQuery({
+    queryKey: ['/daily-plan', orgId, userId, selectedDate],
+    queryFn: async () => {
+      if (!orgId || !userId) return null;
+      const plan = await fetchDailyPlan(orgId, userId, selectedDate, authReady);
+      if (!plan) {
+        return await upsertDailyPlan(orgId, userId, selectedDate, {}, authReady);
+      }
+      return plan;
+    },
+    enabled: !!orgId && !!userId && authReady,
+  });
+  
+  const { data: aiBrief } = useQuery({
+    queryKey: ['/ai-brief', orgId, userId, selectedDate],
+    queryFn: async () => {
+      if (!orgId || !userId) return null;
+      return await fetchAIBrief(orgId, userId, selectedDate, authReady);
+    },
+    enabled: !!orgId && !!userId && authReady,
+  });
+  
+  const { data: planTasks = [] } = useQuery({
+    queryKey: ['/plan-tasks', orgId, userId, selectedDate],
+    queryFn: async () => {
+      if (!orgId || !userId) return [];
+      return await fetchPlanTasks(orgId, userId, selectedDate, authReady);
+    },
+    enabled: !!orgId && !!userId && authReady,
+  });
+  
+  const { data: leads = [] } = useQuery({
+    queryKey: ['/api/leads', orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      return await fetchLeads(orgId, authReady);
+    },
+    enabled: !!orgId && authReady,
+  });
+  
+  const { data: clients = [] } = useQuery({
+    queryKey: ['/api/clients', orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      return await fetchClients(orgId, authReady);
+    },
+    enabled: !!orgId && authReady,
+  });
+  
+  const { data: recommendations = [] } = useQuery({
+    queryKey: ['/action-recommendations', orgId, userId, selectedDate],
+    queryFn: async () => {
+      if (!orgId || !userId) return [];
+      return await fetchActionRecommendations(orgId, userId, selectedDate, authReady);
+    },
+    enabled: !!orgId && !!userId && authReady,
+  });
+  
+  const timeBlocks = dailyPlan?.timeBlocks || DEFAULT_PLAN_TIME_BLOCKS;
+  const targets = dailyPlan?.targets || {
+    prospecting: {
+      calls: { target: 25, completed: 0 },
+      doors: { target: 5, completed: 0 },
+      conversations: { target: 10, completed: 0 },
+      meetingsBooked: { target: 2, completed: 0 },
+    },
+    clients: {
+      checkIns: { target: 5, completed: 0 },
+      upsellConversations: { target: 2, completed: 0 },
+      renewalActions: { target: 3, completed: 0 },
+      followUps: { target: 10, completed: 0 },
+    },
+  };
+  
+  const tasksByBlock = useMemo(() => {
+    const byBlock: Record<string, Task[]> = {};
+    timeBlocks.forEach(block => {
+      byBlock[block.id] = planTasks.filter(t => t.planBlockId === block.id);
+    });
+    return byBlock;
+  }, [planTasks, timeBlocks]);
+  
+  const battleScore = useMemo(() => {
+    let score = 0;
+    planTasks.forEach(task => {
+      if (task.status === 'completed') {
+        score += 10;
+        if (task.outcome === 'meeting_booked') score += 25;
+        if (task.outcome === 'conversation') score += 5;
+      }
+    });
+    return score;
+  }, [planTasks]);
+  
+  const handleGenerateBrief = async () => {
+    if (!orgId || !userId) return;
+    
+    setIsGeneratingBrief(true);
+    try {
+      const response = await apiRequest('/api/daily-plan/generate-brief', {
+        method: 'POST',
+        body: JSON.stringify({
+          planDate: selectedDate,
+          targets,
+          leads: leads.filter(l => !l.archived).slice(0, 15),
+          clients: clients.filter(c => c.status === 'active').slice(0, 15),
+          overdueTasks: planTasks.filter(t => t.status === 'pending'),
+        }),
+      });
+      
+      const brief: AIBrief = response as AIBrief;
+      await saveAIBrief(orgId, userId, brief, authReady);
+      
+      queryClient.invalidateQueries({ queryKey: ['/ai-brief', orgId, userId, selectedDate] });
+      toast({ title: 'Brief generated', description: 'Your AI daily brief is ready.' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to generate brief.', variant: 'destructive' });
+    } finally {
+      setIsGeneratingBrief(false);
+    }
+  };
+  
+  const isToday = selectedDate === getTodayDDMMYYYY();
+  
+  if (!authReady || !orgId) {
     return (
       <div className="p-6 flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Loading daily plan...</p>
+        <p className="text-muted-foreground">Please log in to view your daily plan.</p>
+      </div>
+    );
+  }
+  
+  if (planLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  useEffect(() => {
-    if (!dailyPlan || dailyPlan.isQueuesInitialized || leads.length === 0) {
-      return;
-    }
-    
-    const priorityLeads = leads
-      .filter(lead => !lead.archived && getTrafficLightStatus(lead) !== 'green')
-      .slice(0, 8);
-    priorityLeads.forEach(lead => {
-      dispatch(addActionToQueue({
-        id: `action-${lead.id}`,
-        type: 'call',
-        leadId: lead.id,
-        title: `Call ${lead.companyName}`,
-        subtitle: lead.contactName || undefined,
-        urgency: getTrafficLightStatus(lead) === 'red' ? 'high' : 'medium',
-        priorityScore: (lead.mrr || 0) + (getTrafficLightStatus(lead) === 'red' ? 100 : 0),
-        status: 'pending',
-        battleScorePoints: BATTLE_SCORE_POINTS.call,
-      }));
-    });
-    
-    const routeLeads = leads
-      .filter(lead => !lead.archived && lead.address && getTrafficLightStatus(lead) !== 'green')
-      .slice(0, 5);
-    routeLeads.forEach((lead, i) => {
-      dispatch(addRouteStop({
-        id: `stop-${lead.id}`,
-        targetType: 'lead',
-        leadId: lead.id,
-        companyName: lead.companyName,
-        address: lead.address || '',
-        phone: lead.phone,
-        actionType: 'dropin',
-        priority: i + 1,
-        completed: false,
-      }));
-    });
-    
-    dispatch(markQueuesInitialized());
-  }, [dailyPlan?.isQueuesInitialized, leads.length, dispatch]);
-
-  const handleGenerateSummary = async () => {
-    setIsGeneratingSummary(true);
-    try {
-      const priorityLeads = leads
-        .filter(lead => !lead.archived && lead.nextContactDate)
-        .filter(lead => getTrafficLightStatus(lead) !== 'green')
-        .slice(0, 5)
-        .map(l => ({ name: l.companyName, stage: l.stage, mrr: l.mrr }));
-
-      const response = await fetch('/api/daily-plan/summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leads: priorityLeads,
-          metrics: {
-            calls: dailyPlan.targets.prospecting.calls.completed,
-            doors: dailyPlan.targets.prospecting.doors.completed,
-            meetings: dailyPlan.targets.prospecting.meetingsBooked.completed,
-          },
-          targets: {
-            calls: dailyPlan.targets.prospecting.calls.target,
-            doors: dailyPlan.targets.prospecting.doors.target,
-            meetings: dailyPlan.targets.prospecting.meetingsBooked.target,
-          },
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to generate summary');
-      
-      const data = await response.json();
-      dispatch(setDailyPlanSummary({
-        todaysFocus: data.todaysFocus,
-        nonNegotiableActions: data.nonNegotiableActions || [],
-        riskAreas: data.riskAreas || [],
-        generatedAt: new Date(),
-      }));
-      
-      toast({ title: 'Daily plan generated', description: 'Your AI-powered daily plan is ready.' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to generate daily plan summary.', variant: 'destructive' });
-    } finally {
-      setIsGeneratingSummary(false);
-    }
-  };
-
-  const handleGenerateDebrief = async () => {
-    setIsGeneratingDebrief(true);
-    try {
-      const completedActions = dailyPlan.actionQueue.filter(a => a.status === 'completed').length;
-      
-      const response = await fetch('/api/daily-plan/debrief', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targets: dailyPlan.targets,
-          completedActions,
-          battleScore: dailyPlan.battleScoreEarned,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to generate debrief');
-      
-      const data = await response.json();
-      setDebriefResult(data);
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to generate debrief.', variant: 'destructive' });
-    } finally {
-      setIsGeneratingDebrief(false);
-    }
-  };
-
-  const handleGenerateNBAQueue = async () => {
-    setIsGeneratingNBA(true);
-    try {
-      const activeLeads = leads.filter(l => !l.archived && l.stage !== 'won' && l.stage !== 'lost');
-      const response = await fetch('/api/nba/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leads: activeLeads.slice(0, 50),
-          dailyTargets: {
-            calls: dailyPlan.targets.prospecting.calls,
-            meetings: dailyPlan.targets.prospecting.meetingsBooked,
-            proposals: { target: 2, completed: 0 },
-          },
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to generate NBA queue');
-      const data = await response.json();
-      dispatch(setNBAQueue(data.queue || []));
-      toast({ title: 'Actions generated', description: `${data.queue?.length || 0} recommended actions ready.` });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to generate action queue.', variant: 'destructive' });
-    } finally {
-      setIsGeneratingNBA(false);
-    }
-  };
-
-  const handleSubmitDebrief = () => {
-    if (debriefResult) {
-      const planned = dailyPlan.actionQueue.length;
-      const completed = dailyPlan.actionQueue.filter(a => a.status === 'completed').length;
-      dispatch(submitDebrief({
-        completed: true,
-        aiReview: debriefResult.aiReview,
-        plannedVsCompleted: {
-          planned,
-          completed,
-          percentage: planned > 0 ? Math.round((completed / planned) * 100) : 0,
-        },
-        improvements: debriefResult.improvements,
-        tomorrowsFocus: debriefResult.tomorrowsFocus,
-        submittedAt: new Date(),
-      }));
-      setIsDebriefOpen(false);
-      toast({ title: 'Debrief submitted', description: 'Great work today!' });
-    }
-  };
-
-  const handleCompleteAction = (actionId: string) => {
-    dispatch(completeAction(actionId));
-    toast({ title: 'Action completed', description: 'Battle score updated!' });
-  };
-
-  const handleSkipAction = (actionId: string) => {
-    dispatch(skipAction(actionId));
-  };
-
-  const handleCompleteRouteStop = (stopId: string) => {
-    dispatch(completeRouteStop(stopId));
-  };
-
-  const handleAddRouteStop = () => {
-    if (!selectedTargetId) {
-      toast({ title: 'Error', description: 'Please select a lead or client.', variant: 'destructive' });
-      return;
-    }
-    const existingIds = dailyPlan.routeStops.map(s => s.leadId || s.clientId);
-    if (existingIds.includes(selectedTargetId)) {
-      toast({ title: 'Already added', description: 'This stop is already in your route.', variant: 'destructive' });
-      return;
-    }
-    if (addStopTab === 'leads') {
-      const lead = leads.find(l => l.id === selectedTargetId);
-      if (!lead || !lead.address) {
-        toast({ title: 'Error', description: 'Lead has no address.', variant: 'destructive' });
-        return;
-      }
-      dispatch(addRouteStop({
-        id: `stop-${lead.id}-${Date.now()}`,
-        targetType: 'lead',
-        leadId: lead.id,
-        companyName: lead.companyName,
-        address: lead.address,
-        phone: lead.phone,
-        actionType: selectedActionType,
-        priority: dailyPlan.routeStops.length + 1,
-        completed: false,
-      }));
-    } else {
-      const client = clients.find(c => c.id === selectedTargetId);
-      if (!client || !client.address) {
-        toast({ title: 'Error', description: 'Client has no address.', variant: 'destructive' });
-        return;
-      }
-      dispatch(addRouteStop({
-        id: `stop-${client.id}-${Date.now()}`,
-        targetType: 'client',
-        clientId: client.id,
-        companyName: client.businessName,
-        address: client.address,
-        phone: client.phone,
-        actionType: selectedActionType,
-        priority: dailyPlan.routeStops.length + 1,
-        completed: false,
-      }));
-    }
-    setSelectedTargetId('');
-    setIsAddStopOpen(false);
-    toast({ title: 'Stop added', description: 'Route stop added to your plan.' });
-  };
-
-  const handleRemoveRouteStop = (stopId: string) => {
-    dispatch(removeRouteStop(stopId));
-  };
-
-  const handleOpenGoogleMaps = () => {
-    const pendingStops = dailyPlan.routeStops.filter(s => !s.completed);
-    if (pendingStops.length === 0) {
-      toast({ title: 'No stops', description: 'Add stops to your route first.', variant: 'destructive' });
-      return;
-    }
-    const addresses = pendingStops.map(s => encodeURIComponent(s.address));
-    const origin = addresses[0];
-    const destination = addresses[addresses.length - 1];
-    const waypoints = addresses.slice(1, -1).join('|');
-    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
-    if (waypoints) {
-      url += `&waypoints=${waypoints}`;
-    }
-    url += '&travelmode=driving';
-    window.open(url, '_blank');
-  };
-
-  const leadsWithAddress = leads.filter(l => !l.archived && l.address);
-  const clientsWithAddress = clients.filter(c => !c.archived && c.address);
-
-  const getActionIcon = (type: string) => {
-    switch (type) {
-      case 'call': return <Phone className="h-4 w-4" />;
-      case 'door': return <Building2 className="h-4 w-4" />;
-      case 'email': return <MessageSquare className="h-4 w-4" />;
-      case 'meeting': return <Calendar className="h-4 w-4" />;
-      case 'follow_up': return <RefreshCw className="h-4 w-4" />;
-      case 'check_in': return <Users className="h-4 w-4" />;
-      default: return <CheckCircle2 className="h-4 w-4" />;
-    }
-  };
-
-  const getUrgencyColor = (urgency: string) => {
-    switch (urgency) {
-      case 'high': return 'text-red-500';
-      case 'medium': return 'text-amber-500';
-      case 'low': return 'text-muted-foreground';
-      default: return '';
-    }
-  };
-
   return (
-    <div className="p-6 space-y-6 overflow-auto h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="p-4 space-y-4 max-w-7xl mx-auto" data-testid="page-daily-plan">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-daily-plan-title">Daily Plan</h1>
-          <p className="text-muted-foreground">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Badge variant="outline" className="gap-2 text-base py-1 px-3" data-testid="badge-battle-score">
-            <Trophy className="h-4 w-4 text-amber-500" />
-            <span className="font-mono font-bold">{dailyPlan.battleScoreEarned}</span>
-            <span className="text-muted-foreground">Battle Score</span>
-          </Badge>
-        </div>
-      </div>
-
-      {/* AI Summary Section */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-          <h2 className="font-semibold flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            AI Daily Brief
-          </h2>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleGenerateSummary}
-            disabled={isGeneratingSummary}
-            data-testid="button-generate-summary"
-          >
-            {isGeneratingSummary ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-2" />
-                {dailyPlan.summary ? 'Regenerate' : 'Generate Plan'}
-              </>
-            )}
-          </Button>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Daily Plan</h1>
+          <p className="text-muted-foreground">AI-managed schedule and targets</p>
         </div>
         
-        {dailyPlan.summary ? (
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Today's Focus</p>
-              <p className="font-medium" data-testid="text-todays-focus">{dailyPlan.summary.todaysFocus}</p>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                  <Zap className="h-3 w-3" />
-                  Non-Negotiables
-                </p>
-                <ul className="space-y-1">
-                  {dailyPlan.summary.nonNegotiableActions.map((action, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2">
-                      <ChevronRight className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
-                      {action}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                  <AlertTriangle className="h-3 w-3" />
-                  Risk Areas
-                </p>
-                <ul className="space-y-1">
-                  {dailyPlan.summary.riskAreas.map((risk, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2">
-                      <ChevronRight className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
-                      {risk}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            Click "Generate Plan" to get your AI-powered daily brief based on your leads and targets.
-          </p>
-        )}
-      </Card>
-
-      {/* Calendar View */}
-      <Card className="p-6">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Calendar className="h-4 w-4" />
-          Today's Schedule
-        </h2>
-        <div className="relative" data-testid="calendar-view">
-          {/* Time axis */}
-          <div className="flex">
-            <div className="w-16 shrink-0" />
-            <div className="flex-1 grid grid-cols-9 gap-0 text-xs text-muted-foreground mb-2">
-              {['9am', '10am', '11am', '12pm', '1pm', '2pm', '3pm', '4pm', '5pm'].map(time => (
-                <div key={time} className="text-center">{time}</div>
-              ))}
-            </div>
-          </div>
+        <DateSelector
+          selectedDate={selectedDate}
+          onDateChange={setSelectedDate}
+        />
+        
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="flex items-center gap-1" data-testid="badge-battle-score">
+            <Trophy className="h-3 w-3" />
+            {battleScore} pts
+          </Badge>
           
-          {/* Schedule rows */}
-          <div className="space-y-2">
-            {/* Time blocks row */}
-            <div className="flex items-center gap-2">
-              <div className="w-16 shrink-0 text-xs text-muted-foreground">Blocks</div>
-              <div className="flex-1 relative h-12 bg-muted/30 rounded-md overflow-hidden">
-                {dailyPlan.timeBlocks.map(block => {
-                  const startHour = parseInt(block.startTime.split(':')[0]);
-                  const endHour = parseInt(block.endTime.split(':')[0]);
-                  const startOffset = ((startHour - 9) / 8) * 100;
-                  const width = ((endHour - startHour) / 8) * 100;
-                  
-                  const blockColors: Record<string, string> = {
-                    prospecting_calls: 'bg-blue-500/20 border-blue-500/40',
-                    prospecting_doors: 'bg-green-500/20 border-green-500/40',
-                    client_management: 'bg-purple-500/20 border-purple-500/40',
-                    meetings: 'bg-amber-500/20 border-amber-500/40',
-                    admin: 'bg-gray-500/20 border-gray-500/40',
-                  };
-                  
-                  return (
-                    <div
-                      key={block.id}
-                      className={`absolute top-1 bottom-1 rounded border ${blockColors[block.type] || 'bg-muted border-muted-foreground/20'} flex items-center justify-center px-2`}
-                      style={{ left: `${startOffset}%`, width: `${width}%` }}
-                      title={`${block.name}: ${block.startTime} - ${block.endTime}`}
-                    >
-                      <span className="text-xs font-medium truncate flex items-center gap-1">
-                        {block.isLocked && <Lock className="h-3 w-3" />}
-                        {block.name}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            
-            {/* Current time indicator */}
-            <div className="flex items-center gap-2">
-              <div className="w-16 shrink-0 text-xs text-muted-foreground">Now</div>
-              <div className="flex-1 relative h-6">
-                {(() => {
-                  const now = new Date();
-                  const currentHour = now.getHours() + now.getMinutes() / 60;
-                  if (currentHour >= 9 && currentHour <= 17) {
-                    const position = ((currentHour - 9) / 8) * 100;
-                    return (
-                      <div 
-                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-                        style={{ left: `${position}%` }}
-                      >
-                        <div className="absolute -top-1 -left-1.5 w-3 h-3 rounded-full bg-red-500" />
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-dashed border-muted-foreground/30" />
-                </div>
-              </div>
-            </div>
-            
-            {/* Actions timeline */}
-            <div className="flex items-start gap-2">
-              <div className="w-16 shrink-0 text-xs text-muted-foreground pt-1">Actions</div>
-              <div className="flex-1 flex flex-wrap gap-1">
-                {dailyPlan.actionQueue.slice(0, 6).map(action => (
-                  <Badge 
-                    key={action.id} 
-                    variant={action.status === 'completed' ? 'secondary' : 'outline'}
-                    className={`text-xs ${action.status === 'completed' ? 'opacity-60' : ''}`}
-                  >
-                    {getActionIcon(action.type)}
-                    <span className="ml-1 truncate max-w-20">{action.title.replace('Call ', '')}</span>
-                  </Badge>
-                ))}
-                {dailyPlan.actionQueue.length > 6 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{dailyPlan.actionQueue.length - 6} more
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left Column - Targets & Time Blocks */}
-        <div className="space-y-6">
-          {/* Daily Targets - Prospecting */}
-          <Card className="p-6">
-            <h2 className="font-semibold mb-4 flex items-center gap-2">
-              <Target className="h-4 w-4" />
-              Prospecting Targets
-            </h2>
-            <div className="space-y-4">
-              {[
-                { label: 'Calls', data: dailyPlan.targets.prospecting.calls },
-                { label: 'Door Knocks', data: dailyPlan.targets.prospecting.doors },
-                { label: 'Conversations', data: dailyPlan.targets.prospecting.conversations },
-                { label: 'Meetings Booked', data: dailyPlan.targets.prospecting.meetingsBooked },
-              ].map(item => (
-                <div key={item.label} className="space-y-1">
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <span>{item.label}</span>
-                    <span className="font-mono">
-                      {item.data.completed} / {item.data.target}
-                    </span>
-                  </div>
-                  <Progress 
-                    value={Math.min((item.data.completed / item.data.target) * 100, 100)} 
-                    className="h-2"
-                  />
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Daily Targets - Clients */}
-          <Card className="p-6">
-            <h2 className="font-semibold mb-4 flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Client Targets
-            </h2>
-            <div className="space-y-4">
-              {[
-                { label: 'Check-ins', data: dailyPlan.targets.clients.checkIns },
-                { label: 'Upsell Conversations', data: dailyPlan.targets.clients.upsellConversations },
-                { label: 'Renewal Actions', data: dailyPlan.targets.clients.renewalActions },
-                { label: 'Follow-ups', data: dailyPlan.targets.clients.followUps },
-              ].map(item => (
-                <div key={item.label} className="space-y-1">
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <span>{item.label}</span>
-                    <span className="font-mono">
-                      {item.data.completed} / {item.data.target}
-                    </span>
-                  </div>
-                  <Progress 
-                    value={Math.min((item.data.completed / item.data.target) * 100, 100)} 
-                    className="h-2"
-                  />
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Time Blocks */}
-          <Card className="p-6">
-            <h2 className="font-semibold mb-4 flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Time Blocks
-            </h2>
-            <div className="space-y-3">
-              {dailyPlan.timeBlocks.map(block => (
-                <div 
-                  key={block.id} 
-                  className={`flex items-start gap-3 p-3 rounded-lg ${
-                    block.isLocked ? 'bg-primary/5 border border-primary/20' : 'bg-muted/50'
-                  }`}
-                  data-testid={`timeblock-${block.id}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      {block.isLocked && <Lock className="h-3 w-3 text-primary" />}
-                      <p className="font-medium text-sm">{block.name}</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {block.startTime} - {block.endTime}
-                    </p>
-                    {block.activityTarget > 0 && (
-                      <div className="mt-2">
-                        <Progress 
-                          value={Math.min((block.activitiesCompleted / block.activityTarget) * 100, 100)} 
-                          className="h-1.5"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {block.activitiesCompleted} / {block.activityTarget} activities
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    {TIME_BLOCK_LABELS[block.type]}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Center Column - NBA Action Queue */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-end gap-2">
+          {isToday && (
             <Button
-              size="sm"
-              variant={focusMode?.enabled ? "default" : "outline"}
-              onClick={() => dispatch(toggleFocusMode())}
-              data-testid="button-toggle-focus"
-            >
-              <Focus className="h-4 w-4 mr-1" />
-              {focusMode?.enabled ? 'Exit Focus Mode' : 'Focus Mode'}
-            </Button>
-            <Button
-              size="sm"
               variant="outline"
-              onClick={handleGenerateNBAQueue}
-              disabled={isGeneratingNBA}
-              data-testid="button-generate-nba"
+              size="sm"
+              onClick={() => setIsDebriefOpen(true)}
+              data-testid="button-open-debrief"
             >
-              {isGeneratingNBA ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin mr-1" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-1" />
-                  Generate Actions
-                </>
-              )}
+              <Clock className="h-4 w-4 mr-2" />
+              End of Day
             </Button>
-          </div>
-          <ActionQueueCard maxItems={10} />
+          )}
         </div>
-
-        {/* Right Column - Route Plan & Debrief */}
-        <div className="space-y-6">
-          {/* Route Plan */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-              <h2 className="font-semibold flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Route Plan
+      </div>
+      
+      <AIBriefSection
+        brief={aiBrief || null}
+        isGenerating={isGeneratingBrief}
+        onGenerate={handleGenerateBrief}
+      />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          <Card className="p-4" data-testid="card-schedule">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Schedule Timeline
               </h2>
-              <div className="flex items-center gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={() => setIsAddStopOpen(true)}
-                  data-testid="button-add-route-stop"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Stop
-                </Button>
-                {dailyPlan.routeStops.filter(s => !s.completed).length > 0 && (
-                  <Button 
-                    size="sm" 
-                    variant="default"
-                    onClick={handleOpenGoogleMaps}
-                    data-testid="button-open-directions"
-                  >
-                    <Navigation className="h-4 w-4 mr-1" />
-                    Get Directions
-                  </Button>
-                )}
-              </div>
+              <Badge variant="outline">
+                {selectedDate}
+              </Badge>
             </div>
-            <div className="space-y-2">
-              {dailyPlan.routeStops.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  No stops planned. Add leads or clients to build a route.
-                </p>
-              ) : (
-                dailyPlan.routeStops.map((stop, index) => (
-                  <div 
-                    key={stop.id} 
-                    className={`flex items-start gap-3 p-3 rounded-lg ${
-                      stop.completed ? 'bg-muted/30 opacity-60' : 'bg-muted/50'
-                    }`}
-                    data-testid={`route-stop-${stop.id}`}
-                  >
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className={`font-medium text-sm truncate ${stop.completed ? 'line-through' : ''}`}>
-                          {stop.companyName}
-                        </p>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {stop.actionType === 'meeting' ? 'Meeting' : 'Drop-in'}
-                        </Badge>
-                        {stop.targetType === 'client' && (
-                          <Badge variant="secondary" className="text-xs shrink-0">Client</Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">{stop.address}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {!stop.completed && (
-                        <>
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            onClick={() => handleCompleteRouteStop(stop.id)}
-                            data-testid={`button-complete-stop-${stop.id}`}
-                          >
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          </Button>
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            onClick={() => handleRemoveRouteStop(stop.id)}
-                            data-testid={`button-remove-stop-${stop.id}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {timeBlocks.map(block => (
+                <TimeBlockCard
+                  key={block.id}
+                  block={block}
+                  tasks={tasksByBlock[block.id] || []}
+                />
+              ))}
             </div>
           </Card>
-
-          {/* End of Day Debrief */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-              <h2 className="font-semibold flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                End of Day Debrief
+          
+          <Card className="p-4" data-testid="card-action-queue">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Action Queue
               </h2>
+              <Button size="sm" variant="outline" data-testid="button-generate-actions">
+                <Sparkles className="h-4 w-4 mr-2" />
+                Generate Actions
+              </Button>
             </div>
-            {dailyPlan.debrief.completed ? (
-              <div className="space-y-3">
-                <p className="text-sm">{dailyPlan.debrief.aiReview}</p>
-                {dailyPlan.debrief.plannedVsCompleted && (
-                  <Badge variant="outline">
-                    {dailyPlan.debrief.plannedVsCompleted.percentage}% completed
-                  </Badge>
-                )}
+            
+            {recommendations.length === 0 && planTasks.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Zap className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                <p>No actions yet. Generate your AI brief to get started.</p>
               </div>
             ) : (
-              <>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Get AI-powered insights on your day's activities and plan for tomorrow.
-                </p>
-                <Button 
-                  className="w-full gap-2" 
-                  variant="outline" 
-                  onClick={() => setIsDebriefOpen(true)}
-                  data-testid="button-debrief"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Generate Debrief
-                </Button>
-              </>
+              <div className="space-y-2">
+                {recommendations.slice(0, 10).map((rec, idx) => (
+                  <div
+                    key={rec.id}
+                    className="flex items-center gap-3 p-3 rounded-md bg-muted/50"
+                    data-testid={`action-rec-${idx}`}
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">{rec.targetName}</div>
+                      <div className="text-xs text-muted-foreground">{rec.reason}</div>
+                    </div>
+                    <Badge variant="outline" size="sm">{rec.taskType}</Badge>
+                    <Badge variant="secondary" size="sm">{rec.priorityScore}</Badge>
+                    <Button size="icon" variant="ghost" data-testid={`button-accept-rec-${idx}`}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+        
+        <div className="space-y-4">
+          <Card className="p-4" data-testid="card-prospecting-targets">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Prospecting Targets
+            </h2>
+            
+            <div className="space-y-1">
+              <TargetProgress
+                label="Calls"
+                icon={<Phone className="h-4 w-4" />}
+                target={targets.prospecting.calls.target}
+                completed={targets.prospecting.calls.completed}
+              />
+              <TargetProgress
+                label="Door Knocks"
+                icon={<Building2 className="h-4 w-4" />}
+                target={targets.prospecting.doors.target}
+                completed={targets.prospecting.doors.completed}
+              />
+              <TargetProgress
+                label="Conversations"
+                icon={<MessageSquare className="h-4 w-4" />}
+                target={targets.prospecting.conversations.target}
+                completed={targets.prospecting.conversations.completed}
+              />
+              <TargetProgress
+                label="Meetings Booked"
+                icon={<Calendar className="h-4 w-4" />}
+                target={targets.prospecting.meetingsBooked.target}
+                completed={targets.prospecting.meetingsBooked.completed}
+              />
+            </div>
+          </Card>
+          
+          <Card className="p-4" data-testid="card-client-targets">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Client Targets
+            </h2>
+            
+            <div className="space-y-1">
+              <TargetProgress
+                label="Check-ins"
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                target={targets.clients.checkIns.target}
+                completed={targets.clients.checkIns.completed}
+              />
+              <TargetProgress
+                label="Upsell Convos"
+                icon={<Handshake className="h-4 w-4" />}
+                target={targets.clients.upsellConversations.target}
+                completed={targets.clients.upsellConversations.completed}
+              />
+              <TargetProgress
+                label="Renewal Actions"
+                icon={<RefreshCw className="h-4 w-4" />}
+                target={targets.clients.renewalActions.target}
+                completed={targets.clients.renewalActions.completed}
+              />
+              <TargetProgress
+                label="Follow-ups"
+                icon={<ChevronRight className="h-4 w-4" />}
+                target={targets.clients.followUps.target}
+                completed={targets.clients.followUps.completed}
+              />
+            </div>
+          </Card>
+          
+          <Card className="p-4" data-testid="card-route-plan">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Route Plan
+              </h2>
+              <Button size="icon" variant="ghost" data-testid="button-add-route-stop">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {(dailyPlan?.routeStops?.length || 0) === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <Navigation className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No route stops planned</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {dailyPlan?.routeStops?.map((stop, idx) => (
+                  <div
+                    key={stop.id}
+                    className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                    data-testid={`route-stop-${idx}`}
+                  >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">{idx + 1}.</span>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">{stop.companyName}</div>
+                      <div className="text-xs text-muted-foreground">{stop.address}</div>
+                    </div>
+                    {stop.completed && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                  </div>
+                ))}
+              </div>
             )}
           </Card>
         </div>
       </div>
-
-      {/* Debrief Dialog */}
+      
       <Dialog open={isDebriefOpen} onOpenChange={setIsDebriefOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
+              <Clock className="h-5 w-5" />
               End of Day Debrief
             </DialogTitle>
             <DialogDescription>
-              Let's review your performance today and plan for tomorrow.
+              Review your day and get AI-powered insights for tomorrow.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-2xl font-bold">{dailyPlan.battleScoreEarned}</p>
-                <p className="text-xs text-muted-foreground">Battle Score</p>
+          <div className="py-4">
+            <div className="text-center p-6">
+              <Trophy className="h-12 w-12 mx-auto mb-4 text-amber-500" />
+              <div className="text-3xl font-bold mb-2">{battleScore} pts</div>
+              <p className="text-muted-foreground">Battle Score Earned</p>
+            </div>
+            
+            <Separator className="my-4" />
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold">{planTasks.filter(t => t.status === 'completed').length}</div>
+                <p className="text-sm text-muted-foreground">Tasks Completed</p>
               </div>
-              <div className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-2xl font-bold">
-                  {dailyPlan.actionQueue.filter(a => a.status === 'completed').length}
-                </p>
-                <p className="text-xs text-muted-foreground">Actions Done</p>
-              </div>
-              <div className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-2xl font-bold">
-                  {dailyPlan.targets.prospecting.calls.completed}
-                </p>
-                <p className="text-xs text-muted-foreground">Calls Made</p>
+              <div className="text-center">
+                <div className="text-2xl font-bold">{planTasks.length}</div>
+                <p className="text-sm text-muted-foreground">Tasks Planned</p>
               </div>
             </div>
-
-            <Separator />
-
-            {debriefResult ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">AI Review</p>
-                  <p className="text-sm">{debriefResult.aiReview}</p>
-                </div>
-                {debriefResult.improvements && debriefResult.improvements.length > 0 && (
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Improvements for Tomorrow</p>
-                    <ul className="space-y-1">
-                      {debriefResult.improvements.map((item, i) => (
-                        <li key={i} className="text-sm flex items-start gap-2">
-                          <ChevronRight className="h-4 w-4 shrink-0 mt-0.5" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {debriefResult.tomorrowsFocus && (
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Tomorrow's Focus</p>
-                    <p className="text-sm font-medium">{debriefResult.tomorrowsFocus}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <Button 
-                  onClick={handleGenerateDebrief}
-                  disabled={isGeneratingDebrief}
-                  data-testid="button-generate-debrief"
-                >
-                  {isGeneratingDebrief ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                      Analyzing your day...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Generate AI Review
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
           </div>
-
+          
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDebriefOpen(false)}>
-              Cancel
+              Close
             </Button>
-            <Button 
-              onClick={handleSubmitDebrief}
-              disabled={!debriefResult}
-              data-testid="button-submit-debrief"
-            >
-              Submit Debrief
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Route Stop Dialog */}
-      <Dialog open={isAddStopOpen} onOpenChange={setIsAddStopOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5" />
-              Add Route Stop
-            </DialogTitle>
-            <DialogDescription>
-              Select a lead or client to add to your route.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Tabs value={addStopTab} onValueChange={(v) => { setAddStopTab(v as 'leads' | 'clients'); setSelectedTargetId(''); }}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="leads" data-testid="tab-leads">
-                  <Building2 className="h-4 w-4 mr-2" />
-                  Leads ({leadsWithAddress.length})
-                </TabsTrigger>
-                <TabsTrigger value="clients" data-testid="tab-clients">
-                  <Users className="h-4 w-4 mr-2" />
-                  Clients ({clientsWithAddress.length})
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="leads" className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Lead</Label>
-                  <Select value={selectedTargetId} onValueChange={setSelectedTargetId}>
-                    <SelectTrigger data-testid="select-lead">
-                      <SelectValue placeholder="Choose a lead..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {leadsWithAddress.map(lead => (
-                        <SelectItem key={lead.id} value={lead.id}>
-                          {lead.companyName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </TabsContent>
-              <TabsContent value="clients" className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Client</Label>
-                  <Select value={selectedTargetId} onValueChange={setSelectedTargetId}>
-                    <SelectTrigger data-testid="select-client">
-                      <SelectValue placeholder="Choose a client..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientsWithAddress.map(client => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.businessName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            <div className="space-y-2">
-              <Label>Action Type</Label>
-              <Select value={selectedActionType} onValueChange={(v) => setSelectedActionType(v as RouteActionType)}>
-                <SelectTrigger data-testid="select-action-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dropin">Drop-in Visit</SelectItem>
-                  <SelectItem value="meeting">Scheduled Meeting</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddStopOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddRouteStop} disabled={!selectedTargetId} data-testid="button-confirm-add-stop">
-              Add to Route
+            <Button data-testid="button-generate-debrief">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Generate AI Debrief
             </Button>
           </DialogFooter>
         </DialogContent>

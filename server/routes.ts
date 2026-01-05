@@ -607,5 +607,244 @@ Focus on practical, achievable actions for a local service business. Tailor reco
     }
   });
 
+  // ============================================
+  // Daily Plan AI Generation API
+  // ============================================
+
+  app.post("/api/daily-plan/generate-brief", async (req, res) => {
+    try {
+      const { planDate, targets, leads, clients, overdueTasks, userSettings } = req.body;
+      
+      if (!planDate) {
+        return res.status(400).json({ error: "planDate is required (DD-MM-YYYY format)" });
+      }
+
+      const prompt = `You are an AI sales coach helping a sales rep plan their day. Today's date is ${planDate}.
+
+Current Daily Targets:
+${JSON.stringify(targets, null, 2)}
+
+Active Leads (${leads?.length || 0} total):
+${JSON.stringify(leads?.slice(0, 10) || [], null, 2)}
+
+Active Clients (${clients?.length || 0} total):
+${JSON.stringify(clients?.slice(0, 10) || [], null, 2)}
+
+Overdue Tasks (${overdueTasks?.length || 0} total):
+${JSON.stringify(overdueTasks || [], null, 2)}
+
+User Settings:
+${JSON.stringify(userSettings || {}, null, 2)}
+
+Generate a daily brief with:
+1. Today's focus - A motivating single sentence theme for the day
+2. Focus Mode Top 3 - The 3 most important tasks/priorities
+3. Risk List - Any at-risk clients, overdue tasks, or opportunities that need attention
+4. Suggested Time Allocation - How to best allocate time blocks
+
+Return valid JSON only:
+{
+  "todaysFocus": "Motivating theme for the day",
+  "focusModeTop3": ["Priority 1", "Priority 2", "Priority 3"],
+  "targets": {
+    "calls": 25,
+    "doorKnocks": 5,
+    "conversations": 10,
+    "meetingsBooked": 2,
+    "clientCheckIns": 5,
+    "upsellConvos": 2,
+    "renewalActions": 3,
+    "followUps": 10
+  },
+  "riskList": [
+    {"type": "overdue_client", "targetId": "id", "targetName": "Name", "reason": "Why at risk"}
+  ],
+  "suggestedTimeAllocation": [
+    {"blockId": "block-morning-prospecting", "blockName": "Morning Prospecting", "suggestedTasks": 15}
+  ]
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const brief = JSON.parse(content);
+      
+      res.json({
+        id: `brief-${planDate}`,
+        planDate,
+        ...brief,
+        generatedAt: new Date().toISOString(),
+        aiModelVersion: "gpt-4o-mini"
+      });
+    } catch (error) {
+      console.error("Error generating daily brief:", error);
+      res.status(500).json({ error: "Failed to generate daily brief" });
+    }
+  });
+
+  app.post("/api/daily-plan/generate-actions", async (req, res) => {
+    try {
+      const { planDate, leads, clients, overdueTasks, brief, timeBlocks } = req.body;
+      
+      if (!planDate) {
+        return res.status(400).json({ error: "planDate is required (DD-MM-YYYY format)" });
+      }
+
+      const prompt = `You are an AI sales coach generating recommended actions for a sales rep's daily plan.
+
+Today's date: ${planDate}
+Today's Focus: ${brief?.todaysFocus || "General sales activities"}
+Top 3 Priorities: ${JSON.stringify(brief?.focusModeTop3 || [])}
+
+Available Time Blocks:
+${JSON.stringify(timeBlocks || [], null, 2)}
+
+Active Leads to consider:
+${JSON.stringify(leads?.slice(0, 15) || [], null, 2)}
+
+Active Clients to consider:
+${JSON.stringify(clients?.slice(0, 15) || [], null, 2)}
+
+Overdue Tasks:
+${JSON.stringify(overdueTasks || [], null, 2)}
+
+Generate 10-15 recommended actions. Each should specify the target (lead/client), what to do, and which time block.
+
+Return valid JSON:
+{
+  "recommendations": [
+    {
+      "id": "rec-1",
+      "targetType": "lead",
+      "targetId": "lead-id",
+      "targetName": "Business Name",
+      "reason": "Why this action is recommended",
+      "expectedImpact": "Expected outcome",
+      "suggestedBlockId": "block-morning-prospecting",
+      "suggestedBlockName": "Morning Prospecting",
+      "taskType": "call",
+      "priorityScore": 95
+    }
+  ]
+}
+
+taskType options: call, door_knock, meeting, follow_up, check_in, renewal, upsell, other
+priorityScore: 1-100 based on urgency and impact`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 2000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || '{"recommendations":[]}';
+      const result = JSON.parse(content);
+      
+      const recommendations = (result.recommendations || []).map((rec: any, idx: number) => ({
+        ...rec,
+        id: rec.id || `rec-${idx + 1}`,
+        status: "recommended"
+      }));
+      
+      res.json({ recommendations });
+    } catch (error) {
+      console.error("Error generating action recommendations:", error);
+      res.status(500).json({ error: "Failed to generate action recommendations" });
+    }
+  });
+
+  app.post("/api/daily-plan/generate-debrief", async (req, res) => {
+    try {
+      const { planDate, tasks, targets, activities, brief } = req.body;
+      
+      if (!planDate) {
+        return res.status(400).json({ error: "planDate is required (DD-MM-YYYY format)" });
+      }
+
+      const completedTasks = tasks?.filter((t: any) => t.status === 'completed') || [];
+      const pendingTasks = tasks?.filter((t: any) => t.status === 'pending') || [];
+      const totalPlanned = tasks?.length || 0;
+      const totalCompleted = completedTasks.length;
+      const percentage = totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : 0;
+
+      const prompt = `You are an AI sales coach conducting an end-of-day debrief for a sales rep.
+
+Today's date: ${planDate}
+Today's Focus was: ${brief?.todaysFocus || "General sales activities"}
+Top 3 Priorities were: ${JSON.stringify(brief?.focusModeTop3 || [])}
+
+Target vs Actual:
+${JSON.stringify(targets, null, 2)}
+
+Completed Tasks (${completedTasks.length}):
+${JSON.stringify(completedTasks.slice(0, 10), null, 2)}
+
+Incomplete Tasks (${pendingTasks.length}):
+${JSON.stringify(pendingTasks.slice(0, 10), null, 2)}
+
+Today's Activities:
+${JSON.stringify(activities?.slice(0, 20) || [], null, 2)}
+
+Generate an end-of-day debrief with:
+1. Summary of what was accomplished
+2. What slipped (tasks not completed and why)
+3. Tomorrow's priorities based on what wasn't done today
+4. Tasks to roll forward to tomorrow
+5. AI coach review with encouragement and improvement suggestions
+
+Return valid JSON:
+{
+  "summary": {
+    "planned": ${totalPlanned},
+    "completed": ${totalCompleted},
+    "percentage": ${percentage}
+  },
+  "whatSlipped": [
+    {"taskId": "id", "title": "Task title", "reason": "overdue"}
+  ],
+  "tomorrowPriorities": ["Priority 1", "Priority 2", "Priority 3"],
+  "rollForwardTasks": [
+    {"taskId": "id", "title": "Task title", "newPlanDate": "DD-MM-YYYY"}
+  ],
+  "aiReview": "Encouraging summary of the day's performance",
+  "improvements": ["Suggestion 1", "Suggestion 2"]
+}
+
+reason options: overdue, rescheduled, no_response, skipped`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const debrief = JSON.parse(content);
+      
+      res.json({
+        id: `debrief-${planDate}`,
+        planDate,
+        summary: {
+          planned: totalPlanned,
+          completed: totalCompleted,
+          percentage
+        },
+        ...debrief,
+        generatedAt: new Date().toISOString(),
+        aiModelVersion: "gpt-4o-mini"
+      });
+    } catch (error) {
+      console.error("Error generating debrief:", error);
+      res.status(500).json({ error: "Failed to generate debrief" });
+    }
+  });
+
   return httpServer;
 }
