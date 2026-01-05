@@ -25,13 +25,14 @@ import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { 
   fetchDailyPlan, upsertDailyPlan, fetchAIBrief, saveAIBrief,
-  fetchPlanTasks, fetchActionRecommendations, fetchLeads, fetchClients
+  fetchPlanTasks, fetchActionRecommendations, fetchLeads, fetchClients,
+  fetchAIDebrief, saveAIDebrief, fetchActivities, updatePlanTask
 } from '@/lib/firestoreService';
 import {
-  DailyPlanDoc, AIBrief, PlanTimeBlock, PlanActionRecommendation,
+  DailyPlanDoc, AIBrief, AIDebrief, PlanTimeBlock, PlanActionRecommendation,
   formatDateDDMMYYYY, parseDateDDMMYYYY, getTodayDDMMYYYY,
   PLAN_BLOCK_CATEGORY_LABELS, DEFAULT_PLAN_TIME_BLOCKS, Lead, Client,
-  Task, getTrafficLightStatus
+  Task, getTrafficLightStatus, Activity
 } from '@/lib/types';
 
 interface DateSelectorProps {
@@ -223,7 +224,7 @@ function TimeBlockCard({ block, tasks }: TimeBlockCardProps) {
           {block.isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
           <span className="font-medium text-sm">{block.name}</span>
         </div>
-        <Badge variant="outline" size="sm">
+        <Badge variant="outline">
           {block.startTime} - {block.endTime}
         </Badge>
       </div>
@@ -277,6 +278,8 @@ export default function DailyPlanPage() {
   
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDDMMYYYY());
   const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
+  const [isGeneratingDebrief, setIsGeneratingDebrief] = useState(false);
+  const [isRollingForward, setIsRollingForward] = useState(false);
   const [isDebriefOpen, setIsDebriefOpen] = useState(false);
   
   const { data: dailyPlan, isLoading: planLoading } = useQuery({
@@ -335,6 +338,32 @@ export default function DailyPlanPage() {
       return await fetchActionRecommendations(orgId, userId, selectedDate, authReady);
     },
     enabled: !!orgId && !!userId && authReady,
+  });
+  
+  const { data: aiDebrief } = useQuery({
+    queryKey: ['/ai-debrief', orgId, userId, selectedDate],
+    queryFn: async () => {
+      if (!orgId || !userId) return null;
+      return await fetchAIDebrief(orgId, userId, selectedDate, authReady);
+    },
+    enabled: !!orgId && !!userId && authReady,
+  });
+  
+  const { data: activities = [] } = useQuery({
+    queryKey: ['/activities', orgId, selectedDate],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const allActivities = await fetchActivities(orgId, authReady);
+      const dateStart = parseDateDDMMYYYY(selectedDate);
+      dateStart.setHours(0, 0, 0, 0);
+      const dateEnd = new Date(dateStart);
+      dateEnd.setHours(23, 59, 59, 999);
+      return allActivities.filter(a => {
+        const actDate = a.date instanceof Date ? a.date : new Date(a.date);
+        return actDate >= dateStart && actDate <= dateEnd;
+      });
+    },
+    enabled: !!orgId && authReady,
   });
   
   const timeBlocks = dailyPlan?.timeBlocks || DEFAULT_PLAN_TIME_BLOCKS;
@@ -400,6 +429,80 @@ export default function DailyPlanPage() {
       setIsGeneratingBrief(false);
     }
   };
+  
+  const handleGenerateDebrief = async () => {
+    if (!orgId || !userId) return;
+    
+    setIsGeneratingDebrief(true);
+    try {
+      const response = await apiRequest('/api/daily-plan/generate-debrief', {
+        method: 'POST',
+        body: JSON.stringify({
+          planDate: selectedDate,
+          tasks: planTasks,
+          targets,
+          activities: activities.slice(0, 30),
+          brief: aiBrief,
+        }),
+      });
+      
+      const debrief: AIDebrief = {
+        ...(response as AIDebrief),
+        id: `${orgId}_${userId}_${selectedDate}`,
+        planDate: selectedDate,
+        generatedAt: new Date(),
+        aiModelVersion: 'gpt-4o-mini',
+      };
+      await saveAIDebrief(orgId, userId, debrief, authReady);
+      
+      queryClient.invalidateQueries({ queryKey: ['/ai-debrief', orgId, userId, selectedDate] });
+      toast({ title: 'Debrief generated', description: 'Your end-of-day review is ready.' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to generate debrief.', variant: 'destructive' });
+    } finally {
+      setIsGeneratingDebrief(false);
+    }
+  };
+  
+  const handleRollForwardTasks = async () => {
+    if (!orgId || !userId || !aiDebrief?.rollForwardTasks?.length) return;
+    
+    setIsRollingForward(true);
+    try {
+      const tomorrow = new Date(parseDateDDMMYYYY(selectedDate));
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowDate = formatDateDDMMYYYY(tomorrow);
+      
+      const updatePromises = aiDebrief.rollForwardTasks.map(async (rollTask) => {
+        const task = planTasks.find(t => t.id === rollTask.taskId);
+        if (task) {
+          await updatePlanTask(orgId, task.id, {
+            planDate: tomorrowDate,
+          }, authReady);
+        }
+      });
+      
+      await Promise.all(updatePromises);
+      
+      queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId, userId, selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId, userId, tomorrowDate] });
+      
+      toast({ 
+        title: 'Tasks rolled forward', 
+        description: `${aiDebrief.rollForwardTasks.length} tasks moved to ${tomorrowDate}.` 
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to roll forward tasks.', variant: 'destructive' });
+    } finally {
+      setIsRollingForward(false);
+    }
+  };
+  
+  const pendingTasks = planTasks.filter(t => t.status === 'pending');
+  const completedTasks = planTasks.filter(t => t.status === 'completed');
+  const completionPercentage = planTasks.length > 0 
+    ? Math.round((completedTasks.length / planTasks.length) * 100) 
+    : 0;
   
   const isToday = selectedDate === getTodayDDMMYYYY();
   
@@ -511,8 +614,8 @@ export default function DailyPlanPage() {
                       <div className="font-medium text-sm">{rec.targetName}</div>
                       <div className="text-xs text-muted-foreground">{rec.reason}</div>
                     </div>
-                    <Badge variant="outline" size="sm">{rec.taskType}</Badge>
-                    <Badge variant="secondary" size="sm">{rec.priorityScore}</Badge>
+                    <Badge variant="outline">{rec.taskType}</Badge>
+                    <Badge variant="secondary">{rec.priorityScore}</Badge>
                     <Button size="icon" variant="ghost" data-testid={`button-accept-rec-${idx}`}>
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -632,7 +735,7 @@ export default function DailyPlanPage() {
       </div>
       
       <Dialog open={isDebriefOpen} onOpenChange={setIsDebriefOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
@@ -643,34 +746,196 @@ export default function DailyPlanPage() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-4">
-            <div className="text-center p-6">
-              <Trophy className="h-12 w-12 mx-auto mb-4 text-amber-500" />
-              <div className="text-3xl font-bold mb-2">{battleScore} pts</div>
-              <p className="text-muted-foreground">Battle Score Earned</p>
-            </div>
-            
-            <Separator className="my-4" />
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold">{planTasks.filter(t => t.status === 'completed').length}</div>
-                <p className="text-sm text-muted-foreground">Tasks Completed</p>
+          <ScrollArea className="flex-1 pr-4">
+            <div className="py-4 space-y-4">
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-md">
+                <div className="text-center flex-1">
+                  <Trophy className="h-8 w-8 mx-auto mb-2 text-amber-500" />
+                  <div className="text-2xl font-bold" data-testid="text-debrief-score">{battleScore}</div>
+                  <p className="text-xs text-muted-foreground">Battle Score</p>
+                </div>
+                <Separator orientation="vertical" className="h-16" />
+                <div className="text-center flex-1">
+                  <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                  <div className="text-2xl font-bold" data-testid="text-debrief-completed">{completedTasks.length}</div>
+                  <p className="text-xs text-muted-foreground">Completed</p>
+                </div>
+                <Separator orientation="vertical" className="h-16" />
+                <div className="text-center flex-1">
+                  <Target className="h-8 w-8 mx-auto mb-2 text-blue-500" />
+                  <div className="text-2xl font-bold" data-testid="text-debrief-total">{planTasks.length}</div>
+                  <p className="text-xs text-muted-foreground">Planned</p>
+                </div>
+                <Separator orientation="vertical" className="h-16" />
+                <div className="text-center flex-1">
+                  <div className="h-8 flex items-center justify-center mb-2">
+                    <span className={`text-xl font-bold ${completionPercentage >= 80 ? 'text-green-500' : completionPercentage >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
+                      {completionPercentage}%
+                    </span>
+                  </div>
+                  <Progress value={completionPercentage} className="h-2 mb-1" />
+                  <p className="text-xs text-muted-foreground">Completion</p>
+                </div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold">{planTasks.length}</div>
-                <p className="text-sm text-muted-foreground">Tasks Planned</p>
-              </div>
+              
+              {isGeneratingDebrief && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mr-3" />
+                  <span>Generating your AI debrief...</span>
+                </div>
+              )}
+              
+              {aiDebrief && !isGeneratingDebrief && (
+                <>
+                  <div className="p-4 bg-primary/5 rounded-md border border-primary/20">
+                    <h4 className="font-medium mb-2 flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-primary" />
+                      AI Coach Review
+                    </h4>
+                    <p className="text-sm" data-testid="text-ai-review">{aiDebrief.aiReview}</p>
+                  </div>
+                  
+                  {aiDebrief.whatSlipped && aiDebrief.whatSlipped.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2 flex items-center gap-2 text-amber-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        What Slipped ({aiDebrief.whatSlipped.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {aiDebrief.whatSlipped.slice(0, 5).map((item, idx) => (
+                          <div 
+                            key={idx} 
+                            className="flex items-center justify-between p-2 bg-muted/50 rounded-md"
+                            data-testid={`item-slipped-${idx}`}
+                          >
+                            <span className="text-sm">{item.title}</span>
+                            <Badge variant="outline">{item.reason}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {aiDebrief.tomorrowPriorities && aiDebrief.tomorrowPriorities.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2 flex items-center gap-2">
+                        <Target className="h-4 w-4" />
+                        Tomorrow's Priorities
+                      </h4>
+                      <ul className="space-y-1">
+                        {aiDebrief.tomorrowPriorities.slice(0, 5).map((priority, idx) => (
+                          <li 
+                            key={idx} 
+                            className="text-sm flex items-start gap-2"
+                            data-testid={`text-tomorrow-priority-${idx}`}
+                          >
+                            <span className="font-bold text-primary">{idx + 1}.</span>
+                            {priority}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {aiDebrief.improvements && aiDebrief.improvements.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2 flex items-center gap-2">
+                        <Zap className="h-4 w-4" />
+                        Improvement Suggestions
+                      </h4>
+                      <ul className="space-y-1">
+                        {aiDebrief.improvements.slice(0, 3).map((improvement, idx) => (
+                          <li 
+                            key={idx} 
+                            className="text-sm text-muted-foreground"
+                            data-testid={`text-improvement-${idx}`}
+                          >
+                            {improvement}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {aiDebrief.rollForwardTasks && aiDebrief.rollForwardTasks.length > 0 && (
+                    <div className="p-4 bg-muted/50 rounded-md">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <RefreshCw className="h-4 w-4" />
+                          Roll Forward to Tomorrow ({aiDebrief.rollForwardTasks.length})
+                        </h4>
+                        <Button
+                          size="sm"
+                          onClick={handleRollForwardTasks}
+                          disabled={isRollingForward}
+                          data-testid="button-roll-forward"
+                        >
+                          {isRollingForward ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 mr-2" />
+                          )}
+                          Roll Forward
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        {aiDebrief.rollForwardTasks.slice(0, 5).map((task, idx) => (
+                          <div 
+                            key={idx} 
+                            className="text-sm text-muted-foreground"
+                            data-testid={`text-roll-task-${idx}`}
+                          >
+                            {task.title}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+              
+              {!aiDebrief && !isGeneratingDebrief && pendingTasks.length > 0 && (
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-md">
+                  <h4 className="font-medium mb-2 flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    Incomplete Tasks ({pendingTasks.length})
+                  </h4>
+                  <div className="space-y-1">
+                    {pendingTasks.slice(0, 5).map((task, idx) => (
+                      <div 
+                        key={task.id} 
+                        className="text-sm text-amber-700 dark:text-amber-400"
+                        data-testid={`text-pending-task-${idx}`}
+                      >
+                        {task.title || task.description}
+                      </div>
+                    ))}
+                    {pendingTasks.length > 5 && (
+                      <p className="text-sm text-muted-foreground">
+                        +{pendingTasks.length - 5} more...
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          </ScrollArea>
           
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setIsDebriefOpen(false)}>
               Close
             </Button>
-            <Button data-testid="button-generate-debrief">
-              <Sparkles className="h-4 w-4 mr-2" />
-              Generate AI Debrief
+            <Button 
+              onClick={handleGenerateDebrief}
+              disabled={isGeneratingDebrief}
+              data-testid="button-generate-debrief"
+            >
+              {isGeneratingDebrief ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-2" />
+              )}
+              {aiDebrief ? 'Regenerate Debrief' : 'Generate AI Debrief'}
             </Button>
           </DialogFooter>
         </DialogContent>
