@@ -342,6 +342,201 @@ export async function logPipelineAction(
   return { activity, task };
 }
 
+/**
+ * Log a client action (call, email, meeting, check-in, etc.) and create
+ * a corresponding completed task in the Daily Plan.
+ * 
+ * This ensures Client activities drive Daily Plan progress and are linked
+ * to the client's history.
+ */
+export async function logClientAction(
+  orgId: string,
+  activityData: {
+    userId: string;
+    clientId: string;
+    type: Activity['type'];
+    clientName: string;
+    notes?: string;
+  },
+  authReady: boolean = false
+): Promise<{ activity: Activity; task: Task }> {
+  const now = new Date();
+  const todayDDMMYYYY = getTodayDDMMYYYY();
+  const todayKey = toPlanDateKey(todayDDMMYYYY);
+  
+  // Create the activity record linked to the client
+  const activity = await createActivity(orgId, {
+    userId: activityData.userId,
+    clientId: activityData.clientId,
+    type: activityData.type,
+    notes: activityData.notes,
+    createdAt: now,
+  }, authReady);
+  
+  // Map activity type to task type - client activities are typically check-ins/delivery
+  const taskType = activityTypeToTaskType(activityData.type);
+  const timeSlot = getCurrentTimeSlot();
+  const activityLabel = ACTIVITY_LABELS[activityData.type] || activityData.type;
+  
+  // Create a completed task for the Daily Plan
+  const task = await createPlanTask(orgId, {
+    userId: activityData.userId,
+    clientId: activityData.clientId,
+    title: `${activityLabel}: ${activityData.clientName}`,
+    dueAt: now,
+    status: 'completed',
+    completedAt: now,
+    createdAt: now,
+    planDate: todayDDMMYYYY,
+    planDateKey: todayKey,
+    taskType: taskType,
+    timeSlot: timeSlot,
+    revenueLane: 'client',
+    outcome: 'completed',
+  }, authReady);
+  
+  return { activity, task };
+}
+
+/**
+ * Create a pending task linked to a client for future action.
+ */
+export async function createClientTask(
+  orgId: string,
+  taskData: {
+    userId: string;
+    clientId: string;
+    clientName: string;
+    title: string;
+    taskType: Task['taskType'];
+    dueDate: string; // DD-MM-YYYY format
+    notes?: string;
+  },
+  authReady: boolean = false
+): Promise<Task> {
+  const now = new Date();
+  const planDateKey = toPlanDateKey(taskData.dueDate);
+  
+  const task = await createPlanTask(orgId, {
+    userId: taskData.userId,
+    clientId: taskData.clientId,
+    title: taskData.title,
+    dueAt: now,
+    status: 'pending',
+    createdAt: now,
+    planDate: taskData.dueDate,
+    planDateKey: planDateKey,
+    taskType: taskData.taskType || 'check_in',
+    revenueLane: 'client',
+  }, authReady);
+  
+  // Also create an activity record to track task creation
+  await createActivity(orgId, {
+    userId: taskData.userId,
+    clientId: taskData.clientId,
+    type: 'followup',
+    notes: `Task created: ${taskData.title}${taskData.notes ? ` - ${taskData.notes}` : ''}`,
+    createdAt: now,
+  }, authReady);
+  
+  return task;
+}
+
+/**
+ * Add a note to a client's history (creates an activity entry).
+ */
+export async function addClientNote(
+  orgId: string,
+  noteData: {
+    userId: string;
+    clientId: string;
+    notes: string;
+  },
+  authReady: boolean = false
+): Promise<Activity> {
+  const now = new Date();
+  
+  const activity = await createActivity(orgId, {
+    userId: noteData.userId,
+    clientId: noteData.clientId,
+    type: 'followup', // Using followup as a general "note" activity type
+    notes: noteData.notes,
+    createdAt: now,
+  }, authReady);
+  
+  return activity;
+}
+
+/**
+ * Fetch activities for a specific client.
+ */
+export async function fetchClientActivities(
+  orgId: string,
+  clientId: string,
+  authReady: boolean = false
+): Promise<Activity[]> {
+  const path = `orgs/${orgId}/activities`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const activitiesRef = collection(db, 'orgs', orgId, 'activities');
+    const q = query(
+      activitiesRef, 
+      where('clientId', '==', clientId),
+      orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    const activities = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as Activity[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return activities;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+/**
+ * Fetch pending tasks for a specific client.
+ */
+export async function fetchClientTasks(
+  orgId: string,
+  clientId: string,
+  authReady: boolean = false
+): Promise<Task[]> {
+  const path = `orgs/${orgId}/tasks`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const tasksRef = collection(db, 'orgs', orgId, 'tasks');
+    const q = query(
+      tasksRef, 
+      where('clientId', '==', clientId),
+      orderBy('dueAt', 'asc')
+    );
+    const snapshot = await getDocs(q);
+    const tasks = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as Task[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return tasks;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
 // ============================================
 // NBA (Next Best Action) Queue Functions
 // ============================================

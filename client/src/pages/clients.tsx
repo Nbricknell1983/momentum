@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -17,9 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, TaskType, ActivityType } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -243,6 +243,7 @@ export default function ClientsPage() {
   const user = useSelector((state: RootState) => state.app.user);
   const { toast } = useToast();
   const { user: authUser, orgId, authReady, membershipReady } = useAuth();
+  const userId = authUser?.uid;
 
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -314,6 +315,19 @@ export default function ClientsPage() {
     topKeywords: '',
     notes: '',
   });
+
+  // Activity tab state
+  const [clientActivities, setClientActivities] = useState<Record<string, Activity[]>>({});
+  const [clientTasks, setClientTasks] = useState<Record<string, Task[]>>({});
+  const [loadingClientActivity, setLoadingClientActivity] = useState<string | null>(null);
+  const [loggingAction, setLoggingAction] = useState(false);
+  const [newClientNote, setNewClientNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskType, setNewTaskType] = useState<TaskType>('check_in');
+  const [newTaskDueDate, setNewTaskDueDate] = useState(getTodayDDMMYYYY());
+  const [savingClientTask, setSavingClientTask] = useState(false);
 
   const searchString = useSearch();
 
@@ -403,6 +417,131 @@ export default function ClientsPage() {
         .finally(() => setLoadingSnapshots(null));
     }
   }, [expandedClientId, orgId, authReady]);
+
+  // Load client activities and tasks when a client is expanded
+  useEffect(() => {
+    if (expandedClientId && orgId && authReady && clientActivities[expandedClientId] === undefined) {
+      setLoadingClientActivity(expandedClientId);
+      Promise.all([
+        fetchClientActivities(orgId, expandedClientId, authReady),
+        fetchClientTasks(orgId, expandedClientId, authReady),
+      ])
+        .then(([activities, tasks]) => {
+          setClientActivities(prev => ({ ...prev, [expandedClientId]: activities }));
+          setClientTasks(prev => ({ ...prev, [expandedClientId]: tasks }));
+        })
+        .finally(() => setLoadingClientActivity(null));
+    }
+  }, [expandedClientId, orgId, authReady]);
+
+  // Handler to log a client action (call, email, meeting, etc.)
+  const handleLogClientAction = async (clientId: string, clientName: string, actionType: ActivityType) => {
+    if (!orgId || !userId) return;
+    setLoggingAction(true);
+    try {
+      await logClientAction(orgId, {
+        userId,
+        clientId,
+        type: actionType,
+        clientName,
+      }, authReady);
+      
+      // Refresh activities
+      const activities = await fetchClientActivities(orgId, clientId, authReady);
+      setClientActivities(prev => ({ ...prev, [clientId]: activities }));
+      
+      toast({ 
+        title: 'Activity logged', 
+        description: `${ACTIVITY_LABELS[actionType] || actionType} logged for ${clientName}` 
+      });
+    } catch (error) {
+      console.error('Error logging client action:', error);
+      toast({ title: 'Error', description: 'Failed to log activity.', variant: 'destructive' });
+    } finally {
+      setLoggingAction(false);
+    }
+  };
+
+  // Handler to add a note to client history
+  const handleAddClientNote = async (clientId: string) => {
+    if (!orgId || !userId || !newClientNote.trim()) return;
+    setSavingNote(true);
+    try {
+      await addClientNote(orgId, {
+        userId,
+        clientId,
+        notes: newClientNote.trim(),
+      }, authReady);
+      
+      // Refresh activities
+      const activities = await fetchClientActivities(orgId, clientId, authReady);
+      setClientActivities(prev => ({ ...prev, [clientId]: activities }));
+      setNewClientNote('');
+      
+      toast({ title: 'Note added', description: 'Note has been saved to client history.' });
+    } catch (error) {
+      console.error('Error adding note:', error);
+      toast({ title: 'Error', description: 'Failed to add note.', variant: 'destructive' });
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  // Handler to create a task for a client
+  const handleCreateClientTask = async (clientId: string, clientName: string) => {
+    if (!orgId || !userId || !newTaskTitle.trim()) return;
+    setSavingClientTask(true);
+    try {
+      await createClientTask(orgId, {
+        userId,
+        clientId,
+        clientName,
+        title: newTaskTitle.trim(),
+        taskType: newTaskType,
+        dueDate: newTaskDueDate,
+      }, authReady);
+      
+      // Refresh tasks and activities
+      const [tasks, activities] = await Promise.all([
+        fetchClientTasks(orgId, clientId, authReady),
+        fetchClientActivities(orgId, clientId, authReady),
+      ]);
+      setClientTasks(prev => ({ ...prev, [clientId]: tasks }));
+      setClientActivities(prev => ({ ...prev, [clientId]: activities }));
+      
+      setNewTaskTitle('');
+      setNewTaskType('check_in');
+      setNewTaskDueDate(getTodayDDMMYYYY());
+      setIsAddTaskDialogOpen(false);
+      
+      toast({ title: 'Task created', description: 'Task has been added to your plan.' });
+    } catch (error) {
+      console.error('Error creating task:', error);
+      toast({ title: 'Error', description: 'Failed to create task.', variant: 'destructive' });
+    } finally {
+      setSavingClientTask(false);
+    }
+  };
+
+  // Handler to complete a client task
+  const handleCompleteClientTask = async (clientId: string, taskId: string) => {
+    if (!orgId) return;
+    try {
+      await updatePlanTask(orgId, taskId, {
+        status: 'completed',
+        completedAt: new Date(),
+      }, authReady);
+      
+      // Refresh tasks
+      const tasks = await fetchClientTasks(orgId, clientId, authReady);
+      setClientTasks(prev => ({ ...prev, [clientId]: tasks }));
+      
+      toast({ title: 'Task completed!' });
+    } catch (error) {
+      console.error('Error completing task:', error);
+      toast({ title: 'Error', description: 'Failed to complete task.', variant: 'destructive' });
+    }
+  };
 
   const handleCreateEvidenceTask = async (clientId: string, task: string, channel: InsightChannel, definition: string, impactMetric: string) => {
     if (!orgId) return;
@@ -1390,6 +1529,10 @@ export default function ClientsPage() {
                           <TabsTrigger value="strategy" data-testid={`tab-strategy-${client.id}`}>
                             <Target className="h-4 w-4 mr-2" />
                             Strategy
+                          </TabsTrigger>
+                          <TabsTrigger value="activity" data-testid={`tab-activity-${client.id}`}>
+                            <ClipboardList className="h-4 w-4 mr-2" />
+                            Activity
                           </TabsTrigger>
                         </TabsList>
 
@@ -2996,6 +3139,249 @@ export default function ClientsPage() {
                               )}
                             </TabsContent>
                           </Tabs>
+                        </TabsContent>
+
+                        {/* Activity Tab - Tasks, Notes, and History */}
+                        <TabsContent value="activity" className="space-y-4">
+                          {loadingClientActivity === client.id ? (
+                            <div className="flex items-center justify-center p-8">
+                              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <div className="space-y-6">
+                              {/* Quick Actions */}
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium flex items-center gap-2">
+                                  <Sparkles className="h-4 w-4" />
+                                  Log Activity
+                                </h4>
+                                <div className="flex flex-wrap gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleLogClientAction(client.id, client.businessName, 'call')}
+                                    disabled={loggingAction}
+                                    data-testid={`button-log-call-${client.id}`}
+                                  >
+                                    <Phone className="h-4 w-4 mr-2" />
+                                    Call
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleLogClientAction(client.id, client.businessName, 'email')}
+                                    disabled={loggingAction}
+                                    data-testid={`button-log-email-${client.id}`}
+                                  >
+                                    <Mail className="h-4 w-4 mr-2" />
+                                    Email
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleLogClientAction(client.id, client.businessName, 'meeting')}
+                                    disabled={loggingAction}
+                                    data-testid={`button-log-meeting-${client.id}`}
+                                  >
+                                    <Calendar className="h-4 w-4 mr-2" />
+                                    Meeting
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleLogClientAction(client.id, client.businessName, 'dropin')}
+                                    disabled={loggingAction}
+                                    data-testid={`button-log-dropin-${client.id}`}
+                                  >
+                                    <Navigation className="h-4 w-4 mr-2" />
+                                    Drop-in
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {/* Add Note */}
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium flex items-center gap-2">
+                                  <MessageSquare className="h-4 w-4" />
+                                  Add Note
+                                </h4>
+                                <div className="flex gap-2">
+                                  <Textarea
+                                    value={newClientNote}
+                                    onChange={(e) => setNewClientNote(e.target.value)}
+                                    placeholder="Add a note to client history..."
+                                    className="min-h-[80px]"
+                                    data-testid={`input-note-${client.id}`}
+                                  />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAddClientNote(client.id)}
+                                  disabled={savingNote || !newClientNote.trim()}
+                                  data-testid={`button-save-note-${client.id}`}
+                                >
+                                  {savingNote ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                                  Save Note
+                                </Button>
+                              </div>
+
+                              {/* Tasks Section */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <h4 className="text-sm font-medium flex items-center gap-2">
+                                    <ClipboardList className="h-4 w-4" />
+                                    Tasks
+                                  </h4>
+                                  <Dialog open={isAddTaskDialogOpen && expandedClientId === client.id} onOpenChange={(open) => {
+                                    setIsAddTaskDialogOpen(open);
+                                    if (!open) {
+                                      setNewTaskTitle('');
+                                      setNewTaskType('check_in');
+                                      setNewTaskDueDate(getTodayDDMMYYYY());
+                                    }
+                                  }}>
+                                    <DialogTrigger asChild>
+                                      <Button size="sm" variant="outline" data-testid={`button-add-task-${client.id}`}>
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        Add Task
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>Create Task for {client.businessName}</DialogTitle>
+                                      </DialogHeader>
+                                      <div className="space-y-4 py-4">
+                                        <div className="space-y-2">
+                                          <Label>Task Title</Label>
+                                          <Input
+                                            value={newTaskTitle}
+                                            onChange={(e) => setNewTaskTitle(e.target.value)}
+                                            placeholder="e.g., Follow up on proposal..."
+                                            data-testid="input-new-task-title"
+                                          />
+                                        </div>
+                                        <div className="space-y-2">
+                                          <Label>Task Type</Label>
+                                          <Select value={newTaskType} onValueChange={(v) => setNewTaskType(v as TaskType)}>
+                                            <SelectTrigger data-testid="select-task-type">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="check_in">Check-in</SelectItem>
+                                              <SelectItem value="follow_up">Follow-up</SelectItem>
+                                              <SelectItem value="meeting">Meeting</SelectItem>
+                                              <SelectItem value="delivery">Delivery</SelectItem>
+                                              <SelectItem value="renewal">Renewal</SelectItem>
+                                              <SelectItem value="upsell">Upsell</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                          <Label>Due Date (DD-MM-YYYY)</Label>
+                                          <Input
+                                            value={newTaskDueDate}
+                                            onChange={(e) => setNewTaskDueDate(e.target.value)}
+                                            placeholder="DD-MM-YYYY"
+                                            data-testid="input-task-due-date"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="flex justify-end gap-2">
+                                        <Button variant="outline" onClick={() => setIsAddTaskDialogOpen(false)}>
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          onClick={() => handleCreateClientTask(client.id, client.businessName)}
+                                          disabled={savingClientTask || !newTaskTitle.trim()}
+                                          data-testid="button-create-task-submit"
+                                        >
+                                          {savingClientTask ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                                          Create Task
+                                        </Button>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
+
+                                {(clientTasks[client.id] ?? []).filter(t => t.status === 'pending').length > 0 ? (
+                                  <div className="space-y-2">
+                                    {(clientTasks[client.id] ?? [])
+                                      .filter(t => t.status === 'pending')
+                                      .slice(0, 5)
+                                      .map(task => (
+                                        <div
+                                          key={task.id}
+                                          className="flex items-center gap-3 p-3 border rounded-md"
+                                          data-testid={`task-${task.id}`}
+                                        >
+                                          <Checkbox
+                                            checked={task.status === 'completed'}
+                                            onCheckedChange={() => handleCompleteClientTask(client.id, task.id)}
+                                            data-testid={`checkbox-task-${task.id}`}
+                                          />
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">{task.title}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              Due: {task.planDate || 'Not set'}
+                                            </p>
+                                          </div>
+                                          <Badge variant="outline" className="text-xs">
+                                            {task.taskType || 'task'}
+                                          </Badge>
+                                        </div>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground py-2" data-testid={`text-no-tasks-${client.id}`}>No pending tasks</p>
+                                )}
+                              </div>
+
+                              {/* Activity History */}
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium flex items-center gap-2">
+                                  <Clock className="h-4 w-4" />
+                                  Recent Activity
+                                </h4>
+                                {(clientActivities[client.id] ?? []).length > 0 ? (
+                                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                    {(clientActivities[client.id] ?? []).slice(0, 10).map(activity => (
+                                      <div
+                                        key={activity.id}
+                                        className="flex items-start gap-3 p-3 border rounded-md bg-muted/30"
+                                        data-testid={`activity-${activity.id}`}
+                                      >
+                                        <div className="flex-shrink-0 mt-0.5">
+                                          {activity.type === 'call' && <Phone className="h-4 w-4 text-blue-500" />}
+                                          {activity.type === 'email' && <Mail className="h-4 w-4 text-green-500" />}
+                                          {activity.type === 'meeting' && <Calendar className="h-4 w-4 text-purple-500" />}
+                                          {activity.type === 'dropin' && <Navigation className="h-4 w-4 text-orange-500" />}
+                                          {activity.type === 'followup' && <MessageSquare className="h-4 w-4 text-muted-foreground" />}
+                                          {!['call', 'email', 'meeting', 'dropin', 'followup'].includes(activity.type) && (
+                                            <CircleDot className="h-4 w-4 text-muted-foreground" />
+                                          )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <Badge variant="outline" className="text-xs">
+                                              {ACTIVITY_LABELS[activity.type] || activity.type}
+                                            </Badge>
+                                            <span className="text-xs text-muted-foreground">
+                                              {new Date(activity.createdAt).toLocaleDateString()} at {new Date(activity.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                          </div>
+                                          {activity.notes && (
+                                            <p className="text-sm text-muted-foreground">{activity.notes}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground py-2" data-testid={`text-no-activity-${client.id}`}>No activity recorded yet</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </TabsContent>
                       </Tabs>
 
