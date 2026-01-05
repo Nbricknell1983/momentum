@@ -163,6 +163,24 @@ Fields:
 - __name__ (Descending)
 ```
 
+**5. activities (client activity history - REQUIRED for Activity tab):**
+```
+Collection ID: activities (collection group scope)
+Fields:
+- clientId (Ascending)
+- createdAt (Descending)
+- __name__ (Descending)
+```
+
+**6. tasks (client tasks - REQUIRED for Activity tab):**
+```
+Collection ID: tasks (collection group scope)
+Fields:
+- clientId (Ascending)
+- dueAt (Ascending)
+- __name__ (Ascending)
+```
+
 **Index Creation Steps:**
 1. Go to Firebase Console → Firestore Database → Indexes
 2. Click "Add Index" for each index above
