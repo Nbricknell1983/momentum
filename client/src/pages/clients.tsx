@@ -23,6 +23,7 @@ import { createClient as createClientInFirestore, updateClientInFirestore, fetch
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { DictationButton } from '@/components/DictationButton';
 
 const healthIcons: Record<HealthStatus, React.ReactNode> = {
   green: <CheckCircle className="h-4 w-4 text-green-500" />,
@@ -3201,15 +3202,21 @@ export default function ClientsPage() {
 
                               {/* Add Note */}
                               <div className="space-y-2">
-                                <h4 className="text-sm font-medium flex items-center gap-2">
-                                  <MessageSquare className="h-4 w-4" />
-                                  Add Note
-                                </h4>
+                                <div className="flex items-center justify-between gap-2">
+                                  <h4 className="text-sm font-medium flex items-center gap-2">
+                                    <MessageSquare className="h-4 w-4" />
+                                    Add Note
+                                  </h4>
+                                  <DictationButton
+                                    onTranscript={(text) => setNewClientNote(prev => prev + (prev ? ' ' : '') + text)}
+                                    data-testid={`button-dictate-note-${client.id}`}
+                                  />
+                                </div>
                                 <div className="flex gap-2">
                                   <Textarea
                                     value={newClientNote}
                                     onChange={(e) => setNewClientNote(e.target.value)}
-                                    placeholder="Add a note to client history..."
+                                    placeholder="Add a note to client history... (or use microphone to dictate)"
                                     className="min-h-[80px]"
                                     data-testid={`input-note-${client.id}`}
                                   />
@@ -3252,11 +3259,17 @@ export default function ClientsPage() {
                                       </DialogHeader>
                                       <div className="space-y-4 py-4">
                                         <div className="space-y-2">
-                                          <Label>Task Title</Label>
+                                          <div className="flex items-center justify-between gap-2">
+                                            <Label>Task Title</Label>
+                                            <DictationButton
+                                              onTranscript={(text) => setNewTaskTitle(prev => prev + (prev ? ' ' : '') + text)}
+                                              data-testid="button-dictate-task"
+                                            />
+                                          </div>
                                           <Input
                                             value={newTaskTitle}
                                             onChange={(e) => setNewTaskTitle(e.target.value)}
-                                            placeholder="e.g., Follow up on proposal..."
+                                            placeholder="e.g., Follow up on proposal... (or use mic to dictate)"
                                             data-testid="input-new-task-title"
                                           />
                                         </div>
