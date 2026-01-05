@@ -3261,6 +3261,15 @@ export default function ClientsPage() {
                                     <ClipboardList className="h-4 w-4" />
                                     Tasks
                                   </h4>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    onClick={() => setIsAddTaskDialogOpen(true)}
+                                    data-testid={`button-add-task-${client.id}`}
+                                  >
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Add Task
+                                  </Button>
                                   <Dialog open={isAddTaskDialogOpen && expandedClientId === client.id} onOpenChange={(open) => {
                                     setIsAddTaskDialogOpen(open);
                                     if (!open) {
@@ -3269,12 +3278,6 @@ export default function ClientsPage() {
                                       setNewTaskDueDate(getTodayDDMMYYYY());
                                     }
                                   }}>
-                                    <DialogTrigger asChild>
-                                      <Button size="sm" variant="outline" data-testid={`button-add-task-${client.id}`}>
-                                        <Plus className="h-4 w-4 mr-1" />
-                                        Add Task
-                                      </Button>
-                                    </DialogTrigger>
                                     <DialogContent>
                                       <DialogHeader>
                                         <DialogTitle>Create Task for {client.businessName}</DialogTitle>
