@@ -1175,6 +1175,15 @@ export default function ClientsPage() {
     red: clients.filter(c => !c.archived && c.healthStatus === 'red').length,
   };
 
+  // Calculate task counts across all clients
+  const todayKey = toPlanDateKey(getTodayDDMMYYYY());
+  const allTasks = Object.values(clientTasks).flat().filter(t => t.status !== 'completed');
+  const taskCounts = {
+    overdue: allTasks.filter(t => t.planDateKey && t.planDateKey < todayKey).length,
+    today: allTasks.filter(t => t.planDateKey === todayKey).length,
+    upcoming: allTasks.filter(t => t.planDateKey && t.planDateKey > todayKey).length,
+  };
+
   const handleAddClient = async () => {
     if (!newBusinessName.trim() || !newContactName.trim()) {
       toast({
@@ -1462,6 +1471,23 @@ export default function ClientsPage() {
             <Badge variant="outline" className="gap-1" data-testid="badge-health-red">
               <AlertCircle className="h-3 w-3 text-red-500" />
               {healthCounts.red}
+            </Badge>
+          </div>
+
+          <div className="h-6 w-px bg-border mx-1" />
+
+          <div className="flex items-center gap-1 mr-2">
+            <Badge variant={taskCounts.overdue > 0 ? "destructive" : "outline"} className="gap-1" data-testid="badge-tasks-overdue">
+              <Clock className="h-3 w-3" />
+              {taskCounts.overdue} overdue
+            </Badge>
+            <Badge variant={taskCounts.today > 0 ? "default" : "outline"} className="gap-1" data-testid="badge-tasks-today">
+              <Calendar className="h-3 w-3" />
+              {taskCounts.today} today
+            </Badge>
+            <Badge variant="outline" className="gap-1 text-muted-foreground" data-testid="badge-tasks-upcoming">
+              <CalendarPlus className="h-3 w-3" />
+              {taskCounts.upcoming} upcoming
             </Badge>
           </div>
 
