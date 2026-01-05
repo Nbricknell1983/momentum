@@ -99,6 +99,60 @@ shared/           # Shared code between client/server
 - `@replit/vite-plugin-cartographer`: Development tooling
 - `@replit/vite-plugin-dev-banner`: Development banner
 
-### Authentication (Planned)
-- Schema includes users table with username/password
-- Passport.js packages available for authentication implementation
+### Authentication & Authorization
+- **Firebase Authentication**: Google Sign-In and Email/Password authentication
+- **2-Stage Auth Gating**: 
+  1. `authReady`: Firebase Auth state resolved, user signed in
+  2. `membershipReady`: Membership doc verified at `/orgs/{orgId}/members/{uid}` with `active=true`
+- All Firestore queries are blocked until both stages complete
+- User profile stored at `/users/{uid}` with `orgId` reference
+
+### Firestore Structure
+All data is stored under organization scope: `orgs/{orgId}/`
+
+**Collections:**
+- `members` - Organization membership records
+- `leads` - Sales pipeline leads
+- `clients` - Converted client records
+- `activities` - Activity log (calls, emails, meetings)
+- `tasks` - Tasks with Daily Plan integration
+- `dailyPlans` - Daily plan documents
+- `aiBriefs` - AI-generated morning briefs
+- `aiDebriefs` - AI-generated end-of-day reviews
+- `actionRecommendations` - AI action queue recommendations
+
+### Required Firestore Composite Indexes
+
+**tasks collection index** (for Daily Plan ordered task display):
+```
+Collection: orgs/{orgId}/tasks
+Fields:
+- planDate (Ascending)
+- userId (Ascending)
+- sortOrder (Ascending)
+- __name__ (Ascending)
+```
+
+**actionRecommendations collection index** (for AI action queue):
+```
+Collection: orgs/{orgId}/actionRecommendations
+Fields:
+- planDate (Ascending)
+- userId (Ascending)
+- priorityScore (Descending)
+- __name__ (Descending)
+```
+
+To create these indexes:
+1. Go to Firebase Console → Firestore Database → Indexes
+2. Click "Add Index" and configure each field as specified above
+3. Wait for index to build (may take a few minutes)
+
+### Date Format Convention (NON-NEGOTIABLE)
+- **User-facing dates**: DD-MM-YYYY format (e.g., "05-01-2026")
+- **Internal sorting key**: YYYY-MM-DD format stored in `planDateKey` field
+- Helper functions in `client/src/lib/types.ts`:
+  - `formatDateDDMMYYYY(date)` - Convert Date to DD-MM-YYYY
+  - `parseDateDDMMYYYY(str)` - Parse DD-MM-YYYY to Date
+  - `toPlanDateKey(ddmmyyyy)` - Convert DD-MM-YYYY to YYYY-MM-DD
+  - `fromPlanDateKey(yyyymmdd)` - Convert YYYY-MM-DD to DD-MM-YYYY

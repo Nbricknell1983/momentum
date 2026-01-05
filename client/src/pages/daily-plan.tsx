@@ -30,7 +30,7 @@ import {
 } from '@/lib/firestoreService';
 import {
   DailyPlanDoc, AIBrief, AIDebrief, PlanTimeBlock, PlanActionRecommendation,
-  formatDateDDMMYYYY, parseDateDDMMYYYY, getTodayDDMMYYYY,
+  formatDateDDMMYYYY, parseDateDDMMYYYY, getTodayDDMMYYYY, toPlanDateKey,
   PLAN_BLOCK_CATEGORY_LABELS, DEFAULT_PLAN_TIME_BLOCKS, Lead, Client,
   Task, getTrafficLightStatus, Activity
 } from '@/lib/types';
@@ -272,7 +272,7 @@ function TargetProgress({ label, icon, target, completed }: TargetProgressProps)
 
 export default function DailyPlanPage() {
   const { toast } = useToast();
-  const { user, orgId, authReady } = useAuth();
+  const { user, orgId, authReady, membershipReady } = useAuth();
   const queryClient = useQueryClient();
   const userId = user?.uid || '';
   
@@ -292,7 +292,7 @@ export default function DailyPlanPage() {
       }
       return plan;
     },
-    enabled: !!orgId && !!userId && authReady,
+    enabled: !!orgId && !!userId && authReady && membershipReady,
   });
   
   const { data: aiBrief } = useQuery({
@@ -301,7 +301,7 @@ export default function DailyPlanPage() {
       if (!orgId || !userId) return null;
       return await fetchAIBrief(orgId, userId, selectedDate, authReady);
     },
-    enabled: !!orgId && !!userId && authReady,
+    enabled: !!orgId && !!userId && authReady && membershipReady,
   });
   
   const { data: planTasks = [] } = useQuery({
@@ -310,7 +310,7 @@ export default function DailyPlanPage() {
       if (!orgId || !userId) return [];
       return await fetchPlanTasks(orgId, userId, selectedDate, authReady);
     },
-    enabled: !!orgId && !!userId && authReady,
+    enabled: !!orgId && !!userId && authReady && membershipReady,
   });
   
   const { data: leads = [] } = useQuery({
@@ -319,7 +319,7 @@ export default function DailyPlanPage() {
       if (!orgId) return [];
       return await fetchLeads(orgId, authReady);
     },
-    enabled: !!orgId && authReady,
+    enabled: !!orgId && authReady && membershipReady,
   });
   
   const { data: clients = [] } = useQuery({
@@ -328,7 +328,7 @@ export default function DailyPlanPage() {
       if (!orgId) return [];
       return await fetchClients(orgId, authReady);
     },
-    enabled: !!orgId && authReady,
+    enabled: !!orgId && authReady && membershipReady,
   });
   
   const { data: recommendations = [] } = useQuery({
@@ -337,7 +337,7 @@ export default function DailyPlanPage() {
       if (!orgId || !userId) return [];
       return await fetchActionRecommendations(orgId, userId, selectedDate, authReady);
     },
-    enabled: !!orgId && !!userId && authReady,
+    enabled: !!orgId && !!userId && authReady && membershipReady,
   });
   
   const { data: aiDebrief } = useQuery({
@@ -346,24 +346,24 @@ export default function DailyPlanPage() {
       if (!orgId || !userId) return null;
       return await fetchAIDebrief(orgId, userId, selectedDate, authReady);
     },
-    enabled: !!orgId && !!userId && authReady,
+    enabled: !!orgId && !!userId && authReady && membershipReady,
   });
   
   const { data: activities = [] } = useQuery({
     queryKey: ['/activities', orgId, selectedDate],
     queryFn: async () => {
       if (!orgId) return [];
-      const allActivities = await fetchActivities(orgId, authReady);
+      const allActivities = await fetchActivities(orgId, '', authReady);
       const dateStart = parseDateDDMMYYYY(selectedDate);
       dateStart.setHours(0, 0, 0, 0);
       const dateEnd = new Date(dateStart);
       dateEnd.setHours(23, 59, 59, 999);
       return allActivities.filter(a => {
-        const actDate = a.date instanceof Date ? a.date : new Date(a.date);
+        const actDate = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
         return actDate >= dateStart && actDate <= dateEnd;
       });
     },
-    enabled: !!orgId && authReady,
+    enabled: !!orgId && authReady && membershipReady,
   });
   
   const timeBlocks = dailyPlan?.timeBlocks || DEFAULT_PLAN_TIME_BLOCKS;
@@ -407,18 +407,15 @@ export default function DailyPlanPage() {
     
     setIsGeneratingBrief(true);
     try {
-      const response = await apiRequest('/api/daily-plan/generate-brief', {
-        method: 'POST',
-        body: JSON.stringify({
-          planDate: selectedDate,
-          targets,
-          leads: leads.filter(l => !l.archived).slice(0, 15),
-          clients: clients.filter(c => c.status === 'active').slice(0, 15),
-          overdueTasks: planTasks.filter(t => t.status === 'pending'),
-        }),
+      const response = await apiRequest('POST', '/api/daily-plan/generate-brief', {
+        planDate: selectedDate,
+        targets,
+        leads: leads.filter(l => !l.archived).slice(0, 15),
+        clients: clients.filter(c => c.healthStatus === 'green' || c.healthStatus === 'amber').slice(0, 15),
+        overdueTasks: planTasks.filter(t => t.status === 'pending'),
       });
       
-      const brief: AIBrief = response as AIBrief;
+      const brief: AIBrief = await response.json();
       await saveAIBrief(orgId, userId, brief, authReady);
       
       queryClient.invalidateQueries({ queryKey: ['/ai-brief', orgId, userId, selectedDate] });
@@ -435,19 +432,17 @@ export default function DailyPlanPage() {
     
     setIsGeneratingDebrief(true);
     try {
-      const response = await apiRequest('/api/daily-plan/generate-debrief', {
-        method: 'POST',
-        body: JSON.stringify({
-          planDate: selectedDate,
-          tasks: planTasks,
-          targets,
-          activities: activities.slice(0, 30),
-          brief: aiBrief,
-        }),
+      const response = await apiRequest('POST', '/api/daily-plan/generate-debrief', {
+        planDate: selectedDate,
+        tasks: planTasks,
+        targets,
+        activities: activities.slice(0, 30),
+        brief: aiBrief,
       });
       
+      const responseData = await response.json();
       const debrief: AIDebrief = {
-        ...(response as AIDebrief),
+        ...responseData,
         id: `${orgId}_${userId}_${selectedDate}`,
         planDate: selectedDate,
         generatedAt: new Date(),
@@ -478,6 +473,7 @@ export default function DailyPlanPage() {
         if (task) {
           await updatePlanTask(orgId, task.id, {
             planDate: tomorrowDate,
+            planDateKey: toPlanDateKey(tomorrowDate),
           }, authReady);
         }
       });
@@ -907,7 +903,7 @@ export default function DailyPlanPage() {
                         className="text-sm text-amber-700 dark:text-amber-400"
                         data-testid={`text-pending-task-${idx}`}
                       >
-                        {task.title || task.description}
+                        {task.title}
                       </div>
                     ))}
                     {pendingTasks.length > 5 && (

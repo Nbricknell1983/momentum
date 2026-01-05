@@ -44,7 +44,7 @@ function ProtectedRoutes() {
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const dispatch = useDispatch();
-  const { user, orgId, loading, authReady, orgError } = useAuth();
+  const { user, orgId, loading, authReady, membershipReady, orgError } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
@@ -56,11 +56,11 @@ function AppLayout() {
 
   useEffect(() => {
     async function loadData() {
-      if (!authReady || !orgId) {
-        console.log('[App] Skipping data fetch - authReady:', authReady, 'orgId:', orgId);
+      if (!authReady || !membershipReady || !orgId) {
+        console.log('[App] Skipping data fetch - authReady:', authReady, 'membershipReady:', membershipReady, 'orgId:', orgId);
         return;
       }
-      console.log('[App] Auth ready, fetching data for org:', orgId);
+      console.log('[App] Auth and membership ready, fetching data for org:', orgId);
       try {
         const [leads, activities, clients] = await Promise.all([
           fetchLeads(orgId, true),
@@ -75,10 +75,10 @@ function AppLayout() {
         console.error('[App] Error loading data from Firestore:', error);
       }
     }
-    if (authReady && user && orgId) {
+    if (authReady && membershipReady && user && orgId) {
       loadData();
     }
-  }, [dispatch, user, orgId, authReady]);
+  }, [dispatch, user, orgId, authReady, membershipReady]);
 
   if (loading || !authReady) {
     return (
@@ -98,6 +98,17 @@ function AppLayout() {
         <div className="text-center space-y-4">
           <p className="text-lg text-destructive">{orgError || 'Organisation not initialised.'}</p>
           <p className="text-sm text-muted-foreground">Please try signing out and signing in again.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!membershipReady) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Verifying access...</p>
         </div>
       </div>
     );

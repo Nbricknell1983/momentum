@@ -27,7 +27,7 @@ export default function PipelinePage() {
   const areaFilter = useSelector((state: RootState) => state.app.areaFilter);
   const user = useSelector((state: RootState) => state.app.user);
   const { toast } = useToast();
-  const { user: authUser, orgId, authReady } = useAuth();
+  const { user: authUser, orgId, authReady, membershipReady } = useAuth();
   
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);

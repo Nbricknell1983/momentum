@@ -27,6 +27,7 @@ interface AuthContextType {
   orgId: string | null;
   loading: boolean;
   authReady: boolean;
+  membershipReady: boolean;
   orgError: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
+  const [membershipReady, setMembershipReady] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[Auth] onAuthStateChanged fired, user:', firebaseUser?.uid || 'null');
       
       setAuthReady(false);
+      setMembershipReady(false);
       setOrgError(null);
       
       if (firebaseUser) {
@@ -62,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(authUser);
         
         try {
-          console.log('[Auth] Resolving org via /users/' + firebaseUser.uid);
+          console.log('[Auth] Stage 1: Resolving org via /users/' + firebaseUser.uid);
           const resolvedOrgId = await resolveOrCreateUserProfile(firebaseUser);
           
           if (resolvedOrgId) {
@@ -70,6 +73,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setOrgId(resolvedOrgId);
             setAuthReady(true);
             console.log('[Auth] authReady = true');
+            
+            console.log('[Auth] Stage 2: Verifying membership at /orgs/' + resolvedOrgId + '/members/' + firebaseUser.uid);
+            const membershipVerified = await verifyMembership(resolvedOrgId, firebaseUser.uid);
+            
+            if (membershipVerified) {
+              console.log('[Auth] Membership verified, membershipReady = true');
+              setMembershipReady(true);
+            } else {
+              console.error('[Auth] Membership verification failed - user is not an active member');
+              setOrgError('Access denied. You are not an active member of this organisation.');
+            }
           } else {
             console.error('[Auth] Failed to resolve orgId');
             setOrgId(null);
@@ -77,8 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAuthReady(true);
           }
         } catch (error: any) {
-          console.error('[Auth] Error resolving org:', error);
-          logFirestoreError('resolveOrCreateUserProfile', `/users/${firebaseUser.uid}`, firebaseUser.uid, null, error);
+          console.error('[Auth] Error during auth flow:', error);
+          logFirestoreError('authFlow', `/users/${firebaseUser.uid}`, firebaseUser.uid, null, error);
           setOrgId(null);
           setOrgError('Failed to initialise organisation. Please try again.');
           setAuthReady(true);
@@ -87,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[Auth] No user, clearing state');
         setUser(null);
         setOrgId(null);
+        setMembershipReady(false);
         setAuthReady(true);
       }
       setLoading(false);
@@ -105,6 +120,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       errorMessage: error?.message,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  async function verifyMembership(orgId: string, uid: string): Promise<boolean> {
+    try {
+      const memberDocRef = doc(db, 'orgs', orgId, 'members', uid);
+      const memberSnap = await getDoc(memberDocRef);
+      
+      if (memberSnap.exists()) {
+        const memberData = memberSnap.data();
+        console.log('[Auth] Member doc found:', memberData);
+        return memberData.active === true;
+      }
+      
+      console.log('[Auth] Member doc not found');
+      return false;
+    } catch (error: any) {
+      console.error('[Auth] Error verifying membership:', error);
+      return false;
+    }
   }
 
   async function resolveOrCreateUserProfile(firebaseUser: User): Promise<string | null> {
@@ -224,6 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       orgId,
       loading,
       authReady,
+      membershipReady,
       orgError,
       signInWithGoogle,
       signInWithEmail,

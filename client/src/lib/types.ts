@@ -171,8 +171,9 @@ export interface Task {
   dueAt: Date;
   status: TaskStatus;
   createdAt: Date;
-  // Daily Plan integration (DD-MM-YYYY format)
-  planDate?: string;
+  // Daily Plan integration (DD-MM-YYYY format for UI, YYYY-MM-DD for internal sorting)
+  planDate?: string;         // DD-MM-YYYY (user-facing)
+  planDateKey?: string;      // YYYY-MM-DD (internal sorting key)
   planBlockId?: string | null;
   taskType?: 'call' | 'door_knock' | 'meeting' | 'follow_up' | 'check_in' | 'renewal' | 'upsell' | 'other';
   outcome?: 'no_answer' | 'conversation' | 'meeting_booked' | 'completed' | null;
@@ -611,6 +612,18 @@ export function isValidDDMMYYYY(dateStr: string): boolean {
 
 export function getTodayDDMMYYYY(): string {
   return formatDateDDMMYYYY(new Date());
+}
+
+// Convert DD-MM-YYYY to YYYY-MM-DD for internal sorting (planDateKey)
+export function toPlanDateKey(ddmmyyyy: string): string {
+  const [day, month, year] = ddmmyyyy.split('-');
+  return `${year}-${month}-${day}`;
+}
+
+// Convert YYYY-MM-DD back to DD-MM-YYYY if needed
+export function fromPlanDateKey(yyyymmdd: string): string {
+  const [year, month, day] = yyyymmdd.split('-');
+  return `${day}-${month}-${year}`;
 }
 
 // ============================================

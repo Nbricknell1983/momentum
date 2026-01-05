@@ -1,0 +1,283 @@
+BASE44 BUILD INSTRUCTION — FIRESTORE AUTH GATING + REQUIRED INDEXES + AI DAILY PLAN (DD-MM-YYYY)
+0) NON-NEGOTIABLES
+
+Firestore is the single source of truth for: Tasks, Daily Plan, Calendar, AI Briefs/Debriefs, Action Recommendations, Client activity/health.
+
+User-facing dates must be DD-MM-YYYY everywhere in UI and stored planDate fields.
+
+Firestore queries must not run until membership is verified. No noisy “authReady false / membership not verified” errors are allowed after this change.
+
+1) FIX AUTH + MEMBERSHIP VERIFICATION GATING (CRITICAL)
+Problem
+
+Queries are being started before membership verification completes, causing:
+
+“BLOCKED: READ - authReady is false”
+
+“Auth not ready - membership not verified”
+
+Requirement
+
+Implement a strict 2-stage readiness gate:
+
+authReady: Firebase Auth state is known (user is signed in)
+
+membershipReady: membership doc exists and active == true
+
+Membership source of truth
+
+Membership is defined by this document existing and being active:
+
+/orgs/{orgId}/members/{uid} with field active == true
+
+New rule
+
+Do not mount/subscribe/query any org collections until:
+
+authReady === true
+
+orgId is resolved
+
+membershipReady === true
+
+If membership is not ready:
+
+show a blocking UI state (“Verifying access…”) and do not start any Firestore subscriptions.
+
+Implementation behavior
+
+onAuthStateChanged fires
+
+load /users/{uid} to resolve orgId
+
+read /orgs/{orgId}/members/{uid}
+
+if exists AND active=true → set membershipReady = true
+
+only then start:
+
+leads, clients, activities
+
+tasks, dailyPlans
+
+aiBriefs, aiDebriefs
+
+actionRecommendations
+
+2) FIRESTORE COLLECTIONS REQUIRED (UNDER orgs/{orgId})
+
+Ensure these subcollections exist and are used (no parallel collections):
+
+leads
+
+clients
+
+activities
+
+tasks
+
+dailyPlans
+
+aiBriefs
+
+aiDebriefs
+
+actionRecommendations
+
+members
+
+All reads/writes must use these paths:
+
+orgs/{orgId}/{collectionName}
+
+3) REQUIRED COMPOSITE INDEXES (FIX “QUERY REQUIRES AN INDEX”)
+
+Base44 must ensure Firestore composite indexes exist for the exact queries the app is running.
+
+3.1 tasks composite index
+
+For Daily Plan and ordered chips, the app queries tasks by:
+
+planDate
+
+userId
+and orders by:
+
+sortOrder
+(plus name)
+
+Create this composite index:
+
+Collection Group: tasks
+Fields:
+
+planDate Asc
+
+userId Asc
+
+sortOrder Asc
+
+__name__ Asc
+
+3.2 actionRecommendations composite index
+
+For AI action queue recommendations, the app queries by:
+
+planDate
+
+userId
+and orders by:
+
+priorityScore (descending)
+(plus name)
+
+Create this composite index:
+
+Collection Group: actionRecommendations
+Fields:
+
+planDate Asc
+
+userId Asc
+
+priorityScore Desc
+
+__name__ Desc (or Asc if Base44 requires; match Firestore’s generated index)
+
+IMPORTANT
+
+If Base44 cannot automatically create indexes, Base44 must:
+
+Output a clear checklist of the required indexes above
+
+Provide the exact Firebase Console navigation for creating them
+
+Confirm which queries require which indexes
+
+4) DATE FORMAT REQUIREMENT (DD-MM-YYYY)
+User-facing date format
+
+All displayed and stored plan date strings must use:
+
+DD-MM-YYYY (example: 05-01-2026)
+
+This includes:
+
+Daily Plan selected day
+
+Task planDate
+
+Daily Plan document IDs (if used)
+
+AI Brief/Debrief doc IDs (if used)
+
+Internal sorting (important)
+
+Because DD-MM-YYYY is not lexicographically sortable across months/years, the system must also store:
+
+planDateKey = YYYY-MM-DD (internal only, not shown in UI)
+
+This field is purely for correct week/month sorting and range queries.
+
+Non-negotiable:
+
+UI shows DD-MM-YYYY only
+
+Firestore can store both planDate (DD-MM-YYYY) and planDateKey (YYYY-MM-DD internal)
+
+5) DAILY PLAN MUST BE AI-AGENT MANAGED (CRITICAL)
+
+Daily Plan must be fully generated and managed by an AI Agent that reads/writes Firestore.
+
+“Generate Plan” button behavior
+
+When clicked for a selected date (DD-MM-YYYY):
+
+AI Agent must:
+
+Load overdue open tasks first (highest priority)
+
+Load today tasks (planDate = selected date)
+
+Identify clients needing contact:
+
+no next contact scheduled
+
+next contact due today
+
+at-risk health
+
+Create missing tasks where required (follow-ups)
+
+Assign tasks into Daily Plan blocks by writing:
+
+task.planDate (DD-MM-YYYY)
+
+task.planDateKey (YYYY-MM-DD internal)
+
+task.planBlockId
+
+task.sortOrder
+
+Daily Plan UI rendering
+
+Daily Plan must render only from Firestore:
+
+Blocks from dailyPlans/{planId}.blocks
+
+Chips from tasks filtered by:
+
+userId
+
+planDate
+
+status=open
+and grouped by planBlockId
+
+No local-only schedule state.
+
+6) CALENDAR INTEGRATION (TASKS ONLY)
+
+Calendar must read/write Firestore tasks only.
+
+Create calendar event → create task
+
+Drag/reschedule event → update task dueAt + planDate + planDateKey
+
+Delete event → cancel task (status=cancelled) or delete (if allowed)
+
+No separate “calendarEvents” collection.
+
+7) CLIENT CARD ACTIVITY + HEALTH (DERIVED FROM TASKS/ACTIVITIES)
+
+Client must show:
+
+Last Contact: most recent completed contact task/activity
+
+Next Contact: nearest future open contact task
+
+Health + reasons computed from:
+
+overdue contact tasks
+
+missing next contact
+
+no contact ever
+
+existing product rules
+
+Write derived fields back onto client doc for fast UI.
+
+8) ACCEPTANCE TESTS (MUST PASS)
+
+After these changes:
+
+No more “Auth not ready - membership not verified” errors after initial auth completes.
+
+Tasks, Daily Plan, AI Briefs, AI Debriefs, Action Recommendations load without “Missing permissions”.
+
+No “Query requires an index” errors (indexes created as specified).
+
+Creating/rescheduling tasks updates Daily Plan and Calendar.
+
+All plan/grouping dates are DD-MM-YYYY in UI and stored planDate fields.
