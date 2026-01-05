@@ -1,0 +1,257 @@
+BUILD INSTRUCTIONS — FIRESTORE ORG MEMBERSHIP, INDEXES & PIPELINE STABILITY (BASE44)
+PURPOSE (NON-NEGOTIABLE)
+
+Stabilise authentication, permissions, and data access across Pipeline, Tasks, Daily Plan, Activities, and AI modules by enforcing a strict Org → Members → Data access model in Firestore.
+
+This instruction resolves:
+
+“Auth not ready – membership not verified”
+
+“Missing or insufficient permissions”
+
+Firestore query index failures
+
+Inconsistent data loading across Pipeline, Daily Plan, Tasks, and AI
+
+CORE PRINCIPLES (DO NOT BREAK)
+
+Every user must be a verified org member before any org data is accessed
+
+All org data lives under /orgs/{orgId}
+
+Firestore indexes must exist for every compound query
+
+UI must wait for membershipReady before querying org data
+
+No fallback reads, no silent failures
+
+REQUIRED DATA STRUCTURE (AUTHORITATIVE)
+1) User Profile (Global)
+
+Path:
+
+/users/{uid}
+
+
+Required fields:
+
+orgId (string)
+
+role (string: owner | admin | rep)
+
+displayName (string)
+
+email (string)
+
+createdAt (timestamp)
+
+2) Org Document
+
+Path:
+
+/orgs/{orgId}
+
+
+Required fields:
+
+name (string)
+
+createdBy (uid)
+
+createdAt (timestamp)
+
+3) Org Membership (CRITICAL)
+
+Path:
+
+/orgs/{orgId}/members/{uid}
+
+
+This document must exist or all org reads are blocked.
+
+Required fields:
+
+uid (string)
+
+email (string)
+
+role (string: owner | admin | rep)
+
+active (boolean = true)
+
+joinedAt (timestamp)
+
+Auth flow must:
+
+Read /users/{uid}
+
+Resolve orgId
+
+Verify /orgs/{orgId}/members/{uid} exists AND active == true
+
+Only then set membershipReady = true
+
+Only then fetch org data
+
+FIRESTORE SECURITY RULE REQUIREMENTS
+
+All org data access must be gated by:
+
+exists(/orgs/{orgId}/members/{uid}) && active == true
+
+
+No org-level reads or writes are allowed without verified membership.
+
+REQUIRED FIRESTORE INDEXES (MANDATORY)
+
+Create the following composite indexes in Firebase Console → Firestore → Indexes.
+
+1) activities (collection group)
+
+Used for: activity feeds, lead timelines
+
+Fields:
+
+leadId ASC
+
+createdAt DESC
+
+__name__ DESC
+
+2) tasks (collection group)
+
+Used for: Daily Plan, Tasks page, Calendar, AI planning
+
+Fields:
+
+planDate ASC
+
+userId ASC
+
+sortOrder ASC
+
+__name__ ASC
+
+3) actionRecommendations (collection group)
+
+Used for: AI Agent suggestions
+
+Fields:
+
+planDate ASC
+
+userId ASC
+
+priorityScore DESC
+
+__name__ DESC
+
+4) activities (alternate query path)
+
+Used for: activities by lead ordered by time
+
+Fields:
+
+leadId ASC
+
+createdAt ASC
+
+__name__ ASC
+
+PIPELINE (LEADS) STORAGE RULES
+
+All leads must be stored at:
+
+/orgs/{orgId}/leads/{leadId}
+
+
+Required fields for Pipeline UI:
+
+name
+
+stage (Suspect | Contacted | Engaged | Qualified | Discovery | Proposal | Won | Lost)
+
+region
+
+area
+
+createdAt
+
+updatedAt
+
+Pipeline UI must:
+
+Read directly from /orgs/{orgId}/leads
+
+Never read from a global leads collection
+
+Never duplicate lead state locally
+
+DAILY PLAN + TASKS + AI (STRICT RULE)
+
+Everything is a task
+
+Calendar events = tasks
+
+Daily Plan actions = tasks
+
+Follow-ups = tasks
+
+AI recommendations = tasks or task suggestions
+
+Canonical path:
+
+/orgs/{orgId}/tasks/{taskId}
+
+
+Daily Plan documents may reference tasks but must not duplicate task data.
+
+UI GATING (NON-NEGOTIABLE)
+
+The app must follow this exact order:
+
+Firebase auth resolves user
+
+Load /users/{uid}
+
+Resolve orgId
+
+Verify /orgs/{orgId}/members/{uid} with active == true
+
+Set membershipReady = true
+
+Only then:
+
+Fetch leads
+
+Fetch tasks
+
+Fetch activities
+
+Fetch Daily Plan
+
+Run AI Agent
+
+If membership is not verified:
+
+Block all org reads
+
+Show loading or access error
+
+Do NOT attempt fallback queries
+
+SUCCESS CRITERIA
+
+This instruction is complete when:
+
+Pipeline loads consistently with correct stages
+
+Leads are created and visible under /orgs/{orgId}/leads
+
+Tasks, Daily Plan, and Calendar load without permission errors
+
+AI Agent can read tasks and generate recommendations
+
+No Firestore “permission denied” errors
+
+No Firestore “index required” errors in console

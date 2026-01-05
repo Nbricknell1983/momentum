@@ -121,11 +121,31 @@ All data is stored under organization scope: `orgs/{orgId}/`
 - `aiDebriefs` - AI-generated end-of-day reviews
 - `actionRecommendations` - AI action queue recommendations
 
-### Required Firestore Composite Indexes
+### Required Firestore Composite Indexes (MANDATORY)
 
-**tasks collection index** (for Daily Plan ordered task display):
+Create these in Firebase Console → Firestore Database → Indexes:
+
+**1. activities (activity feeds, lead timelines):**
 ```
-Collection: orgs/{orgId}/tasks
+Collection ID: activities (collection group scope)
+Fields:
+- leadId (Ascending)
+- createdAt (Descending)
+- __name__ (Descending)
+```
+
+**2. activities (alternate - activities by lead ordered by time):**
+```
+Collection ID: activities (collection group scope)
+Fields:
+- leadId (Ascending)
+- createdAt (Ascending)
+- __name__ (Ascending)
+```
+
+**3. tasks (Daily Plan, Tasks page, Calendar, AI planning):**
+```
+Collection ID: tasks (collection group scope)
 Fields:
 - planDate (Ascending)
 - userId (Ascending)
@@ -133,9 +153,9 @@ Fields:
 - __name__ (Ascending)
 ```
 
-**actionRecommendations collection index** (for AI action queue):
+**4. actionRecommendations (AI Agent suggestions):**
 ```
-Collection: orgs/{orgId}/actionRecommendations
+Collection ID: actionRecommendations (collection group scope)
 Fields:
 - planDate (Ascending)
 - userId (Ascending)
@@ -143,10 +163,12 @@ Fields:
 - __name__ (Descending)
 ```
 
-To create these indexes:
+**Index Creation Steps:**
 1. Go to Firebase Console → Firestore Database → Indexes
-2. Click "Add Index" and configure each field as specified above
-3. Wait for index to build (may take a few minutes)
+2. Click "Add Index" for each index above
+3. Set Collection Group scope if queries span multiple orgs
+4. Wait for each index to build (may take a few minutes)
+5. Verify no "index required" errors in browser console
 
 ### Date Format Convention (NON-NEGOTIABLE)
 - **User-facing dates**: DD-MM-YYYY format (e.g., "05-01-2026")
