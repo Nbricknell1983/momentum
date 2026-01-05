@@ -31,6 +31,53 @@ export type TaskType =
 // Time slots for task scheduling (simple version)
 export type TaskTimeSlot = 'morning' | 'afternoon' | 'evening';
 
+// Daily Time Block state for focus management (distinct from legacy TimeBlock)
+export type DailyTimeBlockStatus = 'not_started' | 'active' | 'paused' | 'completed';
+
+export interface DailyTimeBlock {
+  slot: TaskTimeSlot;
+  status: DailyTimeBlockStatus;
+  startedAt?: Date;
+  pausedAt?: Date;
+  completedAt?: Date;
+  totalActiveMinutes: number;  // Accumulated active time
+  focusScore?: number;         // 1-100 score based on completion rate
+}
+
+export const DAILY_TIME_BLOCK_LABELS: Record<TaskTimeSlot, string> = {
+  morning: 'Morning Block',
+  afternoon: 'Afternoon Block',
+  evening: 'Evening Block',
+};
+
+export const DAILY_TIME_BLOCK_RANGES: Record<TaskTimeSlot, string> = {
+  morning: '8:00 AM - 12:00 PM',
+  afternoon: '12:00 PM - 5:00 PM',
+  evening: '5:00 PM - 8:00 PM',
+};
+
+// Create default daily time blocks for a day
+export function createDefaultDailyTimeBlocks(): Record<TaskTimeSlot, DailyTimeBlock> {
+  return {
+    morning: { slot: 'morning', status: 'not_started', totalActiveMinutes: 0 },
+    afternoon: { slot: 'afternoon', status: 'not_started', totalActiveMinutes: 0 },
+    evening: { slot: 'evening', status: 'not_started', totalActiveMinutes: 0 },
+  };
+}
+
+// Calculate focus score based on task completion within a time block
+export function calculateBlockFocusScore(
+  completedTasks: number,
+  totalTasks: number,
+  activeMinutes: number,
+  expectedMinutes: number = 120
+): number {
+  if (totalTasks === 0) return 100;
+  const completionRate = completedTasks / totalTasks;
+  const timeEfficiency = Math.min(1, activeMinutes / expectedMinutes);
+  return Math.round((completionRate * 0.7 + timeEfficiency * 0.3) * 100);
+}
+
 // Revenue lane classification
 export type RevenueLane = 'client' | 'new_business';
 

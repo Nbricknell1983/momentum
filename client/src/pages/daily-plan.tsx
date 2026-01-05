@@ -4,7 +4,7 @@ import {
   Target, Clock, CheckCircle2, Sparkles, Play, Lock, MapPin, 
   Phone, Building2, MessageSquare, Calendar, Users, RefreshCw,
   ChevronRight, ChevronLeft, X, AlertTriangle, Zap, Trophy, Plus,
-  Navigation, Trash2, GripVertical, Handshake, Brain, Loader2
+  Navigation, Trash2, GripVertical, Handshake, Brain, Loader2, Focus
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,8 +33,10 @@ import {
   formatDateDDMMYYYY, parseDateDDMMYYYY, getTodayDDMMYYYY, toPlanDateKey,
   PLAN_BLOCK_CATEGORY_LABELS, DEFAULT_PLAN_TIME_BLOCKS, Lead, Client,
   Task, getTrafficLightStatus, Activity, getRevenueLane, TaskType,
-  calculateReplacementRate, generateClientTaskRecommendations, ClientTaskRecommendation
+  calculateReplacementRate, generateClientTaskRecommendations, ClientTaskRecommendation,
+  DailyTimeBlock, TaskTimeSlot, createDefaultDailyTimeBlocks, getCurrentTimeSlot, calculateBlockFocusScore
 } from '@/lib/types';
+import TimeBlockCard from '@/components/TimeBlockCard';
 
 interface DateSelectorProps {
   selectedDate: string;
@@ -390,12 +392,12 @@ function AIBriefSection({ brief, isGenerating, onGenerate }: AIBriefSectionProps
   );
 }
 
-interface TimeBlockCardProps {
+interface PlanTimeBlockCardProps {
   block: PlanTimeBlock;
   tasks: Task[];
 }
 
-function TimeBlockCard({ block, tasks }: TimeBlockCardProps) {
+function PlanTimeBlockCard({ block, tasks }: PlanTimeBlockCardProps) {
   const completedTasks = tasks.filter(t => t.status === 'completed').length;
   const progress = block.capacity > 0 ? Math.round((completedTasks / block.capacity) * 100) : 0;
   
@@ -463,6 +465,12 @@ export default function DailyPlanPage() {
   const [isGeneratingDebrief, setIsGeneratingDebrief] = useState(false);
   const [isRollingForward, setIsRollingForward] = useState(false);
   const [isDebriefOpen, setIsDebriefOpen] = useState(false);
+  
+  // Daily time blocks state with focus controls
+  const [dailyTimeBlocks, setDailyTimeBlocks] = useState<Record<TaskTimeSlot, DailyTimeBlock>>(
+    createDefaultDailyTimeBlocks()
+  );
+  const currentSlot = getCurrentTimeSlot();
   
   const { data: dailyPlan, isLoading: planLoading } = useQuery({
     queryKey: ['/daily-plan', orgId, userId, selectedDate],
@@ -719,6 +727,71 @@ export default function DailyPlanPage() {
     }
   };
   
+  // Time block control handlers
+  const handleStartBlock = (slot: TaskTimeSlot) => {
+    setDailyTimeBlocks(prev => ({
+      ...prev,
+      [slot]: {
+        ...prev[slot],
+        status: 'active',
+        startedAt: prev[slot].startedAt || new Date(),
+      }
+    }));
+  };
+  
+  const handlePauseBlock = (slot: TaskTimeSlot) => {
+    setDailyTimeBlocks(prev => {
+      const block = prev[slot];
+      const now = new Date();
+      const additionalMinutes = block.startedAt 
+        ? Math.round((now.getTime() - new Date(block.startedAt).getTime()) / 60000) 
+        : 0;
+      return {
+        ...prev,
+        [slot]: {
+          ...block,
+          status: 'paused',
+          pausedAt: now,
+          totalActiveMinutes: block.totalActiveMinutes + additionalMinutes,
+        }
+      };
+    });
+  };
+  
+  const handleEndBlock = (slot: TaskTimeSlot) => {
+    const tasksInBlock = planTasks.filter(t => t.timeSlot === slot);
+    const completed = tasksInBlock.filter(t => t.status === 'completed').length;
+    
+    setDailyTimeBlocks(prev => {
+      const block = prev[slot];
+      const now = new Date();
+      let additionalMinutes = 0;
+      if (block.status === 'active' && block.startedAt) {
+        additionalMinutes = Math.round((now.getTime() - new Date(block.startedAt).getTime()) / 60000);
+      }
+      const totalMinutes = block.totalActiveMinutes + additionalMinutes;
+      const focusScore = calculateBlockFocusScore(completed, tasksInBlock.length, totalMinutes);
+      
+      return {
+        ...prev,
+        [slot]: {
+          ...block,
+          status: 'completed',
+          completedAt: now,
+          totalActiveMinutes: totalMinutes,
+          focusScore,
+        }
+      };
+    });
+    
+    toast({ title: `${slot.charAt(0).toUpperCase() + slot.slice(1)} block completed!` });
+  };
+  
+  // Get tasks for each daily time block
+  const getTasksForSlot = (slot: TaskTimeSlot) => {
+    return planTasks.filter(t => t.timeSlot === slot);
+  };
+  
   if (!authReady || !orgId) {
     return (
       <div className="p-6 flex items-center justify-center h-full">
@@ -794,6 +867,37 @@ export default function DailyPlanPage() {
         clientRecommendations={clientRecommendations}
       />
       
+      {/* Focus Blocks - Time block controls with Start/Pause/End */}
+      {isToday && (
+        <Card className="p-4" data-testid="card-focus-blocks">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Focus className="h-5 w-5" />
+              Focus Blocks
+            </h2>
+            {currentSlot && (
+              <Badge variant="default">
+                Current: {currentSlot.charAt(0).toUpperCase() + currentSlot.slice(1)}
+              </Badge>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {Object.values(dailyTimeBlocks).map(block => (
+              <TimeBlockCard
+                key={block.slot}
+                block={block}
+                tasks={getTasksForSlot(block.slot)}
+                isCurrentSlot={currentSlot === block.slot}
+                onStart={() => handleStartBlock(block.slot)}
+                onPause={() => handlePauseBlock(block.slot)}
+                onEnd={() => handleEndBlock(block.slot)}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <Card className="p-4" data-testid="card-schedule">
@@ -809,7 +913,7 @@ export default function DailyPlanPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {timeBlocks.map(block => (
-                <TimeBlockCard
+                <PlanTimeBlockCard
                   key={block.id}
                   block={block}
                   tasks={tasksByBlock[block.id] || []}
