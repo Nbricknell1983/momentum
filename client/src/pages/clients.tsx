@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
 import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
@@ -4165,6 +4165,62 @@ export default function ClientsPage() {
                 </div>
               )}
 
+              {selectedTask.suggestedFollowUp && (
+                <div className="space-y-2 p-4 bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-md">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                      <AlertCircle className="h-4 w-4" />
+                      Action Required: Follow-up
+                    </Label>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="border-amber-500/50 text-amber-700 dark:text-amber-400"
+                      onClick={async () => {
+                        if (!orgId || !selectedTaskClientId) return;
+                        const currentUserId = authUser?.uid || user?.id;
+                        if (!currentUserId) return;
+                        
+                        const followUpDate = new Date();
+                        followUpDate.setDate(followUpDate.getDate() + 3);
+                        const dueDate = formatDateDDMMYYYY(followUpDate);
+                        
+                        // Find the client name
+                        const client = clients.find(c => c.id === selectedTaskClientId);
+                        const clientName = client?.businessName || 'Client';
+                        
+                        try {
+                          const saved = await createClientTask(orgId, {
+                            userId: currentUserId,
+                            clientId: selectedTaskClientId,
+                            clientName,
+                            title: `Follow up: ${selectedTask.title}`,
+                            taskType: 'follow_up',
+                            dueDate,
+                            notes: `Follow-up for task: ${selectedTask.title}\n\nOriginal suggestion: ${selectedTask.suggestedFollowUp}`,
+                            priority: 'high',
+                          }, authReady);
+                          
+                          setClientTasks(prev => ({
+                            ...prev,
+                            [selectedTaskClientId]: [saved, ...(prev[selectedTaskClientId] || [])],
+                          }));
+                          toast({ title: 'Follow-up scheduled', description: `Task created for ${dueDate}` });
+                        } catch (error) {
+                          console.error('Error creating follow-up:', error);
+                          toast({ title: 'Error', description: 'Failed to create follow-up task.', variant: 'destructive' });
+                        }
+                      }}
+                      data-testid="button-schedule-followup"
+                    >
+                      <CalendarPlus className="h-4 w-4 mr-1" />
+                      Schedule in 3 days
+                    </Button>
+                  </div>
+                  <p className="text-sm">{selectedTask.suggestedFollowUp}</p>
+                </div>
+              )}
+
               {selectedTask.checklist && selectedTask.checklist.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -4185,16 +4241,6 @@ export default function ClientsPage() {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {selectedTask.suggestedFollowUp && (
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Follow-up if no response
-                  </Label>
-                  <p className="text-sm p-3 bg-muted/50 rounded-md">{selectedTask.suggestedFollowUp}</p>
                 </div>
               )}
 
