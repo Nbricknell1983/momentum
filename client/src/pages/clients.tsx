@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -338,6 +338,10 @@ export default function ClientsPage() {
   const [aiFollowUp, setAiFollowUp] = useState('');
   const [aiEmailTemplate, setAiEmailTemplate] = useState('');
   const [aiCallScript, setAiCallScript] = useState('');
+  
+  // Task detail view state
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isTaskDetailDialogOpen, setIsTaskDetailDialogOpen] = useState(false);
 
   const searchString = useSearch();
 
@@ -3549,16 +3553,26 @@ export default function ClientsPage() {
                                       .map(task => (
                                         <div
                                           key={task.id}
-                                          className="flex items-center gap-3 p-3 border rounded-md"
+                                          className="flex items-center gap-3 p-3 border rounded-md cursor-pointer hover-elevate"
+                                          onClick={() => {
+                                            setSelectedTask(task);
+                                            setIsTaskDetailDialogOpen(true);
+                                          }}
                                           data-testid={`task-${task.id}`}
                                         >
                                           <Checkbox
                                             checked={task.status === 'completed'}
                                             onCheckedChange={() => handleCompleteClientTask(client.id, task.id)}
+                                            onClick={(e) => e.stopPropagation()}
                                             data-testid={`checkbox-task-${task.id}`}
                                           />
                                           <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">{task.title}</p>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-sm font-medium truncate">{task.title}</p>
+                                              {task.aiEnhanced && (
+                                                <Sparkles className="h-3 w-3 text-primary flex-shrink-0" />
+                                              )}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">
                                               Due: {task.planDate || 'Not set'}
                                             </p>
@@ -4080,6 +4094,127 @@ export default function ClientsPage() {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Task Detail Dialog */}
+      <Dialog open={isTaskDetailDialogOpen} onOpenChange={(open) => { if (!open) { setIsTaskDetailDialogOpen(false); setSelectedTask(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedTask?.aiEnhanced && <Sparkles className="h-5 w-5 text-primary" />}
+              Task Details
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedTask && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">{selectedTask.title}</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{selectedTask.taskType || 'task'}</Badge>
+                  {selectedTask.priority && (
+                    <Badge variant={selectedTask.priority === 'urgent' ? 'destructive' : selectedTask.priority === 'high' ? 'default' : 'secondary'}>
+                      {selectedTask.priority}
+                    </Badge>
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    Due: {selectedTask.planDate || 'Not set'}
+                  </span>
+                </div>
+              </div>
+
+              {selectedTask.outcomeStatement && (
+                <div className="space-y-2 p-3 bg-muted/50 rounded-md">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Target className="h-3 w-3" />
+                    Outcome (what done looks like)
+                  </Label>
+                  <p className="text-sm">{selectedTask.outcomeStatement}</p>
+                </div>
+              )}
+
+              {selectedTask.checklist && selectedTask.checklist.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CheckSquare className="h-3 w-3" />
+                    Checklist
+                  </Label>
+                  <div className="space-y-2 p-3 border rounded-md">
+                    {selectedTask.checklist.map((item, idx) => (
+                      <div key={item.id || idx} className="flex items-center gap-3">
+                        <Checkbox checked={item.completed} disabled />
+                        <span className={item.completed ? 'line-through text-muted-foreground' : ''}>
+                          {item.text}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedTask.suggestedFollowUp && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Follow-up if no response
+                  </Label>
+                  <p className="text-sm p-3 bg-muted/50 rounded-md">{selectedTask.suggestedFollowUp}</p>
+                </div>
+              )}
+
+              {selectedTask.emailTemplate && (
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full justify-between gap-2">
+                      <span className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        Email Template
+                      </span>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="p-3 bg-muted/30 rounded-md mt-2">
+                      <pre className="text-sm whitespace-pre-wrap font-sans">{selectedTask.emailTemplate}</pre>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {selectedTask.callScript && (
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full justify-between gap-2">
+                      <span className="flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        Call Script
+                      </span>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="p-3 bg-muted/30 rounded-md mt-2">
+                      <pre className="text-sm whitespace-pre-wrap font-sans">{selectedTask.callScript}</pre>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {selectedTask.notes && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Notes</Label>
+                  <p className="text-sm p-3 bg-muted/50 rounded-md">{selectedTask.notes}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => { setIsTaskDetailDialogOpen(false); setSelectedTask(null); }}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
