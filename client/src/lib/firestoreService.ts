@@ -411,6 +411,14 @@ export async function createClientTask(
     taskType: Task['taskType'];
     dueDate: string; // DD-MM-YYYY format
     notes?: string;
+    // AI-enhanced fields
+    aiEnhanced?: boolean;
+    outcomeStatement?: string;
+    checklist?: Task['checklist'];
+    priority?: Task['priority'];
+    suggestedFollowUp?: string;
+    emailTemplate?: string;
+    callScript?: string;
   },
   authReady: boolean = false
 ): Promise<Task> {
@@ -428,6 +436,16 @@ export async function createClientTask(
     planDateKey: planDateKey,
     taskType: taskData.taskType || 'check_in',
     revenueLane: 'client',
+    // AI-enhanced fields
+    ...(taskData.aiEnhanced && {
+      aiEnhanced: true,
+      outcomeStatement: taskData.outcomeStatement,
+      checklist: taskData.checklist,
+      priority: taskData.priority,
+      suggestedFollowUp: taskData.suggestedFollowUp,
+      emailTemplate: taskData.emailTemplate,
+      callScript: taskData.callScript,
+    }),
   }, authReady);
   
   // Also create an activity record to track task creation

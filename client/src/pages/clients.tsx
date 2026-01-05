@@ -17,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, TaskType, ActivityType } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
 import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
@@ -329,6 +329,15 @@ export default function ClientsPage() {
   const [newTaskType, setNewTaskType] = useState<TaskType>('check_in');
   const [newTaskDueDate, setNewTaskDueDate] = useState(getTodayDDMMYYYY());
   const [savingClientTask, setSavingClientTask] = useState(false);
+  // AI Task Assist state
+  const [aiAssisting, setAiAssisting] = useState(false);
+  const [aiResult, setAiResult] = useState<AITaskAssistResponse | null>(null);
+  const [aiChecklist, setAiChecklist] = useState<TaskChecklistItem[]>([]);
+  const [aiOutcome, setAiOutcome] = useState('');
+  const [aiPriority, setAiPriority] = useState<TaskPriority>('medium');
+  const [aiFollowUp, setAiFollowUp] = useState('');
+  const [aiEmailTemplate, setAiEmailTemplate] = useState('');
+  const [aiCallScript, setAiCallScript] = useState('');
 
   const searchString = useSearch();
 
@@ -519,6 +528,16 @@ export default function ClientsPage() {
         title: newTaskTitle.trim(),
         taskType: newTaskType,
         dueDate: newTaskDueDate,
+        // AI-enhanced fields
+        ...(aiResult && {
+          aiEnhanced: true,
+          outcomeStatement: aiOutcome,
+          checklist: aiChecklist,
+          priority: aiPriority,
+          suggestedFollowUp: aiFollowUp,
+          emailTemplate: aiEmailTemplate || undefined,
+          callScript: aiCallScript || undefined,
+        }),
       }, authReady);
       
       console.log('[Task] Task created successfully, refreshing list...');
@@ -534,6 +553,7 @@ export default function ClientsPage() {
       setNewTaskTitle('');
       setNewTaskType('check_in');
       setNewTaskDueDate(getTodayDDMMYYYY());
+      resetAiAssistState();
       setIsAddTaskDialogOpen(false);
       
       toast({ title: 'Task created', description: 'Task has been added to your plan.' });
@@ -544,6 +564,69 @@ export default function ClientsPage() {
     } finally {
       setSavingClientTask(false);
     }
+  };
+
+  // AI Task Assist handler
+  const handleAITaskAssist = async (client: Client) => {
+    if (!newTaskTitle.trim()) {
+      toast({ title: 'Enter task first', description: 'Type a rough task description, then click AI Assist.', variant: 'destructive' });
+      return;
+    }
+    
+    setAiAssisting(true);
+    try {
+      const response = await fetch('/api/ai/task-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roughTask: newTaskTitle,
+          clientName: client.businessName,
+          clientContext: client.businessProfile?.industry || '',
+          lastContactDate: client.lastContactDate ? client.lastContactDate.toLocaleDateString('en-AU') : 'Unknown',
+          pipelineStage: client.strategyStatus || 'active',
+          products: client.products?.map(p => p.productType) || [],
+          todayDate: getTodayDDMMYYYY(),
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to get AI assistance');
+      
+      const result: AITaskAssistResponse = await response.json();
+      setAiResult(result);
+      
+      // Populate form fields with AI suggestions
+      setNewTaskTitle(result.enhancedTitle);
+      setNewTaskDueDate(result.suggestedDueDate);
+      setNewTaskType(result.suggestedTaskType as TaskType);
+      setAiOutcome(result.outcomeStatement);
+      setAiPriority(result.priority);
+      setAiFollowUp(result.suggestedFollowUp);
+      setAiChecklist(result.checklist.map((text, idx) => ({
+        id: `check-${idx}`,
+        text,
+        completed: false,
+      })));
+      setAiEmailTemplate(result.emailTemplate || '');
+      setAiCallScript(result.callScript || '');
+      
+      toast({ title: 'AI Assist Complete', description: 'Task has been enhanced with actionable details.' });
+    } catch (error) {
+      console.error('AI Task Assist error:', error);
+      toast({ title: 'AI Assist Failed', description: 'Could not enhance task. Please try again.', variant: 'destructive' });
+    } finally {
+      setAiAssisting(false);
+    }
+  };
+
+  // Reset AI assist state when dialog closes
+  const resetAiAssistState = () => {
+    setAiResult(null);
+    setAiChecklist([]);
+    setAiOutcome('');
+    setAiPriority('medium');
+    setAiFollowUp('');
+    setAiEmailTemplate('');
+    setAiCallScript('');
   };
 
   // Handler to complete a client task
@@ -3276,9 +3359,10 @@ export default function ClientsPage() {
                                       setNewTaskTitle('');
                                       setNewTaskType('check_in');
                                       setNewTaskDueDate(getTodayDDMMYYYY());
+                                      resetAiAssistState();
                                     }
                                   }}>
-                                    <DialogContent>
+                                    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                                       <DialogHeader>
                                         <DialogTitle>Create Task for {client.businessName}</DialogTitle>
                                       </DialogHeader>
@@ -3286,43 +3370,158 @@ export default function ClientsPage() {
                                         <div className="space-y-2">
                                           <div className="flex items-center justify-between gap-2">
                                             <Label>Task Title</Label>
-                                            <DictationButton
-                                              onTranscript={(text) => setNewTaskTitle(prev => prev + (prev ? ' ' : '') + text)}
-                                              data-testid="button-dictate-task"
-                                            />
+                                            <div className="flex items-center gap-2">
+                                              <DictationButton
+                                                onTranscript={(text) => setNewTaskTitle(prev => prev + (prev ? ' ' : '') + text)}
+                                                data-testid="button-dictate-task"
+                                              />
+                                              <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() => handleAITaskAssist(client)}
+                                                disabled={aiAssisting || !newTaskTitle.trim()}
+                                                data-testid="button-ai-assist"
+                                              >
+                                                {aiAssisting ? (
+                                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                ) : (
+                                                  <Sparkles className="h-4 w-4 mr-1" />
+                                                )}
+                                                AI Assist
+                                              </Button>
+                                            </div>
                                           </div>
                                           <Input
                                             value={newTaskTitle}
                                             onChange={(e) => setNewTaskTitle(e.target.value)}
-                                            placeholder="e.g., Follow up on proposal... (or use mic to dictate)"
+                                            placeholder="e.g., Follow up on proposal... then click AI Assist"
                                             data-testid="input-new-task-title"
                                           />
                                         </div>
-                                        <div className="space-y-2">
-                                          <Label>Task Type</Label>
-                                          <Select value={newTaskType} onValueChange={(v) => setNewTaskType(v as TaskType)}>
-                                            <SelectTrigger data-testid="select-task-type">
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="check_in">Check-in</SelectItem>
-                                              <SelectItem value="follow_up">Follow-up</SelectItem>
-                                              <SelectItem value="meeting">Meeting</SelectItem>
-                                              <SelectItem value="delivery">Delivery</SelectItem>
-                                              <SelectItem value="renewal">Renewal</SelectItem>
-                                              <SelectItem value="upsell">Upsell</SelectItem>
-                                            </SelectContent>
-                                          </Select>
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                          <div className="space-y-2">
+                                            <Label>Task Type</Label>
+                                            <Select value={newTaskType} onValueChange={(v) => setNewTaskType(v as TaskType)}>
+                                              <SelectTrigger data-testid="select-task-type">
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="check_in">Check-in</SelectItem>
+                                                <SelectItem value="follow_up">Follow-up</SelectItem>
+                                                <SelectItem value="meeting">Meeting</SelectItem>
+                                                <SelectItem value="delivery">Delivery</SelectItem>
+                                                <SelectItem value="renewal">Renewal</SelectItem>
+                                                <SelectItem value="upsell">Upsell</SelectItem>
+                                                <SelectItem value="prospecting">Prospecting</SelectItem>
+                                                <SelectItem value="admin">Admin</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                          <div className="space-y-2">
+                                            <Label>Due Date (DD-MM-YYYY)</Label>
+                                            <Input
+                                              value={newTaskDueDate}
+                                              onChange={(e) => setNewTaskDueDate(e.target.value)}
+                                              placeholder="DD-MM-YYYY"
+                                              data-testid="input-task-due-date"
+                                            />
+                                          </div>
                                         </div>
-                                        <div className="space-y-2">
-                                          <Label>Due Date (DD-MM-YYYY)</Label>
-                                          <Input
-                                            value={newTaskDueDate}
-                                            onChange={(e) => setNewTaskDueDate(e.target.value)}
-                                            placeholder="DD-MM-YYYY"
-                                            data-testid="input-task-due-date"
-                                          />
-                                        </div>
+                                        
+                                        {aiResult && (
+                                          <div className="space-y-4 p-3 bg-muted/50 rounded-md border">
+                                            <div className="flex items-center gap-2">
+                                              <Sparkles className="h-4 w-4 text-primary" />
+                                              <span className="text-sm font-medium">AI-Enhanced Task</span>
+                                              <Badge variant="secondary" className="text-xs">{aiPriority}</Badge>
+                                            </div>
+                                            
+                                            <div className="space-y-2">
+                                              <Label className="text-xs text-muted-foreground">Outcome (what done looks like)</Label>
+                                              <Input
+                                                value={aiOutcome}
+                                                onChange={(e) => setAiOutcome(e.target.value)}
+                                                placeholder="What does done look like?"
+                                                className="text-sm"
+                                                data-testid="input-outcome"
+                                              />
+                                            </div>
+                                            
+                                            {aiChecklist.length > 0 && (
+                                              <div className="space-y-2">
+                                                <Label className="text-xs text-muted-foreground">Checklist</Label>
+                                                <div className="space-y-1">
+                                                  {aiChecklist.map((item, idx) => (
+                                                    <div key={item.id} className="flex items-center gap-2 text-sm">
+                                                      <Checkbox
+                                                        checked={item.completed}
+                                                        onCheckedChange={(checked) => {
+                                                          setAiChecklist(prev => prev.map((it, i) =>
+                                                            i === idx ? { ...it, completed: !!checked } : it
+                                                          ));
+                                                        }}
+                                                        data-testid={`checkbox-checklist-${idx}`}
+                                                      />
+                                                      <span className={item.completed ? 'line-through text-muted-foreground' : ''}>{item.text}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                            
+                                            {aiFollowUp && (
+                                              <div className="space-y-1">
+                                                <Label className="text-xs text-muted-foreground">Follow-up if no response</Label>
+                                                <p className="text-sm text-muted-foreground">{aiFollowUp}</p>
+                                              </div>
+                                            )}
+                                            
+                                            {aiEmailTemplate && (
+                                              <Collapsible>
+                                                <CollapsibleTrigger asChild>
+                                                  <Button variant="ghost" size="sm" className="w-full justify-between">
+                                                    <span className="flex items-center gap-2">
+                                                      <Mail className="h-4 w-4" />
+                                                      Email Template
+                                                    </span>
+                                                    <ChevronDown className="h-4 w-4" />
+                                                  </Button>
+                                                </CollapsibleTrigger>
+                                                <CollapsibleContent>
+                                                  <Textarea
+                                                    value={aiEmailTemplate}
+                                                    onChange={(e) => setAiEmailTemplate(e.target.value)}
+                                                    className="text-xs min-h-[100px] mt-2"
+                                                    data-testid="textarea-email-template"
+                                                  />
+                                                </CollapsibleContent>
+                                              </Collapsible>
+                                            )}
+                                            
+                                            {aiCallScript && (
+                                              <Collapsible>
+                                                <CollapsibleTrigger asChild>
+                                                  <Button variant="ghost" size="sm" className="w-full justify-between">
+                                                    <span className="flex items-center gap-2">
+                                                      <Phone className="h-4 w-4" />
+                                                      Call Script
+                                                    </span>
+                                                    <ChevronDown className="h-4 w-4" />
+                                                  </Button>
+                                                </CollapsibleTrigger>
+                                                <CollapsibleContent>
+                                                  <Textarea
+                                                    value={aiCallScript}
+                                                    onChange={(e) => setAiCallScript(e.target.value)}
+                                                    className="text-xs min-h-[100px] mt-2"
+                                                    data-testid="textarea-call-script"
+                                                  />
+                                                </CollapsibleContent>
+                                              </Collapsible>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
                                       <div className="flex justify-end gap-2">
                                         <Button variant="outline" onClick={() => setIsAddTaskDialogOpen(false)}>
@@ -3334,7 +3533,7 @@ export default function ClientsPage() {
                                           data-testid="button-create-task-submit"
                                         >
                                           {savingClientTask ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-                                          Create Task
+                                          {aiResult ? 'Create AI-Enhanced Task' : 'Create Task'}
                                         </Button>
                                       </div>
                                     </DialogContent>
