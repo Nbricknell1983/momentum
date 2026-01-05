@@ -490,9 +490,28 @@ export default function ClientsPage() {
 
   // Handler to create a task for a client
   const handleCreateClientTask = async (clientId: string, clientName: string) => {
-    if (!orgId || !userId || !newTaskTitle.trim()) return;
+    // Validate required fields
+    if (!orgId) {
+      toast({ title: 'Error', description: 'No organization selected.', variant: 'destructive' });
+      return;
+    }
+    if (!userId) {
+      toast({ title: 'Error', description: 'User not authenticated.', variant: 'destructive' });
+      return;
+    }
+    if (!newTaskTitle.trim()) {
+      toast({ title: 'Error', description: 'Please enter a task title.', variant: 'destructive' });
+      return;
+    }
+    if (!authReady) {
+      toast({ title: 'Error', description: 'Please wait for authentication to complete.', variant: 'destructive' });
+      return;
+    }
+    
     setSavingClientTask(true);
     try {
+      console.log('[Task] Creating task:', { orgId, userId, clientId, clientName, title: newTaskTitle, dueDate: newTaskDueDate });
+      
       await createClientTask(orgId, {
         userId,
         clientId,
@@ -501,6 +520,8 @@ export default function ClientsPage() {
         taskType: newTaskType,
         dueDate: newTaskDueDate,
       }, authReady);
+      
+      console.log('[Task] Task created successfully, refreshing list...');
       
       // Refresh tasks and activities
       const [tasks, activities] = await Promise.all([
@@ -516,9 +537,10 @@ export default function ClientsPage() {
       setIsAddTaskDialogOpen(false);
       
       toast({ title: 'Task created', description: 'Task has been added to your plan.' });
-    } catch (error) {
-      console.error('Error creating task:', error);
-      toast({ title: 'Error', description: 'Failed to create task.', variant: 'destructive' });
+    } catch (error: any) {
+      console.error('[Task] Error creating task:', error);
+      const errorMessage = error?.message || 'Unknown error occurred';
+      toast({ title: 'Failed to create task', description: errorMessage, variant: 'destructive' });
     } finally {
       setSavingClientTask(false);
     }
