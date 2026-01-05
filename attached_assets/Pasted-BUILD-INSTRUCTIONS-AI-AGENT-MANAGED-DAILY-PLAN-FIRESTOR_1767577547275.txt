@@ -1,0 +1,362 @@
+BUILD INSTRUCTIONS — AI-AGENT MANAGED DAILY PLAN (FIRESTORE-CONNECTED)
+GLOBAL DATE FORMAT RULE (NON-NEGOTIABLE)
+
+All date keys used for planning, grouping, filtering, and display must be DD-MM-YYYY.
+
+Daily Plan selected date is stored and queried as DD-MM-YYYY
+
+Each task includes planDate stored as DD-MM-YYYY
+
+“Today”, “This Week”, schedule grouping, and all AI decisions must use DD-MM-YYYY
+
+Firestore timestamps may exist for dueAt, completedAt, but the plan system uses planDate as DD-MM-YYYY.
+
+PURPOSE (NON-NEGOTIABLE)
+
+The Daily Plan page must be the execution hub. The AI Agent must be able to build and manage the entire day by reading Firestore and writing back assignments to Firestore.
+
+Everything in Daily Plan must be backed by Firestore records so it remains accurate after refresh and across devices.
+
+SINGLE SOURCE OF TRUTH (DO NOT BREAK)
+
+If it appears on Daily Plan, it must map to Firestore:
+
+Action chips = Firestore tasks
+
+Schedule blocks = Firestore dailyPlans.blocks
+
+Targets/progress = derived from completed activities and/or completed tasks
+
+Route Plan stops = Firestore routeStops or tasks tagged as “door_knock”
+
+Brief + Debrief = Firestore aiBriefs / aiDebriefs linked to the plan date
+
+No local-only state, no UI-only actions.
+
+REQUIRED DAILY PLAN SECTIONS AND HOW THEY MUST POPULATE
+1) AI Daily Brief (top card)
+
+Purpose: AI summarises today’s focus and auto-builds plan.
+
+When user clicks “Generate Plan”:
+AI Agent must create/update an aiBrief record for that plan date.
+
+The brief must include:
+
+Today’s targets (calls, door knocks, conversations, meetings booked, client check-ins, upsell convos, renewal actions, follow-ups)
+
+The 3 highest leverage outcomes for today (Focus Mode Top 3)
+
+A short risk list: overdue clients/tasks, neglected clients, renewals/upsells due
+
+Suggested time allocation aligned to your existing blocks
+
+Data sources:
+
+Firestore tasks (open/overdue/today)
+
+Firestore clients (health/nextContactAt/lastContactAt)
+
+Firestore pipeline/leads (if applicable)
+
+Past activity totals for momentum/targets
+
+Output writes:
+
+dailyPlans (block definitions if missing)
+
+Updates relevant tasks with planDate and planBlockId
+
+Creates aiBriefs/{orgId_userId_planDate}
+
+2) Today’s Schedule (timeline)
+
+Purpose: show time blocks and the actions inside them.
+
+The timeline must be driven by:
+
+dailyPlans.blocks for the selected date
+
+Tasks assigned to those blocks via task.planBlockId
+
+Rules:
+
+Blocks displayed exactly as configured: Morning Prospecting, Follow-ups, Lunch Meetings, Afternoon Doors, Admin & Prep (and any future custom blocks)
+
+“Actions” chips row is populated with tasks where:
+
+assignedToUserId = currentUser
+
+planDate = selectedDate (DD-MM-YYYY)
+
+status = open
+
+Chips are grouped/ordered by:
+
+planBlockId
+
+then sortOrder or dueAt
+
+Interactions:
+
+Clicking a chip opens a Task Drawer (details, client, mark done, reschedule, reassign block)
+
+Marking done must update Firestore task + create an activity log + update client last/next contact and health
+
+3) Prospecting Targets (left card)
+
+Purpose: show daily target numbers and progress.
+
+These are not random counters. They must be computed from Firestore activity.
+
+Requirements:
+
+Targets are stored in a user settings doc (e.g. userSettings.dailyTargets)
+
+Progress is computed from today’s completed activity:
+
+calls = count of completed tasks with taskType=call (or activityType=call)
+
+door knocks = completed tasks with taskType=door_knock
+
+conversations = completed tasks marked with outcome “conversation” (or activity)
+
+meetings booked = completed tasks with outcome “meeting booked”
+
+AI Agent must use these targets to decide:
+
+how many tasks to schedule into blocks
+
+whether to recommend more prospecting vs more follow-ups
+
+4) Client Targets (left card)
+
+Purpose: enforce customer service cadence.
+
+Targets include:
+
+check-ins
+
+upsell conversations
+
+renewal actions
+
+follow-ups
+
+These must be computed from tasks completed today (or activities logged today) by category.
+
+AI Agent must:
+
+identify which clients should be actioned today
+
+create/schedule tasks to meet these client targets
+
+prioritise based on health/risk and next-contact rules
+
+5) Time Blocks (left list)
+
+Purpose: visible structure that the AI agent must fill.
+
+This list must show:
+
+each block label + time range
+
+number of tasks assigned to that block (e.g. “0/15 activities”)
+
+category tag (Prospecting Calls / Client Management / Meetings / Door Knocking / Admin)
+
+Rules:
+
+Block capacity is configurable (e.g. Follow-ups block target = 8 actions)
+
+AI Agent uses block capacity + targets to allocate tasks
+
+6) Action Queue (centre card)
+
+Purpose: a ranked list of “next best actions” the agent recommends.
+
+This must be Firestore-backed and AI-filled.
+
+When user clicks “Generate Actions”:
+
+AI Agent generates a ranked list of recommended tasks:
+
+pulled from overdue tasks, clients missing next contact, hot prospects, at-risk clients
+
+each recommendation includes: who, why, expected impact, suggested time block
+
+Each recommendation must be either:
+
+a link to an existing open task, or
+
+a “create task” proposal that becomes a Firestore task when accepted
+
+No recommendations should exist only in UI memory.
+
+7) Route Plan (right card)
+
+Purpose: door-knocking route that ties into tasks.
+
+Route Plan must support:
+
+Add Stop (client or lead)
+
+Stops are Firestore records (or tasks tagged as door_knock with a location)
+
+AI Agent can propose the best route when Afternoon Doors block exists
+
+Rules:
+
+Route Plan is linked to selected plan date (DD-MM-YYYY)
+
+Each stop creates/links a door_knock task scheduled in the Afternoon Doors block
+
+Completing a stop marks the associated task complete and logs outcome
+
+8) End of Day Debrief (right card)
+
+Purpose: AI turns activity into improvements and tomorrow’s setup.
+
+When user clicks “Generate Debrief”:
+AI Agent must:
+
+summarise what was completed vs planned
+
+identify what slipped and why (overdue, rescheduled, no response, etc.)
+
+propose tomorrow’s priority list
+
+automatically roll unfinished tasks forward (with user confirmation rules if desired)
+
+Writes:
+
+aiDebriefs/{orgId_userId_planDate}
+
+updates tasks for reschedules and next contact logic
+
+AI AGENT DAILY PLAN LOGIC (THE HEART OF IT)
+Inputs the AI Agent must read (Firestore)
+
+For selected planDate (DD-MM-YYYY), and rolling windows:
+
+Tasks
+
+Overdue open tasks (highest priority)
+
+Tasks due today
+
+Future tasks linked to client next-contact
+
+Tasks missing planBlockId that should be scheduled
+
+Clients
+
+health status and reasons
+
+missing next contact
+
+next contact due today
+
+neglected clients (no contact for X days)
+
+renewal/upsell timing flags (if you track them)
+
+Leads/Pipeline (if connected)
+
+hot leads needing follow-up
+
+proposals outstanding
+
+stale leads with next action missing
+
+User targets/settings
+
+daily target counts
+
+preferred time block structure and capacities
+
+territory/region filters
+
+Outputs the AI Agent must write
+
+Assign tasks into the plan
+
+set task.planDate = DD-MM-YYYY
+
+set task.planBlockId
+
+set task.sortOrder
+
+Create missing tasks
+
+when a client needs next contact and none exists
+
+when a renewal/upsell cadence requires action
+
+when targets are behind and prospecting is required
+
+Save AI artifacts
+
+aiBrief
+
+actionQueue recommendations
+
+aiDebrief
+
+“GENERATE PLAN” MUST DO ALL OF THIS
+
+When the user clicks Generate Plan, the AI Agent must:
+
+Load today’s blocks (or create defaults)
+
+Pull overdue tasks and schedule them first into appropriate blocks
+
+Pull client service obligations:
+
+at-risk clients
+
+clients with next contact due today
+
+clients with no next contact scheduled
+
+Pull prospecting needs to hit targets:
+
+if calls/doors target is not met by scheduled tasks, propose or create prospecting tasks
+
+Allocate tasks into blocks respecting capacities and time relevance
+
+Populate Action Queue with ranked “next best actions”
+
+Update the UI purely by Firestore refresh (no local-only plan state)
+
+ACCEPTANCE CRITERIA (HOW YOU KNOW IT WORKS)
+
+The feature is complete only when:
+
+A plan can be generated and reloaded:
+
+Refresh the browser and the plan remains identical because it’s stored in Firestore.
+
+Every action chip is a task:
+
+Clicking a chip shows the Firestore task id and details.
+
+Completing a task updates everything:
+
+Task disappears from blocks
+
+Targets progress increments
+
+Client last/next contact updates
+
+Client health updates
+
+Date format is correct everywhere:
+
+Plan date keys, filters, and display use DD-MM-YYYY
+
+No YYYY-MM-DD appears in data or UI
+
+AI Agent is truly managing the plan:
+
+“Generate Plan” and “Generate Actions” produce a usable day without manual scheduling.

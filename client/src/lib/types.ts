@@ -166,10 +166,18 @@ export interface Task {
   id: string;
   userId: string;
   leadId?: string;
+  clientId?: string;
   title: string;
   dueAt: Date;
   status: TaskStatus;
   createdAt: Date;
+  // Daily Plan integration (DD-MM-YYYY format)
+  planDate?: string;
+  planBlockId?: string | null;
+  taskType?: 'call' | 'door_knock' | 'meeting' | 'follow_up' | 'check_in' | 'renewal' | 'upsell' | 'other';
+  outcome?: 'no_answer' | 'conversation' | 'meeting_booked' | 'completed' | null;
+  completedAt?: Date;
+  sortOrder?: number;
 }
 
 export interface DailyMetrics {
@@ -575,6 +583,226 @@ export function createDefaultDailyPlan(date: Date): DailyPlan {
     battleScoreEarned: 0,
     hasProspectingBlock: true,
     isQueuesInitialized: false,
+  };
+}
+
+// ============================================
+// DD-MM-YYYY Date Format Utilities (NON-NEGOTIABLE)
+// ============================================
+
+export function formatDateDDMMYYYY(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+export function parseDateDDMMYYYY(dateStr: string): Date {
+  const [day, month, year] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+export function isValidDDMMYYYY(dateStr: string): boolean {
+  const regex = /^\d{2}-\d{2}-\d{4}$/;
+  if (!regex.test(dateStr)) return false;
+  const parsed = parseDateDDMMYYYY(dateStr);
+  return !isNaN(parsed.getTime());
+}
+
+export function getTodayDDMMYYYY(): string {
+  return formatDateDDMMYYYY(new Date());
+}
+
+// ============================================
+// Firestore-Backed Daily Plan Types
+// ============================================
+
+export type PlanTaskType = 'call' | 'door_knock' | 'meeting' | 'follow_up' | 'check_in' | 'renewal' | 'upsell' | 'other';
+export type PlanTaskOutcome = 'no_answer' | 'conversation' | 'meeting_booked' | 'completed' | null;
+export type PlanBlockCategory = 'prospecting_calls' | 'prospecting_doors' | 'client_management' | 'meetings' | 'admin';
+
+export interface PlanTimeBlock {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  category: PlanBlockCategory;
+  capacity: number;
+  isLocked: boolean;
+}
+
+export interface AIBrief {
+  id: string;
+  planDate: string;
+  todaysFocus: string;
+  focusModeTop3: string[];
+  targets: {
+    calls: number;
+    doorKnocks: number;
+    conversations: number;
+    meetingsBooked: number;
+    clientCheckIns: number;
+    upsellConvos: number;
+    renewalActions: number;
+    followUps: number;
+  };
+  riskList: {
+    type: 'overdue_client' | 'neglected_client' | 'renewal_due' | 'upsell_opportunity' | 'overdue_task';
+    targetId: string;
+    targetName: string;
+    reason: string;
+  }[];
+  suggestedTimeAllocation: {
+    blockId: string;
+    blockName: string;
+    suggestedTasks: number;
+  }[];
+  generatedAt: Date;
+  aiModelVersion: string;
+}
+
+export interface AIDebrief {
+  id: string;
+  planDate: string;
+  summary: {
+    planned: number;
+    completed: number;
+    percentage: number;
+  };
+  whatSlipped: {
+    taskId: string;
+    title: string;
+    reason: 'overdue' | 'rescheduled' | 'no_response' | 'skipped';
+  }[];
+  tomorrowPriorities: string[];
+  rollForwardTasks: {
+    taskId: string;
+    title: string;
+    newPlanDate: string;
+  }[];
+  aiReview: string;
+  improvements: string[];
+  generatedAt: Date;
+  aiModelVersion: string;
+}
+
+export interface PlanActionRecommendation {
+  id: string;
+  targetType: 'lead' | 'client';
+  targetId: string;
+  targetName: string;
+  reason: string;
+  expectedImpact: string;
+  suggestedBlockId: string;
+  suggestedBlockName: string;
+  taskType: PlanTaskType;
+  linkedTaskId?: string;
+  priorityScore: number;
+  status: 'recommended' | 'accepted' | 'dismissed';
+}
+
+export interface DailyPlanDoc {
+  id: string;
+  planDate: string;
+  orgId: string;
+  userId: string;
+  timeBlocks: PlanTimeBlock[];
+  targets: DailyTargets;
+  routeStops: RouteStop[];
+  battleScoreEarned: number;
+  briefId?: string;
+  debriefId?: string;
+  lastGeneratedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserDailySettings {
+  id: string;
+  userId: string;
+  orgId: string;
+  dailyTargets: {
+    calls: number;
+    doorKnocks: number;
+    conversations: number;
+    meetingsBooked: number;
+    clientCheckIns: number;
+    upsellConvos: number;
+    renewalActions: number;
+    followUps: number;
+  };
+  defaultTimeBlocks: PlanTimeBlock[];
+  workingHours: {
+    start: string;
+    end: string;
+  };
+  territory?: string;
+  updatedAt: Date;
+}
+
+export const DEFAULT_PLAN_TIME_BLOCKS: PlanTimeBlock[] = [
+  { id: 'block-morning-prospecting', name: 'Morning Prospecting', startTime: '09:00', endTime: '11:00', category: 'prospecting_calls', capacity: 15, isLocked: true },
+  { id: 'block-follow-ups', name: 'Follow-ups', startTime: '11:00', endTime: '12:00', category: 'client_management', capacity: 8, isLocked: false },
+  { id: 'block-lunch-meetings', name: 'Lunch Meetings', startTime: '12:00', endTime: '14:00', category: 'meetings', capacity: 2, isLocked: false },
+  { id: 'block-afternoon-doors', name: 'Afternoon Doors', startTime: '14:00', endTime: '16:00', category: 'prospecting_doors', capacity: 5, isLocked: true },
+  { id: 'block-admin-prep', name: 'Admin & Prep', startTime: '16:00', endTime: '17:00', category: 'admin', capacity: 0, isLocked: false },
+];
+
+export const DEFAULT_DAILY_TARGETS = {
+  calls: 25,
+  doorKnocks: 5,
+  conversations: 10,
+  meetingsBooked: 2,
+  clientCheckIns: 5,
+  upsellConvos: 2,
+  renewalActions: 3,
+  followUps: 10,
+};
+
+export const PLAN_BLOCK_CATEGORY_LABELS: Record<PlanBlockCategory, string> = {
+  prospecting_calls: 'Prospecting Calls',
+  prospecting_doors: 'Door Knocking',
+  client_management: 'Client Management',
+  meetings: 'Meetings',
+  admin: 'Admin',
+};
+
+export const PLAN_TASK_TYPE_LABELS: Record<PlanTaskType, string> = {
+  call: 'Call',
+  door_knock: 'Door Knock',
+  meeting: 'Meeting',
+  follow_up: 'Follow-up',
+  check_in: 'Check-in',
+  renewal: 'Renewal Action',
+  upsell: 'Upsell Conversation',
+  other: 'Other',
+};
+
+export function createDefaultDailyPlanDoc(planDate: string, orgId: string, userId: string): DailyPlanDoc {
+  return {
+    id: `${orgId}_${userId}_${planDate}`,
+    planDate,
+    orgId,
+    userId,
+    timeBlocks: [...DEFAULT_PLAN_TIME_BLOCKS],
+    targets: {
+      prospecting: {
+        calls: { target: DEFAULT_DAILY_TARGETS.calls, completed: 0 },
+        doors: { target: DEFAULT_DAILY_TARGETS.doorKnocks, completed: 0 },
+        conversations: { target: DEFAULT_DAILY_TARGETS.conversations, completed: 0 },
+        meetingsBooked: { target: DEFAULT_DAILY_TARGETS.meetingsBooked, completed: 0 },
+      },
+      clients: {
+        checkIns: { target: DEFAULT_DAILY_TARGETS.clientCheckIns, completed: 0 },
+        upsellConversations: { target: DEFAULT_DAILY_TARGETS.upsellConvos, completed: 0 },
+        renewalActions: { target: DEFAULT_DAILY_TARGETS.renewalActions, completed: 0 },
+        followUps: { target: DEFAULT_DAILY_TARGETS.followUps, completed: 0 },
+      },
+    },
+    routeStops: [],
+    battleScoreEarned: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 }
 
