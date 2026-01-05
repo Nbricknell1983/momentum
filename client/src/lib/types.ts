@@ -253,6 +253,38 @@ export interface Task {
   outcome?: 'no_answer' | 'conversation' | 'meeting_booked' | 'completed' | null;
   completedAt?: Date;
   sortOrder?: number;
+  // AI-enhanced task fields
+  aiEnhanced?: boolean;              // Was this task enhanced by AI?
+  outcomeStatement?: string;         // What "done" looks like
+  checklist?: TaskChecklistItem[];   // Step-by-step checklist
+  priority?: TaskPriority;           // AI-suggested priority
+  suggestedFollowUp?: string;        // AI-suggested follow-up if no response
+  emailTemplate?: string;            // AI-generated email draft
+  callScript?: string;               // AI-generated call script
+  notes?: string;                    // Additional notes or context
+}
+
+// AI-generated checklist item
+export interface TaskChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+// Task priority levels
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+// AI Task Assist response shape
+export interface AITaskAssistResponse {
+  enhancedTitle: string;
+  outcomeStatement: string;
+  checklist: string[];
+  suggestedDueDate: string;  // DD-MM-YYYY
+  priority: TaskPriority;
+  suggestedTaskType: TaskType;
+  suggestedFollowUp: string;
+  emailTemplate?: string;
+  callScript?: string;
 }
 
 // Map ActivityType to TaskType for Pipeline → Daily Plan integration

@@ -846,5 +846,81 @@ reason options: overdue, rescheduled, no_response, skipped`;
     }
   });
 
+  // AI Task Assist - enhance a rough task description into actionable task
+  app.post("/api/ai/task-assist", async (req, res) => {
+    try {
+      const { 
+        roughTask, 
+        clientName, 
+        clientContext,
+        lastContactDate,
+        pipelineStage,
+        products,
+        knownObjections,
+        todayDate
+      } = req.body;
+
+      if (!roughTask) {
+        return res.status(400).json({ error: "Rough task description is required" });
+      }
+
+      const contextInfo = clientContext ? `
+Client: ${clientName || 'Unknown'}
+Last Contact: ${lastContactDate || 'Unknown'}
+Pipeline Stage: ${pipelineStage || 'Unknown'}
+Products/Services: ${products?.join(', ') || 'Not specified'}
+Known Objections: ${knownObjections || 'None recorded'}
+Additional Context: ${clientContext}
+` : '';
+
+      const prompt = `You are a sales productivity assistant. Transform this rough task into a clear, actionable task pack.
+
+Rough Task: "${roughTask}"
+${contextInfo}
+Today's Date: ${todayDate || new Date().toLocaleDateString('en-AU')}
+
+Return a JSON object with:
+1. enhancedTitle: A clear, specific task title (max 60 chars)
+2. outcomeStatement: What "done" looks like - the specific measurable outcome
+3. checklist: Array of 3-7 specific action steps to complete the task
+4. suggestedDueDate: Suggested due date in DD-MM-YYYY format based on urgency
+5. priority: One of "low", "medium", "high", "urgent" based on context
+6. suggestedTaskType: One of "call", "meeting", "follow_up", "check_in", "delivery", "renewal", "upsell", "prospecting", "admin"
+7. suggestedFollowUp: What to do if there's no response (e.g., "If no response in 3 days, send reminder email")
+8. emailTemplate: If task involves email, provide a draft email template (optional)
+9. callScript: If task involves a call, provide a brief call script with key talking points (optional)
+
+Be specific and actionable. Focus on sales outcomes and client relationships.
+
+Return valid JSON:
+{
+  "enhancedTitle": "string",
+  "outcomeStatement": "string",
+  "checklist": ["step1", "step2", ...],
+  "suggestedDueDate": "DD-MM-YYYY",
+  "priority": "low|medium|high|urgent",
+  "suggestedTaskType": "string",
+  "suggestedFollowUp": "string",
+  "emailTemplate": "string or null",
+  "callScript": "string or null"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const aiResult = JSON.parse(content);
+      
+      res.json(aiResult);
+    } catch (error) {
+      console.error("Error in AI task assist:", error);
+      res.status(500).json({ error: "Failed to enhance task with AI" });
+    }
+  });
+
   return httpServer;
 }
