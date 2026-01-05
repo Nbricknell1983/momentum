@@ -13,6 +13,9 @@ const ACTIVITY_ICONS: Record<ActivityType, typeof Phone> = {
   followup: Phone,
   proposal: Mail,
   deal: Users,
+  nba_completed: Phone,
+  nba_dismissed: Phone,
+  stage_change: Phone,
 };
 
 interface ActivityButtonProps {

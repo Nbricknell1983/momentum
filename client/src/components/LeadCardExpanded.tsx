@@ -16,7 +16,8 @@ import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
-import { deleteLeadFromFirestore, createActivity } from '@/lib/firestoreService';
+import { deleteLeadFromFirestore, logPipelineAction } from '@/lib/firestoreService';
+import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -195,16 +196,22 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
     
     setIsLoggingActivity(type);
     try {
-      const activityData = {
+      // Use logPipelineAction to create both activity AND task for Daily Plan
+      const { activity: savedActivity } = await logPipelineAction(orgId, {
         userId: lead.userId,
         leadId: lead.id,
         type,
-        createdAt: new Date(),
-      };
-      const savedActivity = await createActivity(orgId, activityData, authReady);
+        leadName: lead.companyName || lead.contactName,
+      }, authReady);
+      
       dispatch(addActivity(savedActivity));
       setLastLoggedActivity({ type, id: savedActivity.id });
       setTimeout(() => setLastLoggedActivity(null), 5000);
+      
+      // Invalidate all Daily Plan queries for this org (partial match)
+      queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId] });
+      
+      toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
     } catch (error) {
       console.error('[LeadCardExpanded] Error logging activity:', error);
       toast({ title: 'Error', description: 'Failed to log activity', variant: 'destructive' });

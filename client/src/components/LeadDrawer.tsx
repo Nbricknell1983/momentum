@@ -20,6 +20,10 @@ import TrafficLight from './TrafficLight';
 import { getTrafficLightStatus } from '@/lib/types';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '@/contexts/AuthContext';
+import { logPipelineAction } from '@/lib/firestoreService';
+import { queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +46,8 @@ const NEPQ_LABELS = [
 
 export default function LeadDrawer() {
   const dispatch = useDispatch();
+  const { orgId, authReady, user } = useAuth();
+  const { toast } = useToast();
   const isOpen = useSelector((state: RootState) => state.app.isDrawerOpen);
   const selectedLeadId = useSelector((state: RootState) => state.app.selectedLeadId);
   const leads = useSelector((state: RootState) => state.app.leads);
@@ -69,7 +75,8 @@ export default function LeadDrawer() {
     }
   };
 
-  const handleLogActivity = (type: ActivityType) => {
+  const handleLogActivity = async (type: ActivityType) => {
+    // Update Redux for immediate UI feedback
     dispatch(addActivity({
       id: uuidv4(),
       userId: lead.userId,
@@ -77,6 +84,26 @@ export default function LeadDrawer() {
       type,
       createdAt: new Date(),
     }));
+    
+    // Create task in Firestore for Daily Plan integration
+    if (orgId && authReady && user) {
+      try {
+        // Use lead.userId for proper Daily Plan attribution (not logged-in user)
+        await logPipelineAction(orgId, {
+          userId: lead.userId,
+          leadId: lead.id,
+          type,
+          leadName: lead.companyName || lead.contactName,
+        }, authReady);
+        
+        // Invalidate all Daily Plan queries (partial match)
+        queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId] });
+        
+        toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
+      } catch (error) {
+        console.error('Failed to log pipeline action to Daily Plan:', error);
+      }
+    }
   };
 
   const handleUpdateField = (field: keyof Lead, value: any) => {

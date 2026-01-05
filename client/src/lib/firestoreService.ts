@@ -1,7 +1,7 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit, setDoc } from './firebase';
 import { auth } from './firebase';
 import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task } from './types';
-import { calculateClientHealth, createDefaultDailyPlanDoc, formatDateDDMMYYYY } from './types';
+import { calculateClientHealth, createDefaultDailyPlanDoc, formatDateDDMMYYYY, activityTypeToTaskType, getCurrentTimeSlot, getTodayDDMMYYYY, toPlanDateKey, ACTIVITY_LABELS } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
   const currentUser = auth.currentUser;
@@ -281,6 +281,65 @@ export async function createActivity(orgId: string, activity: Omit<Activity, 'id
     logFirestoreOperation('WRITE', path, orgId, false, error);
     throw error;
   }
+}
+
+// ============================================
+// Pipeline Action → Daily Plan Task Integration
+// ============================================
+
+/**
+ * Log a pipeline action (call, email, sms, meeting, drop-in) and create
+ * a corresponding completed task in the Daily Plan.
+ * 
+ * This ensures Pipeline actions drive Daily Plan progress.
+ */
+export async function logPipelineAction(
+  orgId: string,
+  activityData: {
+    userId: string;  // This should be the lead owner's userId for proper Daily Plan attribution
+    leadId: string;
+    type: Activity['type'];
+    leadName?: string;
+    notes?: string;
+  },
+  authReady: boolean = false
+): Promise<{ activity: Activity; task: Task }> {
+  const now = new Date();
+  const todayDDMMYYYY = getTodayDDMMYYYY();
+  const todayKey = toPlanDateKey(todayDDMMYYYY);
+  
+  // Create the activity record
+  const activity = await createActivity(orgId, {
+    userId: activityData.userId,
+    leadId: activityData.leadId,
+    type: activityData.type,
+    notes: activityData.notes,
+    createdAt: now,
+  }, authReady);
+  
+  // Map activity type to task type
+  const taskType = activityTypeToTaskType(activityData.type);
+  const timeSlot = getCurrentTimeSlot();
+  const activityLabel = ACTIVITY_LABELS[activityData.type] || activityData.type;
+  
+  // Create a completed task for the Daily Plan
+  // Note: userId must match lead.userId for proper Daily Plan attribution
+  const task = await createPlanTask(orgId, {
+    userId: activityData.userId,
+    leadId: activityData.leadId,
+    title: `${activityLabel}: ${activityData.leadName || 'Lead'}`,
+    dueAt: now,
+    status: 'completed',
+    completedAt: now,
+    createdAt: now,
+    planDate: todayDDMMYYYY,
+    planDateKey: todayKey,
+    taskType: taskType,
+    timeSlot: timeSlot,
+    outcome: activityData.type === 'meeting' ? 'completed' : 'conversation',
+  }, authReady);
+  
+  return { activity, task };
 }
 
 // ============================================

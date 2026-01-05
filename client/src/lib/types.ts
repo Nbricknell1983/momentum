@@ -208,6 +208,36 @@ export interface Task {
   sortOrder?: number;
 }
 
+// Map ActivityType to TaskType for Pipeline → Daily Plan integration
+export function activityTypeToTaskType(activityType: ActivityType): TaskType {
+  switch (activityType) {
+    case 'call':
+    case 'sms':
+    case 'email':
+      return 'prospecting';
+    case 'meeting':
+      return 'meeting';
+    case 'dropin':
+      return 'check_in';
+    case 'followup':
+      return 'follow_up';
+    case 'proposal':
+      return 'delivery';
+    case 'deal':
+      return 'meeting';
+    default:
+      return 'admin';
+  }
+}
+
+// Infer time slot from current time
+export function getCurrentTimeSlot(): TaskTimeSlot {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+}
+
 // Helper to determine revenue lane from task type
 export function getRevenueLane(taskType?: TaskType): RevenueLane {
   if (!taskType) return 'new_business';
