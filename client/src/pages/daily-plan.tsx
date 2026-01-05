@@ -32,7 +32,8 @@ import {
   DailyPlanDoc, AIBrief, AIDebrief, PlanTimeBlock, PlanActionRecommendation,
   formatDateDDMMYYYY, parseDateDDMMYYYY, getTodayDDMMYYYY, toPlanDateKey,
   PLAN_BLOCK_CATEGORY_LABELS, DEFAULT_PLAN_TIME_BLOCKS, Lead, Client,
-  Task, getTrafficLightStatus, Activity
+  Task, getTrafficLightStatus, Activity, getRevenueLane, TaskType,
+  calculateReplacementRate, generateClientTaskRecommendations, ClientTaskRecommendation
 } from '@/lib/types';
 
 interface DateSelectorProps {
@@ -100,6 +101,187 @@ function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
           Today
         </Button>
       )}
+    </div>
+  );
+}
+
+interface ReplacementRateBannerProps {
+  clientMeetings: number;
+  revenueExtended: number;
+  qualifiedConversations: number;
+}
+
+function ReplacementRateBanner({ clientMeetings, revenueExtended, qualifiedConversations }: ReplacementRateBannerProps) {
+  const rate = calculateReplacementRate(clientMeetings, revenueExtended, qualifiedConversations);
+  
+  if (rate.required === 0) {
+    return (
+      <div className="bg-green-500/10 border border-green-500/20 rounded-md p-3 flex items-center gap-3" data-testid="banner-replacement-rate">
+        <CheckCircle2 className="h-5 w-5 text-green-500" />
+        <div>
+          <span className="font-medium text-green-700 dark:text-green-400">Pipeline Healthy</span>
+          <span className="text-sm text-muted-foreground ml-2">No replacement needed today</span>
+        </div>
+      </div>
+    );
+  }
+  
+  const isOnTrack = rate.deficit === 0;
+  const bgColor = isOnTrack ? 'bg-amber-500/10 border-amber-500/20' : 'bg-red-500/10 border-red-500/20';
+  const textColor = isOnTrack ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400';
+  
+  return (
+    <div className={`${bgColor} border rounded-md p-3 flex items-center gap-3`} data-testid="banner-replacement-rate">
+      <AlertTriangle className={`h-5 w-5 ${textColor}`} />
+      <div className="flex-1">
+        <span className={`font-semibold ${textColor}`}>
+          Replacement Rate: {rate.achieved}/{rate.required}
+        </span>
+        <span className="text-sm text-muted-foreground ml-2">
+          {rate.deficit > 0 
+            ? `Need ${rate.deficit} more qualified conversation${rate.deficit > 1 ? 's' : ''} to maintain pipeline`
+            : 'On track to maintain pipeline'
+          }
+        </span>
+      </div>
+      <Badge variant={isOnTrack ? 'secondary' : 'destructive'}>
+        {rate.deficit > 0 ? `${rate.deficit} behind` : 'On track'}
+      </Badge>
+    </div>
+  );
+}
+
+interface NowModePanelProps {
+  currentTasks: Task[];
+  onCompleteTask: (taskId: string) => void;
+}
+
+function NowModePanel({ currentTasks, onCompleteTask }: NowModePanelProps) {
+  if (currentTasks.length === 0) return null;
+  
+  const topTasks = currentTasks.slice(0, 3);
+  
+  return (
+    <Card className="p-4 border-primary/50 bg-primary/5" data-testid="card-now-mode">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+        <span className="font-semibold text-primary">NOW</span>
+        <Badge variant="outline" className="ml-auto">Focus Mode</Badge>
+      </div>
+      
+      <div className="space-y-2">
+        {topTasks.map((task, idx) => (
+          <div 
+            key={task.id} 
+            className="flex items-center gap-3 p-2 rounded-md bg-background/50"
+            data-testid={`now-task-${idx}`}
+          >
+            <span className="font-bold text-primary text-lg">{idx + 1}</span>
+            <div className="flex-1">
+              <div className="font-medium">{task.title}</div>
+              {task.taskType && (
+                <Badge variant="secondary">{task.taskType}</Badge>
+              )}
+            </div>
+            <Button
+              size="sm"
+              onClick={() => onCompleteTask(task.id)}
+              data-testid={`button-complete-now-${idx}`}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Done
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+interface RevenueLanesProps {
+  tasks: Task[];
+  clientRecommendations: ClientTaskRecommendation[];
+}
+
+function RevenueLanes({ tasks, clientRecommendations }: RevenueLanesProps) {
+  const clientTasks = tasks.filter(t => getRevenueLane(t.taskType) === 'client');
+  const newBusinessTasks = tasks.filter(t => getRevenueLane(t.taskType) === 'new_business');
+  
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card className="p-4" data-testid="card-lane-client">
+        <div className="flex items-center gap-2 mb-3">
+          <Users className="h-5 w-5 text-blue-500" />
+          <h3 className="font-semibold">Revenue Protection</h3>
+          <Badge variant="secondary" className="ml-auto">{clientTasks.length}</Badge>
+        </div>
+        
+        {clientTasks.length === 0 && clientRecommendations.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            No client tasks scheduled
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {clientTasks.slice(0, 5).map((task, idx) => (
+              <div 
+                key={task.id} 
+                className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                data-testid={`client-task-${idx}`}
+              >
+                <Checkbox checked={task.status === 'completed'} />
+                <span className={`text-sm flex-1 ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
+                  {task.title}
+                </span>
+              </div>
+            ))}
+            {clientRecommendations.slice(0, 3).map((rec, idx) => (
+              <div 
+                key={`rec-${idx}`} 
+                className="flex items-center gap-2 p-2 rounded-md bg-blue-500/10 border border-blue-500/20"
+                data-testid={`client-rec-${idx}`}
+              >
+                <Sparkles className="h-4 w-4 text-blue-500" />
+                <div className="flex-1">
+                  <span className="text-sm font-medium">{rec.title}</span>
+                  <span className="text-xs text-muted-foreground block">{rec.reason}</span>
+                </div>
+                <Button size="icon" variant="ghost">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+      
+      <Card className="p-4" data-testid="card-lane-new-business">
+        <div className="flex items-center gap-2 mb-3">
+          <Target className="h-5 w-5 text-green-500" />
+          <h3 className="font-semibold">Revenue Creation</h3>
+          <Badge variant="secondary" className="ml-auto">{newBusinessTasks.length}</Badge>
+        </div>
+        
+        {newBusinessTasks.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            No prospecting tasks scheduled
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {newBusinessTasks.slice(0, 8).map((task, idx) => (
+              <div 
+                key={task.id} 
+                className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                data-testid={`newbiz-task-${idx}`}
+              >
+                <Checkbox checked={task.status === 'completed'} />
+                <span className={`text-sm flex-1 ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
+                  {task.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -502,6 +684,41 @@ export default function DailyPlanPage() {
   
   const isToday = selectedDate === getTodayDDMMYYYY();
   
+  // Revenue Lanes calculations - only count completed client meetings
+  const completedClientMeetings = planTasks.filter(t => 
+    t.status === 'completed' && 
+    (t.taskType === 'meeting' || t.taskType === 'check_in' || t.taskType === 'delivery') &&
+    t.clientId // Must be linked to a client
+  );
+  const clientMeetingsToday = completedClientMeetings.length;
+  const revenueExtendedCount = completedClientMeetings.filter(t => t.revenueExtended === true).length;
+  // Qualified conversations = completed prospecting with good outcome
+  const qualifiedConversationsToday = planTasks.filter(t => 
+    t.status === 'completed' &&
+    getRevenueLane(t.taskType) === 'new_business' &&
+    (t.outcome === 'conversation' || t.outcome === 'meeting_booked')
+  ).length;
+  
+  // Generate client task recommendations
+  const clientRecommendations = useMemo(() => {
+    return generateClientTaskRecommendations(clients, 5);
+  }, [clients]);
+  
+  // Handler for completing tasks from NOW MODE
+  const handleCompleteNowTask = async (taskId: string) => {
+    if (!orgId) return;
+    try {
+      await updatePlanTask(orgId, taskId, { 
+        status: 'completed', 
+        completedAt: new Date() 
+      }, authReady);
+      queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId, userId, selectedDate] });
+      toast({ title: 'Task completed!' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to complete task.', variant: 'destructive' });
+    }
+  };
+  
   if (!authReady || !orgId) {
     return (
       <div className="p-6 flex items-center justify-center h-full">
@@ -551,10 +768,30 @@ export default function DailyPlanPage() {
         </div>
       </div>
       
+      {isToday && (
+        <ReplacementRateBanner
+          clientMeetings={clientMeetingsToday}
+          revenueExtended={revenueExtendedCount}
+          qualifiedConversations={qualifiedConversationsToday}
+        />
+      )}
+      
+      {isToday && pendingTasks.length > 0 && (
+        <NowModePanel
+          currentTasks={pendingTasks}
+          onCompleteTask={handleCompleteNowTask}
+        />
+      )}
+      
       <AIBriefSection
         brief={aiBrief || null}
         isGenerating={isGeneratingBrief}
         onGenerate={handleGenerateBrief}
+      />
+      
+      <RevenueLanes
+        tasks={planTasks}
+        clientRecommendations={clientRecommendations}
       />
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

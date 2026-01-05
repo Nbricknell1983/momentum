@@ -1,0 +1,381 @@
+BASE44 BUILD INSTRUCTION
+DAILY PLAN, CLIENT BALANCE & MEETING-DRIVEN PIPELINE AUTOMATION
+PURPOSE (NON-NEGOTIABLE)
+
+Transform the Daily Plan into an execution cockpit that:
+
+Actively drives daily behaviour
+
+Protects existing revenue and enforces new business creation
+
+Prevents pipeline decay caused by over-servicing clients
+
+Eliminates decision fatigue (“what should I do next?”)
+
+This system must automatically balance client work and prospecting, without relying on user discipline.
+
+CORE PRINCIPLES (DO NOT BREAK)
+
+Tasks are the single source of truth
+
+Every client meeting creates follow-up AND replacement pressure
+
+No day with client work may end without pipeline progress
+
+UI must tell the user exactly what to do next
+
+AI is tactical, not motivational
+
+DAILY PLAN STRUCTURE (AUTHORITATIVE)
+
+The Daily Plan operates on two parallel revenue lanes:
+
+Lane 1 — Revenue Protection & Expansion (Clients)
+
+Client meetings
+
+Check-ins
+
+Renewals
+
+Upsells
+
+Delivery follow-ups
+
+Lane 2 — Revenue Creation (New Business)
+
+Prospecting calls
+
+Door knocking
+
+Discovery meetings
+
+Follow-ups
+
+Referrals
+
+These lanes must always be visible in the same day view.
+
+If Lane 1 grows, Lane 2 is automatically injected.
+
+No exceptions.
+
+TASK MODEL (SINGLE SOURCE OF TRUTH)
+Rule
+
+If it can be counted, tracked, completed, or reviewed → it must be a task
+
+Canonical Path
+/orgs/{orgId}/tasks/{taskId}
+
+Task Types (Required)
+
+prospecting
+
+follow_up
+
+meeting
+
+delivery
+
+renewal
+
+upsell
+
+referral
+
+admin
+
+All Daily Plan metrics, progress bars, targets, and AI reasoning must derive only from tasks.
+
+TIME BLOCKS → ACTION CONTAINERS
+Upgrade Schedule Timeline Blocks
+
+Each time block becomes a task container, not a static label.
+
+Example:
+Morning Prospecting (09:00–11:00)
+
+Filtered tasks:
+
+category = prospecting
+
+dueDate = today
+
+timeBlock = morning
+
+Required Controls
+
+Start block
+
+Pause
+
+End block & review
+
+On Block End (Automatic)
+
+Calculate outcomes (calls, conversations, meetings)
+
+Update live targets
+
+Feed results into AI Debrief
+
+Adjust remaining tasks for the day
+
+“NOW MODE” (CRITICAL)
+
+Add a persistent Now Mode panel.
+
+Shows only:
+
+Current time block
+
+Top 1–3 tasks
+
+One primary CTA
+
+Example:
+
+NOW: Morning Prospecting
+1. Call Sakura Signs
+2. Call Borg’s Roofing
+3. Log outcome
+
+
+This panel overrides all other UI during execution.
+
+ACTION QUEUE (HEARTBEAT RULE)
+
+The Action Queue must never be empty.
+
+It is fed by:
+
+Overdue tasks
+
+Missed targets
+
+Pipeline stagnation
+
+AI recommendations
+
+Replacement enforcement (see below)
+
+Rule
+
+If Action Queue = empty → system failure
+
+User should never ask “what next?”
+
+CLIENT HEALTH ENGINE (AUTOMATIC INJECTION)
+
+Each client tracks:
+
+lastContactDate
+
+productsOwned
+
+deliveryStatus
+
+upsellReadiness
+
+churnRisk
+
+revenueValue
+
+Daily Plan Injection Rule
+
+Each day, automatically inject 3–5 client tasks, weighted by:
+
+revenue value
+
+time since last contact
+
+churn risk
+
+upsell timing
+
+Example:
+
+“Check in with Abiv Automotive — 21 days since last contact”
+
+“Upsell Performance Boost to Advanced Auto — site live 14 days”
+
+Client work is not optional or remembered — it is injected.
+
+MEETING-DRIVEN AUTOMATION (KEY SYSTEM)
+Core Rule (LOCK THIS IN)
+
+Every client meeting creates two obligations:
+
+Continuation obligation
+Follow-up, delivery, renewal, or upsell
+
+Replacement obligation
+New business activity to replace or grow revenue
+
+AUTOMATION LAYER 1 — MEETING → MEETING (CLIENT CONTINUITY)
+Trigger
+
+A meeting is logged or scheduled with:
+
+clientId
+
+outcome (review | proposal | delivery | renewal)
+
+nextMeetingDate (optional)
+
+System Automatically
+
+Creates a linked client task:
+
+type = follow_up | delivery | renewal | upsell
+
+linked to clientId
+
+due before nextMeetingDate
+
+Reserves calendar time
+
+Updates client health status
+
+AUTOMATION LAYER 2 — REVENUE BALANCE CHECK
+
+After every client meeting, evaluate:
+
+Did this meeting create new future revenue?
+
+Criteria:
+
+Upsell
+
+Expansion
+
+Referral
+
+New opportunity
+
+If YES → revenueExtended = true
+If NO → revenueExtended = false
+
+AUTOMATION LAYER 3 — LAW OF REPLACEMENT (ENFORCED)
+
+If revenueExtended == false:
+
+Automatically create one replacement task, based on availability and risk:
+
+Prospecting block
+
+High-intent follow-ups
+
+Door knock route
+
+Referral ask
+
+Pipeline reactivation
+
+Rules:
+
+Scheduled within 48 hours
+
+Assigned to same user
+
+Injected into Daily Plan
+
+Non-dismissible
+
+The user never chooses whether to prospect — the system decides.
+
+TARGETS → LIVE SCOREBOARDS
+
+Targets must be:
+
+Clickable
+
+Actionable
+
+Context-aware
+
+Example:
+Clicking Calls (0/25):
+
+Shows remaining call tasks
+
+Suggests next best leads
+
+Offers “Generate 5 Call Tasks”
+
+Client Targets Upgrade
+
+Replace flat counts with revenue weighting:
+
+Instead of:
+
+Check-ins (0/5)
+
+Use:
+
+Revenue Protected Today: $4,200 / $7,500
+
+RECOVERY MODE (BAD DAY LOGIC)
+
+If by midday:
+
+Calls < 30%
+
+Conversations < target
+
+System enters Recovery Mode:
+
+Narrows focus
+
+Pushes highest-probability actions
+
+Lowers friction
+
+Prevents full-day derailment
+
+AI ROLE (TACTICAL, NOT MOTIVATIONAL)
+
+AI must:
+
+Reference real tasks
+
+Reference real names
+
+Reference real gaps
+
+Example:
+“You are 6 calls behind. Call these 3 leads first.”
+
+AI Responsibilities:
+
+Balance client vs pipeline time
+
+Enforce replacement rate
+
+Flag neglected high-value clients
+
+Adjust prospecting intensity dynamically
+
+DAILY GUARANTEES (SUCCESS CRITERIA)
+
+Every day must guarantee:
+
+✅ Clients are contacted intentionally
+✅ Revenue risk is monitored
+✅ New business momentum continues
+
+❌ No client goes dark accidentally
+❌ No day ends without pipeline progress
+
+FINAL RULE (BRUTAL & HONEST METRIC)
+
+Display one headline metric at the top of the Daily Plan:
+
+Replacement Rate Today
+
+Example:
+“You need 3 new qualified conversations to replace pipeline decay.
+You currently have 1.”
+
+This ties the Daily Plan directly to revenue survival, not vanity activity.

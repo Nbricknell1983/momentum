@@ -16,6 +16,24 @@ export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'dropin' | 'fo
 
 export type TaskStatus = 'pending' | 'completed' | 'snoozed';
 
+// Task types for Daily Plan revenue lanes
+export type TaskType = 
+  | 'prospecting'    // New business outreach
+  | 'follow_up'      // Pipeline follow-ups
+  | 'meeting'        // Discovery/client meetings
+  | 'delivery'       // Deliverable updates
+  | 'renewal'        // Contract renewals
+  | 'upsell'         // Expansion opportunities
+  | 'referral'       // Referral asks
+  | 'admin'          // Admin tasks
+  | 'check_in';      // Client check-ins (legacy compatibility)
+
+// Time slots for task scheduling (simple version)
+export type TaskTimeSlot = 'morning' | 'afternoon' | 'evening';
+
+// Revenue lane classification
+export type RevenueLane = 'client' | 'new_business';
+
 export type TrafficLightStatus = 'green' | 'amber' | 'red';
 
 // Nurture system types
@@ -175,11 +193,30 @@ export interface Task {
   planDate?: string;         // DD-MM-YYYY (user-facing)
   planDateKey?: string;      // YYYY-MM-DD (internal sorting key)
   planBlockId?: string | null;
-  taskType?: 'call' | 'door_knock' | 'meeting' | 'follow_up' | 'check_in' | 'renewal' | 'upsell' | 'other';
+  // Enhanced task typing for revenue lanes
+  taskType?: TaskType;
+  timeSlot?: TaskTimeSlot;
+  // Revenue lane classification (derived from taskType if not set)
+  revenueLane?: RevenueLane;
+  // Meeting-driven automation
+  revenueExtended?: boolean;         // Did this task result in revenue extension?
+  replacementTaskId?: string;        // If no revenue extended, linked replacement task
+  sourceTaskId?: string;             // Task that triggered this one (for automation tracking)
+  // Outcomes
   outcome?: 'no_answer' | 'conversation' | 'meeting_booked' | 'completed' | null;
   completedAt?: Date;
   sortOrder?: number;
 }
+
+// Helper to determine revenue lane from task type
+export function getRevenueLane(taskType?: TaskType): RevenueLane {
+  if (!taskType) return 'new_business';
+  const clientTasks: TaskType[] = ['meeting', 'delivery', 'renewal', 'upsell', 'check_in'];
+  return clientTasks.includes(taskType) ? 'client' : 'new_business';
+}
+
+// Task types that require replacement enforcement when no revenue extended
+export const REPLACEMENT_REQUIRED_TYPES: TaskType[] = ['meeting', 'delivery', 'check_in'];
 
 export interface DailyMetrics {
   id: string;
@@ -1007,6 +1044,10 @@ export interface Client {
   createdAt: Date;
   updatedAt: Date;
   archived: boolean;
+  // Client Health Engine fields
+  upsellReadiness?: 'not_ready' | 'warming' | 'ready' | 'hot';
+  deliveryStatus?: 'onboarding' | 'active' | 'blocked' | 'complete';
+  daysSinceContact?: number;  // Computed field for quick access
 }
 
 export interface Deliverable {
@@ -1528,6 +1569,141 @@ export const DEFAULT_CLIENT_FIELDS = {
   totalMRR: 0,
   archived: false,
 };
+
+// Client Health Engine - Automatic Task Injection
+
+export interface ClientTaskRecommendation {
+  clientId: string;
+  clientName: string;
+  taskType: TaskType;
+  title: string;
+  reason: string;
+  priority: number;  // 1-100, higher = more urgent
+  totalMRR: number;
+}
+
+export function generateClientTaskRecommendations(clients: Client[], maxTasks: number = 5): ClientTaskRecommendation[] {
+  const recommendations: ClientTaskRecommendation[] = [];
+  const now = new Date();
+  const seenClientTasks = new Set<string>(); // Dedupe by clientId+taskType
+  
+  for (const client of clients) {
+    if (client.archived) continue;
+    
+    // Safe access with defaults
+    const cadenceDays = client.preferredContactCadenceDays || 14;
+    const daysSinceContact = client.lastContactDate 
+      ? Math.floor((now.getTime() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24))
+      : 999;
+    
+    // Check-in needed (overdue contact)
+    const checkInKey = `${client.id}-check_in`;
+    if (daysSinceContact > cadenceDays && !seenClientTasks.has(checkInKey)) {
+      const severityMultiplier = daysSinceContact > cadenceDays * 2 ? 1.5 : 1;
+      recommendations.push({
+        clientId: client.id,
+        clientName: client.businessName,
+        taskType: 'check_in',
+        title: `Check in with ${client.businessName}`,
+        reason: `${daysSinceContact} days since last contact`,
+        priority: Math.min(100, Math.round(((client.churnRiskScore || 0) + ((client.totalMRR || 0) / 100)) * severityMultiplier)),
+        totalMRR: client.totalMRR || 0,
+      });
+      seenClientTasks.add(checkInKey);
+    }
+    
+    // Upsell opportunity (ready or hot)
+    const upsellKey = `${client.id}-upsell`;
+    if ((client.upsellReadiness === 'ready' || client.upsellReadiness === 'hot') && !seenClientTasks.has(upsellKey)) {
+      recommendations.push({
+        clientId: client.id,
+        clientName: client.businessName,
+        taskType: 'upsell',
+        title: `Upsell opportunity: ${client.businessName}`,
+        reason: client.upsellReadiness === 'hot' ? 'Hot upsell opportunity' : 'Ready for upsell conversation',
+        priority: client.upsellReadiness === 'hot' ? 90 : 70,
+        totalMRR: client.totalMRR || 0,
+      });
+      seenClientTasks.add(upsellKey);
+    }
+    
+    // Renewal coming up (within 30 days of any product end date)
+    const renewalKey = `${client.id}-renewal`;
+    const upcomingRenewals = (client.products || []).filter(p => {
+      if (!p.endDate || p.status !== 'active') return false;
+      const daysToEnd = Math.floor((new Date(p.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      return daysToEnd > 0 && daysToEnd <= 30;
+    });
+    
+    if (upcomingRenewals.length > 0 && !seenClientTasks.has(renewalKey)) {
+      const daysToRenewal = Math.min(...upcomingRenewals.map(p => 
+        Math.floor((new Date(p.endDate!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      ));
+      recommendations.push({
+        clientId: client.id,
+        clientName: client.businessName,
+        taskType: 'renewal',
+        title: `Renewal discussion: ${client.businessName}`,
+        reason: `Renewal in ${daysToRenewal} days`,
+        priority: Math.max(65, 95 - daysToRenewal), // More urgent as date approaches
+        totalMRR: client.totalMRR || 0,
+      });
+      seenClientTasks.add(renewalKey);
+    }
+    
+    // High churn risk client needs attention (only if not already check_in)
+    if (client.healthStatus === 'red' && !seenClientTasks.has(checkInKey)) {
+      recommendations.push({
+        clientId: client.id,
+        clientName: client.businessName,
+        taskType: 'check_in',
+        title: `Urgent: Review ${client.businessName} account`,
+        reason: 'High churn risk',
+        priority: 85 + ((client.totalMRR || 0) / 1000), // Weight by revenue
+        totalMRR: client.totalMRR || 0,
+      });
+      seenClientTasks.add(checkInKey);
+    }
+  }
+  
+  // Sort by priority (highest first), then by MRR (highest first)
+  recommendations.sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return b.totalMRR - a.totalMRR;
+  });
+  
+  return recommendations.slice(0, maxTasks);
+}
+
+// Replacement Rate Calculation
+
+export interface ReplacementRateResult {
+  required: number;       // Number of new qualified conversations needed
+  achieved: number;       // Number achieved today
+  deficit: number;        // required - achieved (0 if achieved >= required)
+  pipelineDecayRate: number;  // Daily pipeline decay estimate
+}
+
+export function calculateReplacementRate(
+  clientMeetingsToday: number,
+  revenueExtendedCount: number,
+  qualifiedConversationsToday: number,
+  avgConversionRate: number = 0.2  // 20% conversion default
+): ReplacementRateResult {
+  // Each client meeting without revenue extension needs replacement
+  const meetingsNeedingReplacement = clientMeetingsToday - revenueExtendedCount;
+  
+  // Assume each non-extended meeting represents potential pipeline decay
+  // Need enough new conversations to maintain pipeline
+  const required = Math.max(0, Math.ceil(meetingsNeedingReplacement / avgConversionRate));
+  
+  return {
+    required,
+    achieved: qualifiedConversationsToday,
+    deficit: Math.max(0, required - qualifiedConversationsToday),
+    pipelineDecayRate: meetingsNeedingReplacement,
+  };
+}
 
 // Re-export momentum types from momentumEngine
 export type { 
