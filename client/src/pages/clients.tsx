@@ -341,6 +341,7 @@ export default function ClientsPage() {
   
   // Task detail view state
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTaskClientId, setSelectedTaskClientId] = useState<string | null>(null);
   const [isTaskDetailDialogOpen, setIsTaskDetailDialogOpen] = useState(false);
 
   const searchString = useSearch();
@@ -631,6 +632,35 @@ export default function ClientsPage() {
     setAiFollowUp('');
     setAiEmailTemplate('');
     setAiCallScript('');
+  };
+
+  // Handler to toggle a checklist item in a task
+  const handleToggleChecklistItem = async (clientId: string, task: Task, itemIndex: number) => {
+    if (!orgId || !task.checklist) return;
+    
+    const updatedChecklist = task.checklist.map((item, idx) => 
+      idx === itemIndex ? { ...item, completed: !item.completed } : item
+    );
+    
+    try {
+      await updatePlanTask(orgId, task.id, { checklist: updatedChecklist }, authReady);
+      
+      // Update local state
+      setClientTasks(prev => ({
+        ...prev,
+        [clientId]: (prev[clientId] || []).map(t => 
+          t.id === task.id ? { ...t, checklist: updatedChecklist } : t
+        ),
+      }));
+      
+      // Update selectedTask if it's the same task
+      if (selectedTask && selectedTask.id === task.id) {
+        setSelectedTask({ ...selectedTask, checklist: updatedChecklist });
+      }
+    } catch (error) {
+      console.error('Error updating checklist:', error);
+      toast({ title: 'Error', description: 'Failed to update checklist.', variant: 'destructive' });
+    }
   };
 
   // Handler to complete a client task
@@ -3556,6 +3586,7 @@ export default function ClientsPage() {
                                           className="flex items-center gap-3 p-3 border rounded-md cursor-pointer hover-elevate"
                                           onClick={() => {
                                             setSelectedTask(task);
+                                            setSelectedTaskClientId(client.id);
                                             setIsTaskDetailDialogOpen(true);
                                           }}
                                           data-testid={`task-${task.id}`}
@@ -4098,7 +4129,7 @@ export default function ClientsPage() {
       </Dialog>
 
       {/* Task Detail Dialog */}
-      <Dialog open={isTaskDetailDialogOpen} onOpenChange={(open) => { if (!open) { setIsTaskDetailDialogOpen(false); setSelectedTask(null); } }}>
+      <Dialog open={isTaskDetailDialogOpen} onOpenChange={(open) => { if (!open) { setIsTaskDetailDialogOpen(false); setSelectedTask(null); setSelectedTaskClientId(null); } }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -4107,7 +4138,7 @@ export default function ClientsPage() {
             </DialogTitle>
           </DialogHeader>
           
-          {selectedTask && (
+          {selectedTask && selectedTaskClientId && (
             <div className="space-y-6">
               <div className="space-y-2">
                 <h3 className="text-lg font-semibold">{selectedTask.title}</h3>
@@ -4138,12 +4169,16 @@ export default function ClientsPage() {
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1">
                     <CheckSquare className="h-3 w-3" />
-                    Checklist
+                    Checklist ({selectedTask.checklist.filter(i => i.completed).length}/{selectedTask.checklist.length} completed)
                   </Label>
                   <div className="space-y-2 p-3 border rounded-md">
                     {selectedTask.checklist.map((item, idx) => (
-                      <div key={item.id || idx} className="flex items-center gap-3">
-                        <Checkbox checked={item.completed} disabled />
+                      <div key={item.id || idx} className="flex items-center gap-3 cursor-pointer hover-elevate p-1 rounded" onClick={() => handleToggleChecklistItem(selectedTaskClientId, selectedTask, idx)}>
+                        <Checkbox 
+                          checked={item.completed} 
+                          onCheckedChange={() => handleToggleChecklistItem(selectedTaskClientId, selectedTask, idx)}
+                          data-testid={`checkbox-detail-checklist-${idx}`}
+                        />
                         <span className={item.completed ? 'line-through text-muted-foreground' : ''}>
                           {item.text}
                         </span>
@@ -4209,7 +4244,7 @@ export default function ClientsPage() {
               )}
 
               <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button variant="outline" onClick={() => { setIsTaskDetailDialogOpen(false); setSelectedTask(null); }}>
+                <Button variant="outline" onClick={() => { setIsTaskDetailDialogOpen(false); setSelectedTask(null); setSelectedTaskClientId(null); }}>
                   Close
                 </Button>
               </div>
