@@ -344,6 +344,12 @@ export default function ClientsPage() {
   const [selectedTaskClientId, setSelectedTaskClientId] = useState<string | null>(null);
   const [isTaskDetailDialogOpen, setIsTaskDetailDialogOpen] = useState(false);
 
+  // Product management state
+  const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
+  const [editingProductClientId, setEditingProductClientId] = useState<string | null>(null);
+  const [editingProducts, setEditingProducts] = useState<{ productType: string; monthlyValue: number }[]>([]);
+  const [savingProducts, setSavingProducts] = useState(false);
+
   const searchString = useSearch();
 
   useEffect(() => {
@@ -1155,6 +1161,53 @@ export default function ClientsPage() {
     }
   };
 
+  const handleOpenProductDialog = (client: Client) => {
+    setEditingProductClientId(client.id);
+    setEditingProducts(client.products.map(p => ({ productType: p.productType, monthlyValue: p.monthlyValue })));
+    setIsProductDialogOpen(true);
+  };
+
+  const handleAddProduct = () => {
+    setEditingProducts(prev => [...prev, { productType: '', monthlyValue: 0 }]);
+  };
+
+  const handleRemoveProduct = (index: number) => {
+    setEditingProducts(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveProducts = async () => {
+    if (!orgId || !editingProductClientId) return;
+    
+    const validProducts = editingProducts.filter(p => p.productType.trim());
+    const now = new Date();
+    
+    const products = validProducts.map((p, idx) => ({
+      id: `prod_${idx}_${Date.now()}`,
+      productType: p.productType.trim(),
+      status: 'active' as const,
+      monthlyValue: p.monthlyValue,
+      startDate: now,
+    }));
+    
+    const totalMRR = products.reduce((sum, p) => sum + p.monthlyValue, 0);
+    
+    setSavingProducts(true);
+    try {
+      await updateClientInFirestore(orgId, editingProductClientId, { products, totalMRR }, authReady);
+      const existingClient = clients.find(c => c.id === editingProductClientId);
+      if (existingClient) {
+        dispatch(updateClient({ ...existingClient, products, totalMRR }));
+      }
+      toast({ title: "Products Updated", description: `${products.length} product(s) saved with $${totalMRR}/mo MRR.` });
+      setIsProductDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving products:', error);
+      toast({ title: "Error", description: "Failed to save products.", variant: "destructive" });
+    } finally {
+      setSavingProducts(false);
+    }
+  };
+
   const availableFilterAreas = regionFilter !== 'all' ? getAreasForRegion(regionFilter) : [];
   const availableNewClientAreas = newRegionId ? getAreasForRegion(newRegionId) : [];
 
@@ -1729,17 +1782,34 @@ export default function ClientsPage() {
                             </div>
 
                             <div className="space-y-2">
-                              <h4 className="text-sm font-medium">Products</h4>
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="text-sm font-medium">Products & Revenue</h4>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleOpenProductDialog(client)}
+                                  data-testid={`button-edit-products-${client.id}`}
+                                >
+                                  <PenTool className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                              </div>
                               {client.products.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {client.products.map((product, idx) => (
-                                    <Badge key={idx} variant="outline">
-                                      {product.productType}
-                                    </Badge>
-                                  ))}
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap gap-1">
+                                    {client.products.map((product, idx) => (
+                                      <Badge key={idx} variant="outline" className="gap-1">
+                                        {product.productType}
+                                        <span className="text-muted-foreground">${product.monthlyValue}/mo</span>
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                  <div className="text-sm font-medium text-green-600 dark:text-green-400">
+                                    Total MRR: {formatMRR(client.totalMRR)}
+                                  </div>
                                 </div>
                               ) : (
-                                <p className="text-sm text-muted-foreground">No products</p>
+                                <p className="text-sm text-muted-foreground">No products - click Edit to add</p>
                               )}
                             </div>
 
@@ -4322,6 +4392,83 @@ export default function ClientsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Management Dialog */}
+      <Dialog open={isProductDialogOpen} onOpenChange={(open) => { if (!open) { setIsProductDialogOpen(false); setEditingProductClientId(null); setEditingProducts([]); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Manage Products & Revenue
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Add products and their monthly revenue to track MRR and inform strategy development.
+            </p>
+
+            {editingProducts.length === 0 ? (
+              <div className="text-center py-6 border border-dashed rounded-md">
+                <p className="text-sm text-muted-foreground mb-2">No products yet</p>
+                <Button variant="outline" size="sm" onClick={handleAddProduct}>
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add First Product
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {editingProducts.map((product, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={product.productType}
+                      onChange={(e) => setEditingProducts(prev => prev.map((p, i) => i === idx ? { ...p, productType: e.target.value } : p))}
+                      placeholder="e.g., SEO, PPC, Website"
+                      className="flex-1"
+                      data-testid={`input-product-type-${idx}`}
+                    />
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-muted-foreground">$</span>
+                      <Input
+                        type="number"
+                        value={product.monthlyValue}
+                        onChange={(e) => setEditingProducts(prev => prev.map((p, i) => i === idx ? { ...p, monthlyValue: parseFloat(e.target.value) || 0 } : p))}
+                        placeholder="0"
+                        className="w-24"
+                        data-testid={`input-product-mrr-${idx}`}
+                      />
+                      <span className="text-sm text-muted-foreground">/mo</span>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(idx)} data-testid={`button-remove-product-${idx}`}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" onClick={handleAddProduct} className="w-full" data-testid="button-add-another-product">
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Another Product
+                </Button>
+              </div>
+            )}
+
+            {editingProducts.length > 0 && (
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-sm font-medium">Total MRR:</span>
+                <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                  ${editingProducts.reduce((sum, p) => sum + (p.monthlyValue || 0), 0).toLocaleString()}/mo
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsProductDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveProducts} disabled={savingProducts} data-testid="button-save-products">
+                {savingProducts && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save Products
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
