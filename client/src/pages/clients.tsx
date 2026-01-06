@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
 import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare } from 'lucide-react';
@@ -1564,14 +1564,15 @@ export default function ClientsPage() {
       .sort((a, b) => b.count - a.count);
   };
 
-  // Get all tasks with client info for Task Panel
-  const getAllTasksWithClientInfo = () => {
+  // Memoized: Get all tasks with client info for Task Panel
+  const allTasksWithClientInfo = useMemo(() => {
     const allTasks: Array<{ task: Task; client: Client; urgency: 'overdue' | 'today' | 'upcoming' }> = [];
     
     clients.filter(c => !c.archived).forEach(client => {
       const tasks = clientTasks[client.id] || [];
       tasks.filter(t => t.status !== 'completed').forEach(task => {
         let urgency: 'overdue' | 'today' | 'upcoming' = 'upcoming';
+        // planDateKey is in YYYY-MM-DD format, todayKey is also YYYY-MM-DD
         if (task.planDateKey && task.planDateKey < todayKey) {
           urgency = 'overdue';
         } else if (task.planDateKey === todayKey) {
@@ -1589,13 +1590,15 @@ export default function ClientsPage() {
       }
       return (a.task.planDateKey || '').localeCompare(b.task.planDateKey || '');
     });
-  };
+  }, [clients, clientTasks, todayKey]);
 
-  // Filtered tasks for Task Panel
-  const filteredPanelTasks = getAllTasksWithClientInfo().filter(({ urgency }) => {
-    if (taskPanelFilter === 'all') return true;
-    return urgency === taskPanelFilter;
-  });
+  // Memoized: Filtered tasks for Task Panel
+  const filteredPanelTasks = useMemo(() => {
+    return allTasksWithClientInfo.filter(({ urgency }) => {
+      if (taskPanelFilter === 'all') return true;
+      return urgency === taskPanelFilter;
+    });
+  }, [allTasksWithClientInfo, taskPanelFilter]);
 
   const formatDate = (date: Date | undefined) => {
     if (!date) return '-';
