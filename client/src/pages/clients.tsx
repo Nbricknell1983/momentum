@@ -17,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
 import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
@@ -1503,6 +1503,31 @@ export default function ClientsPage() {
     return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0 }).format(mrr);
   };
 
+  // Get task stats for a specific client
+  const getClientTaskStats = (clientId: string) => {
+    const tasks = clientTasks[clientId] || [];
+    const incomplete = tasks.filter(t => t.status !== 'completed');
+    const overdue = incomplete.filter(t => t.planDateKey && t.planDateKey < todayKey).length;
+    const today = incomplete.filter(t => t.planDateKey === todayKey).length;
+    const upcoming = incomplete.filter(t => t.planDateKey && t.planDateKey > todayKey).length;
+    return { overdue, today, upcoming };
+  };
+
+  // Get top health contributor for display
+  const getTopHealthReason = (client: Client): string | null => {
+    if (client.healthContributors && client.healthContributors.length > 0) {
+      const badContributor = client.healthContributors.find(c => c.status === 'bad');
+      return badContributor?.label || client.healthContributors[0]?.label || null;
+    }
+    // Fall back to calculated health
+    const health = calculateClientHealth(client);
+    if (health.healthContributors.length > 0) {
+      const badContributor = health.healthContributors.find(c => c.status === 'bad');
+      return badContributor?.label || health.healthContributors[0]?.label || null;
+    }
+    return client.healthReasons?.[0] || null;
+  };
+
   const formatDate = (date: Date | undefined) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
@@ -1712,10 +1737,34 @@ export default function ClientsPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
                           <Badge variant={healthBadgeVariant[client.healthStatus]}>
                             {HEALTH_STATUS_LABELS[client.healthStatus]}
                           </Badge>
+                          {getTopHealthReason(client) && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              {getTopHealthReason(client)}
+                            </Badge>
+                          )}
+                          {(() => {
+                            const stats = getClientTaskStats(client.id);
+                            return (
+                              <>
+                                {stats.overdue > 0 && (
+                                  <Badge variant="destructive" className="gap-1" data-testid={`badge-overdue-${client.id}`}>
+                                    <Clock className="h-3 w-3" />
+                                    {stats.overdue}
+                                  </Badge>
+                                )}
+                                {stats.today > 0 && (
+                                  <Badge variant="default" className="gap-1" data-testid={`badge-today-${client.id}`}>
+                                    <Calendar className="h-3 w-3" />
+                                    {stats.today}
+                                  </Badge>
+                                )}
+                              </>
+                            );
+                          })()}
                           {client.totalMRR > 0 && (
                             <Badge variant="outline">
                               {formatMRR(client.totalMRR)}/mo
