@@ -250,6 +250,8 @@ export default function ClientsPage() {
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'overdue' | 'health' | 'lastActivity'>('name');
+  const [taskPanelFilter, setTaskPanelFilter] = useState<'overdue' | 'today' | 'upcoming' | 'all'>('all');
+  const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(true);
   const [newBusinessName, setNewBusinessName] = useState('');
   const [newContactName, setNewContactName] = useState('');
   const [newPhone, setNewPhone] = useState('');
@@ -1562,6 +1564,39 @@ export default function ClientsPage() {
       .sort((a, b) => b.count - a.count);
   };
 
+  // Get all tasks with client info for Task Panel
+  const getAllTasksWithClientInfo = () => {
+    const allTasks: Array<{ task: Task; client: Client; urgency: 'overdue' | 'today' | 'upcoming' }> = [];
+    
+    clients.filter(c => !c.archived).forEach(client => {
+      const tasks = clientTasks[client.id] || [];
+      tasks.filter(t => t.status !== 'completed').forEach(task => {
+        let urgency: 'overdue' | 'today' | 'upcoming' = 'upcoming';
+        if (task.planDateKey && task.planDateKey < todayKey) {
+          urgency = 'overdue';
+        } else if (task.planDateKey === todayKey) {
+          urgency = 'today';
+        }
+        allTasks.push({ task, client, urgency });
+      });
+    });
+    
+    // Sort by urgency (overdue first, then today, then upcoming) and then by planDateKey
+    const urgencyOrder = { overdue: 0, today: 1, upcoming: 2 };
+    return allTasks.sort((a, b) => {
+      if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
+        return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+      }
+      return (a.task.planDateKey || '').localeCompare(b.task.planDateKey || '');
+    });
+  };
+
+  // Filtered tasks for Task Panel
+  const filteredPanelTasks = getAllTasksWithClientInfo().filter(({ urgency }) => {
+    if (taskPanelFilter === 'all') return true;
+    return urgency === taskPanelFilter;
+  });
+
   const formatDate = (date: Date | undefined) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
@@ -1808,6 +1843,105 @@ export default function ClientsPage() {
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
+          {/* Task Panel */}
+          <Collapsible open={isTaskPanelOpen} onOpenChange={setIsTaskPanelOpen}>
+            <Card className="overflow-visible">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer py-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm">Task Overview</CardTitle>
+                      <Badge variant="outline" className="text-xs">{filteredPanelTasks.length} tasks</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Badge
+                          variant={taskPanelFilter === 'all' ? 'default' : 'outline'}
+                          className="cursor-pointer text-xs"
+                          onClick={() => setTaskPanelFilter('all')}
+                        >
+                          All
+                        </Badge>
+                        <Badge
+                          variant={taskPanelFilter === 'overdue' ? 'destructive' : 'outline'}
+                          className="cursor-pointer text-xs gap-1"
+                          onClick={() => setTaskPanelFilter('overdue')}
+                        >
+                          <Clock className="h-3 w-3" />
+                          Overdue ({taskCounts.overdue})
+                        </Badge>
+                        <Badge
+                          variant={taskPanelFilter === 'today' ? 'default' : 'outline'}
+                          className="cursor-pointer text-xs gap-1"
+                          onClick={() => setTaskPanelFilter('today')}
+                        >
+                          <Calendar className="h-3 w-3" />
+                          Today ({taskCounts.today})
+                        </Badge>
+                        <Badge
+                          variant={taskPanelFilter === 'upcoming' ? 'secondary' : 'outline'}
+                          className="cursor-pointer text-xs gap-1"
+                          onClick={() => setTaskPanelFilter('upcoming')}
+                        >
+                          <CalendarPlus className="h-3 w-3" />
+                          Upcoming ({taskCounts.upcoming})
+                        </Badge>
+                      </div>
+                      {isTaskPanelOpen ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 pb-3">
+                  {filteredPanelTasks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No tasks to show</p>
+                  ) : (
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {filteredPanelTasks.map(({ task, client, urgency }) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-3 py-2 px-3 rounded hover-elevate"
+                          data-testid={`task-panel-item-${task.id}`}
+                        >
+                          <Badge
+                            variant={urgency === 'overdue' ? 'destructive' : urgency === 'today' ? 'default' : 'outline'}
+                            className="text-xs flex-shrink-0"
+                          >
+                            {urgency === 'overdue' ? 'Overdue' : urgency === 'today' ? 'Today' : task.planDate || 'Upcoming'}
+                          </Badge>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{task.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">{client.businessName}</p>
+                          </div>
+                          {task.priority && (
+                            <Badge variant="outline" className="text-xs flex-shrink-0">
+                              {task.priority}
+                            </Badge>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="flex-shrink-0"
+                            onClick={() => setExpandedClientId(client.id)}
+                            data-testid={`button-goto-client-${task.id}`}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
           {filteredClients.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
