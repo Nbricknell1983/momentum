@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
 import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
@@ -1528,6 +1529,19 @@ export default function ClientsPage() {
     return client.healthReasons?.[0] || null;
   };
 
+  // Get clients with task attribution for popover
+  const getClientsWithTaskType = (type: 'overdue' | 'today' | 'upcoming') => {
+    return clients
+      .filter(c => !c.archived)
+      .map(client => {
+        const stats = getClientTaskStats(client.id);
+        const count = type === 'overdue' ? stats.overdue : type === 'today' ? stats.today : stats.upcoming;
+        return { client, count };
+      })
+      .filter(({ count }) => count > 0)
+      .sort((a, b) => b.count - a.count);
+  };
+
   const formatDate = (date: Date | undefined) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
@@ -1555,18 +1569,75 @@ export default function ClientsPage() {
           <div className="h-6 w-px bg-border mx-1" />
 
           <div className="flex items-center gap-1 mr-2">
-            <Badge variant={taskCounts.overdue > 0 ? "destructive" : "outline"} className="gap-1" data-testid="badge-tasks-overdue">
-              <Clock className="h-3 w-3" />
-              {taskCounts.overdue} overdue
-            </Badge>
-            <Badge variant={taskCounts.today > 0 ? "default" : "outline"} className="gap-1" data-testid="badge-tasks-today">
-              <Calendar className="h-3 w-3" />
-              {taskCounts.today} today
-            </Badge>
-            <Badge variant="outline" className="gap-1 text-muted-foreground" data-testid="badge-tasks-upcoming">
-              <CalendarPlus className="h-3 w-3" />
-              {taskCounts.upcoming} upcoming
-            </Badge>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Badge variant={taskCounts.overdue > 0 ? "destructive" : "outline"} className="gap-1 cursor-pointer" data-testid="badge-tasks-overdue">
+                  <Clock className="h-3 w-3" />
+                  {taskCounts.overdue} overdue
+                </Badge>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="start">
+                <div className="text-sm font-medium mb-2">Overdue Tasks by Client</div>
+                {getClientsWithTaskType('overdue').length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No overdue tasks</p>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {getClientsWithTaskType('overdue').map(({ client, count }) => (
+                      <div key={client.id} className="flex items-center justify-between gap-2 py-1 px-2 rounded hover-elevate">
+                        <span className="text-sm truncate">{client.businessName}</span>
+                        <Badge variant="destructive" className="text-xs">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Badge variant={taskCounts.today > 0 ? "default" : "outline"} className="gap-1 cursor-pointer" data-testid="badge-tasks-today">
+                  <Calendar className="h-3 w-3" />
+                  {taskCounts.today} today
+                </Badge>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="start">
+                <div className="text-sm font-medium mb-2">Today's Tasks by Client</div>
+                {getClientsWithTaskType('today').length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No tasks for today</p>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {getClientsWithTaskType('today').map(({ client, count }) => (
+                      <div key={client.id} className="flex items-center justify-between gap-2 py-1 px-2 rounded hover-elevate">
+                        <span className="text-sm truncate">{client.businessName}</span>
+                        <Badge variant="default" className="text-xs">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Badge variant="outline" className="gap-1 text-muted-foreground cursor-pointer" data-testid="badge-tasks-upcoming">
+                  <CalendarPlus className="h-3 w-3" />
+                  {taskCounts.upcoming} upcoming
+                </Badge>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="start">
+                <div className="text-sm font-medium mb-2">Upcoming Tasks by Client</div>
+                {getClientsWithTaskType('upcoming').length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No upcoming tasks</p>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {getClientsWithTaskType('upcoming').map(({ client, count }) => (
+                      <div key={client.id} className="flex items-center justify-between gap-2 py-1 px-2 rounded hover-elevate">
+                        <span className="text-sm truncate">{client.businessName}</span>
+                        <Badge variant="outline" className="text-xs">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
           </div>
 
           <Select value={healthFilter} onValueChange={(val) => dispatch(setHealthFilter(val as HealthStatus | 'all'))}>
