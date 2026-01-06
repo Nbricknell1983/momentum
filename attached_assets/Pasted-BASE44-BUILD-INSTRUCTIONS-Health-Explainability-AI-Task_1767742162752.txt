@@ -1,0 +1,262 @@
+BASE44 BUILD INSTRUCTIONS — Health Explainability + AI Task Generation + Task Attribution
+GOAL
+
+Improve the Clients list so that:
+
+Health status is always explainable (no guessing)
+
+AI can generate corrective or scale-up tasks tied to the health drivers
+
+Top-level task counts (Overdue / Due Today / Upcoming) are actionable via an attribution preview (without opening each client card)
+
+Clients list can scale to hundreds+ clients without click-hunting
+
+1) HEALTH MUST BE EXPLAINABLE
+REQUIREMENT: Health is composed of contributors
+
+Each client must store structured “health contributors” so the system can explain why health is critical/at-risk/healthy.
+
+Client fields
+
+healthStatus: "critical" | "at_risk" | "healthy"
+
+healthScore: number (0–100 optional)
+
+healthContributors: array of contributor objects
+
+Contributor object
+
+type: "visibility" | "leads" | "conversion" | "delivery" | "engagement" | "billing" | "reputation" | "retention"
+
+status: "bad" | "ok" | "good"
+
+label: short reason text (example: “No inbound leads in 14 days”)
+
+metricKey: string (example: gbp_impressions_mom)
+
+metricValue: string/number (example: “-42%”)
+
+updatedAt: timestamp
+
+evidenceRefs: optional array of links/ids to supporting data (activity logs, reports)
+
+REQUIREMENT: Clients list must show “Reason Chip”
+
+In the Clients list row, show a short health reason at-a-glance using the top contributor:
+
+display healthStatus
+
+display healthContributors[0].label (or best-ranked contributor)
+
+No need for full detail on the list row—just the “why headline”.
+
+2) AI STRATEGY → TASK GENERATION (RUBBER HITS THE ROAD)
+REQUIREMENT: Strategy tab becomes structured, not just free text
+
+Inside a client card (Strategy section), store and display an AI-generated strategy object that can be edited by the user.
+
+Strategy fields
+
+strategyOverview: 3–6 sentences summary grounded in contributors
+
+strategyFocusAreas: array of 1–3 focus items (example: “Local Visibility”, “Conversion Rate”, “Paid Traffic”)
+
+strategyInsights: bullet list (data-backed observations)
+
+strategyPlan: phased plan (Now / Next / Later) with measurable goals
+
+REQUIREMENT: AI generates tasks from contributors + strategy focus
+
+Add an AI action: Generate Strategy Tasks that produces tasks in two modes:
+
+Fix mode (if health is Critical / At Risk): generate tasks that correct contributors marked status = "bad"
+
+Scale mode (if health is Healthy): generate tasks that amplify contributors marked status = "good" (“double down”)
+
+Task generation rules
+
+Every AI-generated task MUST be linked to:
+
+clientId
+
+one healthContributor.type
+
+one strategyFocusArea
+
+one measurable successMetric
+
+Tasks must be written in executable language (not vague advice)
+
+Include estimated effort + expected impact
+
+AI Task fields
+
+title
+
+description
+
+dueDate (AI suggests, user can edit)
+
+priority: "high" | "medium" | "low"
+
+taskType: "call" | "email" | "admin" | "content" | "seo" | "ads" | "website" | "review" | "reporting"
+
+linkedContributorType
+
+linkedFocusArea
+
+successMetric (example: “GBP views +20% in 14 days”)
+
+reviewDate (example: 14 days after completion)
+
+source: "ai_health_correction" or "ai_scale_success"
+
+REQUIREMENT: One-click task creation
+
+On the Strategy tab, render the AI task recommendations with actions:
+
+Add to Client Tasks
+
+Add to Daily Plan
+
+Defer
+
+Dismiss
+
+When a task is added:
+
+create a Task document
+
+create an Activity log entry
+
+link task back to client and contributor
+
+3) TASK COUNTS MUST BE ATTRIBUTED (NO CLICK-HUNTING)
+REQUIREMENT: Top bar task counters must open an attribution preview
+
+At the top of the Clients list, display counters:
+
+Overdue (#)
+
+Due Today (#)
+
+Upcoming (#)
+
+Interaction:
+
+On hover OR click (choose whichever Base44 supports best), open a Task Attribution Preview panel
+
+The panel lists tasks grouped by client, with task titles and due info
+
+Each task is clickable and takes user directly to context
+
+Panel behaviour
+
+Title: “Overdue Tasks (7)” (or corresponding category)
+
+Group by client:
+
+Client name
+
+list of tasks (title + days overdue / due today)
+
+Clicking a task should:
+
+open that client card
+
+auto-switch to the Tasks/Activity section
+
+highlight the task
+
+REQUIREMENT: Client rows show task urgency chips
+
+Each client row must show small task indicators when non-zero:
+
+overdueCount
+
+dueTodayCount
+
+Example behaviour:
+
+If overdueCount > 0: show “Overdue: X”
+
+If dueTodayCount > 0: show “Today: X”
+
+Clicking these chips filters the attribution preview to that client’s tasks
+
+REQUIREMENT: Sorting option for task debt
+
+Add a sort option:
+
+Sort by Most Overdue Tasks
+
+Sort by Health Score
+
+Sort by Last Activity
+
+Most Overdue Tasks should sort descending by overdueCount then dueTodayCount
+
+4) PERFORMANCE AND SCALING (HUNDREDS OF CLIENTS)
+REQUIREMENT: Precompute task counts per client
+
+Do NOT calculate overdue counts client-by-client on the fly.
+
+Maintain per-client counters:
+
+taskStats.overdueCount
+
+taskStats.dueTodayCount
+
+taskStats.upcomingCount
+
+taskStats.lastTaskDueAt
+
+Update these when:
+
+tasks are created
+
+tasks are completed
+
+due dates change
+
+tasks are deferred
+
+REQUIREMENT: Global counters
+
+Maintain global counters for:
+
+total overdue
+
+total due today
+
+total upcoming
+
+Update as above (can be computed from tasks but should be cached if needed for speed).
+
+5) HEALTH → TASK FEEDBACK LOOP
+REQUIREMENT: Task completion influences health
+
+When a task marked as source = ai_health_correction is completed:
+
+log a “health impact check” activity item
+
+on reviewDate, prompt AI to reassess contributor metrics and update health contributors/status
+
+This creates a closed loop:
+Signals → Diagnosis → Tasks → Outcomes → Health Update
+
+DEFINITION OF DONE (ACCEPTANCE CHECKLIST)
+
+Clients list shows health status AND at least one clear “reason”
+
+Overdue/Due Today counts open an attribution preview showing which clients/tasks
+
+Client rows show overdue/today chips without opening the card
+
+Clicking a task from preview navigates directly to task context
+
+Strategy tab can generate AI tasks that map to contributors + measurable outcomes
+
+Tasks can be added to Client Tasks and/or Daily Plan with one click
+
+Task counts work efficiently with hundreds of clients

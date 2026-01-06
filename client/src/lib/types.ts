@@ -1118,6 +1118,41 @@ export interface ChannelStatuses {
   ppc: ChannelStatus;
 }
 
+export type HealthContributorType = 'visibility' | 'leads' | 'conversion' | 'delivery' | 'engagement' | 'billing' | 'reputation' | 'retention' | 'contact' | 'strategy' | 'products' | 'channels';
+export type HealthContributorStatus = 'bad' | 'ok' | 'good';
+
+export interface HealthContributor {
+  type: HealthContributorType;
+  status: HealthContributorStatus;
+  label: string;
+  metricKey?: string;
+  metricValue?: string | number;
+  updatedAt: Date;
+  evidenceRefs?: string[];
+}
+
+export const HEALTH_CONTRIBUTOR_LABELS: Record<HealthContributorType, string> = {
+  visibility: 'Visibility',
+  leads: 'Leads',
+  conversion: 'Conversion',
+  delivery: 'Delivery',
+  engagement: 'Engagement',
+  billing: 'Billing',
+  reputation: 'Reputation',
+  retention: 'Retention',
+  contact: 'Contact',
+  strategy: 'Strategy',
+  products: 'Products',
+  channels: 'Channels',
+};
+
+export interface ClientTaskStats {
+  overdueCount: number;
+  dueTodayCount: number;
+  upcomingCount: number;
+  lastTaskDueAt?: Date;
+}
+
 export interface Client {
   id: string;
   userId: string;
@@ -1141,6 +1176,8 @@ export interface Client {
   healthStatus: HealthStatus;
   churnRiskScore: number;
   healthReasons: string[];
+  healthContributors?: HealthContributor[];
+  taskStats?: ClientTaskStats;
   channelStatus: ChannelStatuses;
   cadenceTier: CadenceTier;
   preferredContactCadenceDays: number;
@@ -1579,74 +1616,91 @@ export interface ClientHealthResult {
   churnRiskScore: number;
   healthStatus: HealthStatus;
   healthReasons: string[];
+  healthContributors: HealthContributor[];
 }
 
 export function calculateClientHealth(client: Client): ClientHealthResult {
   let score = 0;
   const reasons: string[] = [];
+  const contributors: HealthContributor[] = [];
   const now = new Date();
   
-  // +20/+35 if no contact or overdue
+  // Contact health
   if (client.lastContactDate) {
     const daysSinceContact = Math.floor((now.getTime() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24));
     if (daysSinceContact > client.preferredContactCadenceDays * 2) {
       score += 35;
       reasons.push(`Severely overdue for contact (${daysSinceContact} days since last contact)`);
+      contributors.push({ type: 'contact', status: 'bad', label: `${daysSinceContact}d since contact`, metricKey: 'days_since_contact', metricValue: daysSinceContact, updatedAt: now });
     } else if (daysSinceContact > client.preferredContactCadenceDays) {
       score += 20;
       reasons.push(`Overdue for contact (${daysSinceContact} days since last contact)`);
+      contributors.push({ type: 'contact', status: 'bad', label: `Overdue: ${daysSinceContact}d`, metricKey: 'days_since_contact', metricValue: daysSinceContact, updatedAt: now });
+    } else {
+      contributors.push({ type: 'contact', status: 'good', label: `Contact OK (${daysSinceContact}d)`, metricKey: 'days_since_contact', metricValue: daysSinceContact, updatedAt: now });
     }
   } else {
     score += 25;
     reasons.push('No contact date recorded');
+    contributors.push({ type: 'contact', status: 'bad', label: 'No contact recorded', updatedAt: now });
   }
   
-  // +10 if strategy needs review
+  // Strategy health
   if (client.strategyStatus === 'needs_review') {
     score += 10;
     reasons.push('Strategy needs review');
-  }
-  
-  // +20 if no strategy started
-  if (client.strategyStatus === 'not_started') {
+    contributors.push({ type: 'strategy', status: 'ok', label: 'Strategy needs review', updatedAt: now });
+  } else if (client.strategyStatus === 'not_started') {
     score += 20;
     reasons.push('No strategy plan started');
+    contributors.push({ type: 'strategy', status: 'bad', label: 'No strategy started', updatedAt: now });
+  } else if (client.strategyStatus === 'completed') {
+    contributors.push({ type: 'strategy', status: 'good', label: 'Strategy active', updatedAt: now });
   }
   
-  // +5 per paused product
+  // Products health
   const pausedProducts = client.products.filter(p => p.status === 'paused').length;
+  const activeProducts = client.products.filter(p => p.status === 'active').length;
   if (pausedProducts > 0) {
     score += pausedProducts * 5;
     reasons.push(`${pausedProducts} product(s) paused`);
+    contributors.push({ type: 'products', status: 'ok', label: `${pausedProducts} paused`, metricValue: pausedProducts, updatedAt: now });
   }
-  
-  // +10 if no active products
-  const activeProducts = client.products.filter(p => p.status === 'active').length;
   if (activeProducts === 0 && client.products.length === 0) {
     score += 10;
     reasons.push('No products assigned');
+    contributors.push({ type: 'products', status: 'bad', label: 'No products', updatedAt: now });
+  } else if (activeProducts > 0) {
+    contributors.push({ type: 'products', status: 'good', label: `${activeProducts} active`, metricValue: activeProducts, updatedAt: now });
   }
   
-  // -10 if all channels live
+  // Channels health
   const allChannelsLive = Object.values(client.channelStatus).every(s => s === 'live');
+  const channelsNotStarted = Object.entries(client.channelStatus).filter(([, status]) => status === 'not_started');
   if (allChannelsLive && Object.keys(client.channelStatus).length > 0) {
     score -= 10;
-  }
-  
-  // Check for channels not started
-  const channelsNotStarted = Object.entries(client.channelStatus).filter(([, status]) => status === 'not_started');
-  if (channelsNotStarted.length === Object.keys(client.channelStatus).length) {
+    contributors.push({ type: 'channels', status: 'good', label: 'All channels live', updatedAt: now });
+  } else if (channelsNotStarted.length === Object.keys(client.channelStatus).length) {
     score += 5;
     reasons.push('No channels have been started');
+    contributors.push({ type: 'channels', status: 'bad', label: 'No channels started', updatedAt: now });
+  } else {
+    const liveCount = Object.values(client.channelStatus).filter(s => s === 'live').length;
+    contributors.push({ type: 'channels', status: 'ok', label: `${liveCount}/${Object.keys(client.channelStatus).length} live`, updatedAt: now });
   }
   
   const finalScore = Math.max(0, Math.min(100, score));
   const healthStatus = getClientHealthStatus(finalScore);
   
+  // Sort contributors: bad first, then ok, then good
+  const statusOrder = { bad: 0, ok: 1, good: 2 };
+  contributors.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+  
   return {
     churnRiskScore: finalScore,
     healthStatus,
     healthReasons: reasons,
+    healthContributors: contributors,
   };
 }
 
