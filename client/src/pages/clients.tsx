@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -249,6 +249,7 @@ export default function ClientsPage() {
 
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<'name' | 'overdue' | 'health' | 'lastActivity'>('name');
   const [newBusinessName, setNewBusinessName] = useState('');
   const [newContactName, setNewContactName] = useState('');
   const [newPhone, setNewPhone] = useState('');
@@ -1221,6 +1222,25 @@ export default function ClientsPage() {
       if (areaFilter !== 'all' && client.areaId !== areaFilter) return false;
     }
     return true;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'overdue': {
+        const aStats = getClientTaskStats(a.id);
+        const bStats = getClientTaskStats(b.id);
+        return bStats.overdue - aStats.overdue;
+      }
+      case 'health': {
+        const healthOrder = { red: 0, amber: 1, green: 2 };
+        return healthOrder[a.healthStatus] - healthOrder[b.healthStatus];
+      }
+      case 'lastActivity': {
+        const aDate = a.lastContactDate ? new Date(a.lastContactDate).getTime() : 0;
+        const bDate = b.lastContactDate ? new Date(b.lastContactDate).getTime() : 0;
+        return aDate - bDate;
+      }
+      default:
+        return a.businessName.localeCompare(b.businessName);
+    }
   });
 
   const healthCounts = {
@@ -1678,6 +1698,19 @@ export default function ClientsPage() {
               {availableFilterAreas.map(area => (
                 <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={sortBy} onValueChange={(val) => setSortBy(val as typeof sortBy)}>
+            <SelectTrigger className="w-36" data-testid="select-sort">
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="overdue">Most Overdue</SelectItem>
+              <SelectItem value="health">Health Score</SelectItem>
+              <SelectItem value="lastActivity">Last Activity</SelectItem>
             </SelectContent>
           </Select>
         </div>
