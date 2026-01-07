@@ -2340,7 +2340,14 @@ export async function saveStrategyActions(orgId: string, clientId: string, actio
   try {
     for (const action of actions) {
       const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyActions', action.id);
-      const dataToSave = convertDatesToTimestamp(action);
+      // Sanitize: set optional fields to null if undefined, then remove any remaining undefined fields
+      const sanitizedAction = {
+        ...action,
+        suggestedDueDate: action.suggestedDueDate ?? null,
+        convertedTaskId: action.convertedTaskId ?? null,
+      };
+      const cleanedAction = removeUndefinedFields(sanitizedAction);
+      const dataToSave = convertDatesToTimestamp(cleanedAction);
       await setDoc(docRef, dataToSave);
     }
     
