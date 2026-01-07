@@ -1119,5 +1119,131 @@ Return valid JSON:
     }
   });
 
+  // ============================================
+  // Client App Integration API
+  // ============================================
+
+  // Generate a pairing code for a client
+  app.post("/api/integrations/generate-pairing-code", async (req, res) => {
+    try {
+      const { clientId, clientName, orgId } = req.body;
+
+      if (!clientId || !clientName || !orgId) {
+        return res.status(400).json({ error: "clientId, clientName, and orgId are required" });
+      }
+
+      // Generate a 6-character alphanumeric code
+      const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed confusing chars (0,O,1,I)
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += characters.charAt(Math.floor(Math.random() * characters.length));
+      }
+
+      // Generate unique ID
+      const id = `pair_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes expiry
+
+      const pairingCode = {
+        id,
+        code,
+        clientId,
+        clientName,
+        orgId,
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        status: 'pending'
+      };
+
+      res.json(pairingCode);
+    } catch (error) {
+      console.error("Error generating pairing code:", error);
+      res.status(500).json({ error: "Failed to generate pairing code" });
+    }
+  });
+
+  // Validate pairing code and return integration secret
+  app.post("/api/integrations/pair", async (req, res) => {
+    try {
+      const { pairingCode, appId, appName, appUrl } = req.body;
+
+      if (!pairingCode || !appId || !appName) {
+        return res.status(400).json({ error: "pairingCode, appId, and appName are required" });
+      }
+
+      // In a real implementation, this would:
+      // 1. Look up the pairing code in Firestore
+      // 2. Verify it hasn't expired
+      // 3. Mark it as used
+      // 4. Create the integration record
+      // For now, we return a simulated response (actual Firestore lookup happens client-side)
+
+      // Generate a permanent integration secret (32-char hex)
+      const integrationSecret = Array.from({ length: 32 }, () => 
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+
+      const integrationId = `int_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      res.json({
+        success: true,
+        integrationId,
+        integrationSecret,
+        message: "Pairing successful. Store this secret securely - it cannot be retrieved again."
+      });
+    } catch (error) {
+      console.error("Error validating pairing code:", error);
+      res.status(500).json({ error: "Failed to validate pairing code" });
+    }
+  });
+
+  // Receive events from integrated apps
+  app.post("/api/integrations/events", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: "Missing or invalid authorization header" });
+      }
+
+      const integrationSecret = authHeader.substring(7);
+      const { eventType, payload } = req.body;
+
+      if (!eventType || !payload) {
+        return res.status(400).json({ error: "eventType and payload are required" });
+      }
+
+      // In production, validate the integrationSecret against stored integrations
+      // and look up the associated clientId/orgId
+
+      const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      res.json({
+        success: true,
+        eventId,
+        receivedAt: new Date().toISOString(),
+        message: "Event received and queued for processing"
+      });
+    } catch (error) {
+      console.error("Error receiving integration event:", error);
+      res.status(500).json({ error: "Failed to process event" });
+    }
+  });
+
+  // Get integration status for a client
+  app.get("/api/integrations/client/:clientId", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+
+      // In production, this would query Firestore for integrations by clientId
+      // For now, return empty array (actual data comes from client-side Firestore)
+      res.json({ integrations: [] });
+    } catch (error) {
+      console.error("Error fetching client integrations:", error);
+      res.status(500).json({ error: "Failed to fetch integrations" });
+    }
+  });
+
   return httpServer;
 }

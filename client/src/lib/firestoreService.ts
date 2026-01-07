@@ -2376,3 +2376,186 @@ export async function updateStrategyAction(orgId: string, clientId: string, acti
     throw error;
   }
 }
+
+// ============================================
+// Client App Integration System
+// ============================================
+
+import type { PairingCode, ClientIntegration, IntegrationEvent } from './types';
+
+export async function savePairingCode(orgId: string, pairingCode: PairingCode, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/pairingCodes/${pairingCode.id}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save pairing code: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'pairingCodes', pairingCode.id);
+    const dataToSave = convertDatesToTimestamp(removeUndefinedFields(pairingCode));
+    await setDoc(docRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function fetchPairingCodeByCode(orgId: string, code: string, authReady: boolean = false): Promise<PairingCode | null> {
+  const path = `orgs/${orgId}/pairingCodes`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const codesRef = collection(db, 'orgs', orgId, 'pairingCodes');
+    const q = query(codesRef, where('code', '==', code), where('status', '==', 'pending'), limit(1));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return null;
+    }
+    
+    const docData = snapshot.docs[0];
+    const pairingCode = {
+      id: docData.id,
+      ...convertTimestampToDate(docData.data()),
+    } as PairingCode;
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return pairingCode;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function markPairingCodeUsed(orgId: string, pairingCodeId: string, appId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/pairingCodes/${pairingCodeId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update pairing code: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'pairingCodes', pairingCodeId);
+    await updateDoc(docRef, {
+      status: 'used',
+      usedAt: Timestamp.fromDate(new Date()),
+      usedByAppId: appId
+    });
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function saveClientIntegration(orgId: string, integration: ClientIntegration, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${integration.clientId}/integrations/${integration.id}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save integration: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', integration.clientId, 'integrations', integration.id);
+    const dataToSave = convertDatesToTimestamp(removeUndefinedFields(integration));
+    await setDoc(docRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function fetchClientIntegrations(orgId: string, clientId: string, authReady: boolean = false): Promise<ClientIntegration[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/integrations`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const integrationsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'integrations');
+    const q = query(integrationsRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const integrations = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as ClientIntegration[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return integrations;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function updateClientIntegration(orgId: string, clientId: string, integrationId: string, updates: Partial<ClientIntegration>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/integrations/${integrationId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update integration: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'integrations', integrationId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    await updateDoc(docRef, cleanedUpdates);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function saveIntegrationEvent(orgId: string, clientId: string, event: IntegrationEvent, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/integrationEvents/${event.id}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save event: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'integrationEvents', event.id);
+    const dataToSave = convertDatesToTimestamp(removeUndefinedFields(event));
+    await setDoc(docRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function fetchRecentIntegrationEvents(orgId: string, clientId: string, limitCount: number = 20, authReady: boolean = false): Promise<IntegrationEvent[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/integrationEvents`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const eventsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'integrationEvents');
+    const q = query(eventsRef, orderBy('receivedAt', 'desc'), limit(limitCount));
+    const snapshot = await getDocs(q);
+    const events = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as IntegrationEvent[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return events;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
