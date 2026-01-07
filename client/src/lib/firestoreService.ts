@@ -2442,12 +2442,11 @@ export async function fetchPendingPairingCodeForClient(orgId: string, clientId: 
   
   try {
     const codesRef = collection(db, 'orgs', orgId, 'pairingCodes');
+    // Query by clientId only to avoid composite index requirement
+    // Then filter by status client-side
     const q = query(
       codesRef, 
-      where('clientId', '==', clientId), 
-      where('status', '==', 'pending'),
-      orderBy('createdAt', 'desc'),
-      limit(1)
+      where('clientId', '==', clientId)
     );
     const snapshot = await getDocs(q);
     
@@ -2456,20 +2455,38 @@ export async function fetchPendingPairingCodeForClient(orgId: string, clientId: 
       return null;
     }
     
-    const docData = snapshot.docs[0];
-    const pairingCode = {
-      id: docData.id,
-      ...convertTimestampToDate(docData.data()),
-    } as PairingCode;
+    // Find the most recent pending code that hasn't expired
+    const now = new Date();
+    let validCode: PairingCode | null = null;
     
-    // Check if expired
-    if (new Date() > pairingCode.expiresAt) {
-      logFirestoreOperation('READ', path, orgId, true);
-      return null;
+    for (const docData of snapshot.docs) {
+      const pairingCode = {
+        id: docData.id,
+        ...convertTimestampToDate(docData.data()),
+      } as PairingCode;
+      
+      // Skip non-pending codes
+      if (pairingCode.status !== 'pending') continue;
+      
+      // Check if expired - mark it as expired in Firestore
+      if (now > pairingCode.expiresAt) {
+        try {
+          const docRef = doc(db, 'orgs', orgId, 'pairingCodes', pairingCode.id);
+          await updateDoc(docRef, { status: 'expired' });
+        } catch (e) {
+          console.warn('Failed to mark pairing code as expired:', e);
+        }
+        continue;
+      }
+      
+      // Found a valid pending code
+      if (!validCode || pairingCode.createdAt > validCode.createdAt) {
+        validCode = pairingCode;
+      }
     }
     
     logFirestoreOperation('READ', path, orgId, true);
-    return pairingCode;
+    return validCode;
   } catch (error: any) {
     logFirestoreOperation('READ', path, orgId, false, error);
     return null;
