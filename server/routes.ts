@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLeadSchema, insertActivitySchema } from "@shared/schema";
 import OpenAI from "openai";
+import { firestore, isFirebaseAdminReady } from "./firebase";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -1172,12 +1173,50 @@ Return valid JSON:
         return res.status(400).json({ error: "pairingCode, appId, and appName are required" });
       }
 
-      // In a real implementation, this would:
-      // 1. Look up the pairing code in Firestore
-      // 2. Verify it hasn't expired
-      // 3. Mark it as used
-      // 4. Create the integration record
-      // For now, we return a simulated response (actual Firestore lookup happens client-side)
+      // Check if Firebase Admin is configured
+      if (!isFirebaseAdminReady() || !firestore) {
+        console.warn("[Pair] Firebase Admin not configured, returning mock response");
+        const integrationSecret = Array.from({ length: 32 }, () => 
+          Math.floor(Math.random() * 16).toString(16)
+        ).join('');
+        const integrationId = `int_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return res.json({
+          success: true,
+          integrationId,
+          integrationSecret,
+          message: "Pairing successful (Firebase Admin not configured - mock mode). Store this secret securely."
+        });
+      }
+
+      // Look up the pairing code in Firestore across all orgs
+      const orgsSnapshot = await firestore.collection('orgs').get();
+      let foundPairingDoc: FirebaseFirestore.DocumentSnapshot | null = null;
+      let foundOrgId: string | null = null;
+
+      for (const orgDoc of orgsSnapshot.docs) {
+        const pairingCodesRef = firestore.collection('orgs').doc(orgDoc.id).collection('pairingCodes');
+        const pairingQuery = await pairingCodesRef.where('code', '==', pairingCode).where('status', '==', 'pending').limit(1).get();
+        
+        if (!pairingQuery.empty) {
+          foundPairingDoc = pairingQuery.docs[0];
+          foundOrgId = orgDoc.id;
+          break;
+        }
+      }
+
+      if (!foundPairingDoc || !foundOrgId) {
+        return res.status(404).json({ error: "Invalid or expired pairing code" });
+      }
+
+      const pairingData = foundPairingDoc.data()!;
+      
+      // Check if expired
+      const expiresAt = pairingData.expiresAt?.toDate ? pairingData.expiresAt.toDate() : new Date(pairingData.expiresAt);
+      if (new Date() > expiresAt) {
+        // Mark as expired
+        await foundPairingDoc.ref.update({ status: 'expired' });
+        return res.status(400).json({ error: "Pairing code has expired" });
+      }
 
       // Generate a permanent integration secret (32-char hex)
       const integrationSecret = Array.from({ length: 32 }, () => 
@@ -1185,11 +1224,43 @@ Return valid JSON:
       ).join('');
 
       const integrationId = `int_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const now = new Date();
+
+      // Create the integration record in Firestore
+      const integrationData = {
+        id: integrationId,
+        clientId: pairingData.clientId,
+        appId,
+        appName,
+        appUrl: appUrl || null,
+        integrationSecret,
+        status: 'active',
+        createdAt: now,
+        lastSyncAt: null
+      };
+
+      await firestore
+        .collection('orgs')
+        .doc(foundOrgId)
+        .collection('clients')
+        .doc(pairingData.clientId)
+        .collection('integrations')
+        .doc(integrationId)
+        .set(integrationData);
+
+      // Mark pairing code as used
+      await foundPairingDoc.ref.update({ 
+        status: 'used',
+        usedAt: now,
+        usedByAppId: appId
+      });
 
       res.json({
         success: true,
         integrationId,
         integrationSecret,
+        clientId: pairingData.clientId,
+        clientName: pairingData.clientName,
         message: "Pairing successful. Store this secret securely - it cannot be retrieved again."
       });
     } catch (error) {
