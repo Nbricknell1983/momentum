@@ -92,7 +92,7 @@ shared/           # Shared code between client/server
 - **Purpose**: Connect external client business apps (e.g., Automotive All-Stars) to Momentum for live data flow
 - **Pairing Flow**:
   1. Click "Connect App" button in client card's Integrations tab
-  2. System generates 6-character pairing code (5-minute expiry)
+  2. System generates 12-character pairing code (5-minute expiry)
   3. External app enters code to validate and receive permanent integration secret
   4. Integration secret stored for ongoing API authentication
 - **API Endpoints**:

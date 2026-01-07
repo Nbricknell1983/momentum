@@ -1132,10 +1132,10 @@ Return valid JSON:
         return res.status(400).json({ error: "clientId, clientName, and orgId are required" });
       }
 
-      // Generate a 6-character alphanumeric code
+      // Generate a 12-character alphanumeric code
       const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed confusing chars (0,O,1,I)
       let code = '';
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 12; i++) {
         code += characters.charAt(Math.floor(Math.random() * characters.length));
       }
 
