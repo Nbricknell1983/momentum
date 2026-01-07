@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor, StrategyEngineState, StrategyEngineOutput, StrategyAction, STRATEGY_QUESTIONS, STRATEGY_QUESTION_CATEGORY_LABELS, StrategyQuestionAnswer } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor, StrategyEngineState, StrategyEngineOutput, StrategyAction, STRATEGY_QUESTIONS, STRATEGY_QUESTION_CATEGORY_LABELS, StrategyQuestionAnswer, PairingCode, ClientIntegration } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask, fetchAllOrgTasks, fetchStrategyEngineState, saveStrategyEngineState, fetchStrategyEngineOutput, saveStrategyEngineOutput, fetchStrategyActions, saveStrategyActions, updateStrategyAction } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask, fetchAllOrgTasks, fetchStrategyEngineState, saveStrategyEngineState, fetchStrategyEngineOutput, saveStrategyEngineOutput, fetchStrategyActions, saveStrategyActions, updateStrategyAction, savePairingCode, fetchClientIntegrations, updateClientIntegration } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -362,6 +362,13 @@ export default function ClientsPage() {
     actionType: 'call' | 'email' | 'meeting' | 'strategy' | 'review';
   }
   const [aiRecommendations, setAiRecommendations] = useState<AIRecommendation[]>([]);
+  
+  // Client App Integration state
+  const [clientIntegrations, setClientIntegrations] = useState<Record<string, ClientIntegration[]>>({});
+  const [loadingIntegrations, setLoadingIntegrations] = useState<string | null>(null);
+  const [activePairingCode, setActivePairingCode] = useState<PairingCode | null>(null);
+  const [generatingPairingCode, setGeneratingPairingCode] = useState(false);
+  const [pairingCodeCopied, setPairingCodeCopied] = useState(false);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [attentionPanelExpanded, setAttentionPanelExpanded] = useState(true);
   
@@ -546,6 +553,80 @@ export default function ClientsPage() {
       toast({ title: 'Error', description: 'Failed to add note.', variant: 'destructive' });
     } finally {
       setSavingNote(false);
+    }
+  };
+
+  // Handler to generate a pairing code for app integration
+  const handleGeneratePairingCode = async (clientId: string, clientName: string) => {
+    if (!orgId) return;
+    setGeneratingPairingCode(true);
+    try {
+      const response = await fetch('/api/integrations/generate-pairing-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, clientName, orgId })
+      });
+      
+      if (!response.ok) throw new Error('Failed to generate pairing code');
+      
+      const pairingCode: PairingCode = await response.json();
+      pairingCode.createdAt = new Date(pairingCode.createdAt);
+      pairingCode.expiresAt = new Date(pairingCode.expiresAt);
+      
+      // Save to Firestore
+      await savePairingCode(orgId, pairingCode, authReady);
+      
+      setActivePairingCode(pairingCode);
+      setPairingCodeCopied(false);
+      
+      toast({ 
+        title: 'Pairing code generated', 
+        description: `Code expires in 5 minutes. Share with the client app.` 
+      });
+    } catch (error) {
+      console.error('Error generating pairing code:', error);
+      toast({ title: 'Error', description: 'Failed to generate pairing code.', variant: 'destructive' });
+    } finally {
+      setGeneratingPairingCode(false);
+    }
+  };
+
+  // Handler to copy pairing code to clipboard
+  const handleCopyPairingCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setPairingCodeCopied(true);
+    toast({ title: 'Copied', description: 'Pairing code copied to clipboard.' });
+    setTimeout(() => setPairingCodeCopied(false), 3000);
+  };
+
+  // Handler to load client integrations
+  const loadClientIntegrations = async (clientId: string) => {
+    if (!orgId || clientIntegrations[clientId] !== undefined) return;
+    setLoadingIntegrations(clientId);
+    try {
+      const integrations = await fetchClientIntegrations(orgId, clientId, authReady);
+      setClientIntegrations(prev => ({ ...prev, [clientId]: integrations }));
+    } catch (error) {
+      console.error('Error loading integrations:', error);
+    } finally {
+      setLoadingIntegrations(null);
+    }
+  };
+
+  // Handler to disconnect an integration
+  const handleDisconnectIntegration = async (clientId: string, integrationId: string) => {
+    if (!orgId) return;
+    try {
+      await updateClientIntegration(orgId, clientId, integrationId, { status: 'disconnected' }, authReady);
+      
+      // Refresh integrations
+      const integrations = await fetchClientIntegrations(orgId, clientId, authReady);
+      setClientIntegrations(prev => ({ ...prev, [clientId]: integrations }));
+      
+      toast({ title: 'Disconnected', description: 'App integration has been disconnected.' });
+    } catch (error) {
+      console.error('Error disconnecting integration:', error);
+      toast({ title: 'Error', description: 'Failed to disconnect integration.', variant: 'destructive' });
     }
   };
 
@@ -2350,6 +2431,14 @@ export default function ClientsPage() {
                             <ClipboardList className="h-4 w-4 mr-2" />
                             Activity
                           </TabsTrigger>
+                          <TabsTrigger 
+                            value="integrations" 
+                            data-testid={`tab-integrations-${client.id}`}
+                            onClick={() => loadClientIntegrations(client.id)}
+                          >
+                            <Link2 className="h-4 w-4 mr-2" />
+                            Integrations
+                          </TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="details" className="space-y-4">
@@ -2686,7 +2775,7 @@ export default function ClientsPage() {
                                       <span className="font-medium not-italic text-foreground">Coaching Note:</span> {clientStrategyEngineOutput[client.id]?.narrativeGuidance}
                                     </div>
                                   )}
-                                  {clientStrategyEngineOutput[client.id]?.pillars?.length > 0 && (
+                                  {(clientStrategyEngineOutput[client.id]?.pillars?.length ?? 0) > 0 && (
                                     <div className="space-y-2 pt-2">
                                       <h6 className="text-sm font-medium text-muted-foreground">Strategic Pillars</h6>
                                       <div className="grid gap-2">
@@ -4528,6 +4617,182 @@ export default function ClientsPage() {
                                   <p className="text-sm text-muted-foreground py-2" data-testid={`text-no-activity-${client.id}`}>No activity recorded yet</p>
                                 )}
                               </div>
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        {/* Integrations Tab - App Connections */}
+                        <TabsContent value="integrations" className="space-y-4">
+                          {loadingIntegrations === client.id ? (
+                            <div className="flex items-center justify-center p-8">
+                              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <div className="space-y-6">
+                              {/* Connect New App Section */}
+                              <div className="space-y-3">
+                                <h4 className="text-sm font-medium flex items-center gap-2">
+                                  <Link2 className="h-4 w-4" />
+                                  Connect External App
+                                </h4>
+                                <p className="text-sm text-muted-foreground">
+                                  Link this client's business app (e.g., Automotive All-Stars) to receive live data for strategy and planning.
+                                </p>
+                                
+                                {activePairingCode && activePairingCode.clientId === client.id ? (
+                                  <Card className="bg-muted/50">
+                                    <CardContent className="pt-4">
+                                      <div className="space-y-4">
+                                        <div className="text-center">
+                                          <p className="text-sm text-muted-foreground mb-2">Enter this code in the client app:</p>
+                                          <div className="flex items-center justify-center gap-2">
+                                            <span className="text-3xl font-mono font-bold tracking-widest" data-testid={`text-pairing-code-${client.id}`}>
+                                              {activePairingCode.code}
+                                            </span>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              onClick={() => handleCopyPairingCode(activePairingCode.code)}
+                                              data-testid={`button-copy-code-${client.id}`}
+                                            >
+                                              {pairingCodeCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                                            </Button>
+                                          </div>
+                                          <p className="text-xs text-muted-foreground mt-2">
+                                            Expires at {activePairingCode.expiresAt.toLocaleTimeString()}
+                                          </p>
+                                        </div>
+                                        <div className="flex justify-center">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setActivePairingCode(null)}
+                                            data-testid={`button-cancel-pairing-${client.id}`}
+                                          >
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                ) : (
+                                  <Button
+                                    onClick={() => handleGeneratePairingCode(client.id, client.businessName)}
+                                    disabled={generatingPairingCode}
+                                    data-testid={`button-connect-app-${client.id}`}
+                                  >
+                                    {generatingPairingCode ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                      <Link2 className="h-4 w-4 mr-2" />
+                                    )}
+                                    Connect App
+                                  </Button>
+                                )}
+                              </div>
+
+                              {/* Connected Apps Section */}
+                              <div className="space-y-3">
+                                <h4 className="text-sm font-medium flex items-center gap-2">
+                                  <CheckCircle className="h-4 w-4" />
+                                  Connected Apps
+                                </h4>
+                                
+                                {(clientIntegrations[client.id] || []).filter(i => i.status === 'active').length > 0 ? (
+                                  <div className="space-y-2">
+                                    {clientIntegrations[client.id]
+                                      .filter(i => i.status === 'active')
+                                      .map(integration => (
+                                        <Card key={integration.id} className="bg-green-500/5">
+                                          <CardContent className="py-3">
+                                            <div className="flex items-center justify-between gap-4">
+                                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                <div className="h-10 w-10 rounded-md bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                                  <Link2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                  <p className="font-medium truncate" data-testid={`text-app-name-${integration.id}`}>
+                                                    {integration.appName}
+                                                  </p>
+                                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-600/30">
+                                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                                      Connected
+                                                    </Badge>
+                                                    <span>{integration.eventCount} events received</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-2">
+                                                {integration.lastEventAt && (
+                                                  <span className="text-xs text-muted-foreground">
+                                                    Last: {new Date(integration.lastEventAt).toLocaleDateString()}
+                                                  </span>
+                                                )}
+                                                <Button
+                                                  size="icon"
+                                                  variant="ghost"
+                                                  onClick={() => handleDisconnectIntegration(client.id, integration.id)}
+                                                  data-testid={`button-disconnect-${integration.id}`}
+                                                >
+                                                  <Unlink className="h-4 w-4 text-muted-foreground" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </CardContent>
+                                        </Card>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <div className="p-4 border rounded-md text-center text-muted-foreground border-dashed">
+                                    <Link2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                    <p className="font-medium">No Apps Connected</p>
+                                    <p className="text-sm">Connect an external app to receive live business data for this client.</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Disconnected Apps (if any) */}
+                              {(clientIntegrations[client.id] || []).filter(i => i.status === 'disconnected').length > 0 && (
+                                <div className="space-y-3">
+                                  <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                    <Unlink className="h-4 w-4" />
+                                    Previously Connected
+                                  </h4>
+                                  <div className="space-y-2">
+                                    {clientIntegrations[client.id]
+                                      .filter(i => i.status === 'disconnected')
+                                      .map(integration => (
+                                        <Card key={integration.id} className="opacity-60">
+                                          <CardContent className="py-3">
+                                            <div className="flex items-center justify-between gap-4">
+                                              <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center">
+                                                  <Unlink className="h-5 w-5 text-muted-foreground" />
+                                                </div>
+                                                <div>
+                                                  <p className="font-medium">{integration.appName}</p>
+                                                  <Badge variant="outline" className="text-xs">
+                                                    Disconnected
+                                                  </Badge>
+                                                </div>
+                                              </div>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleGeneratePairingCode(client.id, client.businessName)}
+                                                data-testid={`button-reconnect-${integration.id}`}
+                                              >
+                                                <RefreshCw className="h-4 w-4 mr-2" />
+                                                Reconnect
+                                              </Button>
+                                            </div>
+                                          </CardContent>
+                                        </Card>
+                                      ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </TabsContent>

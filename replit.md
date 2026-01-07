@@ -88,6 +88,25 @@ shared/           # Shared code between client/server
 - **Filtering**: Pipeline page has linked Region/Area dropdowns (area resets when region changes)
 - **Migration**: `client/src/lib/migrateTerritories.ts` contains utilities to migrate old territory strings
 
+### Client App Integration System
+- **Purpose**: Connect external client business apps (e.g., Automotive All-Stars) to Momentum for live data flow
+- **Pairing Flow**:
+  1. Click "Connect App" button in client card's Integrations tab
+  2. System generates 6-character pairing code (5-minute expiry)
+  3. External app enters code to validate and receive permanent integration secret
+  4. Integration secret stored for ongoing API authentication
+- **API Endpoints**:
+  - `POST /api/integrations/generate-pairing-code` - Generate short-lived pairing code
+  - `POST /api/integrations/pair` - Validate code and return integration secret
+  - `POST /api/integrations/events` - Receive events from connected apps (Bearer token auth)
+  - `GET /api/integrations/client/:clientId` - Get integration status for a client
+- **Firestore Schema**:
+  - `orgs/{orgId}/pairingCodes/{pairingCodeId}` - Short-lived pairing codes
+  - `orgs/{orgId}/clients/{clientId}/integrations/{integrationId}` - Permanent integration records
+  - `orgs/{orgId}/clients/{clientId}/integrationEvents/{eventId}` - Received events from apps
+- **Event Types**: kpi_snapshot, booking, revenue, customer_activity, job_completed, custom
+- **Types**: `PairingCode`, `ClientIntegration`, `IntegrationEvent`, `KPISnapshot` in `client/src/lib/types.ts`
+
 ### Build and Development
 - Development: `npm run dev` (runs tsx for server with Vite middleware)
 - Production Build: `npm run build` (builds client with Vite, bundles server with esbuild)
