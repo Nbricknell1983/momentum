@@ -555,6 +555,48 @@ export async function fetchClientTasks(
   }
 }
 
+/**
+ * Fetch ALL tasks for the organization (for Task Overview Panel).
+ * Returns tasks grouped by clientId for efficient state hydration.
+ */
+export async function fetchAllOrgTasks(
+  orgId: string,
+  authReady: boolean = false
+): Promise<Record<string, Task[]>> {
+  const path = `orgs/${orgId}/tasks`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return {};
+  }
+  
+  try {
+    const tasksRef = collection(db, 'orgs', orgId, 'tasks');
+    const q = query(tasksRef, orderBy('dueAt', 'asc'));
+    const snapshot = await getDocs(q);
+    
+    const tasksByClient: Record<string, Task[]> = {};
+    snapshot.docs.forEach(doc => {
+      const task = {
+        id: doc.id,
+        ...convertTimestampToDate(doc.data()),
+      } as Task;
+      
+      if (task.clientId) {
+        if (!tasksByClient[task.clientId]) {
+          tasksByClient[task.clientId] = [];
+        }
+        tasksByClient[task.clientId].push(task);
+      }
+    });
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return tasksByClient;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return {};
+  }
+}
+
 // ============================================
 // NBA (Next Best Action) Queue Functions
 // ============================================
