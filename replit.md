@@ -65,6 +65,21 @@ shared/           # Shared code between client/server
 6. **Traffic Light Status**: Visual indicators for lead follow-up urgency
 7. **Momentum Scoring**: Daily/weekly metrics tracking against targets
 8. **AI Agent Panel**: Context-aware AI assistance (placeholder for OpenAI integration)
+9. **Strategy Engine**: AI-powered decision engine that generates strategic pillars and actionable tasks
+
+### Strategy Engine System
+- **Purpose**: Decision engine (not passive documentation) that produces actionable tasks
+- **Components**:
+  - Question Stack: 17 structured intelligence-gathering questions across 5 categories
+  - Engine Output: AI-generated strategic pillars with KPIs, goals, and risks
+  - Action Stream: AI-recommended tasks with urgency levels and convert-to-task functionality
+- **API Endpoint**: `/api/clients/:id/strategy/engine-sync` (POST) - GPT-4o-mini powered
+- **Firestore Schema**:
+  - `clients/{clientId}/strategyEngine/state` - Engine state with answered questions
+  - `clients/{clientId}/strategyEngine/output` - AI-generated strategy output
+  - `clients/{clientId}/strategyActions/{actionId}` - Individual action recommendations
+- **Confidence Levels**: low (<3 questions), medium (3-6), high (>6 questions answered)
+- **Question Categories**: business_context, marketing_status, goals_priorities, constraints_resources, relationship_history
 
 ### Territory System
 - **Configuration**: `client/src/lib/territoryConfig.ts` - Central source of truth for regions and areas

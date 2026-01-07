@@ -1887,3 +1887,138 @@ export {
   detectTrendAlert,
   buildCoachingPrompt
 } from './momentumEngine';
+
+// ============================================
+// Strategy Engine Types (Decision Engine)
+// ============================================
+
+export type StrategyQuestionCategory = 'foundations' | 'acquisition' | 'retention' | 'growth' | 'risks';
+
+export interface StrategyQuestion {
+  id: string;
+  category: StrategyQuestionCategory;
+  question: string;
+  description?: string;
+  answerType: 'text' | 'select' | 'multi_select' | 'number' | 'boolean';
+  options?: string[];
+  required: boolean;
+  priority: number;  // Higher = more important for strategy generation
+}
+
+export interface StrategyQuestionAnswer {
+  questionId: string;
+  answer: string | string[] | number | boolean;
+  confidence: 'low' | 'medium' | 'high';
+  source?: string;  // Where the answer came from (e.g., "client call", "analytics", "assumption")
+  updatedAt: Date;
+}
+
+export type StrategyEngineStatus = 'not_started' | 'gathering_intel' | 'strategy_generated' | 'needs_refresh';
+
+export interface StrategyEngineState {
+  status: StrategyEngineStatus;
+  answers: StrategyQuestionAnswer[];
+  pendingQuestionIds: string[];
+  lastEvaluatedAt?: Date;
+  engineVersion?: string;
+}
+
+export interface StrategyPillar {
+  id: string;
+  name: string;
+  goal: string;
+  rationale: string;
+  kpi?: string;
+  kpiTarget?: string;
+  risk?: string;
+  priority: number;  // 1 = highest priority
+}
+
+export type StrategyActionType = 'call' | 'email' | 'meeting' | 'task' | 'review' | 'follow_up';
+export type StrategyActionUrgency = 'immediate' | 'this_week' | 'this_month' | 'ongoing';
+
+export interface StrategyAction {
+  id: string;
+  clientId: string;
+  actionType: StrategyActionType;
+  title: string;
+  reason: string;
+  urgency: StrategyActionUrgency;
+  priority: number;  // 1 = highest
+  suggestedDueDate?: string;  // YYYY-MM-DD format
+  status: 'pending' | 'converted_to_task' | 'dismissed';
+  convertedTaskId?: string;
+  createdAt: Date;
+}
+
+export interface StrategyEngineOutput {
+  id: string;
+  clientId: string;
+  strategySummary: string;
+  pillars: StrategyPillar[];
+  actions: StrategyAction[];
+  narrativeGuidance: string;
+  confidenceLevel: 'low' | 'medium' | 'high';
+  inputsUsed: string[];  // List of question IDs used
+  generatedAt: Date;
+  modelVersion: string;
+  tokenUsage?: number;
+}
+
+// Strategy Question Catalog - defines the structured questions for each client
+export const STRATEGY_QUESTIONS: StrategyQuestion[] = [
+  // Foundations
+  { id: 'primary_goal', category: 'foundations', question: 'What is the client\'s primary business goal right now?', answerType: 'select', options: ['More leads/calls', 'Better lead quality', 'Higher conversion rate', 'Increase average job value', 'Expand service area', 'Build brand awareness'], required: true, priority: 10 },
+  { id: 'main_challenge', category: 'foundations', question: 'What is their biggest marketing challenge?', answerType: 'text', required: true, priority: 9 },
+  { id: 'target_customer', category: 'foundations', question: 'Who is their ideal customer?', answerType: 'text', required: true, priority: 8 },
+  { id: 'competitive_advantage', category: 'foundations', question: 'What makes them different from competitors?', answerType: 'text', required: false, priority: 6 },
+  
+  // Acquisition
+  { id: 'lead_sources', category: 'acquisition', question: 'Where do most of their leads currently come from?', answerType: 'multi_select', options: ['Google Search', 'Google Maps', 'Facebook/Social', 'Referrals', 'Repeat customers', 'Door knocking', 'Print/Radio', 'Unknown'], required: true, priority: 8 },
+  { id: 'monthly_lead_volume', category: 'acquisition', question: 'Approximately how many leads do they get per month?', answerType: 'number', required: false, priority: 7 },
+  { id: 'lead_quality_issue', category: 'acquisition', question: 'Are they having lead quality issues?', answerType: 'boolean', required: false, priority: 6 },
+  { id: 'conversion_rate', category: 'acquisition', question: 'What\'s their approximate quote-to-close rate?', answerType: 'select', options: ['Under 20%', '20-40%', '40-60%', '60-80%', 'Over 80%', 'Unknown'], required: false, priority: 5 },
+  
+  // Retention
+  { id: 'repeat_business', category: 'retention', question: 'How much of their business is repeat vs new customers?', answerType: 'select', options: ['Mostly repeat (70%+)', 'Mix of both (30-70% repeat)', 'Mostly new (under 30% repeat)', 'Unknown'], required: false, priority: 5 },
+  { id: 'reviews_strategy', category: 'retention', question: 'Do they actively collect reviews?', answerType: 'boolean', required: false, priority: 4 },
+  { id: 'referral_program', category: 'retention', question: 'Do they have a referral program?', answerType: 'boolean', required: false, priority: 3 },
+  
+  // Growth
+  { id: 'growth_timeline', category: 'growth', question: 'What\'s their growth timeline expectation?', answerType: 'select', options: ['Immediate (1-3 months)', 'Short-term (3-6 months)', 'Medium-term (6-12 months)', 'Long-term (12+ months)'], required: false, priority: 6 },
+  { id: 'budget_flexibility', category: 'growth', question: 'Is there budget flexibility for new initiatives?', answerType: 'select', options: ['Very flexible', 'Some flexibility', 'Tight budget', 'Unknown'], required: false, priority: 4 },
+  { id: 'expansion_plans', category: 'growth', question: 'Any plans to expand services or locations?', answerType: 'text', required: false, priority: 3 },
+  
+  // Risks
+  { id: 'churn_signals', category: 'risks', question: 'Are there any signs they might leave?', answerType: 'multi_select', options: ['Complaining about results', 'Slow to respond', 'Budget concerns mentioned', 'Competitor inquiries', 'Team changes', 'None observed'], required: false, priority: 7 },
+  { id: 'expectations_alignment', category: 'risks', question: 'Are their expectations realistic?', answerType: 'select', options: ['Well aligned', 'Slightly misaligned', 'Significantly misaligned', 'Unsure'], required: false, priority: 6 },
+];
+
+export const STRATEGY_QUESTION_CATEGORY_LABELS: Record<StrategyQuestionCategory, string> = {
+  foundations: 'Business Foundations',
+  acquisition: 'Lead Acquisition',
+  retention: 'Client Retention',
+  growth: 'Growth Plans',
+  risks: 'Risk Signals',
+};
+
+export const STRATEGY_ENGINE_STATUS_LABELS: Record<StrategyEngineStatus, string> = {
+  not_started: 'Not Started',
+  gathering_intel: 'Gathering Intelligence',
+  strategy_generated: 'Strategy Active',
+  needs_refresh: 'Needs Refresh',
+};
+
+export const STRATEGY_ACTION_URGENCY_LABELS: Record<StrategyActionUrgency, string> = {
+  immediate: 'Immediate',
+  this_week: 'This Week',
+  this_month: 'This Month',
+  ongoing: 'Ongoing',
+};
+
+// Default empty strategy engine state
+export const DEFAULT_STRATEGY_ENGINE_STATE: StrategyEngineState = {
+  status: 'not_started',
+  answers: [],
+  pendingQuestionIds: STRATEGY_QUESTIONS.filter(q => q.required).map(q => q.id),
+};

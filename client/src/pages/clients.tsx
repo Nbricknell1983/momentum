@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor, StrategyEngineState, StrategyEngineOutput, StrategyAction, STRATEGY_QUESTIONS, STRATEGY_QUESTION_CATEGORY_LABELS, StrategyQuestionAnswer } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask, fetchAllOrgTasks } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask, fetchAllOrgTasks, fetchStrategyEngineState, saveStrategyEngineState, fetchStrategyEngineOutput, saveStrategyEngineOutput, fetchStrategyActions, saveStrategyActions, updateStrategyAction } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -275,6 +275,15 @@ export default function ClientsPage() {
   const [newSessionAgenda, setNewSessionAgenda] = useState('');
   const [newSessionNotes, setNewSessionNotes] = useState('');
   const [savingSession, setSavingSession] = useState(false);
+
+  // Strategy Engine state
+  const [clientStrategyEngineState, setClientStrategyEngineState] = useState<Record<string, StrategyEngineState>>({});
+  const [clientStrategyEngineOutput, setClientStrategyEngineOutput] = useState<Record<string, StrategyEngineOutput | null>>({});
+  const [clientStrategyActions, setClientStrategyActions] = useState<Record<string, StrategyAction[]>>({});
+  const [runningStrategyEngine, setRunningStrategyEngine] = useState<string | null>(null);
+  const [strategyQuestionsExpanded, setStrategyQuestionsExpanded] = useState(false);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [editingQuestionAnswer, setEditingQuestionAnswer] = useState('');
 
   const [isAIToolsOpen, setIsAIToolsOpen] = useState(false);
   const [aiToolType, setAiToolType] = useState<'seo' | 'facebook' | 'meeting'>('seo');
@@ -1523,6 +1532,145 @@ export default function ClientsPage() {
     }
   };
 
+  // Strategy Engine handler - runs AI analysis and generates actions
+  const handleRunStrategyEngine = async (client: Client) => {
+    if (!orgId) return;
+    setRunningStrategyEngine(client.id);
+    try {
+      // Get current strategy engine state
+      const currentState = clientStrategyEngineState[client.id] || { status: 'not_started' as const, answers: [], pendingQuestionIds: [] };
+      
+      // Get recent activities and tasks for context
+      const activities = clientActivities[client.id] || [];
+      const tasks = clientTasks[client.id] || [];
+      
+      const response = await fetch(`/api/clients/${client.id}/strategy/engine-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client,
+          answers: currentState.answers,
+          activities: activities.slice(0, 10),
+          tasks: tasks.filter(t => t.status !== 'completed').slice(0, 10),
+          healthContributors: client.healthContributors || [],
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to run strategy engine');
+      const output = await response.json() as StrategyEngineOutput;
+      
+      // Save output to Firestore
+      await saveStrategyEngineOutput(orgId, client.id, output, authReady);
+      setClientStrategyEngineOutput(prev => ({ ...prev, [client.id]: output }));
+      
+      // Convert actions array to StrategyAction format and save
+      if (output.actions && output.actions.length > 0) {
+        const actionsToSave: StrategyAction[] = output.actions.map((a: any) => ({
+          id: a.id || `action_${client.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          clientId: client.id,
+          actionType: a.actionType,
+          title: a.title,
+          reason: a.reason,
+          urgency: a.urgency,
+          priority: a.priority,
+          suggestedDueDate: a.suggestedDueDate,
+          status: 'pending' as const,
+          createdAt: new Date(),
+        }));
+        await saveStrategyActions(orgId, client.id, actionsToSave, authReady);
+        setClientStrategyActions(prev => ({ ...prev, [client.id]: actionsToSave }));
+      }
+      
+      // Update engine state
+      const newState: StrategyEngineState = {
+        ...currentState,
+        status: 'strategy_generated',
+        lastEvaluatedAt: new Date(),
+        engineVersion: output.modelVersion,
+      };
+      await saveStrategyEngineState(orgId, client.id, newState, authReady);
+      setClientStrategyEngineState(prev => ({ ...prev, [client.id]: newState }));
+      
+      toast({ title: "Strategy Engine Complete", description: `Generated ${output.pillars?.length || 0} pillars and ${output.actions?.length || 0} recommended actions.` });
+    } catch (error) {
+      console.error('Error running strategy engine:', error);
+      toast({ title: "Error", description: "Failed to run strategy engine.", variant: "destructive" });
+    } finally {
+      setRunningStrategyEngine(null);
+    }
+  };
+
+  // Convert strategy action to task
+  const handleConvertActionToTask = async (clientId: string, action: StrategyAction) => {
+    if (!orgId || !userId) return;
+    
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+    
+    try {
+      // Create task from action
+      const today = getTodayDDMMYYYY();
+      const taskType = action.actionType === 'call' ? 'follow_up' : 
+                       action.actionType === 'meeting' ? 'meeting' : 
+                       action.actionType === 'review' ? 'delivery' : 'follow_up';
+      
+      const createdTask = await createClientTask(orgId, {
+        userId,
+        clientId,
+        clientName: client.businessName,
+        title: action.title,
+        taskType: taskType as TaskType,
+        dueDate: today,
+        notes: action.reason,
+        priority: action.priority <= 2 ? 'high' : action.priority <= 4 ? 'medium' : 'low',
+        aiEnhanced: true,
+      }, authReady);
+      
+      // Update action status with actual task ID
+      await updateStrategyAction(orgId, clientId, action.id, { 
+        status: 'converted_to_task',
+        convertedTaskId: createdTask.id,
+      }, authReady);
+      
+      // Update local state with actual task ID
+      setClientStrategyActions(prev => ({
+        ...prev,
+        [clientId]: (prev[clientId] || []).map(a => 
+          a.id === action.id ? { ...a, status: 'converted_to_task' as const, convertedTaskId: createdTask.id } : a
+        ),
+      }));
+      
+      // Refresh tasks
+      const updatedTasks = await fetchClientTasks(orgId, clientId, authReady);
+      setClientTasks(prev => ({ ...prev, [clientId]: updatedTasks }));
+      
+      toast({ title: "Task Created", description: `"${action.title}" has been added to your task list.` });
+    } catch (error) {
+      console.error('Error converting action to task:', error);
+      toast({ title: "Error", description: "Failed to create task.", variant: "destructive" });
+    }
+  };
+
+  // Dismiss strategy action
+  const handleDismissAction = async (clientId: string, actionId: string) => {
+    if (!orgId) return;
+    
+    try {
+      await updateStrategyAction(orgId, clientId, actionId, { status: 'dismissed' }, authReady);
+      
+      setClientStrategyActions(prev => ({
+        ...prev,
+        [clientId]: (prev[clientId] || []).map(a => 
+          a.id === actionId ? { ...a, status: 'dismissed' as const } : a
+        ),
+      }));
+      
+      toast({ title: "Action Dismissed" });
+    } catch (error) {
+      console.error('Error dismissing action:', error);
+    }
+  };
+
   const updateWizardField = <K extends keyof BusinessProfile>(field: K, value: BusinessProfile[K]) => {
     setWizardData(prev => ({ ...prev, [field]: value }));
   };
@@ -2420,8 +2568,8 @@ export default function ClientsPage() {
                           <Tabs value={activeStrategySubTab} onValueChange={setActiveStrategySubTab} className="w-full">
                             <TabsList className="mb-4">
                               <TabsTrigger value="overview" data-testid={`tab-strategy-overview-${client.id}`}>
-                                <LayoutDashboard className="h-4 w-4 mr-2" />
-                                Overview
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                Engine
                               </TabsTrigger>
                               <TabsTrigger value="plan" data-testid={`tab-strategy-plan-${client.id}`}>
                                 <TrendingUp className="h-4 w-4 mr-2" />
@@ -2438,42 +2586,214 @@ export default function ClientsPage() {
                             </TabsList>
 
                             <TabsContent value="overview" className="space-y-4">
+                              {/* Strategy Engine State Header */}
                               <div className="flex items-center justify-between gap-4 p-4 border rounded-md bg-muted/20">
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2">
-                                    <Target className="h-5 w-5 text-muted-foreground" />
-                                    <span className="font-medium">Strategy Status</span>
+                                    <Sparkles className="h-5 w-5 text-primary" />
+                                    <span className="font-medium">Strategy Engine State</span>
                                   </div>
-                                  <Badge variant={client.strategyStatus === 'completed' ? 'default' : 'secondary'}>
-                                    {client.strategyStatus === 'not_started' ? 'Not Started' : 
-                                     client.strategyStatus === 'in_progress' ? 'In Progress' :
-                                     client.strategyStatus === 'completed' ? 'Completed' :
-                                     client.strategyStatus === 'needs_review' ? 'Needs Review' : 'Unknown'}
-                                  </Badge>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant={clientStrategyEngineOutput[client.id] ? 'default' : 'secondary'}>
+                                      {clientStrategyEngineOutput[client.id] ? 'Strategy Active' : 
+                                       clientStrategyEngineState[client.id]?.answers?.length > 0 ? 'Gathering Intelligence' : 'Not Started'}
+                                    </Badge>
+                                    {clientStrategyEngineOutput[client.id] && (
+                                      <Badge variant="outline" className="text-xs">
+                                        Confidence: {clientStrategyEngineOutput[client.id]?.confidenceLevel || 'low'}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  {client.strategyStatus === 'completed' && clientStrategyPlan[client.id] && (
-                                    <Button 
-                                      variant="outline" 
-                                      className="gap-2"
-                                      onClick={() => setShareDialogClientId(client.id)}
-                                      data-testid={`button-share-strategy-${client.id}`}
-                                    >
-                                      <Share2 className="h-4 w-4" />
-                                      Share
-                                    </Button>
-                                  )}
                                   <Button 
                                     variant="default" 
                                     className="gap-2"
-                                    onClick={() => openWizard(client)}
-                                    data-testid={`button-start-strategy-${client.id}`}
+                                    onClick={() => handleRunStrategyEngine(client)}
+                                    disabled={runningStrategyEngine === client.id}
+                                    data-testid={`button-run-strategy-engine-${client.id}`}
                                   >
-                                    <Play className="h-4 w-4" />
-                                    {client.strategyStatus === 'not_started' ? 'Start Strategy Wizard' : 'Edit Strategy'}
+                                    {runningStrategyEngine === client.id ? (
+                                      <><Loader2 className="h-4 w-4 animate-spin" />Running...</>
+                                    ) : (
+                                      <><Sparkles className="h-4 w-4" />{clientStrategyEngineOutput[client.id] ? 'Refresh Strategy' : 'Run Strategy Engine'}</>
+                                    )}
                                   </Button>
                                 </div>
                               </div>
+
+                              {/* AI-Generated Actions (Priority Display) */}
+                              {clientStrategyActions[client.id]?.filter(a => a.status === 'pending').length > 0 && (
+                                <div className="p-4 border rounded-md space-y-3 bg-primary/5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <h5 className="font-medium flex items-center gap-2">
+                                      <Zap className="h-4 w-4 text-primary" />
+                                      Recommended Actions
+                                    </h5>
+                                    <Badge variant="outline" className="text-xs">
+                                      {clientStrategyActions[client.id]?.filter(a => a.status === 'pending').length} pending
+                                    </Badge>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {clientStrategyActions[client.id]?.filter(a => a.status === 'pending').slice(0, 5).map(action => (
+                                      <div key={action.id} className="flex items-start gap-3 p-3 bg-background rounded border">
+                                        <div className="flex-shrink-0 pt-0.5">
+                                          <Badge variant={action.urgency === 'immediate' ? 'destructive' : action.urgency === 'this_week' ? 'default' : 'secondary'} className="text-xs">
+                                            {action.urgency === 'immediate' ? 'Now' : action.urgency === 'this_week' ? 'This Week' : action.urgency === 'this_month' ? 'This Month' : 'Ongoing'}
+                                          </Badge>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium">{action.title}</p>
+                                          <p className="text-xs text-muted-foreground mt-1">{action.reason}</p>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                          <Button
+                                            size="sm"
+                                            variant="default"
+                                            onClick={() => handleConvertActionToTask(client.id, action)}
+                                            data-testid={`button-convert-action-${action.id}`}
+                                          >
+                                            <Plus className="h-3 w-3 mr-1" />
+                                            Add Task
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleDismissAction(client.id, action.id)}
+                                            data-testid={`button-dismiss-action-${action.id}`}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Strategy Engine Output Summary */}
+                              {clientStrategyEngineOutput[client.id] && (
+                                <div className="p-4 border rounded-md space-y-3">
+                                  <div className="space-y-2">
+                                    <h5 className="font-medium flex items-center gap-2">
+                                      <Target className="h-4 w-4" />
+                                      Strategic Direction
+                                    </h5>
+                                    <p className="text-sm">{clientStrategyEngineOutput[client.id]?.strategySummary}</p>
+                                  </div>
+                                  {clientStrategyEngineOutput[client.id]?.narrativeGuidance && (
+                                    <div className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3 bg-muted/20 py-2 rounded-r">
+                                      <span className="font-medium not-italic text-foreground">Coaching Note:</span> {clientStrategyEngineOutput[client.id]?.narrativeGuidance}
+                                    </div>
+                                  )}
+                                  {clientStrategyEngineOutput[client.id]?.pillars?.length > 0 && (
+                                    <div className="space-y-2 pt-2">
+                                      <h6 className="text-sm font-medium text-muted-foreground">Strategic Pillars</h6>
+                                      <div className="grid gap-2">
+                                        {clientStrategyEngineOutput[client.id]?.pillars.map(pillar => (
+                                          <div key={pillar.id} className="p-3 border rounded bg-muted/10">
+                                            <div className="flex items-start justify-between gap-2">
+                                              <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                  <Badge variant="outline" className="text-xs">P{pillar.priority}</Badge>
+                                                  <span className="font-medium text-sm">{pillar.name}</span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground mt-1">{pillar.goal}</p>
+                                              </div>
+                                              {pillar.kpi && (
+                                                <div className="text-right text-xs">
+                                                  <span className="text-muted-foreground">KPI:</span> {pillar.kpi}
+                                                  {pillar.kpiTarget && <span className="block text-primary">{pillar.kpiTarget}</span>}
+                                                </div>
+                                              )}
+                                            </div>
+                                            {pillar.risk && (
+                                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Risk: {pillar.risk}
+                                              </p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Intelligence Gathering Section */}
+                              <Collapsible open={strategyQuestionsExpanded} onOpenChange={setStrategyQuestionsExpanded}>
+                                <div className="p-4 border rounded-md space-y-3">
+                                  <CollapsibleTrigger className="w-full">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <h5 className="font-medium flex items-center gap-2">
+                                        <ClipboardList className="h-4 w-4" />
+                                        Client Intelligence
+                                      </h5>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-xs">
+                                          {clientStrategyEngineState[client.id]?.answers?.length || 0} / {STRATEGY_QUESTIONS.length} answered
+                                        </Badge>
+                                        {strategyQuestionsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                      </div>
+                                    </div>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent className="space-y-3 pt-2">
+                                    <p className="text-xs text-muted-foreground">Answer these questions to improve strategy accuracy. More answers = higher confidence.</p>
+                                    {Object.entries(
+                                      STRATEGY_QUESTIONS.reduce((acc, q) => {
+                                        if (!acc[q.category]) acc[q.category] = [];
+                                        acc[q.category].push(q);
+                                        return acc;
+                                      }, {} as Record<string, typeof STRATEGY_QUESTIONS>)
+                                    ).map(([category, questions]) => (
+                                      <div key={category} className="space-y-2">
+                                        <h6 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                          {STRATEGY_QUESTION_CATEGORY_LABELS[category as keyof typeof STRATEGY_QUESTION_CATEGORY_LABELS]}
+                                        </h6>
+                                        {questions.slice(0, 3).map(question => {
+                                          const existingAnswer = clientStrategyEngineState[client.id]?.answers?.find(a => a.questionId === question.id);
+                                          return (
+                                            <div key={question.id} className="flex items-start gap-3 p-2 rounded bg-muted/20">
+                                              <div className="flex-shrink-0 pt-1">
+                                                {existingAnswer ? (
+                                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                                ) : question.required ? (
+                                                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                                                ) : (
+                                                  <Circle className="h-4 w-4 text-muted-foreground" />
+                                                )}
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-sm">{question.question}</p>
+                                                {existingAnswer ? (
+                                                  <p className="text-xs text-muted-foreground mt-1">
+                                                    {Array.isArray(existingAnswer.answer) ? existingAnswer.answer.join(', ') : String(existingAnswer.answer)}
+                                                  </p>
+                                                ) : (
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 px-2 text-xs mt-1"
+                                                    onClick={() => {
+                                                      setEditingQuestionId(question.id);
+                                                      setEditingQuestionAnswer('');
+                                                    }}
+                                                    data-testid={`button-answer-question-${question.id}`}
+                                                  >
+                                                    <Plus className="h-3 w-3 mr-1" />
+                                                    Add Answer
+                                                  </Button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ))}
+                                  </CollapsibleContent>
+                                </div>
+                              </Collapsible>
 
                               {client.businessProfile && (
                                 <div className="p-4 border rounded-md space-y-3">

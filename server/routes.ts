@@ -676,6 +676,135 @@ Be specific and actionable. Focus on relationship repair and strategy advancemen
   });
 
   // ============================================
+  // Strategy Engine AI API
+  // ============================================
+
+  app.post("/api/clients/:clientId/strategy/engine-sync", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const { client, answers, activities, tasks, healthContributors } = req.body;
+      
+      if (!clientId || !client) {
+        return res.status(400).json({ error: "Client data is required" });
+      }
+
+      // Build context from structured question answers
+      const answeredQuestions = (answers || []).map((a: any) => ({
+        questionId: a.questionId,
+        answer: a.answer,
+        confidence: a.confidence
+      }));
+
+      // Build client snapshot for AI
+      const clientSnapshot = {
+        name: client.businessName,
+        industry: client.businessProfile?.industry || 'Unknown',
+        primaryGoal: client.businessProfile?.primaryGoal || null,
+        mrr: client.totalMRR || 0,
+        healthStatus: client.healthStatus,
+        healthContributors: (healthContributors || []).map((h: any) => ({
+          type: h.type,
+          status: h.status,
+          label: h.label
+        })),
+        products: (client.products || []).map((p: any) => ({
+          name: p.productType,
+          status: p.status,
+          value: p.monthlyValue
+        })),
+        strategyStatus: client.strategyStatus,
+        daysSinceContact: client.lastContactDate 
+          ? Math.floor((Date.now() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24)) 
+          : null,
+        recentActivities: (activities || []).slice(0, 5).map((a: any) => ({
+          type: a.type,
+          date: a.createdAt,
+          notes: a.notes?.substring(0, 100)
+        })),
+        pendingTasks: (tasks || []).filter((t: any) => t.status === 'pending').length,
+        overdueTasks: (tasks || []).filter((t: any) => {
+          if (t.status !== 'pending') return false;
+          const dueDate = t.planDateKey || t.dueAt;
+          return dueDate && dueDate < new Date().toISOString().split('T')[0].replace(/-/g, '');
+        }).length
+      };
+
+      const prompt = `You are a strategy engine for a marketing agency. Based on the structured inputs and client data, generate a strategic plan with specific, actionable recommendations.
+
+CLIENT SNAPSHOT:
+${JSON.stringify(clientSnapshot, null, 2)}
+
+STRUCTURED INTELLIGENCE (answers to strategy questions):
+${JSON.stringify(answeredQuestions, null, 2)}
+
+Generate a strategy output with the following structure. Be specific and actionable - this is for marketing execution, not passive documentation.
+
+Return valid JSON only:
+{
+  "strategySummary": "2-3 sentence executive summary of the strategic direction for this client",
+  "pillars": [
+    {
+      "id": "pillar_1",
+      "name": "Pillar name (e.g., Lead Generation, Client Retention)",
+      "goal": "Specific, measurable goal",
+      "rationale": "Why this pillar matters for this client",
+      "kpi": "Key metric to track",
+      "kpiTarget": "Target value/improvement",
+      "risk": "Main risk or blocker",
+      "priority": 1
+    }
+  ],
+  "actions": [
+    {
+      "id": "action_1",
+      "actionType": "call" | "email" | "meeting" | "task" | "review" | "follow_up",
+      "title": "Specific action (max 60 chars)",
+      "reason": "Why this action now (max 100 chars)",
+      "urgency": "immediate" | "this_week" | "this_month" | "ongoing",
+      "priority": 1
+    }
+  ],
+  "narrativeGuidance": "Coaching note for the account manager - what to focus on, watch out for, and how to approach this client",
+  "confidenceLevel": "low" | "medium" | "high"
+}
+
+Rules:
+1. Generate 2-4 strategic pillars based on client goals and health status
+2. Generate 3-6 specific actions prioritized by urgency and impact
+3. If client health is red/critical, prioritize relationship repair actions
+4. If no contact in 14+ days, include a contact action as immediate priority
+5. Confidence level depends on how many questions were answered (low if <3, medium if 3-6, high if >6)
+6. Be specific to this client's industry, products, and situation`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 2000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      const engineOutput = JSON.parse(content);
+      
+      // Add metadata
+      const result = {
+        ...engineOutput,
+        id: `strategy_${clientId}_${Date.now()}`,
+        clientId,
+        inputsUsed: answeredQuestions.map((a: any) => a.questionId),
+        generatedAt: new Date().toISOString(),
+        modelVersion: "gpt-4o-mini",
+        tokenUsage: response.usage?.total_tokens
+      };
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error running strategy engine:", error);
+      res.status(500).json({ error: "Failed to run strategy engine" });
+    }
+  });
+
+  // ============================================
   // Daily Plan AI Generation API
   // ============================================
 

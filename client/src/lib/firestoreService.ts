@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit, setDoc } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction } from './types';
 import { calculateClientHealth, createDefaultDailyPlanDoc, formatDateDDMMYYYY, activityTypeToTaskType, getCurrentTimeSlot, getTodayDDMMYYYY, toPlanDateKey, ACTIVITY_LABELS } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -2204,6 +2204,162 @@ export async function updateActionRecommendation(orgId: string, recId: string, u
   
   try {
     const docRef = doc(db, 'orgs', orgId, 'actionRecommendations', recId);
+    const cleanedUpdates = removeUndefinedFields(updates);
+    await updateDoc(docRef, cleanedUpdates);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Strategy Engine Functions
+// ============================================
+
+export async function fetchStrategyEngineState(orgId: string, clientId: string, authReady: boolean = false): Promise<StrategyEngineState | null> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyEngine/state`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyEngine', 'state');
+    const snapshot = await getDoc(docRef);
+    
+    if (!snapshot.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return null;
+    }
+    
+    const data = convertTimestampToDate(snapshot.data()) as StrategyEngineState;
+    logFirestoreOperation('READ', path, orgId, true);
+    return data;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function saveStrategyEngineState(orgId: string, clientId: string, state: StrategyEngineState, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyEngine/state`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save strategy engine state: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyEngine', 'state');
+    const dataToSave = convertDatesToTimestamp(state);
+    await setDoc(docRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function fetchStrategyEngineOutput(orgId: string, clientId: string, authReady: boolean = false): Promise<StrategyEngineOutput | null> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyEngine/output`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyEngine', 'output');
+    const snapshot = await getDoc(docRef);
+    
+    if (!snapshot.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return null;
+    }
+    
+    const data = convertTimestampToDate(snapshot.data()) as StrategyEngineOutput;
+    logFirestoreOperation('READ', path, orgId, true);
+    return data;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
+export async function saveStrategyEngineOutput(orgId: string, clientId: string, output: StrategyEngineOutput, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyEngine/output`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save strategy engine output: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyEngine', 'output');
+    const dataToSave = convertDatesToTimestamp(output);
+    await setDoc(docRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function fetchStrategyActions(orgId: string, clientId: string, authReady: boolean = false): Promise<StrategyAction[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyActions`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const actionsRef = collection(db, 'orgs', orgId, 'clients', clientId, 'strategyActions');
+    const q = query(actionsRef, orderBy('priority', 'asc'));
+    const snapshot = await getDocs(q);
+    const actions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as StrategyAction[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return actions;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function saveStrategyActions(orgId: string, clientId: string, actions: StrategyAction[], authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyActions`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot save strategy actions: not authenticated or no orgId');
+  }
+  
+  try {
+    for (const action of actions) {
+      const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyActions', action.id);
+      const dataToSave = convertDatesToTimestamp(action);
+      await setDoc(docRef, dataToSave);
+    }
+    
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateStrategyAction(orgId: string, clientId: string, actionId: string, updates: Partial<StrategyAction>, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/strategyActions/${actionId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot update strategy action: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'strategyActions', actionId);
     const cleanedUpdates = removeUndefinedFields(updates);
     await updateDoc(docRef, cleanedUpdates);
     
