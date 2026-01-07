@@ -154,6 +154,9 @@ All data is stored under organization scope: `orgs/{orgId}/`
 - `aiBriefs` - AI-generated morning briefs
 - `aiDebriefs` - AI-generated end-of-day reviews
 - `actionRecommendations` - AI action queue recommendations
+- `pairingCodes` - Short-lived pairing codes for app integrations (status: pending/used/expired)
+- `clients/{clientId}/integrations` - Permanent integration records for connected apps
+- `clients/{clientId}/integrationEvents` - Events received from connected apps
 
 ### Required Firestore Composite Indexes (MANDATORY)
 
