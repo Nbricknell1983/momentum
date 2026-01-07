@@ -2433,6 +2433,49 @@ export async function fetchPairingCodeByCode(orgId: string, code: string, authRe
   }
 }
 
+export async function fetchPendingPairingCodeForClient(orgId: string, clientId: string, authReady: boolean = false): Promise<PairingCode | null> {
+  const path = `orgs/${orgId}/pairingCodes`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const codesRef = collection(db, 'orgs', orgId, 'pairingCodes');
+    const q = query(
+      codesRef, 
+      where('clientId', '==', clientId), 
+      where('status', '==', 'pending'),
+      orderBy('createdAt', 'desc'),
+      limit(1)
+    );
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return null;
+    }
+    
+    const docData = snapshot.docs[0];
+    const pairingCode = {
+      id: docData.id,
+      ...convertTimestampToDate(docData.data()),
+    } as PairingCode;
+    
+    // Check if expired
+    if (new Date() > pairingCode.expiresAt) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return null;
+    }
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return pairingCode;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return null;
+  }
+}
+
 export async function markPairingCodeUsed(orgId: string, pairingCodeId: string, appId: string, authReady: boolean = false): Promise<void> {
   const path = `orgs/${orgId}/pairingCodes/${pairingCodeId}`;
   
