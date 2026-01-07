@@ -608,6 +608,74 @@ Focus on practical, achievable actions for a local service business. Tailor reco
   });
 
   // ============================================
+  // Client Attention AI Recommendations
+  // ============================================
+
+  app.post("/api/clients/ai/attention-recommendations", async (req, res) => {
+    try {
+      const { clients } = req.body;
+      
+      if (!clients || !Array.isArray(clients) || clients.length === 0) {
+        return res.status(400).json({ error: "Clients array is required" });
+      }
+
+      // Build a summary of clients needing attention
+      const clientSummaries = clients.slice(0, 10).map((c: any) => ({
+        name: c.businessName,
+        id: c.id,
+        health: c.healthStatus,
+        reasons: c.healthReasons?.slice(0, 2) || [],
+        contributors: c.healthContributors?.filter((h: any) => h.status === 'bad').map((h: any) => h.label) || [],
+        daysSinceContact: c.lastContactDate ? Math.floor((Date.now() - new Date(c.lastContactDate).getTime()) / (1000 * 60 * 60 * 24)) : null,
+        strategyStatus: c.strategyStatus,
+        products: c.products?.map((p: any) => ({ name: p.productType, status: p.status })) || [],
+        mrr: c.totalMRR || 0
+      }));
+
+      const prompt = `You are a client success manager for a marketing agency. Analyze these at-risk clients and provide ONE specific, actionable next step for each.
+
+Clients needing attention:
+${JSON.stringify(clientSummaries, null, 2)}
+
+For each client, generate a recommendation in this JSON format:
+{
+  "recommendations": [
+    {
+      "clientId": "client id",
+      "clientName": "client name",
+      "urgency": "critical" | "high" | "medium",
+      "action": "Specific action to take (max 50 chars)",
+      "reason": "Why this action (max 80 chars)",
+      "actionType": "call" | "email" | "meeting" | "strategy" | "review"
+    }
+  ]
+}
+
+Prioritize by:
+1. Revenue at risk (higher MRR = higher priority)
+2. Days without contact (longer = more urgent)
+3. Health status (red > amber)
+
+Be specific and actionable. Focus on relationship repair and strategy advancement.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || '{"recommendations":[]}';
+      const result = JSON.parse(content);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating attention recommendations:", error);
+      res.status(500).json({ error: "Failed to generate recommendations" });
+    }
+  });
+
+  // ============================================
   // Daily Plan AI Generation API
   // ============================================
 

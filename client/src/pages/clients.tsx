@@ -343,6 +343,19 @@ export default function ClientsPage() {
   const [aiEmailTemplate, setAiEmailTemplate] = useState('');
   const [aiCallScript, setAiCallScript] = useState('');
   
+  // AI Attention Recommendations state
+  interface AIRecommendation {
+    clientId: string;
+    clientName: string;
+    urgency: 'critical' | 'high' | 'medium';
+    action: string;
+    reason: string;
+    actionType: 'call' | 'email' | 'meeting' | 'strategy' | 'review';
+  }
+  const [aiRecommendations, setAiRecommendations] = useState<AIRecommendation[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [attentionPanelExpanded, setAttentionPanelExpanded] = useState(true);
+  
   // Task detail view state
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedTaskClientId, setSelectedTaskClientId] = useState<string | null>(null);
@@ -1579,6 +1592,42 @@ export default function ClientsPage() {
       .sort((a, b) => b.count - a.count);
   };
 
+  // Memoized: Clients needing attention (Critical or At Risk)
+  const clientsNeedingAttention = useMemo(() => {
+    return clients
+      .filter(c => !c.archived && (c.healthStatus === 'red' || c.healthStatus === 'amber'))
+      .sort((a, b) => {
+        // Sort by health status (red first), then by MRR (higher first)
+        if (a.healthStatus !== b.healthStatus) {
+          return a.healthStatus === 'red' ? -1 : 1;
+        }
+        return (b.totalMRR || 0) - (a.totalMRR || 0);
+      });
+  }, [clients]);
+
+  // Fetch AI recommendations for at-risk clients
+  const fetchAIRecommendations = useCallback(async () => {
+    if (clientsNeedingAttention.length === 0) return;
+    
+    setLoadingRecommendations(true);
+    try {
+      const response = await fetch('/api/clients/ai/attention-recommendations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clients: clientsNeedingAttention }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAiRecommendations(data.recommendations || []);
+      }
+    } catch (error) {
+      console.error('Error fetching AI recommendations:', error);
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  }, [clientsNeedingAttention]);
+
   // Memoized: Get all tasks with client info for Task Panel
   const allTasksWithClientInfo = useMemo(() => {
     const allTasks: Array<{ task: Task; client: Client; urgency: 'overdue' | 'today' | 'upcoming' }> = [];
@@ -1861,6 +1910,101 @@ export default function ClientsPage() {
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
+          {/* Needs Attention Panel - AI-powered focus section */}
+          {clientsNeedingAttention.length > 0 && (
+            <Collapsible open={attentionPanelExpanded} onOpenChange={setAttentionPanelExpanded}>
+              <Card className="overflow-visible bg-red-500/5 dark:bg-red-500/10">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="cursor-pointer py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        <CardTitle className="text-sm">Needs Attention</CardTitle>
+                        <Badge variant="destructive" className="text-xs">{clientsNeedingAttention.length} clients</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fetchAIRecommendations();
+                          }}
+                          disabled={loadingRecommendations}
+                          data-testid="button-get-ai-recommendations"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          {loadingRecommendations ? 'Analyzing...' : 'Get AI Actions'}
+                        </Button>
+                        {attentionPanelExpanded ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0 pb-3">
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {clientsNeedingAttention.slice(0, 8).map(client => {
+                        const recommendation = aiRecommendations.find(r => r.clientId === client.id);
+                        const topReason = getTopHealthReason(client);
+                        return (
+                          <div
+                            key={client.id}
+                            className={`flex items-start gap-3 py-3 px-3 rounded border ${
+                              client.healthStatus === 'red' ? 'border-red-500/30 bg-red-500/5' : 'border-amber-500/30 bg-amber-500/5'
+                            }`}
+                            data-testid={`attention-client-${client.id}`}
+                          >
+                            <div className="flex-shrink-0 pt-0.5">
+                              {healthIcons[client.healthStatus]}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-sm">{client.businessName}</span>
+                                <Badge variant={client.healthStatus === 'red' ? 'destructive' : 'secondary'} className="text-xs">
+                                  {HEALTH_STATUS_LABELS[client.healthStatus]}
+                                </Badge>
+                                {client.totalMRR > 0 && (
+                                  <Badge variant="outline" className="text-xs">{formatMRR(client.totalMRR)}/mo</Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-muted-foreground">{topReason || 'Needs review'}</span>
+                              </div>
+                              {recommendation && (
+                                <div className="mt-2 p-2 bg-background rounded border">
+                                  <div className="flex items-center gap-2">
+                                    <Sparkles className="h-3 w-3 text-primary flex-shrink-0" />
+                                    <span className="text-sm font-medium">{recommendation.action}</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1">{recommendation.reason}</p>
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-shrink-0"
+                              onClick={() => setExpandedClientId(client.id)}
+                              data-testid={`button-view-client-${client.id}`}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          )}
+
           {/* Task Panel */}
           <Collapsible open={isTaskPanelOpen} onOpenChange={setIsTaskPanelOpen}>
             <Card className="overflow-visible">
@@ -1975,7 +2119,7 @@ export default function ClientsPage() {
                 open={expandedClientId === client.id}
                 onOpenChange={(open) => setExpandedClientId(open ? client.id : null)}
               >
-                <Card className="overflow-visible" data-testid={`card-client-${client.id}`}>
+                <Card className={`overflow-visible ${client.healthStatus === 'red' ? 'bg-red-500/5 dark:bg-red-500/10' : client.healthStatus === 'amber' ? 'bg-amber-500/5 dark:bg-amber-500/10' : ''}`} data-testid={`card-client-${client.id}`}>
                   <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer">
                       <div className="flex items-center justify-between gap-4">
