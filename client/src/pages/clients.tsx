@@ -2859,6 +2859,67 @@ export default function ClientsPage() {
                                                   <p className="text-xs text-muted-foreground mt-1">
                                                     {Array.isArray(existingAnswer.answer) ? existingAnswer.answer.join(', ') : String(existingAnswer.answer)}
                                                   </p>
+                                                ) : editingQuestionId === question.id ? (
+                                                  <div className="mt-2 space-y-2">
+                                                    <Textarea
+                                                      value={editingQuestionAnswer}
+                                                      onChange={(e) => setEditingQuestionAnswer(e.target.value)}
+                                                      placeholder="Enter your answer..."
+                                                      className="text-sm min-h-[60px]"
+                                                      data-testid={`input-answer-${question.id}`}
+                                                    />
+                                                    <div className="flex gap-2">
+                                                      <Button
+                                                        size="sm"
+                                                        onClick={async () => {
+                                                          if (!editingQuestionAnswer.trim()) return;
+                                                          const currentState: StrategyEngineState = clientStrategyEngineState[client.id] || {
+                                                            status: 'gathering_intel',
+                                                            answers: [],
+                                                            pendingQuestionIds: [],
+                                                            lastEvaluatedAt: new Date()
+                                                          };
+                                                          const newAnswer: StrategyQuestionAnswer = {
+                                                            questionId: question.id,
+                                                            answer: editingQuestionAnswer.trim(),
+                                                            confidence: 'high',
+                                                            updatedAt: new Date()
+                                                          };
+                                                          const updatedAnswers = [...(currentState.answers || []), newAnswer];
+                                                          const updatedState: StrategyEngineState = {
+                                                            ...currentState,
+                                                            status: 'gathering_intel',
+                                                            answers: updatedAnswers,
+                                                            lastEvaluatedAt: new Date()
+                                                          };
+                                                          setClientStrategyEngineState(prev => ({
+                                                            ...prev,
+                                                            [client.id]: updatedState
+                                                          }));
+                                                          if (orgId) {
+                                                            await saveStrategyEngineState(orgId, client.id, updatedState);
+                                                          }
+                                                          setEditingQuestionId(null);
+                                                          setEditingQuestionAnswer('');
+                                                        }}
+                                                        data-testid={`button-save-answer-${question.id}`}
+                                                      >
+                                                        <Check className="h-3 w-3 mr-1" />
+                                                        Save
+                                                      </Button>
+                                                      <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => {
+                                                          setEditingQuestionId(null);
+                                                          setEditingQuestionAnswer('');
+                                                        }}
+                                                        data-testid={`button-cancel-answer-${question.id}`}
+                                                      >
+                                                        Cancel
+                                                      </Button>
+                                                    </div>
+                                                  </div>
                                                 ) : (
                                                   <Button
                                                     variant="ghost"
