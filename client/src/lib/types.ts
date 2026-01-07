@@ -2022,3 +2022,63 @@ export const DEFAULT_STRATEGY_ENGINE_STATE: StrategyEngineState = {
   answers: [],
   pendingQuestionIds: STRATEGY_QUESTIONS.filter(q => q.required).map(q => q.id),
 };
+
+// ============================================
+// Client App Integration System
+// ============================================
+
+export interface PairingCode {
+  id: string;
+  code: string; // Short 6-character alphanumeric code
+  clientId: string;
+  clientName: string;
+  orgId: string;
+  createdAt: Date;
+  expiresAt: Date;
+  usedAt?: Date;
+  usedByAppId?: string;
+  status: 'pending' | 'used' | 'expired';
+}
+
+export interface ClientIntegration {
+  id: string;
+  clientId: string;
+  clientName: string;
+  orgId: string;
+  appId: string; // Unique ID of the connected app
+  appName: string; // Display name (e.g., "Automotive All-Stars")
+  appUrl?: string; // Base URL of the connected app
+  integrationSecret: string; // Permanent secret for API authentication
+  status: 'active' | 'paused' | 'disconnected';
+  createdAt: Date;
+  lastEventAt?: Date;
+  eventCount: number;
+}
+
+export interface IntegrationEvent {
+  id: string;
+  integrationId: string;
+  clientId: string;
+  eventType: 'kpi_snapshot' | 'booking' | 'revenue' | 'customer_activity' | 'job_completed' | 'custom';
+  payload: Record<string, any>;
+  receivedAt: Date;
+  processedAt?: Date;
+}
+
+// KPI snapshot structure that external apps can send
+export interface KPISnapshot {
+  period: 'daily' | 'weekly' | 'monthly';
+  periodStart: string; // DD-MM-YYYY
+  periodEnd: string; // DD-MM-YYYY
+  metrics: {
+    revenue?: number;
+    bookings?: number;
+    newCustomers?: number;
+    repeatCustomers?: number;
+    averageJobValue?: number;
+    completedJobs?: number;
+    cancelledJobs?: number;
+    customerSatisfaction?: number; // 1-5 scale
+    [key: string]: any; // Allow custom metrics
+  };
+}
