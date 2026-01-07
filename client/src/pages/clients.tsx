@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
 import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor, StrategyEngineState, StrategyEngineOutput, StrategyAction, STRATEGY_QUESTIONS, STRATEGY_QUESTION_CATEGORY_LABELS, StrategyQuestionAnswer, PairingCode, ClientIntegration } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
-import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask, fetchAllOrgTasks, fetchStrategyEngineState, saveStrategyEngineState, fetchStrategyEngineOutput, saveStrategyEngineOutput, fetchStrategyActions, saveStrategyActions, updateStrategyAction, savePairingCode, fetchClientIntegrations, updateClientIntegration } from '@/lib/firestoreService';
+import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask, fetchAllOrgTasks, fetchStrategyEngineState, saveStrategyEngineState, fetchStrategyEngineOutput, saveStrategyEngineOutput, fetchStrategyActions, saveStrategyActions, updateStrategyAction, savePairingCode, fetchClientIntegrations, updateClientIntegration, fetchPendingPairingCodeForClient } from '@/lib/firestoreService';
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -599,13 +599,32 @@ export default function ClientsPage() {
     setTimeout(() => setPairingCodeCopied(false), 3000);
   };
 
-  // Handler to load client integrations
+  // Handler to load client integrations and pending pairing code
   const loadClientIntegrations = async (clientId: string) => {
-    if (!orgId || clientIntegrations[clientId] !== undefined) return;
-    setLoadingIntegrations(clientId);
+    if (!orgId) return;
+    
+    // Only show loading if integrations haven't been loaded yet
+    const firstLoad = clientIntegrations[clientId] === undefined;
+    if (firstLoad) {
+      setLoadingIntegrations(clientId);
+    }
+    
     try {
-      const integrations = await fetchClientIntegrations(orgId, clientId, authReady);
+      // Load integrations and pending pairing code in parallel
+      const [integrations, pendingCode] = await Promise.all([
+        fetchClientIntegrations(orgId, clientId, authReady),
+        fetchPendingPairingCodeForClient(orgId, clientId, authReady)
+      ]);
+      
       setClientIntegrations(prev => ({ ...prev, [clientId]: integrations }));
+      
+      // If there's a pending pairing code that hasn't expired, restore it
+      if (pendingCode && new Date() < pendingCode.expiresAt) {
+        setActivePairingCode(pendingCode);
+      } else if (activePairingCode?.clientId === clientId && pendingCode === null) {
+        // Clear expired pairing code
+        setActivePairingCode(null);
+      }
     } catch (error) {
       console.error('Error loading integrations:', error);
     } finally {
