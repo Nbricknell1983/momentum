@@ -1230,13 +1230,16 @@ Return valid JSON:
       const integrationData = {
         id: integrationId,
         clientId: pairingData.clientId,
+        clientName: pairingData.clientName,
+        orgId: foundOrgId,
         appId,
         appName,
         appUrl: appUrl || null,
         integrationSecret,
         status: 'active',
         createdAt: now,
-        lastSyncAt: null
+        lastEventAt: null,
+        eventCount: 0
       };
 
       await firestore
