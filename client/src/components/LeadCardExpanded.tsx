@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, Archive, Trash2, Heart, HeartOff, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2 } from 'lucide-react';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -162,10 +163,18 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
   const activities = useSelector((state: RootState) => state.app.activities);
-  const [isRecording, setIsRecording] = useState(false);
   const [lastLoggedActivity, setLastLoggedActivity] = useState<{ type: ActivityType; id: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoggingActivity, setIsLoggingActivity] = useState<ActivityType | null>(null);
+  
+  const handleDictationResult = useCallback((transcript: string) => {
+    const currentNotes = lead.notes || '';
+    const separator = currentNotes && !currentNotes.endsWith(' ') ? ' ' : '';
+    const newNotes = currentNotes + separator + transcript;
+    dispatch(updateLead({ ...lead, notes: newNotes, updatedAt: new Date() }));
+  }, [lead, dispatch]);
+  
+  const { isListening, startListening, stopListening, isSupported: dictationSupported } = useSpeechRecognition(handleDictationResult);
 
   const activityCounts = activities
     .filter(a => a.leadId === lead.id)
@@ -248,8 +257,11 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   };
 
   const toggleRecording = () => {
-    setIsRecording(!isRecording);
-    console.log(isRecording ? 'Stopped recording' : 'Started recording');
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
   };
 
   const ActivityButton = ({ type, label }: { type: ActivityType; label: string }) => {
@@ -486,15 +498,17 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
               <Button variant="outline" size="sm" onClick={() => console.log('Save notes')}>
                 Save notes
               </Button>
-              <Button
-                variant={isRecording ? 'destructive' : 'outline'}
-                size="sm"
-                onClick={toggleRecording}
-                className="gap-1"
-              >
-                <Mic className="h-3 w-3" />
-                Start dictation
-              </Button>
+              {dictationSupported && (
+                <Button
+                  variant={isListening ? 'destructive' : 'outline'}
+                  size="sm"
+                  onClick={toggleRecording}
+                  className={`gap-1 ${isListening ? 'animate-pulse' : ''}`}
+                >
+                  {isListening ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                  {isListening ? 'Stop dictation' : 'Start dictation'}
+                </Button>
+              )}
             </div>
           </div>
 
