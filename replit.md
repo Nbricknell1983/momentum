@@ -59,7 +59,10 @@ A decision engine generating strategic pillars, KPIs, goals, risks, and actionab
 Configurable regions and areas with linked filtering capabilities for lead organization.
 
 ### Leads Research System
-Discovers new Australian businesses via Google Business Profiles and the Australian Business Register (ABR). Offers AI-powered outreach script generation for new leads.
+Discovers new Australian businesses via Google Business Profiles and the Australian Business Register (ABR). Features include:
+- **Auto-generated reasons**: "Why suggested" data from search results auto-populates the reason field when adding leads
+- **AI-powered outreach scripts**: Generates personalized Text, Email, and Call scripts using NEPQ, Jeb Blount, Chris Voss frameworks
+- **Outreach Scripts on Suspect Cards**: Leads in "suspect" stage have an "Outreach Scripts" button in Quick Actions (Pipeline page)
 
 ### Marketing Website
 An SEO-optimized public website (`battlescore.com.au`) targeting business consultancy keywords, with dynamic SEO features and structured data.

@@ -366,8 +366,39 @@ export default function ResearchPage() {
     }
   };
 
+  // Generate "Why suggested" reason for Google results
+  const generateGoogleWhySuggested = (place: GooglePlaceResult): string => {
+    const reasons: string[] = [];
+    
+    if (place.reviewCount === 0) {
+      reasons.push('No reviews yet - brand new business that likely needs marketing help');
+    } else if (place.reviewCount < 10) {
+      reasons.push(`Only ${place.reviewCount} reviews - very new business building their presence`);
+    } else if (place.reviewCount < 50) {
+      reasons.push(`${place.reviewCount} reviews - newer business still establishing reputation`);
+    } else {
+      reasons.push(`Established business with ${place.reviewCount} reviews`);
+    }
+    
+    if (!place.website) {
+      reasons.push('No website detected - opportunity for digital services');
+    }
+    
+    if (place.rating && place.rating < 4) {
+      reasons.push('Rating below 4.0 - may need reputation help');
+    }
+    
+    return reasons.join('. ');
+  };
+
+  // Generate "Why suggested" reason for ABR results
+  const generateAbrWhySuggested = (business: ABRBusinessResult): string => {
+    return `Recently found via ABR search in ${business.State} ${business.Postcode}. Active registered business that may need professional services.`;
+  };
+
   // Open add lead dialog for ABR business
   const openAddLeadDialogAbr = (business: ABRBusinessResult) => {
+    const autoReason = generateAbrWhySuggested(business);
     setAddLeadData({
       type: 'abr',
       businessName: business.Name,
@@ -376,7 +407,7 @@ export default function ResearchPage() {
       abnState: business.State,
       abnPostcode: business.Postcode,
     });
-    setAddedReason('');
+    setAddedReason(autoReason);
     setOutreachScripts(null);
     setAddLeadDialogOpen(true);
   };
@@ -384,6 +415,7 @@ export default function ResearchPage() {
   // Open add lead dialog for Google place
   const openAddLeadDialogGoogle = (place: GooglePlaceResult) => {
     const selectedType = BUSINESS_TYPES.find(t => t.value === googleBusinessType);
+    const autoReason = generateGoogleWhySuggested(place);
     setAddLeadData({
       type: 'google',
       businessName: place.name,
@@ -397,7 +429,7 @@ export default function ResearchPage() {
       placeId: place.placeId,
       address: place.address,
     });
-    setAddedReason('');
+    setAddedReason(autoReason);
     setOutreachScripts(null);
     setAddLeadDialogOpen(true);
   };

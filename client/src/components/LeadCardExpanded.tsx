@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { AIMessageModal } from './AIMessageModal';
+import { OutreachScriptsDialog } from './OutreachScriptsDialog';
 
 const NEPQ_LABELS = [
   'Situation Aware',
@@ -174,6 +175,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const [aiMessageModalOpen, setAiMessageModalOpen] = useState(false);
   const [aiMessageChannel, setAiMessageChannel] = useState<'sms' | 'email'>('sms');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [outreachScriptsOpen, setOutreachScriptsOpen] = useState(false);
   const [contactReason, setContactReason] = useState(lead.nextContactReason || '');
   const [isSavingDate, setIsSavingDate] = useState(false);
 
@@ -843,6 +845,19 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 {!lead.phone && !lead.email && (
                   <span className="text-xs text-muted-foreground">Add phone or email to enable quick actions</span>
                 )}
+                {/* Outreach Scripts button for suspect stage */}
+                {lead.stage === 'suspect' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                    onClick={() => setOutreachScriptsOpen(true)}
+                    data-testid={`button-outreach-scripts-${lead.id}`}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Outreach Scripts
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -978,6 +993,13 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         channel={aiMessageChannel}
         lead={lead}
         activityHistory={leadActivityHistory}
+      />
+
+      {/* Outreach Scripts Dialog */}
+      <OutreachScriptsDialog
+        lead={lead}
+        open={outreachScriptsOpen}
+        onOpenChange={setOutreachScriptsOpen}
       />
     </Card>
   );
