@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { AIMessageModal } from './AIMessageModal';
 
 const NEPQ_LABELS = [
   'Situation Aware',
@@ -167,6 +168,18 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const [lastLoggedActivity, setLastLoggedActivity] = useState<{ type: ActivityType; id: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoggingActivity, setIsLoggingActivity] = useState<ActivityType | null>(null);
+  const [aiMessageModalOpen, setAiMessageModalOpen] = useState(false);
+  const [aiMessageChannel, setAiMessageChannel] = useState<'sms' | 'email'>('sms');
+
+  const openAiMessageModal = (channel: 'sms' | 'email') => {
+    setAiMessageChannel(channel);
+    setAiMessageModalOpen(true);
+  };
+
+  const leadActivityHistory = activities
+    .filter(a => a.leadId === lead.id)
+    .slice(0, 5)
+    .map(a => `${a.type}: ${a.notes || 'No notes'}`);
   
   const handleDictationResult = useCallback((transcript: string) => {
     const currentNotes = lead.notes || '';
@@ -561,9 +574,14 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 )}
               </div>
             )}
-            {/* Quick Send Actions */}
+            {/* Quick Send Actions with AI */}
             <div className="space-y-2">
-              <Label className="text-xs">Quick Actions</Label>
+              <Label className="text-xs flex items-center gap-1.5">
+                Quick Actions
+                <Badge variant="outline" className="text-[10px] h-4 px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300">
+                  AI
+                </Badge>
+              </Label>
               <div className="flex items-center gap-2 flex-wrap">
                 {lead.phone && (
                   <>
@@ -583,13 +601,11 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                       variant="outline"
                       size="sm"
                       className="gap-1.5 bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
-                      asChild
+                      onClick={() => openAiMessageModal('sms')}
                       data-testid={`button-sms-${lead.id}`}
                     >
-                      <a href={`sms:${lead.phone}`}>
-                        <MessageSquare className="h-3 w-3" />
-                        Text
-                      </a>
+                      <MessageSquare className="h-3 w-3" />
+                      Text
                     </Button>
                   </>
                 )}
@@ -598,13 +614,11 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                     variant="outline"
                     size="sm"
                     className="gap-1.5 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
-                    asChild
+                    onClick={() => openAiMessageModal('email')}
                     data-testid={`button-email-${lead.id}`}
                   >
-                    <a href={`mailto:${lead.email}?subject=Following up - ${lead.companyName}`}>
-                      <Mail className="h-3 w-3" />
-                      Email
-                    </a>
+                    <Mail className="h-3 w-3" />
+                    Email
                   </Button>
                 )}
                 {!lead.phone && !lead.email && (
@@ -737,6 +751,15 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
           </div>
         </div>
       )}
+      
+      {/* AI Message Modal */}
+      <AIMessageModal
+        open={aiMessageModalOpen}
+        onOpenChange={setAiMessageModalOpen}
+        channel={aiMessageChannel}
+        lead={lead}
+        activityHistory={leadActivityHistory}
+      />
     </Card>
   );
 }
