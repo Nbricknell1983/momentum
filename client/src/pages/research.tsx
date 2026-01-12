@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar, Check, ChevronsUpDown } from 'lucide-react';
+import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar, Check, ChevronsUpDown, Mail, MessageSquare, Copy } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,13 +10,41 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { addLead } from '@/store';
 import { createLead } from '@/lib/firestoreService';
 import { v4 as uuidv4 } from 'uuid';
-import type { Lead } from '@/lib/types';
+import type { Lead, LeadSourceData } from '@/lib/types';
+
+interface AddLeadDialogData {
+  type: 'abr' | 'google';
+  businessName: string;
+  businessType?: string;
+  location?: string;
+  phone?: string;
+  website?: string;
+  rating?: number;
+  reviewCount?: number;
+  isLikelyNew?: boolean;
+  // ABR specific
+  abn?: string;
+  abnState?: string;
+  abnPostcode?: string;
+  // Google specific
+  placeId?: string;
+  address?: string;
+}
+
+interface OutreachScripts {
+  textScript: string;
+  emailScript: string;
+  callScript: string;
+}
 
 interface ABRBusinessResult {
   Abn: string;
@@ -185,6 +213,15 @@ export default function ResearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Add Lead Dialog state
+  const [addLeadDialogOpen, setAddLeadDialogOpen] = useState(false);
+  const [addLeadData, setAddLeadData] = useState<AddLeadDialogData | null>(null);
+  const [addedReason, setAddedReason] = useState('');
+  const [outreachScripts, setOutreachScripts] = useState<OutreachScripts | null>(null);
+  const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
+  const [isSavingLead, setIsSavingLead] = useState(false);
+  const [activeScriptTab, setActiveScriptTab] = useState<'text' | 'email' | 'call'>('text');
 
   // ABR Search
   const handleAbrSearch = async () => {
@@ -329,80 +366,94 @@ export default function ResearchPage() {
     }
   };
 
-  const handleAddAbrLead = async (business: ABRBusinessResult) => {
-    if (!orgId || !user) {
-      toast({
-        title: 'Error',
-        description: 'You must be logged in to add leads',
-        variant: 'destructive',
-      });
-      return;
-    }
+  // Open add lead dialog for ABR business
+  const openAddLeadDialogAbr = (business: ABRBusinessResult) => {
+    setAddLeadData({
+      type: 'abr',
+      businessName: business.Name,
+      location: `${business.State} ${business.Postcode}`,
+      abn: business.Abn,
+      abnState: business.State,
+      abnPostcode: business.Postcode,
+    });
+    setAddedReason('');
+    setOutreachScripts(null);
+    setAddLeadDialogOpen(true);
+  };
+
+  // Open add lead dialog for Google place
+  const openAddLeadDialogGoogle = (place: GooglePlaceResult) => {
+    const selectedType = BUSINESS_TYPES.find(t => t.value === googleBusinessType);
+    setAddLeadData({
+      type: 'google',
+      businessName: place.name,
+      businessType: selectedType?.label || place.types?.[0] || 'Business',
+      location: place.address || searchedLocation || googleLocation,
+      phone: place.phone || undefined,
+      website: place.website || undefined,
+      rating: place.rating ?? undefined,
+      reviewCount: place.reviewCount,
+      isLikelyNew: place.isLikelyNew,
+      placeId: place.placeId,
+      address: place.address,
+    });
+    setAddedReason('');
+    setOutreachScripts(null);
+    setAddLeadDialogOpen(true);
+  };
+
+  // Generate outreach scripts using AI
+  const generateOutreachScripts = async () => {
+    if (!addLeadData || !addedReason.trim()) return;
     
-    setAddingId(business.Abn);
+    setIsGeneratingScripts(true);
     
     try {
-      const newLead: Lead = {
-        id: uuidv4(),
-        userId: user.uid,
-        companyName: business.Name,
-        territory: `${business.State} ${business.Postcode}`,
-        contactName: '',
-        email: '',
-        phone: '',
-        stage: 'suspect',
-        mrr: 0,
-        notes: `ABN: ${business.Abn}\nState: ${business.State}\nPostcode: ${business.Postcode}\nSource: ABR Research`,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        archived: false,
-        sourceData: {
-          source: 'abr',
-          abn: business.Abn,
-          abnState: business.State,
-          abnPostcode: business.Postcode,
-          addedReason: 'Found via ABR business registry search',
-          businessSignals: ['Newly registered business', 'Active ABN'],
-        },
-        nurtureMode: 'none',
-        nurtureStatus: null,
-        nurtureCadenceId: null,
-        nurtureStepIndex: null,
-        enrolledInNurtureAt: null,
-        nextTouchAt: null,
-        lastTouchAt: null,
-        lastTouchChannel: null,
-        touchesNoResponse: 0,
-        engagementScore: 0,
-        nurturePriorityScore: 0,
-        regionId: undefined,
-        regionName: undefined,
-        areaId: undefined,
-        areaName: undefined,
-        territoryKey: undefined,
-      };
-      
-      const savedLead = await createLead(orgId, newLead, authReady);
-      dispatch(addLead(savedLead));
-      
-      toast({
-        title: 'Lead added',
-        description: `${business.Name} has been added to your pipeline`,
+      const businessSignals: string[] = [];
+      if (addLeadData.isLikelyNew) businessSignals.push('Likely new business (few reviews)');
+      if (addLeadData.rating && addLeadData.rating >= 4.5) businessSignals.push('High customer rating');
+      if (addLeadData.reviewCount && addLeadData.reviewCount < 10) businessSignals.push('Growing business - early stage');
+      if (addLeadData.website) businessSignals.push('Has website presence');
+      if (addLeadData.abn) businessSignals.push('Active ABN - registered business');
+
+      const response = await fetch('/api/leads/generate-outreach-scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: addLeadData.businessName,
+          businessType: addLeadData.businessType,
+          location: addLeadData.location,
+          phone: addLeadData.phone,
+          website: addLeadData.website,
+          rating: addLeadData.rating,
+          reviewCount: addLeadData.reviewCount,
+          source: addLeadData.type === 'abr' ? 'abr' : 'google_places',
+          addedReason: addedReason,
+          businessSignals,
+        }),
       });
-    } catch (err: any) {
-      console.error('Error adding lead:', err);
+
+      if (!response.ok) {
+        throw new Error('Failed to generate scripts');
+      }
+
+      const scripts = await response.json();
+      setOutreachScripts(scripts);
+    } catch (err) {
+      console.error('Error generating scripts:', err);
       toast({
         title: 'Error',
-        description: 'Failed to add lead',
+        description: 'Failed to generate outreach scripts',
         variant: 'destructive',
       });
     } finally {
-      setAddingId(null);
+      setIsGeneratingScripts(false);
     }
   };
 
-  const handleAddGoogleLead = async (place: GooglePlaceResult) => {
-    if (!orgId || !user) {
+  // Confirm and save the lead with scripts
+  const confirmAddLead = async () => {
+    if (!orgId || !user || !addLeadData) {
       toast({
         title: 'Error',
         description: 'You must be logged in to add leads',
@@ -410,49 +461,71 @@ export default function ResearchPage() {
       });
       return;
     }
-    
-    setAddingId(place.placeId);
-    
-    try {
-      const notes = [
-        `Source: Google Business Profile`,
-        place.address ? `Address: ${place.address}` : null,
-        place.phone ? `Phone: ${place.phone}` : null,
-        place.website ? `Website: ${place.website}` : null,
-        place.rating ? `Rating: ${place.rating}/5 (${place.reviewCount} reviews)` : null,
-        `Google Place ID: ${place.placeId}`
-      ].filter(Boolean).join('\n');
 
+    setIsSavingLead(true);
+
+    try {
       const businessSignals: string[] = [];
-      if (place.isLikelyNew) businessSignals.push('Likely new business (few reviews)');
-      if (place.rating && place.rating >= 4.5) businessSignals.push('High customer rating');
-      if (place.reviewCount && place.reviewCount < 10) businessSignals.push('Growing business - early stage');
-      if (place.website) businessSignals.push('Has website presence');
+      if (addLeadData.isLikelyNew) businessSignals.push('Likely new business (few reviews)');
+      if (addLeadData.rating && addLeadData.rating >= 4.5) businessSignals.push('High customer rating');
+      if (addLeadData.reviewCount && addLeadData.reviewCount < 10) businessSignals.push('Growing business - early stage');
+      if (addLeadData.website) businessSignals.push('Has website presence');
+      if (addLeadData.abn) businessSignals.push('Active ABN - registered business');
+
+      const sourceData: LeadSourceData = addLeadData.type === 'abr' 
+        ? {
+            source: 'abr',
+            abn: addLeadData.abn,
+            abnState: addLeadData.abnState,
+            abnPostcode: addLeadData.abnPostcode,
+            addedReason: addedReason || 'Found via ABR business registry search',
+            businessSignals,
+            textScript: outreachScripts?.textScript,
+            emailScript: outreachScripts?.emailScript,
+            callScript: outreachScripts?.callScript,
+          }
+        : {
+            source: 'google_places',
+            googlePlaceId: addLeadData.placeId,
+            googleRating: addLeadData.rating,
+            googleReviewCount: addLeadData.reviewCount,
+            addedReason: addedReason || `Found via Google Business search for "${searchedLocation || googleLocation}"`,
+            businessSignals,
+            textScript: outreachScripts?.textScript,
+            emailScript: outreachScripts?.emailScript,
+            callScript: outreachScripts?.callScript,
+          };
+
+      const notes = addLeadData.type === 'abr'
+        ? `ABN: ${addLeadData.abn}\nState: ${addLeadData.abnState}\nPostcode: ${addLeadData.abnPostcode}\nSource: ABR Research\n\nReason for adding: ${addedReason}`
+        : [
+            `Source: Google Business Profile`,
+            addLeadData.address ? `Address: ${addLeadData.address}` : null,
+            addLeadData.phone ? `Phone: ${addLeadData.phone}` : null,
+            addLeadData.website ? `Website: ${addLeadData.website}` : null,
+            addLeadData.rating ? `Rating: ${addLeadData.rating}/5 (${addLeadData.reviewCount} reviews)` : null,
+            `Google Place ID: ${addLeadData.placeId}`,
+            ``,
+            `Reason for adding: ${addedReason}`,
+          ].filter(Boolean).join('\n');
 
       const newLead: Lead = {
         id: uuidv4(),
         userId: user.uid,
-        companyName: place.name,
-        territory: place.address?.split(',').slice(-2).join(',').trim() || '',
+        companyName: addLeadData.businessName,
+        territory: addLeadData.location || '',
         contactName: '',
         email: '',
-        phone: place.phone || '',
+        phone: addLeadData.phone || '',
         stage: 'suspect',
         mrr: 0,
         notes,
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,
-        website: place.website || undefined,
-        address: place.address || undefined,
-        sourceData: {
-          source: 'google_places',
-          googlePlaceId: place.placeId,
-          googleRating: place.rating ?? undefined,
-          googleReviewCount: place.reviewCount ?? undefined,
-          addedReason: `Found via Google Business search for "${searchedLocation || googleLocation}"`,
-          businessSignals,
-        },
+        website: addLeadData.website,
+        address: addLeadData.address,
+        sourceData,
         nurtureMode: 'none',
         nurtureStatus: null,
         nurtureCadenceId: null,
@@ -470,14 +543,19 @@ export default function ResearchPage() {
         areaName: undefined,
         territoryKey: undefined,
       };
-      
+
       const savedLead = await createLead(orgId, newLead, authReady);
       dispatch(addLead(savedLead));
-      
+
       toast({
         title: 'Lead added',
-        description: `${place.name} has been added to your pipeline`,
+        description: `${addLeadData.businessName} has been added to your pipeline with outreach scripts`,
       });
+
+      setAddLeadDialogOpen(false);
+      setAddLeadData(null);
+      setAddedReason('');
+      setOutreachScripts(null);
     } catch (err: any) {
       console.error('Error adding lead:', err);
       toast({
@@ -486,8 +564,17 @@ export default function ResearchPage() {
         variant: 'destructive',
       });
     } finally {
-      setAddingId(null);
+      setIsSavingLead(false);
     }
+  };
+
+  // Copy script to clipboard
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: 'Copied',
+      description: `${type} script copied to clipboard`,
+    });
   };
 
   // Check domain age for a website
@@ -866,18 +953,11 @@ export default function ResearchPage() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => handleAddGoogleLead(place)}
-                    disabled={addingId === place.placeId}
+                    onClick={() => openAddLeadDialogGoogle(place)}
                     data-testid={`button-add-place-${place.placeId}`}
                   >
-                    {addingId === place.placeId ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <>
-                        <Plus className="h-3 w-3 mr-1" />
-                        Add Lead
-                      </>
-                    )}
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Lead
                   </Button>
                 </div>
               </Card>
@@ -932,19 +1012,12 @@ export default function ResearchPage() {
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleAddAbrLead(business);
+                        openAddLeadDialogAbr(business);
                       }}
-                      disabled={addingId === business.Abn}
                       data-testid={`button-add-lead-${business.Abn}`}
                     >
-                      {addingId === business.Abn ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <>
-                          <Plus className="h-3 w-3 mr-1" />
-                          Add Lead
-                        </>
-                      )}
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Lead
                     </Button>
                   </div>
                 </div>
@@ -1033,6 +1106,246 @@ export default function ResearchPage() {
           </div>
         </Card>
       )}
+
+      {/* Add Lead Dialog with Reason and AI Scripts */}
+      <Dialog open={addLeadDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setAddLeadDialogOpen(false);
+          setAddLeadData(null);
+          setAddedReason('');
+          setOutreachScripts(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-add-lead">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Add Lead to Pipeline
+            </DialogTitle>
+            <DialogDescription>
+              Add {addLeadData?.businessName} to your sales pipeline
+            </DialogDescription>
+          </DialogHeader>
+
+          {addLeadData && (
+            <div className="space-y-6">
+              {/* Business Summary */}
+              <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                <h3 className="font-medium">{addLeadData.businessName}</h3>
+                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                  {addLeadData.location && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {addLeadData.location}
+                    </span>
+                  )}
+                  {addLeadData.phone && (
+                    <span className="flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {addLeadData.phone}
+                    </span>
+                  )}
+                  {addLeadData.website && (
+                    <span className="flex items-center gap-1">
+                      <Globe className="h-3 w-3" />
+                      {addLeadData.website}
+                    </span>
+                  )}
+                  {addLeadData.rating && (
+                    <span className="flex items-center gap-1">
+                      <Star className="h-3 w-3" />
+                      {addLeadData.rating}/5 ({addLeadData.reviewCount} reviews)
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  {addLeadData.isLikelyNew && (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Likely New
+                    </Badge>
+                  )}
+                  {addLeadData.abn && (
+                    <Badge variant="outline">ABN: {addLeadData.abn}</Badge>
+                  )}
+                  <Badge variant="outline">
+                    {addLeadData.type === 'abr' ? 'ABR' : 'Google'}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Reason for Adding */}
+              <div className="space-y-2">
+                <Label htmlFor="addedReason" className="text-sm font-medium">
+                  Why are you adding this lead? <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  id="addedReason"
+                  value={addedReason}
+                  onChange={(e) => setAddedReason(e.target.value)}
+                  placeholder="e.g., New business in my territory, needs help with digital marketing..."
+                  className="min-h-[80px]"
+                  data-testid="input-added-reason"
+                />
+                <p className="text-xs text-muted-foreground">
+                  This helps generate personalized outreach scripts
+                </p>
+              </div>
+
+              {/* Generate Scripts Button */}
+              {!outreachScripts && (
+                <Button
+                  onClick={generateOutreachScripts}
+                  disabled={!addedReason.trim() || isGeneratingScripts}
+                  className="w-full gap-2"
+                  data-testid="button-generate-scripts"
+                >
+                  {isGeneratingScripts ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating AI Scripts...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      Generate Outreach Scripts
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Outreach Scripts */}
+              {outreachScripts && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <h4 className="font-medium">AI-Generated Outreach Scripts</h4>
+                    <Badge variant="outline" className="text-xs">
+                      NEPQ / Jeb Blount / Chris Voss
+                    </Badge>
+                  </div>
+
+                  <Tabs value={activeScriptTab} onValueChange={(v) => setActiveScriptTab(v as 'text' | 'email' | 'call')}>
+                    <TabsList className="w-full justify-start">
+                      <TabsTrigger value="text" className="gap-1" data-testid="tab-script-text">
+                        <MessageSquare className="h-3 w-3" />
+                        Text
+                      </TabsTrigger>
+                      <TabsTrigger value="email" className="gap-1" data-testid="tab-script-email">
+                        <Mail className="h-3 w-3" />
+                        Email
+                      </TabsTrigger>
+                      <TabsTrigger value="call" className="gap-1" data-testid="tab-script-call">
+                        <Phone className="h-3 w-3" />
+                        Call
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="text" className="mt-3">
+                      <div className="relative">
+                        <div className="p-4 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap">
+                          {outreachScripts.textScript}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7"
+                          onClick={() => copyToClipboard(outreachScripts.textScript, 'Text')}
+                          data-testid="button-copy-text-script"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="email" className="mt-3">
+                      <div className="relative">
+                        <div className="p-4 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap">
+                          {outreachScripts.emailScript}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7"
+                          onClick={() => copyToClipboard(outreachScripts.emailScript, 'Email')}
+                          data-testid="button-copy-email-script"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="call" className="mt-3">
+                      <div className="relative">
+                        <ScrollArea className="h-48">
+                          <div className="p-4 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap pr-8">
+                            {outreachScripts.callScript}
+                          </div>
+                        </ScrollArea>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7"
+                          onClick={() => copyToClipboard(outreachScripts.callScript, 'Call')}
+                          data-testid="button-copy-call-script"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={generateOutreachScripts}
+                    disabled={isGeneratingScripts}
+                    className="gap-1"
+                    data-testid="button-regenerate-scripts"
+                  >
+                    {isGeneratingScripts ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3 w-3" />
+                    )}
+                    Regenerate
+                  </Button>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setAddLeadDialogOpen(false)}
+                  className="flex-1"
+                  data-testid="button-cancel-add-lead"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmAddLead}
+                  disabled={!addedReason.trim() || isSavingLead}
+                  className="flex-1 gap-2"
+                  data-testid="button-confirm-add-lead"
+                >
+                  {isSavingLead ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Add to Pipeline
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

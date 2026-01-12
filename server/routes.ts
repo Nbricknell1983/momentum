@@ -1907,6 +1907,97 @@ Return valid JSON:
   });
 
   // ===============================
+  // AI Outreach Script Generation (for Research leads)
+  // ===============================
+
+  app.post("/api/leads/generate-outreach-scripts", async (req, res) => {
+    try {
+      const { 
+        businessName, 
+        businessType, 
+        location, 
+        phone,
+        website,
+        rating,
+        reviewCount,
+        source, // 'abr' | 'google_places'
+        addedReason, // User's reason for adding this lead
+        businessSignals, // Detected signals like 'newly registered', 'few reviews'
+      } = req.body;
+
+      if (!businessName || !addedReason) {
+        return res.status(400).json({ error: "Business name and reason are required" });
+      }
+
+      // Build business context for AI
+      const businessContext = {
+        name: businessName,
+        type: businessType || 'Unknown',
+        location: location || 'Unknown location',
+        hasPhone: !!phone,
+        hasWebsite: !!website,
+        rating: rating || null,
+        reviewCount: reviewCount || 0,
+        source: source || 'research',
+        addedReason,
+        signals: businessSignals || [],
+      };
+
+      const prompt = `You are an expert sales copywriter using proven frameworks (NEPQ, Jeb Blount "Fanatical Prospecting", Chris Voss "Never Split the Difference"). 
+Generate personalized cold outreach scripts for this newly discovered business lead.
+
+BUSINESS CONTEXT:
+${JSON.stringify(businessContext, null, 2)}
+
+THE SALES REP'S REASON FOR REACHING OUT:
+"${addedReason}"
+
+Generate outreach scripts in this exact JSON format:
+{
+  "textScript": "SMS message (under 160 chars, conversational, creates curiosity, no hard sell, includes a soft CTA like 'quick question for you')",
+  "emailScript": "Email with Subject line and Body. Use NEPQ approach - start with a problem-focused question, acknowledge they're busy, offer value not features, end with low-pressure CTA. Max 150 words.",
+  "callScript": "Phone script with: 1) Pattern interrupt opener (not 'how are you'), 2) Permission-based transition, 3) Problem identification question (NEPQ), 4) Value statement tied to their situation, 5) Soft close for next step. Include exact words to say."
+}
+
+FRAMEWORK GUIDELINES:
+- NEPQ (Neuro-Emotional Persuasion Questions): Lead with questions about their situation/challenges, not your product
+- Jeb Blount: Be confident, direct, and persistent. Time is valuable. Get to the point.
+- Chris Voss: Use tactical empathy, labeling ("It seems like..."), calibrated questions ("How am I supposed to..."), and mirroring
+
+PERSONALIZATION RULES:
+1. If they're a new business (few reviews, new registration), acknowledge the challenge of getting started
+2. If they have a website but low reviews, that's a digital presence gap to mention
+3. Reference their specific industry/business type naturally
+4. Never use generic "I help businesses like yours" - be specific
+5. The SMS must feel like it's from a real person, not marketing
+6. The email subject line must create curiosity without being clickbait
+
+TONE: Professional but warm. Confident but not pushy. Curious about THEIR business, not eager to pitch.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1200,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      const scripts = JSON.parse(content);
+
+      res.json({
+        textScript: scripts.textScript || '',
+        emailScript: scripts.emailScript || '',
+        callScript: scripts.callScript || '',
+        generatedAt: new Date().toISOString(),
+        frameworks: ['NEPQ', 'Jeb Blount', 'Chris Voss'],
+      });
+    } catch (error) {
+      console.error("Error generating outreach scripts:", error);
+      res.status(500).json({ error: "Failed to generate outreach scripts" });
+    }
+  });
+
+  // ===============================
   // SMART SCHEDULING API
   // ===============================
 

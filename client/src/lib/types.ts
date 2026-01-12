@@ -231,6 +231,10 @@ export interface LeadSourceData {
   referralSource?: string;
   addedReason?: string;
   businessSignals?: string[];
+  // AI-generated outreach scripts (NEPQ, Jeb Blount, Chris Voss frameworks)
+  textScript?: string;
+  emailScript?: string;
+  callScript?: string;
 }
 
 export interface Lead {
