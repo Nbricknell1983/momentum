@@ -2341,6 +2341,358 @@ export default function ClientsPage() {
         </DndContext>
       )}
 
+      {/* Client Detail Dialog for Kanban View */}
+      {viewMode === 'kanban' && expandedClientId && (() => {
+        const client = clients.find(c => c.id === expandedClientId);
+        if (!client) return null;
+        return (
+          <Dialog open={!!expandedClientId} onOpenChange={(open) => !open && setExpandedClientId(null)}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-client-detail">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <span>{client.businessName}</span>
+                  <Badge variant={healthBadgeVariant[client.healthStatus]}>
+                    {healthIcons[client.healthStatus]}
+                    <span className="ml-1">{HEALTH_STATUS_LABELS[client.healthStatus]}</span>
+                  </Badge>
+                  {client.totalMRR > 0 && (
+                    <Badge variant="outline">{formatMRR(client.totalMRR)}/mo</Badge>
+                  )}
+                </DialogTitle>
+                {client.primaryContactName && (
+                  <p className="text-sm text-muted-foreground">
+                    {client.primaryContactName}
+                    {client.regionName && ` • ${client.regionName}${client.areaName ? ` - ${client.areaName}` : ''}`}
+                  </p>
+                )}
+              </DialogHeader>
+
+              <Tabs value={activeClientTab} onValueChange={setActiveClientTab} className="w-full mt-4">
+                <TabsList className="mb-4 w-full justify-start flex-wrap h-auto gap-1">
+                  <TabsTrigger value="details" data-testid="tab-modal-details">
+                    <Users className="h-4 w-4 mr-2" />
+                    Details
+                  </TabsTrigger>
+                  <TabsTrigger value="deliverables" data-testid="tab-modal-deliverables">
+                    <Package className="h-4 w-4 mr-2" />
+                    Deliverables
+                  </TabsTrigger>
+                  <TabsTrigger value="strategy" data-testid="tab-modal-strategy">
+                    <Target className="h-4 w-4 mr-2" />
+                    Strategy
+                  </TabsTrigger>
+                  <TabsTrigger value="activity" data-testid="tab-modal-activity">
+                    <ClipboardList className="h-4 w-4 mr-2" />
+                    Activity
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="integrations" 
+                    data-testid="tab-modal-integrations"
+                    onClick={() => loadClientIntegrations(client.id)}
+                  >
+                    <Link2 className="h-4 w-4 mr-2" />
+                    Integrations
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="details" className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Contact Details</h4>
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        {client.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3 w-3" />
+                            <a href={`tel:${client.phone}`} className="hover:underline">{client.phone}</a>
+                          </div>
+                        )}
+                        {client.email && (
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3 w-3" />
+                            <a href={`mailto:${client.email}`} className="hover:underline">{client.email}</a>
+                          </div>
+                        )}
+                        {client.address && (
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-3 w-3" />
+                            <span>{client.address}</span>
+                          </div>
+                        )}
+                        {client.website && (
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-3 w-3" />
+                            <a href={client.website.startsWith('http') ? client.website : `https://${client.website}`} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-48">{client.website}</a>
+                          </div>
+                        )}
+                        {(client.facebookUrl || client.instagramUrl || client.linkedinUrl) && (
+                          <div className="flex items-center gap-3 mt-2">
+                            {client.facebookUrl && (
+                              <a href={client.facebookUrl.startsWith('http') ? client.facebookUrl : `https://facebook.com/${client.facebookUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                                <SiFacebook className="h-4 w-4" />
+                              </a>
+                            )}
+                            {client.instagramUrl && (
+                              <a href={client.instagramUrl.startsWith('http') ? client.instagramUrl : `https://instagram.com/${client.instagramUrl}`} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:text-pink-700">
+                                <SiInstagram className="h-4 w-4" />
+                              </a>
+                            )}
+                            {client.linkedinUrl && (
+                              <a href={client.linkedinUrl.startsWith('http') ? client.linkedinUrl : `https://linkedin.com/company/${client.linkedinUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:text-blue-800">
+                                <SiLinkedin className="h-4 w-4" />
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {/* Quick Send Actions */}
+                      {(client.phone || client.email) && (
+                        <div className="mt-3 pt-2 border-t">
+                          <p className="text-xs font-medium mb-2 flex items-center gap-1.5">
+                            Quick Send
+                            <Badge variant="outline" className="text-[10px] h-4 px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300">
+                              AI
+                            </Badge>
+                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {client.phone && (
+                              <>
+                                <Button variant="outline" size="sm" className="gap-1.5 h-7" asChild>
+                                  <a href={`tel:${client.phone}`}>
+                                    <Phone className="h-3 w-3" />
+                                    Call
+                                  </a>
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1.5 h-7 bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                                  onClick={() => openAiMessageModal(client, 'sms')}
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                  Text
+                                </Button>
+                              </>
+                            )}
+                            {client.email && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5 h-7 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
+                                onClick={() => openAiMessageModal(client, 'email')}
+                              >
+                                <Mail className="h-3 w-3" />
+                                Email
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-medium">Products & Revenue</h4>
+                        <Button variant="ghost" size="sm" onClick={() => handleOpenProductDialog(client)}>
+                          <PenTool className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                      </div>
+                      {client.products.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-1">
+                            {client.products.map((product, idx) => (
+                              <Badge key={idx} variant="outline" className="gap-1">
+                                {product.productType}
+                                <span className="text-muted-foreground">${product.monthlyValue}/mo</span>
+                              </Badge>
+                            ))}
+                          </div>
+                          <div className="text-sm font-medium text-green-600 dark:text-green-400">
+                            Total MRR: {formatMRR(client.totalMRR)}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No products - click Edit to add</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Activity</h4>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <p>Last Contact: {formatDate(client.lastContactDate)}</p>
+                        <p>Next Contact: {formatDate(client.nextContactDate)}</p>
+                        <p>Created: {formatDate(client.createdAt)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {client.healthReasons.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Health Reasons</h4>
+                      <ul className="text-sm text-muted-foreground list-disc list-inside">
+                        {client.healthReasons.map((reason, idx) => (
+                          <li key={idx}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {client.notes && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Notes</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{client.notes}</p>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="deliverables" className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium flex items-center gap-2">
+                      <Package className="h-4 w-4" />
+                      Deliverables
+                    </h4>
+                    <Button variant="outline" size="sm" onClick={() => setIsAddDeliverableOpen(true)}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add
+                    </Button>
+                  </div>
+                  {loadingDeliverables === client.id ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (clientDeliverables[client.id] || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No deliverables yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(clientDeliverables[client.id] || []).map((deliverable) => (
+                        <div key={deliverable.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            {deliverableStatusIcons[deliverable.status]}
+                            <div>
+                              <p className="text-sm font-medium">{deliverable.title}</p>
+                              {deliverable.dueDate && (
+                                <p className="text-xs text-muted-foreground">
+                                  Due: {format(new Date(deliverable.dueDate), 'dd/MM/yyyy')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <Badge variant="outline">{DELIVERABLE_STATUS_LABELS[deliverable.status]}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="strategy" className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium flex items-center gap-2">
+                      <Target className="h-4 w-4" />
+                      Strategy Sessions
+                    </h4>
+                    <Button variant="outline" size="sm" onClick={() => setIsAddSessionOpen(true)}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Session
+                    </Button>
+                  </div>
+                  {loadingStrategy === client.id ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (clientStrategySessions[client.id] || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No strategy sessions yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(clientStrategySessions[client.id] || []).map((session) => (
+                        <div key={session.id} className="p-3 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-medium">{format(new Date(session.date), 'dd/MM/yyyy')}</p>
+                            <Badge variant="outline">{session.type}</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{session.agenda}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="activity" className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ClipboardList className="h-4 w-4" />
+                    <h4 className="text-sm font-medium">Recent Activity</h4>
+                  </div>
+                  {loadingClientActivities === client.id ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (clientActivities[client.id] || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No activity logged yet</p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {(clientActivities[client.id] || []).slice(0, 10).map((activity) => (
+                        <div key={activity.id} className="flex items-start gap-3 p-2 border-b last:border-0">
+                          <div className="flex-shrink-0 mt-1">
+                            {activity.type === 'call' && <Phone className="h-3 w-3 text-blue-500" />}
+                            {activity.type === 'email' && <Mail className="h-3 w-3 text-green-500" />}
+                            {activity.type === 'meeting' && <Users className="h-3 w-3 text-purple-500" />}
+                            {activity.type === 'note' && <FileText className="h-3 w-3 text-muted-foreground" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm">{activity.notes || ACTIVITY_LABELS[activity.type as ActivityType]}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm')}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="integrations" className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Link2 className="h-4 w-4" />
+                    <h4 className="text-sm font-medium">App Integrations</h4>
+                  </div>
+                  {loadingIntegrations === client.id ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (clientIntegrations[client.id] || []).length === 0 ? (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-muted-foreground mb-3">No apps connected</p>
+                      <Button variant="outline" size="sm" onClick={() => handleGeneratePairingCode(client.id)}>
+                        <Link2 className="h-4 w-4 mr-1" />
+                        Connect App
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {(clientIntegrations[client.id] || []).map((integration) => (
+                        <div key={integration.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <Link2 className="h-4 w-4" />
+                            <div>
+                              <p className="text-sm font-medium">{integration.appName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Connected {format(new Date(integration.connectedAt), 'dd/MM/yyyy')}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant={integration.status === 'active' ? 'default' : 'secondary'}>
+                            {integration.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
       {/* List View */}
       {viewMode === 'list' && (
       <ScrollArea className="flex-1">
