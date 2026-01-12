@@ -174,6 +174,24 @@ export interface Touch {
   createdAt: Date;
 }
 
+export type LeadSource = 'manual' | 'google_places' | 'abr' | 'referral' | 'website' | 'other';
+
+export interface LeadSourceData {
+  source: LeadSource;
+  googlePlaceId?: string;
+  googleRating?: number;
+  googleReviewCount?: number;
+  googleTypes?: string[];
+  abn?: string;
+  abnState?: string;
+  abnPostcode?: string;
+  abnEntityType?: string;
+  abnGstStatus?: string;
+  referralSource?: string;
+  addedReason?: string;
+  businessSignals?: string[];
+}
+
 export interface Lead {
   id: string;
   userId: string;
@@ -203,6 +221,8 @@ export interface Lead {
   contactName?: string;
   notes?: string;
   crmLink?: string;
+  // Lead source tracking for AI personalization
+  sourceData?: LeadSourceData;
   // Nurture fields
   nurtureMode: NurtureMode;
   nurtureCadenceId: string | null;

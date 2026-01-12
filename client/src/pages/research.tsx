@@ -356,6 +356,14 @@ export default function ResearchPage() {
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,
+        sourceData: {
+          source: 'abr',
+          abn: business.Abn,
+          abnState: business.State,
+          abnPostcode: business.Postcode,
+          addedReason: 'Found via ABR business registry search',
+          businessSignals: ['Newly registered business', 'Active ABN'],
+        },
         nurtureMode: 'none',
         nurtureStatus: null,
         nurtureCadenceId: null,
@@ -415,6 +423,12 @@ export default function ResearchPage() {
         `Google Place ID: ${place.placeId}`
       ].filter(Boolean).join('\n');
 
+      const businessSignals: string[] = [];
+      if (place.isLikelyNew) businessSignals.push('Likely new business (few reviews)');
+      if (place.rating && place.rating >= 4.5) businessSignals.push('High customer rating');
+      if (place.reviewCount && place.reviewCount < 10) businessSignals.push('Growing business - early stage');
+      if (place.website) businessSignals.push('Has website presence');
+
       const newLead: Lead = {
         id: uuidv4(),
         userId: user.uid,
@@ -429,6 +443,16 @@ export default function ResearchPage() {
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,
+        website: place.website || undefined,
+        address: place.address || undefined,
+        sourceData: {
+          source: 'google_places',
+          googlePlaceId: place.placeId,
+          googleRating: place.rating,
+          googleReviewCount: place.reviewCount,
+          addedReason: `Found via Google Business search for "${searchLocation}"`,
+          businessSignals,
+        },
         nurtureMode: 'none',
         nurtureStatus: null,
         nurtureCadenceId: null,
