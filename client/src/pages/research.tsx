@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar } from 'lucide-react';
+import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar, Check, ChevronsUpDown } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { addLead } from '@/store';
@@ -167,7 +170,8 @@ export default function ResearchPage() {
   
   // Google Places state
   const [googleLocation, setGoogleLocation] = useState('');
-  const [googleBusinessType, setGoogleBusinessType] = useState('all');
+  const [googleBusinessType, setGoogleBusinessType] = useState('');
+  const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
   const [googleRadius, setGoogleRadius] = useState('50000');
   const [googleResults, setGoogleResults] = useState<GooglePlaceResult[]>([]);
   const [showOnlyNew, setShowOnlyNew] = useState(true);
@@ -551,20 +555,56 @@ export default function ResearchPage() {
               </div>
               <div>
                 <Label htmlFor="business-type">Business Type</Label>
-                <Input
-                  id="business-type"
-                  placeholder="e.g., mechanic, accountant, cafe..."
-                  value={googleBusinessType}
-                  onChange={(e) => setGoogleBusinessType(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleGoogleSearch()}
-                  list="business-type-suggestions"
-                  data-testid="input-business-type"
-                />
-                <datalist id="business-type-suggestions">
-                  {BUSINESS_TYPES.map(type => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </datalist>
+                <Popover open={businessTypeOpen} onOpenChange={setBusinessTypeOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={businessTypeOpen}
+                      className="w-full justify-between font-normal"
+                      data-testid="combobox-business-type"
+                    >
+                      {googleBusinessType 
+                        ? BUSINESS_TYPES.find(t => t.value === googleBusinessType)?.label || googleBusinessType
+                        : "Select or type..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command>
+                      <CommandInput 
+                        placeholder="Search or type custom..." 
+                        value={googleBusinessType}
+                        onValueChange={setGoogleBusinessType}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          <div className="p-2 text-sm">
+                            Press Enter to use "{googleBusinessType}"
+                          </div>
+                        </CommandEmpty>
+                        <CommandGroup heading="Suggestions">
+                          {BUSINESS_TYPES.filter(type => 
+                            type.label.toLowerCase().includes(googleBusinessType.toLowerCase()) ||
+                            type.value.toLowerCase().includes(googleBusinessType.toLowerCase())
+                          ).slice(0, 15).map(type => (
+                            <CommandItem
+                              key={type.value}
+                              value={type.value}
+                              onSelect={(val) => {
+                                setGoogleBusinessType(val);
+                                setBusinessTypeOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", googleBusinessType === type.value ? "opacity-100" : "opacity-0")} />
+                              {type.label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <Label htmlFor="radius">Search Radius</Label>
