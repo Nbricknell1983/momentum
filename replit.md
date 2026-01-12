@@ -66,6 +66,7 @@ shared/           # Shared code between client/server
 7. **Momentum Scoring**: Daily/weekly metrics tracking against targets
 8. **AI Agent Panel**: Context-aware AI assistance (placeholder for OpenAI integration)
 9. **Strategy Engine**: AI-powered decision engine that generates strategic pillars and actionable tasks
+10. **Leads Research**: ABR (Australian Business Register) integration for discovering newly registered businesses
 
 ### Strategy Engine System
 - **Purpose**: Decision engine (not passive documentation) that produces actionable tasks
@@ -87,6 +88,24 @@ shared/           # Shared code between client/server
 - **Lead Fields**: regionId, regionName, areaId, areaName, territoryKey
 - **Filtering**: Pipeline page has linked Region/Area dropdowns (area resets when region changes)
 - **Migration**: `client/src/lib/migrateTerritories.ts` contains utilities to migrate old territory strings
+
+### Leads Research System
+- **Purpose**: Find newly registered Australian businesses to add as leads
+- **Data Source**: Australian Business Register (ABR) API
+- **Search Options**:
+  - Search by business name
+  - Search by postcode
+- **Features**:
+  - View ABN details, state, postcode
+  - One-click "Add as Lead" conversion to pipeline
+  - Saves ABN and source info in lead notes
+- **API Endpoints**:
+  - `GET /api/abr/search-by-name?name=...` - Search businesses by name
+  - `GET /api/abr/search-by-postcode?postcode=...` - Search businesses by postcode
+  - `GET /api/abr/abn/:abn` - Get detailed ABN information
+- **Requirements**:
+  - `ABR_GUID` environment variable (free API key from https://abr.business.gov.au/Tools/WebServices)
+- **Location**: `client/src/pages/research.tsx`
 
 ### Client App Integration System
 - **Purpose**: Connect external client business apps (e.g., Automotive All-Stars) to Momentum for live data flow
