@@ -83,6 +83,47 @@ export type RevenueLane = 'client' | 'new_business';
 
 export type TrafficLightStatus = 'green' | 'amber' | 'red';
 
+// Client Board Stages for Kanban view
+export type ClientBoardStage = 
+  | 'onboarding'     // New clients being set up
+  | 'steady_state'   // Active, healthy clients
+  | 'growth_plays'   // Clients with expansion opportunities
+  | 'watchlist'      // At-risk or needs attention
+  | 'churned';       // Inactive/cancelled clients
+
+export const CLIENT_BOARD_STAGE_ORDER: ClientBoardStage[] = [
+  'onboarding',
+  'steady_state',
+  'growth_plays',
+  'watchlist',
+  'churned',
+];
+
+export const CLIENT_BOARD_STAGE_LABELS: Record<ClientBoardStage, string> = {
+  onboarding: 'Onboarding',
+  steady_state: 'Steady State',
+  growth_plays: 'Growth Plays',
+  watchlist: 'Watchlist',
+  churned: 'Churned',
+};
+
+export const CLIENT_BOARD_STAGE_COLORS: Record<ClientBoardStage, string> = {
+  onboarding: 'bg-blue-500',
+  steady_state: 'bg-green-500',
+  growth_plays: 'bg-purple-500',
+  watchlist: 'bg-amber-500',
+  churned: 'bg-gray-400',
+};
+
+// Helper to determine default board stage from client data
+export function getDefaultClientBoardStage(client: Pick<Client, 'deliveryStatus' | 'healthStatus' | 'upsellReadiness' | 'archived'>): ClientBoardStage {
+  if (client.archived) return 'churned';
+  if (client.deliveryStatus === 'onboarding') return 'onboarding';
+  if (client.healthStatus === 'red' || client.healthStatus === 'amber') return 'watchlist';
+  if (client.upsellReadiness === 'ready' || client.upsellReadiness === 'hot') return 'growth_plays';
+  return 'steady_state';
+}
+
 // Nurture system types
 export type NurtureMode = 'none' | 'active' | 'passive';
 export type NurtureStatus = 'new' | 'touched_waiting' | 'needs_touch' | 'reengaged' | 'dormant' | 'exit' | null;
@@ -1225,6 +1266,8 @@ export interface Client {
   upsellReadiness?: 'not_ready' | 'warming' | 'ready' | 'hot';
   deliveryStatus?: 'onboarding' | 'active' | 'blocked' | 'complete';
   daysSinceContact?: number;  // Computed field for quick access
+  // Kanban board stage (user-overridable, defaults from health/status)
+  boardStage?: ClientBoardStage;
 }
 
 export interface Deliverable {

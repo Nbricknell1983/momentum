@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List } from 'lucide-react';
+import { DndContext, DragEndEvent, rectIntersection, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import ClientKanbanColumn from '@/components/ClientKanbanColumn';
+import { ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, getDefaultClientBoardStage } from '@/lib/types';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -25,6 +28,7 @@ import { createClient as createClientInFirestore, updateClientInFirestore, fetch
 import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { queryClient } from '@/lib/queryClient';
 import { DictationButton } from '@/components/DictationButton';
 import { AIMessageModal } from '@/components/AIMessageModal';
 
@@ -252,6 +256,16 @@ export default function ClientsPage() {
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'overdue' | 'health' | 'lastActivity'>('name');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
+
+  // DnD sensors for Kanban view
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
   const [taskPanelFilter, setTaskPanelFilter] = useState<'overdue' | 'today' | 'upcoming' | 'all'>('all');
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(true);
   const [newBusinessName, setNewBusinessName] = useState('');
@@ -1398,6 +1412,84 @@ export default function ClientsPage() {
     }
   });
 
+  // Get clients grouped by board stage for Kanban view
+  const clientsByBoardStage = useMemo(() => {
+    const grouped: Record<ClientBoardStage, Client[]> = {
+      onboarding: [],
+      steady_state: [],
+      growth_plays: [],
+      watchlist: [],
+      churned: [],
+    };
+    
+    filteredClients.forEach(client => {
+      const stage = client.boardStage || getDefaultClientBoardStage(client);
+      grouped[stage].push(client);
+    });
+    
+    return grouped;
+  }, [filteredClients]);
+
+  // Handle drag end for Kanban view
+  const handleKanbanDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (!over) return;
+    
+    // Only process if dropped on a valid board stage column
+    const newStage = over.id as ClientBoardStage;
+    if (!CLIENT_BOARD_STAGE_ORDER.includes(newStage)) return;
+    
+    const clientId = active.id as string;
+    const client = clients.find(c => c.id === clientId);
+    if (!client || !orgId || !authReady) return;
+    
+    // Get current stage (use default if not set)
+    const currentStage = client.boardStage || getDefaultClientBoardStage(client);
+    
+    // Skip if dropped on same stage (no change needed)
+    if (currentStage === newStage) return;
+    
+    try {
+      const updatedClient = { ...client, boardStage: newStage, updatedAt: new Date() };
+      dispatch(updateClient(updatedClient));
+      await updateClientInFirestore(orgId, clientId, { boardStage: newStage }, authReady);
+      toast({ title: 'Client moved', description: `Moved to ${newStage.replace('_', ' ')}` });
+    } catch (error) {
+      console.error('Failed to update client board stage:', error);
+      toast({ title: 'Error', description: 'Failed to move client', variant: 'destructive' });
+    }
+  };
+
+  // Handle quick action from Kanban card
+  const handleKanbanQuickAction = async (clientId: string, action: 'call' | 'email' | 'sms') => {
+    const client = clients.find(c => c.id === clientId);
+    if (!client || !orgId || !userId || !authReady) return;
+    
+    try {
+      await logClientAction(orgId, {
+        clientId,
+        userId,
+        type: action,
+        clientName: client.businessName,
+        notes: `Quick ${action} logged from board`,
+      }, authReady);
+      
+      // Update last contact date
+      const updatedClient = { ...client, lastContactDate: new Date(), updatedAt: new Date() };
+      dispatch(updateClient(updatedClient));
+      await updateClientInFirestore(orgId, clientId, { lastContactDate: new Date() }, authReady);
+      
+      // Invalidate queries to refresh activity/task panels
+      queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId] });
+      
+      toast({ title: `${action.charAt(0).toUpperCase() + action.slice(1)} logged` });
+    } catch (error) {
+      console.error('Failed to log action:', error);
+      toast({ title: 'Error', description: 'Failed to log activity', variant: 'destructive' });
+    }
+  };
+
   const healthCounts = {
     green: clients.filter(c => !c.archived && c.healthStatus === 'green').length,
     amber: clients.filter(c => !c.archived && c.healthStatus === 'amber').length,
@@ -2087,6 +2179,29 @@ export default function ClientsPage() {
               <SelectItem value="lastActivity">Last Activity</SelectItem>
             </SelectContent>
           </Select>
+
+          <div className="flex items-center gap-1 border rounded-md p-1">
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 gap-1"
+              onClick={() => setViewMode('kanban')}
+              data-testid="button-view-kanban"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Board
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 gap-1"
+              onClick={() => setViewMode('list')}
+              data-testid="button-view-list"
+            >
+              <List className="h-4 w-4" />
+              List
+            </Button>
+          </div>
         </div>
 
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -2207,6 +2322,27 @@ export default function ClientsPage() {
         </Dialog>
       </div>
 
+      {/* Kanban View */}
+      {viewMode === 'kanban' && (
+        <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragEnd={handleKanbanDragEnd}>
+          <div className="flex-1 overflow-x-auto p-4">
+            <div className="flex gap-4 h-full min-w-max">
+              {CLIENT_BOARD_STAGE_ORDER.map((stage) => (
+                <ClientKanbanColumn
+                  key={stage}
+                  stage={stage}
+                  clients={clientsByBoardStage[stage]}
+                  onClientClick={(clientId) => setExpandedClientId(clientId)}
+                  onQuickAction={handleKanbanQuickAction}
+                />
+              ))}
+            </div>
+          </div>
+        </DndContext>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
           {/* Needs Attention Panel - AI-powered focus section */}
@@ -5023,6 +5159,7 @@ export default function ClientsPage() {
           )}
         </div>
       </ScrollArea>
+      )}
 
       <Dialog open={isWizardOpen} onOpenChange={(open) => { if (!open) closeWizard(); }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
