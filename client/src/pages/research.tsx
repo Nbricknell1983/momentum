@@ -551,18 +551,20 @@ export default function ResearchPage() {
               </div>
               <div>
                 <Label htmlFor="business-type">Business Type</Label>
-                <Select value={googleBusinessType} onValueChange={setGoogleBusinessType}>
-                  <SelectTrigger id="business-type" data-testid="select-business-type">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {BUSINESS_TYPES.map(type => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="business-type"
+                  placeholder="e.g., mechanic, accountant, cafe..."
+                  value={googleBusinessType}
+                  onChange={(e) => setGoogleBusinessType(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGoogleSearch()}
+                  list="business-type-suggestions"
+                  data-testid="input-business-type"
+                />
+                <datalist id="business-type-suggestions">
+                  {BUSINESS_TYPES.map(type => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </datalist>
               </div>
               <div>
                 <Label htmlFor="radius">Search Radius</Label>
