@@ -101,7 +101,7 @@ export default function ServicesPage() {
     '@graph': [
       localBusinessSchema,
       ...mainServices.map(service => 
-        serviceSchema(service.title, service.description, `https://battlescore.com.au/services#${service.id}`)
+        serviceSchema(service.title, service.description, service.id)
       ),
     ],
   };
@@ -112,7 +112,7 @@ export default function ServicesPage() {
         title="Business Consulting Services Brisbane | Sales Coaching & Growth Strategy | BattleScore"
         description="Comprehensive business consulting services in Brisbane. Expert sales coaching, growth strategy, and leadership development for Queensland SMEs. Book your free consultation."
         keywords="business consulting brisbane, sales coaching brisbane, growth strategy brisbane, leadership development queensland, business advisor brisbane, small business consultant"
-        canonicalUrl="https://battlescore.com.au/services"
+        canonicalUrl="https://battlescore.com.au/marketing/services"
         structuredData={servicesSchema}
       />
 

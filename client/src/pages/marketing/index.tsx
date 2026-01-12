@@ -68,7 +68,7 @@ export default function MarketingHome() {
       {
         '@type': 'WebPage',
         '@id': 'https://battlescore.com.au/#webpage',
-        url: 'https://battlescore.com.au',
+        url: 'https://battlescore.com.au/marketing',
         name: 'Business Consultant Brisbane | BattleScore Consulting',
         description: 'Brisbane\'s leading business consulting firm. Expert business advice, sales coaching, and growth strategy for SMEs across Queensland.',
         isPartOf: { '@id': 'https://battlescore.com.au/#website' },
@@ -76,7 +76,7 @@ export default function MarketingHome() {
       {
         '@type': 'WebSite',
         '@id': 'https://battlescore.com.au/#website',
-        url: 'https://battlescore.com.au',
+        url: 'https://battlescore.com.au/marketing',
         name: 'BattleScore Business Consulting',
         publisher: { '@id': 'https://battlescore.com.au/#business' },
       },
@@ -89,7 +89,7 @@ export default function MarketingHome() {
         title="Business Consultant Brisbane | Expert Business Advice | BattleScore"
         description="Brisbane's leading business consulting firm. Get expert business advice, sales coaching, and growth strategy tailored for Queensland SMEs. Book your free discovery call today."
         keywords="business consultant brisbane, business advisor brisbane, business coaching brisbane, small business advisor brisbane, business mentor brisbane, business consulting queensland, growth strategy brisbane"
-        canonicalUrl="https://battlescore.com.au"
+        canonicalUrl="https://battlescore.com.au/marketing"
         structuredData={homeSchema}
       />
 

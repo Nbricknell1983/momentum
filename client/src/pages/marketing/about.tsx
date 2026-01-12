@@ -47,8 +47,8 @@ export default function AboutPage() {
       localBusinessSchema,
       {
         '@type': 'AboutPage',
-        '@id': 'https://battlescore.com.au/about/#webpage',
-        url: 'https://battlescore.com.au/about',
+        '@id': 'https://battlescore.com.au/marketing/about/#webpage',
+        url: 'https://battlescore.com.au/marketing/about',
         name: 'About BattleScore | Business Consultant Brisbane',
         description: 'Learn about BattleScore Consulting - Brisbane\'s trusted business advisors helping SMEs achieve sustainable growth.',
         isPartOf: { '@id': 'https://battlescore.com.au/#website' },
@@ -62,7 +62,7 @@ export default function AboutPage() {
         title="About Us | Business Consultant Brisbane | BattleScore Consulting"
         description="Meet BattleScore Consulting - Brisbane's trusted business advisors. Over 12 years helping Queensland SMEs achieve sustainable growth with proven strategies."
         keywords="business consultant brisbane about, brisbane business advisor, queensland business consulting firm, small business mentor brisbane"
-        canonicalUrl="https://battlescore.com.au/about"
+        canonicalUrl="https://battlescore.com.au/marketing/about"
         structuredData={aboutSchema}
       />
 

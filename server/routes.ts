@@ -21,7 +21,6 @@ export async function registerRoutes(
   
   const siteUrl = 'https://battlescore.com.au';
   const marketingPages = [
-    { path: '/', priority: '1.0', changefreq: 'weekly' },
     { path: '/marketing', priority: '1.0', changefreq: 'weekly' },
     { path: '/marketing/services', priority: '0.9', changefreq: 'weekly' },
     { path: '/marketing/about', priority: '0.8', changefreq: 'monthly' },

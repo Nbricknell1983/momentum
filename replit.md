@@ -67,6 +67,8 @@ shared/           # Shared code between client/server
 8. **AI Agent Panel**: Context-aware AI assistance (placeholder for OpenAI integration)
 9. **Strategy Engine**: AI-powered decision engine that generates strategic pillars and actionable tasks
 10. **Leads Research**: ABR (Australian Business Register) integration for discovering newly registered businesses
+11. **Client Kanban Board**: Lifecycle stage management with AI Movement Tips for strategic account progression
+12. **Marketing Website**: SEO-optimized public website at /marketing for business consultancy lead generation
 
 ### Strategy Engine System
 - **Purpose**: Decision engine (not passive documentation) that produces actionable tasks
@@ -113,6 +115,33 @@ shared/           # Shared code between client/server
   - `GOOGLE_PLACES_API_KEY` - Google Cloud Places API key
   - `ABR_GUID` - Free API key from https://abr.business.gov.au/Tools/WebServices
 - **Location**: `client/src/pages/research.tsx`
+
+### Marketing Website (battlescore.com.au)
+- **Purpose**: SEO-optimized public website targeting "business consultant Brisbane" and related keywords
+- **Routes** (public, no auth required):
+  - `/marketing` - Homepage with hero, services preview, testimonials, CTAs
+  - `/marketing/services` - Detailed service pages (consulting, sales coaching, growth strategy, leadership)
+  - `/marketing/about` - Company story, values, credentials, methodologies
+  - `/marketing/contact` - Contact form with discovery call booking
+- **SEO Features**:
+  - `SEOHead` component for meta tags, Open Graph, canonical URLs
+  - JSON-LD structured data (LocalBusiness, Service, AboutPage, ContactPage schemas)
+  - `/sitemap.xml` - Dynamic XML sitemap for search engines
+  - `/robots.txt` - Crawler directives (allow marketing, disallow app routes)
+- **Target Keywords**: business consultant brisbane, business advisor brisbane, small business advisor brisbane, business coaching brisbane, business mentor brisbane, sales coaching brisbane, growth strategy brisbane
+- **Components**:
+  - `MarketingLayout` - Public header/footer with navigation
+  - `SEOHead` - Dynamic meta tag and schema injection
+- **Domain**: battlescore.com.au (configure DNS to point to Replit deployment)
+
+### AI Movement Tips System
+- **Purpose**: "Chess cheat" style strategic recommendations for moving clients between lifecycle stages
+- **Stages**: onboarding → steady_state → growth_plays (or watchlist for at-risk clients)
+- **API Endpoint**: `POST /api/clients/:id/movement-tip`
+- **AI Model**: GPT-4o-mini with NEPQ, Jeb Blount, Chris Voss sales frameworks
+- **Response Format**: headline, reasoning, actions (with framework tags), blocking factors
+- **Caching**: Server-side in-memory cache with 6-hour TTL, forceRefresh parameter to bypass
+- **UI**: AccountMovementTips dialog triggered from lightbulb icon on ClientKanbanCard
 
 ### Client App Integration System
 - **Purpose**: Connect external client business apps (e.g., Automotive All-Stars) to Momentum for live data flow

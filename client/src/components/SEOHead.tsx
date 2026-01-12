@@ -117,12 +117,12 @@ export const localBusinessSchema = {
   ],
 };
 
-export const serviceSchema = (name: string, description: string, url: string) => ({
+export const serviceSchema = (name: string, description: string, serviceId: string) => ({
   '@context': 'https://schema.org',
   '@type': 'Service',
   name,
   description,
-  url,
+  url: `https://battlescore.com.au/marketing/services#${serviceId}`,
   provider: {
     '@type': 'LocalBusiness',
     name: 'BattleScore Business Consulting',
