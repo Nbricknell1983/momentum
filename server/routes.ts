@@ -1319,5 +1319,110 @@ Return valid JSON:
     }
   });
 
+  // ============================================
+  // ABR Business Research API
+  // ============================================
+
+  // Search businesses by name
+  app.get("/api/abr/search-name", async (req, res) => {
+    try {
+      const { name, maxResults = 20 } = req.query;
+      const guid = process.env.ABR_GUID;
+
+      if (!guid) {
+        return res.status(500).json({ error: "ABR API key not configured. Please add ABR_GUID to secrets." });
+      }
+
+      if (!name) {
+        return res.status(400).json({ error: "Name parameter is required" });
+      }
+
+      const url = `https://abr.business.gov.au/json/MatchingNames.aspx?name=${encodeURIComponent(name as string)}&maxResults=${maxResults}&guid=${guid}`;
+      
+      const response = await fetch(url);
+      const text = await response.text();
+      
+      // ABR returns JSONP, need to extract JSON
+      const jsonMatch = text.match(/callback\((.*)\)/s);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[1]);
+        res.json(data);
+      } else {
+        // Try parsing as regular JSON
+        const data = JSON.parse(text);
+        res.json(data);
+      }
+    } catch (error) {
+      console.error("Error searching ABR by name:", error);
+      res.status(500).json({ error: "Failed to search businesses" });
+    }
+  });
+
+  // Search businesses by postcode
+  app.get("/api/abr/search-postcode", async (req, res) => {
+    try {
+      const { postcode, maxResults = 100 } = req.query;
+      const guid = process.env.ABR_GUID;
+
+      if (!guid) {
+        return res.status(500).json({ error: "ABR API key not configured. Please add ABR_GUID to secrets." });
+      }
+
+      if (!postcode) {
+        return res.status(400).json({ error: "Postcode parameter is required" });
+      }
+
+      // ABR JSON endpoint for postcode search
+      const url = `https://abr.business.gov.au/json/MatchingNames.aspx?postcode=${encodeURIComponent(postcode as string)}&maxResults=${maxResults}&guid=${guid}`;
+      
+      const response = await fetch(url);
+      const text = await response.text();
+      
+      // ABR returns JSONP, need to extract JSON
+      const jsonMatch = text.match(/callback\((.*)\)/s);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[1]);
+        res.json(data);
+      } else {
+        const data = JSON.parse(text);
+        res.json(data);
+      }
+    } catch (error) {
+      console.error("Error searching ABR by postcode:", error);
+      res.status(500).json({ error: "Failed to search businesses" });
+    }
+  });
+
+  // Get ABN details
+  app.get("/api/abr/abn/:abn", async (req, res) => {
+    try {
+      const { abn } = req.params;
+      const guid = process.env.ABR_GUID;
+
+      if (!guid) {
+        return res.status(500).json({ error: "ABR API key not configured. Please add ABR_GUID to secrets." });
+      }
+
+      const cleanAbn = abn.replace(/\s/g, '');
+      const url = `https://abr.business.gov.au/json/AbnDetails.aspx?abn=${cleanAbn}&guid=${guid}`;
+      
+      const response = await fetch(url);
+      const text = await response.text();
+      
+      // ABR returns JSONP, need to extract JSON
+      const jsonMatch = text.match(/callback\((.*)\)/s);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[1]);
+        res.json(data);
+      } else {
+        const data = JSON.parse(text);
+        res.json(data);
+      }
+    } catch (error) {
+      console.error("Error fetching ABN details:", error);
+      res.status(500).json({ error: "Failed to fetch ABN details" });
+    }
+  });
+
   return httpServer;
 }
