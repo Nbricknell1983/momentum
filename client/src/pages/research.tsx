@@ -448,9 +448,9 @@ export default function ResearchPage() {
         sourceData: {
           source: 'google_places',
           googlePlaceId: place.placeId,
-          googleRating: place.rating,
-          googleReviewCount: place.reviewCount,
-          addedReason: `Found via Google Business search for "${searchLocation}"`,
+          googleRating: place.rating ?? undefined,
+          googleReviewCount: place.reviewCount ?? undefined,
+          addedReason: `Found via Google Business search for "${searchedLocation || googleLocation}"`,
           businessSignals,
         },
         nurtureMode: 'none',

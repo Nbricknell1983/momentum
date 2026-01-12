@@ -1827,5 +1827,154 @@ Return valid JSON:
     }
   });
 
+  // ============================================
+  // AI Message Generation
+  // ============================================
+
+  app.post("/api/messages/generate", async (req, res) => {
+    try {
+      const { 
+        channel, // 'sms' or 'email'
+        recipientName,
+        companyName,
+        phone,
+        email,
+        stage,
+        notes,
+        sourceData,
+        activityHistory,
+        contactName,
+        userContext // Any additional context from user
+      } = req.body;
+
+      if (!channel || !companyName) {
+        return res.status(400).json({ error: "Channel and company name are required" });
+      }
+
+      // Determine which sales framework to use based on context
+      let frameworkToUse = 'NEPQ'; // Default
+      let frameworkReason = 'Discovery and relationship building';
+
+      // Framework selection logic
+      if (stage === 'suspect' || stage === 'lead') {
+        // Cold outreach - use Jeb Blount's Fanatical Prospecting
+        frameworkToUse = 'Jeb Blount';
+        frameworkReason = 'Cold outreach - pattern interrupt and value proposition';
+      } else if (stage === 'qualified' || stage === 'proposal') {
+        // Discovery phase - use NEPQ
+        frameworkToUse = 'NEPQ';
+        frameworkReason = 'Discovery phase - asking situation and problem questions';
+      } else if (stage === 'negotiation' || activityHistory?.includes('objection')) {
+        // Negotiation - use Chris Voss
+        frameworkToUse = 'Chris Voss';
+        frameworkReason = 'Negotiation - tactical empathy and calibrated questions';
+      }
+
+      // Build context for the AI
+      const contextParts: string[] = [];
+      
+      if (sourceData?.source === 'google_places') {
+        contextParts.push(`Lead source: Found this business via Google Business Profile search.`);
+        if (sourceData.googleRating) {
+          contextParts.push(`They have a ${sourceData.googleRating}/5 rating with ${sourceData.googleReviewCount || 'some'} reviews.`);
+        }
+        if (sourceData.businessSignals?.length) {
+          contextParts.push(`Business signals: ${sourceData.businessSignals.join(', ')}.`);
+        }
+        if (sourceData.addedReason) {
+          contextParts.push(`Reason added: ${sourceData.addedReason}`);
+        }
+      } else if (sourceData?.source === 'abr') {
+        contextParts.push(`Lead source: Found via Australian Business Register (ABR).`);
+        if (sourceData.abn) {
+          contextParts.push(`ABN: ${sourceData.abn}, State: ${sourceData.abnState || 'Unknown'}`);
+        }
+        if (sourceData.businessSignals?.length) {
+          contextParts.push(`Business signals: ${sourceData.businessSignals.join(', ')}.`);
+        }
+      }
+
+      if (notes) {
+        contextParts.push(`Notes about this lead: ${notes}`);
+      }
+
+      if (activityHistory?.length) {
+        contextParts.push(`Recent activity: ${activityHistory.slice(0, 3).join('; ')}`);
+      }
+
+      if (userContext) {
+        contextParts.push(`Additional context: ${userContext}`);
+      }
+
+      const context = contextParts.join('\n');
+
+      const systemPrompt = `You are an expert sales copywriter who crafts personalized outreach messages. You use proven sales frameworks:
+
+FRAMEWORKS:
+1. **NEPQ (New Economy Power Questions)** by Jeremy Miner: Focus on asking questions that help prospects discover their own problems. Use situation, problem, consequence, and solution questions.
+2. **Jeb Blount (Fanatical Prospecting)**: For cold outreach, use pattern interrupts, be direct about why you're reaching out, focus on value proposition, keep it brief.
+3. **Chris Voss (Never Split the Difference)**: Use tactical empathy, calibrated questions ("How am I supposed to...?"), labels ("It seems like..."), mirrors, and accusation audits.
+
+CURRENT FRAMEWORK TO USE: ${frameworkToUse}
+REASON: ${frameworkReason}
+
+RULES:
+- Keep ${channel === 'sms' ? 'text messages under 160 characters when possible, max 300' : 'emails concise but professional, 3-5 sentences max'}
+- Be conversational and human, not robotic
+- ${channel === 'sms' ? 'Use casual but professional tone' : 'Include a clear subject line for emails'}
+- Reference specific details about their business if available
+- End with a soft call-to-action or open question
+- Never be pushy or salesy
+- Personalize based on the context provided
+- Use DD-MM-YYYY format for any dates
+
+OUTPUT FORMAT:
+${channel === 'email' ? 'Return JSON with "subject" and "body" fields' : 'Return JSON with "message" field only'}`;
+
+      const userPrompt = `Generate a ${channel === 'sms' ? 'text message' : 'professional email'} for:
+
+RECIPIENT:
+- Company: ${companyName}
+${contactName ? `- Contact: ${contactName}` : ''}
+- Stage: ${stage || 'New prospect'}
+
+CONTEXT:
+${context || 'No additional context available.'}
+
+Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.7,
+        response_format: { type: "json_object" }
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("No response from AI");
+      }
+
+      const generated = JSON.parse(content);
+
+      res.json({
+        channel,
+        framework: frameworkToUse,
+        frameworkReason,
+        ...generated,
+        recipientPhone: phone,
+        recipientEmail: email,
+        companyName
+      });
+
+    } catch (error) {
+      console.error("Error generating message:", error);
+      res.status(500).json({ error: "Failed to generate message" });
+    }
+  });
+
   return httpServer;
 }
