@@ -171,6 +171,7 @@ export default function ResearchPage() {
   // Google Places state
   const [googleLocation, setGoogleLocation] = useState('');
   const [googleBusinessType, setGoogleBusinessType] = useState('');
+  const [businessTypeSearch, setBusinessTypeSearch] = useState('');
   const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
   const [googleRadius, setGoogleRadius] = useState('50000');
   const [googleResults, setGoogleResults] = useState<GooglePlaceResult[]>([]);
@@ -278,7 +279,7 @@ export default function ResearchPage() {
         params.append('location', googleLocation);
       }
       
-      if (googleBusinessType !== 'all') {
+      if (googleBusinessType) {
         params.append('type', googleBusinessType);
       }
       
@@ -555,7 +556,10 @@ export default function ResearchPage() {
               </div>
               <div>
                 <Label htmlFor="business-type">Business Type</Label>
-                <Popover open={businessTypeOpen} onOpenChange={setBusinessTypeOpen}>
+                <Popover open={businessTypeOpen} onOpenChange={(open) => {
+                  setBusinessTypeOpen(open);
+                  if (open) setBusinessTypeSearch('');
+                }}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -571,28 +575,39 @@ export default function ResearchPage() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0" align="start">
-                    <Command>
+                    <Command shouldFilter={false}>
                       <CommandInput 
                         placeholder="Search or type custom..." 
-                        value={googleBusinessType}
-                        onValueChange={setGoogleBusinessType}
+                        value={businessTypeSearch}
+                        onValueChange={setBusinessTypeSearch}
                       />
                       <CommandList>
-                        <CommandEmpty>
-                          <div className="p-2 text-sm">
-                            Press Enter to use "{googleBusinessType}"
-                          </div>
-                        </CommandEmpty>
+                        {businessTypeSearch && !BUSINESS_TYPES.some(t => 
+                          t.label.toLowerCase() === businessTypeSearch.toLowerCase() ||
+                          t.value.toLowerCase() === businessTypeSearch.toLowerCase()
+                        ) && (
+                          <CommandItem
+                            value={businessTypeSearch}
+                            onSelect={() => {
+                              setGoogleBusinessType(businessTypeSearch);
+                              setBusinessTypeOpen(false);
+                            }}
+                          >
+                            <Search className="mr-2 h-4 w-4" />
+                            Use "{businessTypeSearch}"
+                          </CommandItem>
+                        )}
                         <CommandGroup heading="Suggestions">
                           {BUSINESS_TYPES.filter(type => 
-                            type.label.toLowerCase().includes(googleBusinessType.toLowerCase()) ||
-                            type.value.toLowerCase().includes(googleBusinessType.toLowerCase())
+                            !businessTypeSearch ||
+                            type.label.toLowerCase().includes(businessTypeSearch.toLowerCase()) ||
+                            type.value.toLowerCase().includes(businessTypeSearch.toLowerCase())
                           ).slice(0, 15).map(type => (
                             <CommandItem
                               key={type.value}
                               value={type.value}
-                              onSelect={(val) => {
-                                setGoogleBusinessType(val);
+                              onSelect={() => {
+                                setGoogleBusinessType(type.value);
                                 setBusinessTypeOpen(false);
                               }}
                             >
