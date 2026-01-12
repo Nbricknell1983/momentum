@@ -22,6 +22,10 @@ import ClientsPage from '@/pages/clients';
 import ResearchPage from '@/pages/research';
 import LoginPage from '@/pages/login';
 import NotFound from '@/pages/not-found';
+import MarketingHome from '@/pages/marketing/index';
+import MarketingServices from '@/pages/marketing/services';
+import MarketingAbout from '@/pages/marketing/about';
+import MarketingContact from '@/pages/marketing/contact';
 import { fetchLeads, fetchAllActivities, fetchClients } from '@/lib/firestoreService';
 import { Loader2 } from 'lucide-react';
 
@@ -144,6 +148,10 @@ function AppLayout() {
 function AppRoutes() {
   return (
     <Switch>
+      <Route path="/marketing" component={MarketingHome} />
+      <Route path="/marketing/services" component={MarketingServices} />
+      <Route path="/marketing/about" component={MarketingAbout} />
+      <Route path="/marketing/contact" component={MarketingContact} />
       <Route path="/login" component={LoginPage} />
       <Route component={AppLayout} />
     </Switch>

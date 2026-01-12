@@ -16,6 +16,59 @@ export async function registerRoutes(
 ): Promise<Server> {
   
   // ============================================
+  // SEO Assets - Sitemap & Robots
+  // ============================================
+  
+  const siteUrl = 'https://battlescore.com.au';
+  const marketingPages = [
+    { path: '/', priority: '1.0', changefreq: 'weekly' },
+    { path: '/marketing', priority: '1.0', changefreq: 'weekly' },
+    { path: '/marketing/services', priority: '0.9', changefreq: 'weekly' },
+    { path: '/marketing/about', priority: '0.8', changefreq: 'monthly' },
+    { path: '/marketing/contact', priority: '0.8', changefreq: 'monthly' },
+  ];
+
+  app.get('/sitemap.xml', (req, res) => {
+    const lastmod = new Date().toISOString().split('T')[0];
+    const urls = marketingPages.map(page => `
+    <url>
+      <loc>${siteUrl}${page.path}</loc>
+      <lastmod>${lastmod}</lastmod>
+      <changefreq>${page.changefreq}</changefreq>
+      <priority>${page.priority}</priority>
+    </url>`).join('');
+    
+    const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`;
+    
+    res.header('Content-Type', 'application/xml');
+    res.send(sitemap);
+  });
+
+  app.get('/robots.txt', (req, res) => {
+    const robots = `User-agent: *
+Allow: /
+Allow: /marketing
+Allow: /marketing/services
+Allow: /marketing/about
+Allow: /marketing/contact
+Disallow: /api/
+Disallow: /login
+Disallow: /pipeline
+Disallow: /clients
+Disallow: /tasks
+Disallow: /daily-plan
+Disallow: /settings
+
+Sitemap: ${siteUrl}/sitemap.xml
+`;
+    res.header('Content-Type', 'text/plain');
+    res.send(robots);
+  });
+
+  // ============================================
   // Leads API
   // ============================================
   
