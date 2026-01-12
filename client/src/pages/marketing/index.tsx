@@ -33,30 +33,27 @@ const services = [
 ];
 
 const stats = [
-  { value: '150+', label: 'Brisbane Businesses Served' },
-  { value: '94%', label: 'Client Retention Rate' },
-  { value: '$2.3M', label: 'Average Revenue Growth' },
-  { value: '12+', label: 'Years Experience' },
+  { value: '12+', label: 'Years Industry Experience' },
+  { value: '100%', label: 'Client-Focused Approach' },
+  { value: 'Proven', label: 'Sales Methodologies' },
+  { value: 'Local', label: 'Brisbane-Based Team' },
 ];
 
-const testimonials = [
+const benefits = [
   {
-    quote: "BattleScore transformed our sales process. We've increased our close rate by 40% in just 6 months.",
-    author: 'Sarah Mitchell',
-    role: 'CEO, TechFlow Solutions',
-    location: 'Brisbane',
+    quote: "A strategic approach that helps identify blind spots and creates a clear path to sustainable growth.",
+    category: 'Strategy',
+    icon: Target,
   },
   {
-    quote: "The strategic clarity they brought to our business was game-changing. Highly recommend to any Brisbane business.",
-    author: 'James Chen',
-    role: 'Founder, GreenBuild Construction',
-    location: 'Gold Coast',
+    quote: "Practical, actionable advice tailored to the unique challenges of the Queensland business landscape.",
+    category: 'Local Expertise',
+    icon: Building2,
   },
   {
-    quote: "Finally, a business consultant who understands the Queensland market. Practical advice, real results.",
-    author: 'Michelle Thompson',
-    role: 'Director, Coastal Wealth Advisors',
-    location: 'Sunshine Coast',
+    quote: "Data-driven insights combined with proven sales frameworks that deliver measurable results.",
+    category: 'Results-Driven',
+    icon: BarChart3,
   },
 ];
 
@@ -177,7 +174,7 @@ export default function MarketingHome() {
               <div className="space-y-4">
                 {[
                   { icon: Building2, text: 'Deep understanding of the Queensland business landscape' },
-                  { icon: Briefcase, text: 'Proven track record with 150+ local businesses' },
+                  { icon: Briefcase, text: 'Proven methodologies adapted for local businesses' },
                   { icon: LineChart, text: 'Data-driven approach with measurable outcomes' },
                   { icon: Clock, text: 'Flexible engagement models that fit your schedule' },
                   { icon: Award, text: 'Certified in leading sales and leadership methodologies' },
@@ -200,21 +197,22 @@ export default function MarketingHome() {
               </div>
             </div>
             <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl p-8 lg:p-12">
-              <blockquote className="space-y-6">
-                <p className="text-lg italic">
-                  "Working with BattleScore was a turning point for our business. Their strategic 
-                  approach helped us identify blind spots and create a clear path to growth."
+              <div className="space-y-6">
+                <h3 className="text-xl font-semibold">Our Approach</h3>
+                <p className="text-lg">
+                  We combine proven sales methodologies with deep local market knowledge to help 
+                  Brisbane businesses identify opportunities and build sustainable growth strategies.
                 </p>
-                <footer className="flex items-center gap-4">
+                <div className="flex items-center gap-4 pt-4">
                   <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
-                    <span className="text-lg font-semibold text-primary">SM</span>
+                    <Award className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <div className="font-semibold">Sarah Mitchell</div>
-                    <div className="text-sm text-muted-foreground">CEO, TechFlow Solutions - Brisbane</div>
+                    <div className="font-semibold">Certified Professionals</div>
+                    <div className="text-sm text-muted-foreground">NEPQ, Jeb Blount, Chris Voss Trained</div>
                   </div>
-                </footer>
-              </blockquote>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -223,28 +221,22 @@ export default function MarketingHome() {
       <section className="py-20">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-4">What Our Clients Say</h2>
+            <h2 className="text-3xl font-bold mb-4">What We Deliver</h2>
             <p className="text-lg text-muted-foreground">
-              Real results from real Brisbane businesses
+              Practical solutions for Brisbane businesses
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((testimonial) => (
-              <Card key={testimonial.author} className="hover-elevate">
+            {benefits.map((benefit) => (
+              <Card key={benefit.category} className="hover-elevate">
                 <CardContent className="p-6">
-                  <p className="text-muted-foreground mb-6 italic">"{testimonial.quote}"</p>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-4">
                     <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-sm font-semibold text-primary">
-                        {testimonial.author.split(' ').map(n => n[0]).join('')}
-                      </span>
+                      <benefit.icon className="h-5 w-5 text-primary" />
                     </div>
-                    <div>
-                      <div className="font-medium text-sm">{testimonial.author}</div>
-                      <div className="text-xs text-muted-foreground">{testimonial.role}</div>
-                      <div className="text-xs text-muted-foreground">{testimonial.location}</div>
-                    </div>
+                    <div className="font-semibold">{benefit.category}</div>
                   </div>
+                  <p className="text-muted-foreground">{benefit.quote}</p>
                 </CardContent>
               </Card>
             ))}
