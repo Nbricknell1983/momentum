@@ -2098,6 +2098,38 @@ export const DEFAULT_STRATEGY_ENGINE_STATE: StrategyEngineState = {
 };
 
 // ============================================
+// AI Account Movement Tips (Chess Cheats)
+// ============================================
+
+export interface MovementAction {
+  action: string;           // What to do: "Schedule a strategy review call"
+  outcome: string;          // Predicted result: "Will increase engagement and move to Steady State"
+  confidence: 'high' | 'medium' | 'low';
+  framework?: 'NEPQ' | 'Jeb Blount' | 'Chris Voss';  // Sales framework reference
+}
+
+export interface ClientMovementTip {
+  id: string;
+  clientId: string;
+  currentStage: ClientBoardStage;
+  targetStage: ClientBoardStage;
+  headline: string;         // "Move from Watchlist to Steady State"
+  reasoning: string;        // Why this is the recommended path
+  actions: MovementAction[]; // 2-3 specific actions
+  blockingFactors?: string[];  // What's preventing progress
+  generatedAt: Date;
+  expiresAt: Date;          // Cache expiry (6-12 hours)
+}
+
+export const MOVEMENT_TIP_TARGET_LABELS: Record<ClientBoardStage, string> = {
+  onboarding: 'Complete Onboarding',
+  steady_state: 'Reach Steady State',
+  growth_plays: 'Unlock Growth',
+  watchlist: 'Stabilize Account',
+  churned: 'Re-engage',
+};
+
+// ============================================
 // Client App Integration System
 // ============================================
 

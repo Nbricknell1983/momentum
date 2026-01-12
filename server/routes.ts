@@ -806,6 +806,142 @@ Rules:
   });
 
   // ============================================
+  // AI Movement Tips (Chess Cheats for Account Progression)
+  // ============================================
+
+  app.post("/api/clients/:clientId/movement-tip", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const { client, activities, tasks, healthContributors } = req.body;
+      
+      if (!clientId || !client) {
+        return res.status(400).json({ error: "Client data is required" });
+      }
+
+      // Determine current board stage
+      const currentStage = client.boardStage || (() => {
+        if (client.archived) return 'churned';
+        if (client.deliveryStatus === 'onboarding') return 'onboarding';
+        if (client.healthStatus === 'red' || client.healthStatus === 'amber') return 'watchlist';
+        if (client.upsellReadiness === 'ready' || client.upsellReadiness === 'hot') return 'growth_plays';
+        return 'steady_state';
+      })();
+
+      // Determine target stage based on current position
+      const stageProgression: Record<string, string> = {
+        'onboarding': 'steady_state',
+        'watchlist': 'steady_state',
+        'steady_state': 'growth_plays',
+        'growth_plays': 'growth_plays', // Maintain and expand
+        'churned': 'watchlist', // Re-engage first
+      };
+      const targetStage = stageProgression[currentStage] || 'steady_state';
+
+      // Build client snapshot for AI
+      const daysSinceContact = client.lastContactDate 
+        ? Math.floor((Date.now() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24)) 
+        : null;
+
+      const clientSnapshot = {
+        name: client.businessName,
+        industry: client.businessProfile?.industry || 'Unknown',
+        mrr: client.totalMRR || 0,
+        currentStage,
+        targetStage,
+        healthStatus: client.healthStatus,
+        healthContributors: (healthContributors || []).map((h: any) => ({
+          type: h.type,
+          status: h.status,
+          label: h.label
+        })),
+        deliveryStatus: client.deliveryStatus,
+        upsellReadiness: client.upsellReadiness,
+        daysSinceContact,
+        nextContactDate: client.nextContactDate,
+        products: (client.products || []).map((p: any) => ({
+          name: p.productType,
+          status: p.status,
+          value: p.monthlyValue
+        })),
+        recentActivities: (activities || []).slice(0, 5).map((a: any) => ({
+          type: a.type,
+          date: a.createdAt,
+          notes: a.notes?.substring(0, 80)
+        })),
+        pendingTasks: (tasks || []).filter((t: any) => t.status === 'pending').length,
+      };
+
+      const prompt = `You are a strategic account advisor using proven sales frameworks (NEPQ, Jeb Blount, Chris Voss). 
+Analyze this client and provide "chess cheats" - specific actions that will move them from their current lifecycle stage to the target stage.
+
+CLIENT SNAPSHOT:
+${JSON.stringify(clientSnapshot, null, 2)}
+
+STAGE DEFINITIONS:
+- onboarding: New client, setting up services
+- steady_state: Active, healthy, low-maintenance client
+- growth_plays: Ready for upsell/expansion opportunities
+- watchlist: At-risk, needs intervention
+- churned: Inactive, needs re-engagement
+
+CURRENT: ${currentStage} → TARGET: ${targetStage}
+
+Generate specific, actionable recommendations in this JSON format:
+{
+  "headline": "Brief statement of the movement goal (e.g., 'Stabilize and rebuild trust')",
+  "reasoning": "1-2 sentences explaining why the client is in current stage and what's blocking progress",
+  "actions": [
+    {
+      "action": "Specific action to take (e.g., 'Schedule a 15-min check-in call to address delivery concerns')",
+      "outcome": "Predicted result (e.g., 'Will reduce anxiety and rebuild confidence in the relationship')",
+      "confidence": "high" | "medium" | "low",
+      "framework": "NEPQ" | "Jeb Blount" | "Chris Voss" (which framework this aligns with)
+    }
+  ],
+  "blockingFactors": ["Factor preventing progress 1", "Factor 2"]
+}
+
+Rules:
+1. Generate exactly 3 actions prioritized by impact
+2. Use NEPQ for discovery/qualification actions, Jeb Blount for urgency/persistence, Chris Voss for negotiation/rapport
+3. If days since contact > 14, first action should be re-engagement
+4. If health is red, focus on problem identification (NEPQ) and empathy (Chris Voss)
+5. If health is green and on watchlist, reassess the categorization in reasoning
+6. Be specific to THIS client's situation, not generic advice
+7. Each action should be doable in under 30 minutes`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      const tipData = JSON.parse(content);
+      
+      // Build the response with metadata
+      const result = {
+        id: `tip_${clientId}_${Date.now()}`,
+        clientId,
+        currentStage,
+        targetStage,
+        headline: tipData.headline || `Move from ${currentStage} to ${targetStage}`,
+        reasoning: tipData.reasoning || '',
+        actions: tipData.actions || [],
+        blockingFactors: tipData.blockingFactors || [],
+        generatedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(), // 6 hours cache
+      };
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating movement tip:", error);
+      res.status(500).json({ error: "Failed to generate movement tip" });
+    }
+  });
+
+  // ============================================
   // Daily Plan AI Generation API
   // ============================================
 

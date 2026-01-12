@@ -1,11 +1,12 @@
 import { useDraggable } from '@dnd-kit/core';
 import { format } from 'date-fns';
-import { Phone, Mail, MessageSquare, DollarSign, Calendar, AlertCircle, CheckCircle, AlertTriangle, Sparkles, ChevronRight } from 'lucide-react';
+import { Phone, Mail, MessageSquare, DollarSign, Calendar, AlertCircle, CheckCircle, AlertTriangle, Sparkles, ChevronRight, Lightbulb } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Client, HealthStatus, HEALTH_STATUS_LABELS, ClientBoardStage } from '@/lib/types';
+import { AccountMovementTips } from './AccountMovementTips';
 
 interface ClientKanbanCardProps {
   client: Client;
@@ -178,6 +179,14 @@ export default function ClientKanbanCard({ client, onClick, onQuickAction }: Cli
             </Button>
           </TooltipTrigger>
           <TooltipContent>Log SMS</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span onClick={(e) => e.stopPropagation()}>
+              <AccountMovementTips client={client} triggerVariant="icon" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>AI Movement Tips</TooltipContent>
         </Tooltip>
         <div className="flex-1" />
         <Button
