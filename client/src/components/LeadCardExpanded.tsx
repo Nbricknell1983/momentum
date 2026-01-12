@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { addDays, addWeeks, addMonths } from 'date-fns';
 import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus, NURTURE_STATUS_LABELS } from '@/lib/types';
 import { updateLead, updateLeadStage, addActivity, archiveLead, deleteLead, enrollInNurture, removeFromNurture } from '@/store';
 import TrafficLight from './TrafficLight';
@@ -170,10 +173,81 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const [isLoggingActivity, setIsLoggingActivity] = useState<ActivityType | null>(null);
   const [aiMessageModalOpen, setAiMessageModalOpen] = useState(false);
   const [aiMessageChannel, setAiMessageChannel] = useState<'sms' | 'email'>('sms');
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [contactReason, setContactReason] = useState(lead.nextContactReason || '');
+  const [isSavingDate, setIsSavingDate] = useState(false);
 
   const openAiMessageModal = (channel: 'sms' | 'email') => {
     setAiMessageChannel(channel);
     setAiMessageModalOpen(true);
+  };
+
+  const handleSetNextContactDate = async (date: Date, source: 'ai' | 'manual' = 'manual', reason?: string) => {
+    if (!orgId || !authReady) return;
+    
+    setIsSavingDate(true);
+    try {
+      const updates = {
+        nextContactDate: date,
+        nextContactSource: source,
+        nextContactReason: reason || (source === 'manual' ? contactReason : undefined),
+        updatedAt: new Date()
+      };
+      
+      dispatch(updateLead({ ...lead, ...updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady);
+      
+      toast({
+        title: 'Next contact date updated',
+        description: `Set to ${format(date, 'dd/MM/yyyy')}${source === 'manual' ? ' (manual)' : ' (AI suggested)'}`,
+      });
+      setIsDatePickerOpen(false);
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update date', variant: 'destructive' });
+    } finally {
+      setIsSavingDate(false);
+    }
+  };
+
+  const handleQuickAdjust = (adjustment: string) => {
+    const baseDate = lead.nextContactDate ? new Date(lead.nextContactDate) : new Date();
+    let newDate: Date;
+    
+    switch (adjustment) {
+      case '+1w': newDate = addWeeks(baseDate, 1); break;
+      case '+2w': newDate = addWeeks(baseDate, 2); break;
+      case '+1m': newDate = addMonths(baseDate, 1); break;
+      case '+2m': newDate = addMonths(baseDate, 2); break;
+      default: newDate = baseDate;
+    }
+    
+    handleSetNextContactDate(newDate, 'manual');
+  };
+
+  const handleRevertToAI = async () => {
+    if (!orgId || !authReady) return;
+    
+    setIsSavingDate(true);
+    try {
+      const updates = {
+        nextContactSource: 'ai' as const,
+        nextContactReason: undefined,
+        updatedAt: new Date()
+      };
+      
+      dispatch(updateLead({ ...lead, ...updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady);
+      setContactReason('');
+      
+      toast({
+        title: 'Reverted to AI scheduling',
+        description: 'Future activities will auto-schedule the next contact date',
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to revert', variant: 'destructive' });
+    } finally {
+      setIsSavingDate(false);
+    }
   };
 
   const leadActivityHistory = activities
@@ -234,62 +308,82 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
       // Invalidate all Daily Plan queries for this org (partial match)
       queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId] });
       
-      // Smart scheduling: auto-set next contact date
-      try {
-        // Fetch real task load for the next 30 days
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 30);
-        const taskLoadByDate = await fetchTaskLoadByDateRange(
-          orgId, 
-          lead.userId, 
-          startDate, 
-          endDate, 
-          authReady
-        );
+      // Smart scheduling: auto-set next contact date (only if not manually overridden)
+      if (lead.nextContactSource === 'manual') {
+        // Respect manual override - don't auto-reschedule
+        dispatch(updateLead({ 
+          ...lead, 
+          lastActivityAt: new Date(),
+          updatedAt: new Date() 
+        }));
+        await updateLeadInFirestore(orgId, lead.id, { 
+          lastActivityAt: new Date(),
+          updatedAt: new Date()
+        }, authReady);
         
-        const scheduleResponse = await fetch('/api/scheduling/suggest-next-contact', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            leadStage: lead.stage,
-            activityType: type,
-            taskLoadByDate,
-            maxTasksPerDay: 8, // TODO: Could be user preference
-            preferredDays: [1, 2, 3, 4, 5], // Mon-Fri
-            leadPriority: 'normal'
-          })
+        toast({ 
+          title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, 
+          description: `Manual follow-up date preserved: ${lead.nextContactDate ? format(new Date(lead.nextContactDate), 'dd/MM/yyyy') : 'Not set'}`
         });
-        
-        if (scheduleResponse.ok) {
-          const scheduleData = await scheduleResponse.json();
-          const nextContactDate = new Date(scheduleData.suggestedDate);
+      } else {
+        try {
+          // Fetch real task load for the next 30 days
+          const startDate = new Date();
+          const endDate = new Date();
+          endDate.setDate(endDate.getDate() + 30);
+          const taskLoadByDate = await fetchTaskLoadByDateRange(
+            orgId, 
+            lead.userId, 
+            startDate, 
+            endDate, 
+            authReady
+          );
           
-          // Update lead with smart-scheduled next contact date
-          dispatch(updateLead({ 
-            ...lead, 
-            nextContactDate,
-            lastActivityAt: new Date(),
-            updatedAt: new Date() 
-          }));
-          
-          // Also update in Firestore
-          await updateLeadInFirestore(orgId, lead.id, { 
-            nextContactDate,
-            lastActivityAt: new Date(),
-            updatedAt: new Date()
-          }, authReady);
-          
-          toast({ 
-            title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, 
-            description: `Next follow-up: ${scheduleData.displayDate} (${scheduleData.reason})`
+          const scheduleResponse = await fetch('/api/scheduling/suggest-next-contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              leadStage: lead.stage,
+              activityType: type,
+              taskLoadByDate,
+              maxTasksPerDay: 8, // TODO: Could be user preference
+              preferredDays: [1, 2, 3, 4, 5], // Mon-Fri
+              leadPriority: 'normal'
+            })
           });
-        } else {
+          
+          if (scheduleResponse.ok) {
+            const scheduleData = await scheduleResponse.json();
+            const nextContactDate = new Date(scheduleData.suggestedDate);
+            
+            // Update lead with smart-scheduled next contact date
+            dispatch(updateLead({ 
+              ...lead, 
+              nextContactDate,
+              nextContactSource: 'ai',
+              lastActivityAt: new Date(),
+              updatedAt: new Date() 
+            }));
+            
+            // Also update in Firestore
+            await updateLeadInFirestore(orgId, lead.id, { 
+              nextContactDate,
+              nextContactSource: 'ai',
+              lastActivityAt: new Date(),
+              updatedAt: new Date()
+            }, authReady);
+            
+            toast({ 
+              title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, 
+              description: `Next follow-up: ${scheduleData.displayDate} (${scheduleData.reason})`
+            });
+          } else {
+            toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
+          }
+        } catch (schedError) {
+          console.error('[LeadCardExpanded] Smart scheduling failed:', schedError);
           toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
         }
-      } catch (schedError) {
-        console.error('[LeadCardExpanded] Smart scheduling failed:', schedError);
-        toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
       }
     } catch (error) {
       console.error('[LeadCardExpanded] Error logging activity:', error);
@@ -427,6 +521,129 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Next Contact Date Editor */}
+          <div className="space-y-2 p-3 bg-muted/30 rounded-md">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs flex items-center gap-1.5">
+                <CalendarIcon className="h-3 w-3" />
+                Next Contact
+                {lead.nextContactSource === 'manual' ? (
+                  <Badge variant="outline" className="text-[10px] h-4 px-1 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300">
+                    Manual
+                  </Badge>
+                ) : lead.nextContactDate ? (
+                  <Badge variant="outline" className="text-[10px] h-4 px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300">
+                    <Sparkles className="h-2 w-2 mr-0.5" />
+                    AI
+                  </Badge>
+                ) : null}
+              </Label>
+              {lead.nextContactSource === 'manual' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs gap-1"
+                  onClick={handleRevertToAI}
+                  disabled={isSavingDate}
+                  data-testid={`button-revert-ai-${lead.id}`}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Revert to AI
+                </Button>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-8"
+                    disabled={isSavingDate}
+                    data-testid={`button-pick-date-${lead.id}`}
+                  >
+                    <CalendarIcon className="h-3 w-3" />
+                    {lead.nextContactDate ? format(new Date(lead.nextContactDate), 'dd/MM/yyyy') : 'Set date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={lead.nextContactDate ? new Date(lead.nextContactDate) : undefined}
+                    onSelect={(date) => date && handleSetNextContactDate(date, 'manual')}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => handleQuickAdjust('+1w')}
+                  disabled={isSavingDate}
+                  data-testid={`button-add-1w-${lead.id}`}
+                >
+                  +1 wk
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => handleQuickAdjust('+2w')}
+                  disabled={isSavingDate}
+                  data-testid={`button-add-2w-${lead.id}`}
+                >
+                  +2 wk
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => handleQuickAdjust('+1m')}
+                  disabled={isSavingDate}
+                  data-testid={`button-add-1m-${lead.id}`}
+                >
+                  +1 mo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => handleQuickAdjust('+2m')}
+                  disabled={isSavingDate}
+                  data-testid={`button-add-2m-${lead.id}`}
+                >
+                  +2 mo
+                </Button>
+              </div>
+            </div>
+            
+            {lead.nextContactSource === 'manual' && (
+              <div className="space-y-1">
+                <Input
+                  value={contactReason}
+                  onChange={(e) => setContactReason(e.target.value)}
+                  placeholder="Reason (e.g., 'Client asked to call in 2 months')"
+                  className="h-7 text-xs"
+                  onBlur={async () => {
+                    if (contactReason !== lead.nextContactReason && orgId && authReady) {
+                      await updateLeadInFirestore(orgId, lead.id, { nextContactReason: contactReason }, authReady);
+                      dispatch(updateLead({ ...lead, nextContactReason: contactReason }));
+                    }
+                  }}
+                  data-testid={`input-contact-reason-${lead.id}`}
+                />
+              </div>
+            )}
+            
+            {lead.nextContactReason && lead.nextContactSource === 'manual' && (
+              <p className="text-xs text-muted-foreground italic">"{lead.nextContactReason}"</p>
+            )}
           </div>
 
           {/* MRR */}

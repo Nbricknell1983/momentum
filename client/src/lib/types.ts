@@ -213,6 +213,8 @@ export interface Lead {
   mrr?: number;
   nepqLabel?: string;
   nextContactDate?: Date;
+  nextContactSource?: 'ai' | 'manual';  // Track if date was set by AI or manually
+  nextContactReason?: string;           // Optional reason for manual override (e.g., "Client requested callback in 2 months")
   lastContactDate?: Date;
   lastActivityAt?: Date;
   createdAt: Date;
