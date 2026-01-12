@@ -630,6 +630,23 @@ export default function ResearchPage() {
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">{place.address}</p>
+                    
+                    {/* Why Suggested */}
+                    <div className="mt-2 p-2 rounded bg-muted/50 text-xs text-muted-foreground">
+                      <span className="font-medium">Why suggested: </span>
+                      {place.reviewCount === 0 ? (
+                        <span>No reviews yet - brand new business that likely needs marketing help</span>
+                      ) : place.reviewCount < 10 ? (
+                        <span>Only {place.reviewCount} reviews - very new business building their presence</span>
+                      ) : place.reviewCount < 50 ? (
+                        <span>{place.reviewCount} reviews - newer business still establishing reputation</span>
+                      ) : (
+                        <span>Established business with {place.reviewCount} reviews</span>
+                      )}
+                      {!place.website && <span> | No website detected - opportunity for digital services</span>}
+                      {place.rating && place.rating < 4 && <span> | Rating below 4.0 - may need reputation help</span>}
+                    </div>
+
                     <div className="flex items-center gap-4 mt-2 text-sm">
                       {place.phone && (
                         <span className="flex items-center gap-1 text-muted-foreground">
