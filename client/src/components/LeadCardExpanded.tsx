@@ -344,6 +344,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
       email: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
       sms: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800',
       meeting: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+      meeting_booked: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
       dropin: 'bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300 dark:border-pink-800',
     };
 
@@ -458,6 +459,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
             <ActivityButton type="email" label="Log Email" />
             <ActivityButton type="sms" label="Log SMS" />
             <ActivityButton type="meeting" label="Log Meeting" />
+            <ActivityButton type="meeting_booked" label="Meeting Booked" />
             <ActivityButton type="dropin" label="Log Drop-in" />
           </div>
 

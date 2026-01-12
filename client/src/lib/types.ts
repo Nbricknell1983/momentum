@@ -12,7 +12,7 @@ export type Stage =
   | 'lost'
   | 'nurture';
 
-export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'dropin' | 'followup' | 'proposal' | 'deal' | 'nba_completed' | 'nba_dismissed' | 'stage_change';
+export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'meeting_booked' | 'dropin' | 'followup' | 'proposal' | 'deal' | 'nba_completed' | 'nba_dismissed' | 'stage_change';
 
 export type TaskStatus = 'pending' | 'completed' | 'snoozed';
 
@@ -318,6 +318,7 @@ export function activityTypeToTaskType(activityType: ActivityType): TaskType {
     case 'email':
       return 'prospecting';
     case 'meeting':
+    case 'meeting_booked':
       return 'meeting';
     case 'dropin':
       return 'check_in';
@@ -421,6 +422,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   email: 'Email',
   sms: 'SMS',
   meeting: 'Meeting',
+  meeting_booked: 'Meeting Booked',
   dropin: 'Drop-in',
   followup: 'Follow-up',
   proposal: 'Proposal',
