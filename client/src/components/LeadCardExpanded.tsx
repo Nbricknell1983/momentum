@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -561,15 +561,56 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 )}
               </div>
             )}
-            <div className="flex items-center gap-2 text-sm">
-              <button className="underline text-muted-foreground" onClick={() => console.log('Save contact')}>
-                Save contact
-              </button>
-              {lead.phone && (
-                <a href={`tel:${lead.phone}`} className="underline text-muted-foreground">
-                  Call
-                </a>
-              )}
+            {/* Quick Send Actions */}
+            <div className="space-y-2">
+              <Label className="text-xs">Quick Actions</Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {lead.phone && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      asChild
+                      data-testid={`button-call-${lead.id}`}
+                    >
+                      <a href={`tel:${lead.phone}`}>
+                        <Phone className="h-3 w-3" />
+                        Call
+                      </a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                      asChild
+                      data-testid={`button-sms-${lead.id}`}
+                    >
+                      <a href={`sms:${lead.phone}`}>
+                        <MessageSquare className="h-3 w-3" />
+                        Text
+                      </a>
+                    </Button>
+                  </>
+                )}
+                {lead.email && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
+                    asChild
+                    data-testid={`button-email-${lead.id}`}
+                  >
+                    <a href={`mailto:${lead.email}?subject=Following up - ${lead.companyName}`}>
+                      <Mail className="h-3 w-3" />
+                      Email
+                    </a>
+                  </Button>
+                )}
+                {!lead.phone && !lead.email && (
+                  <span className="text-xs text-muted-foreground">Add phone or email to enable quick actions</span>
+                )}
+              </div>
             </div>
           </div>
 

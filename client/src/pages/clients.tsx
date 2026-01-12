@@ -2549,6 +2549,56 @@ export default function ClientsPage() {
                                   </div>
                                 )}
                               </div>
+                              {/* Quick Send Actions */}
+                              {(client.phone || client.email) && (
+                                <div className="mt-3 pt-2 border-t">
+                                  <p className="text-xs font-medium mb-2">Quick Send</p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {client.phone && (
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="gap-1.5 h-7"
+                                          asChild
+                                          data-testid={`button-call-client-${client.id}`}
+                                        >
+                                          <a href={`tel:${client.phone}`}>
+                                            <Phone className="h-3 w-3" />
+                                            Call
+                                          </a>
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="gap-1.5 h-7 bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                                          asChild
+                                          data-testid={`button-sms-client-${client.id}`}
+                                        >
+                                          <a href={`sms:${client.phone}`}>
+                                            <MessageSquare className="h-3 w-3" />
+                                            Text
+                                          </a>
+                                        </Button>
+                                      </>
+                                    )}
+                                    {client.email && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1.5 h-7 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
+                                        asChild
+                                        data-testid={`button-email-client-${client.id}`}
+                                      >
+                                        <a href={`mailto:${client.email}?subject=Following up - ${client.businessName}`}>
+                                          <Mail className="h-3 w-3" />
+                                          Email
+                                        </a>
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             <div className="space-y-2">
