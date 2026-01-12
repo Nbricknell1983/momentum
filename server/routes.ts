@@ -1579,5 +1579,115 @@ Return valid JSON:
     }
   });
 
+  // ===============================
+  // Domain WHOIS / Age Lookup
+  // ===============================
+
+  app.get("/api/domain-age", async (req, res) => {
+    try {
+      const { domain } = req.query;
+      
+      if (!domain || typeof domain !== 'string') {
+        return res.status(400).json({ error: "Domain is required" });
+      }
+
+      // Extract just the domain from a full URL
+      let cleanDomain = domain;
+      try {
+        if (domain.includes('://')) {
+          cleanDomain = new URL(domain).hostname;
+        } else if (domain.includes('/')) {
+          cleanDomain = domain.split('/')[0];
+        }
+        // Remove www. prefix
+        cleanDomain = cleanDomain.replace(/^www\./, '');
+      } catch (e) {
+        // Keep original if parsing fails
+      }
+
+      // Use whois package for lookup
+      const whois = await import('whois');
+      
+      const lookupPromise = new Promise<string>((resolve, reject) => {
+        whois.default.lookup(cleanDomain, (err: any, data: any) => {
+          if (err) reject(err);
+          else resolve(typeof data === 'string' ? data : JSON.stringify(data));
+        });
+      });
+
+      const whoisData = await lookupPromise;
+      
+      // Parse creation date from WHOIS response
+      // Different registrars use different field names
+      const creationPatterns = [
+        /Creation Date:\s*(.+)/i,
+        /Created Date:\s*(.+)/i,
+        /Created:\s*(.+)/i,
+        /Registration Date:\s*(.+)/i,
+        /Registered:\s*(.+)/i,
+        /Domain Registration Date:\s*(.+)/i,
+        /created:\s*(\d{4}-\d{2}-\d{2})/i,
+      ];
+
+      let creationDate: Date | null = null;
+      for (const pattern of creationPatterns) {
+        const match = whoisData.match(pattern);
+        if (match) {
+          const dateStr = match[1].trim();
+          const parsed = new Date(dateStr);
+          if (!isNaN(parsed.getTime())) {
+            creationDate = parsed;
+            break;
+          }
+        }
+      }
+
+      if (!creationDate) {
+        return res.json({
+          domain: cleanDomain,
+          creationDate: null,
+          ageInDays: null,
+          ageDescription: 'Could not determine domain age',
+          raw: whoisData.substring(0, 500)
+        });
+      }
+
+      const now = new Date();
+      const ageInDays = Math.floor((now.getTime() - creationDate.getTime()) / (1000 * 60 * 60 * 24));
+      const ageInMonths = Math.floor(ageInDays / 30);
+      const ageInYears = Math.floor(ageInDays / 365);
+
+      let ageDescription: string;
+      if (ageInDays < 30) {
+        ageDescription = `${ageInDays} days old - VERY NEW!`;
+      } else if (ageInDays < 90) {
+        ageDescription = `${ageInMonths} months old - Recently launched`;
+      } else if (ageInDays < 365) {
+        ageDescription = `${ageInMonths} months old - New business`;
+      } else if (ageInYears < 2) {
+        ageDescription = `${ageInYears} year${ageInYears > 1 ? 's' : ''} old - Relatively new`;
+      } else {
+        ageDescription = `${ageInYears} years old - Established`;
+      }
+
+      res.json({
+        domain: cleanDomain,
+        creationDate: creationDate.toISOString(),
+        ageInDays,
+        ageInMonths,
+        ageInYears,
+        ageDescription,
+        isNew: ageInDays < 365 // Less than 1 year = new
+      });
+
+    } catch (error: any) {
+      console.error("Error looking up domain:", error);
+      res.status(500).json({ 
+        error: "Failed to lookup domain age",
+        details: error.message
+      });
+    }
+  });
+
   return httpServer;
 }

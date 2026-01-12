@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation } from 'lucide-react';
+import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -113,6 +113,7 @@ export default function ResearchPage() {
   const [searchedLocation, setSearchedLocation] = useState<string | null>(null);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [domainAges, setDomainAges] = useState<Record<string, { loading: boolean; data?: any; error?: string }>>({});
   
   // Shared state
   const [isSearching, setIsSearching] = useState(false);
@@ -399,6 +400,27 @@ export default function ResearchPage() {
     }
   };
 
+  // Check domain age for a website
+  const checkDomainAge = async (placeId: string, website: string) => {
+    setDomainAges(prev => ({ ...prev, [placeId]: { loading: true } }));
+    
+    try {
+      const response = await fetch(`/api/domain-age?domain=${encodeURIComponent(website)}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Lookup failed');
+      }
+      
+      setDomainAges(prev => ({ ...prev, [placeId]: { loading: false, data } }));
+    } catch (err: any) {
+      setDomainAges(prev => ({ 
+        ...prev, 
+        [placeId]: { loading: false, error: err.message || 'Failed to check' } 
+      }));
+    }
+  };
+
   const filteredGoogleResults = showOnlyNew 
     ? googleResults.filter(r => r.isLikelyNew)
     : googleResults;
@@ -665,6 +687,38 @@ export default function ResearchPage() {
                           <Globe className="h-3 w-3" />
                           Website
                         </a>
+                      )}
+                      {place.website && !domainAges[place.placeId] && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => checkDomainAge(place.placeId, place.website!)}
+                          data-testid={`button-check-domain-${place.placeId}`}
+                        >
+                          <Calendar className="h-3 w-3 mr-1" />
+                          Check Domain Age
+                        </Button>
+                      )}
+                      {domainAges[place.placeId]?.loading && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Checking...
+                        </span>
+                      )}
+                      {domainAges[place.placeId]?.data && (
+                        <Badge 
+                          variant={domainAges[place.placeId].data.isNew ? "default" : "outline"}
+                          className={domainAges[place.placeId].data.isNew ? "bg-green-600" : ""}
+                        >
+                          <Calendar className="h-3 w-3 mr-1" />
+                          {domainAges[place.placeId].data.ageDescription}
+                        </Badge>
+                      )}
+                      {domainAges[place.placeId]?.error && (
+                        <span className="text-xs text-muted-foreground">
+                          {domainAges[place.placeId].error}
+                        </span>
                       )}
                     </div>
                   </div>
