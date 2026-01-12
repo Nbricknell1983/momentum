@@ -188,6 +188,9 @@ export interface Lead {
   phone?: string;
   email?: string;
   website?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  linkedinUrl?: string;
   stage: Stage;
   mrr?: number;
   nepqLabel?: string;
@@ -1160,6 +1163,10 @@ export interface Client {
   primaryContactName: string;
   phone?: string;
   email?: string;
+  website?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  linkedinUrl?: string;
   address?: string;
   regionId?: string;
   regionName?: string;

@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe } from 'lucide-react';
+import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -441,6 +442,69 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
               className="h-8"
               data-testid={`input-email-${lead.id}`}
             />
+            <Input
+              value={lead.website || ''}
+              onChange={(e) => handleUpdateField('website', e.target.value)}
+              placeholder="Website URL"
+              className="h-8"
+              data-testid={`input-website-${lead.id}`}
+            />
+            <div className="grid grid-cols-3 gap-2">
+              <div className="relative">
+                <SiFacebook className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-600" />
+                <Input
+                  value={lead.facebookUrl || ''}
+                  onChange={(e) => handleUpdateField('facebookUrl', e.target.value)}
+                  placeholder="Facebook"
+                  className="h-8 pl-8 text-xs"
+                  data-testid={`input-facebook-${lead.id}`}
+                />
+              </div>
+              <div className="relative">
+                <SiInstagram className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-pink-600" />
+                <Input
+                  value={lead.instagramUrl || ''}
+                  onChange={(e) => handleUpdateField('instagramUrl', e.target.value)}
+                  placeholder="Instagram"
+                  className="h-8 pl-8 text-xs"
+                  data-testid={`input-instagram-${lead.id}`}
+                />
+              </div>
+              <div className="relative">
+                <SiLinkedin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-700" />
+                <Input
+                  value={lead.linkedinUrl || ''}
+                  onChange={(e) => handleUpdateField('linkedinUrl', e.target.value)}
+                  placeholder="LinkedIn"
+                  className="h-8 pl-8 text-xs"
+                  data-testid={`input-linkedin-${lead.id}`}
+                />
+              </div>
+            </div>
+            {(lead.website || lead.facebookUrl || lead.instagramUrl || lead.linkedinUrl) && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {lead.website && (
+                  <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+                    <Globe className="h-4 w-4" />
+                  </a>
+                )}
+                {lead.facebookUrl && (
+                  <a href={lead.facebookUrl.startsWith('http') ? lead.facebookUrl : `https://facebook.com/${lead.facebookUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                    <SiFacebook className="h-4 w-4" />
+                  </a>
+                )}
+                {lead.instagramUrl && (
+                  <a href={lead.instagramUrl.startsWith('http') ? lead.instagramUrl : `https://instagram.com/${lead.instagramUrl}`} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:text-pink-700">
+                    <SiInstagram className="h-4 w-4" />
+                  </a>
+                )}
+                {lead.linkedinUrl && (
+                  <a href={lead.linkedinUrl.startsWith('http') ? lead.linkedinUrl : `https://linkedin.com/company/${lead.linkedinUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:text-blue-800">
+                    <SiLinkedin className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2 text-sm">
               <button className="underline text-muted-foreground" onClick={() => console.log('Save contact')}>
                 Save contact

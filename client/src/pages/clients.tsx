@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe } from 'lucide-react';
+import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { QRCodeSVG } from 'qrcode.react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -256,6 +257,10 @@ export default function ClientsPage() {
   const [newContactName, setNewContactName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newWebsite, setNewWebsite] = useState('');
+  const [newFacebookUrl, setNewFacebookUrl] = useState('');
+  const [newInstagramUrl, setNewInstagramUrl] = useState('');
+  const [newLinkedinUrl, setNewLinkedinUrl] = useState('');
   const [newRegionId, setNewRegionId] = useState('');
   const [newAreaId, setNewAreaId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -1430,6 +1435,10 @@ export default function ClientsPage() {
         primaryContactName: newContactName.trim(),
         phone: newPhone || undefined,
         email: newEmail || undefined,
+        website: newWebsite || undefined,
+        facebookUrl: newFacebookUrl || undefined,
+        instagramUrl: newInstagramUrl || undefined,
+        linkedinUrl: newLinkedinUrl || undefined,
         regionId: territoryFields.regionId,
         regionName: territoryFields.regionName,
         areaId: territoryFields.areaId,
@@ -1464,6 +1473,10 @@ export default function ClientsPage() {
       setNewContactName('');
       setNewPhone('');
       setNewEmail('');
+      setNewWebsite('');
+      setNewFacebookUrl('');
+      setNewInstagramUrl('');
+      setNewLinkedinUrl('');
       setNewRegionId('');
       setNewAreaId('');
       setIsAddDialogOpen(false);
@@ -2112,6 +2125,33 @@ export default function ClientsPage() {
                   type="email"
                   data-testid="input-new-email"
                 />
+                <Input
+                  value={newWebsite}
+                  onChange={(e) => setNewWebsite(e.target.value)}
+                  placeholder="Website URL"
+                  data-testid="input-new-website"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Social Links</Label>
+                <Input
+                  value={newFacebookUrl}
+                  onChange={(e) => setNewFacebookUrl(e.target.value)}
+                  placeholder="Facebook URL or page name"
+                  data-testid="input-new-facebook"
+                />
+                <Input
+                  value={newInstagramUrl}
+                  onChange={(e) => setNewInstagramUrl(e.target.value)}
+                  placeholder="Instagram URL or handle"
+                  data-testid="input-new-instagram"
+                />
+                <Input
+                  value={newLinkedinUrl}
+                  onChange={(e) => setNewLinkedinUrl(e.target.value)}
+                  placeholder="LinkedIn URL or company name"
+                  data-testid="input-new-linkedin"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Territory</Label>
@@ -2481,6 +2521,31 @@ export default function ClientsPage() {
                                   <div className="flex items-center gap-2">
                                     <MapPin className="h-3 w-3" />
                                     <span>{client.address}</span>
+                                  </div>
+                                )}
+                                {client.website && (
+                                  <div className="flex items-center gap-2">
+                                    <Globe className="h-3 w-3" />
+                                    <a href={client.website.startsWith('http') ? client.website : `https://${client.website}`} target="_blank" rel="noopener noreferrer" className="hover:underline truncate max-w-48">{client.website}</a>
+                                  </div>
+                                )}
+                                {(client.facebookUrl || client.instagramUrl || client.linkedinUrl) && (
+                                  <div className="flex items-center gap-3 mt-2">
+                                    {client.facebookUrl && (
+                                      <a href={client.facebookUrl.startsWith('http') ? client.facebookUrl : `https://facebook.com/${client.facebookUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                                        <SiFacebook className="h-4 w-4" />
+                                      </a>
+                                    )}
+                                    {client.instagramUrl && (
+                                      <a href={client.instagramUrl.startsWith('http') ? client.instagramUrl : `https://instagram.com/${client.instagramUrl}`} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:text-pink-700">
+                                        <SiInstagram className="h-4 w-4" />
+                                      </a>
+                                    )}
+                                    {client.linkedinUrl && (
+                                      <a href={client.linkedinUrl.startsWith('http') ? client.linkedinUrl : `https://linkedin.com/company/${client.linkedinUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:text-blue-800">
+                                        <SiLinkedin className="h-4 w-4" />
+                                      </a>
+                                    )}
                                   </div>
                                 )}
                               </div>
