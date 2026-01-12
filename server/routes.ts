@@ -1609,7 +1609,12 @@ Return valid JSON:
       const whois = await import('whois');
       
       const lookupPromise = new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('WHOIS lookup timed out'));
+        }, 10000); // 10 second timeout
+        
         whois.default.lookup(cleanDomain, (err: any, data: any) => {
+          clearTimeout(timeout);
           if (err) reject(err);
           else resolve(typeof data === 'string' ? data : JSON.stringify(data));
         });
