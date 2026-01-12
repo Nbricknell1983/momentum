@@ -809,13 +809,23 @@ Rules:
   // AI Movement Tips (Chess Cheats for Account Progression)
   // ============================================
 
+  // Simple in-memory cache for movement tips (6-hour TTL)
+  const movementTipsCache = new Map<string, { tip: any; expiresAt: number }>();
+  const MOVEMENT_TIP_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
   app.post("/api/clients/:clientId/movement-tip", async (req, res) => {
     try {
       const { clientId } = req.params;
-      const { client, activities, tasks, healthContributors } = req.body;
+      const { client, activities, tasks, healthContributors, forceRefresh } = req.body;
       
       if (!clientId || !client) {
         return res.status(400).json({ error: "Client data is required" });
+      }
+
+      // Check cache first (unless force refresh)
+      const cached = movementTipsCache.get(clientId);
+      if (cached && !forceRefresh && Date.now() < cached.expiresAt) {
+        return res.json(cached.tip);
       }
 
       // Determine current board stage
@@ -921,6 +931,7 @@ Rules:
       const tipData = JSON.parse(content);
       
       // Build the response with metadata
+      const expiresAt = Date.now() + MOVEMENT_TIP_TTL_MS;
       const result = {
         id: `tip_${clientId}_${Date.now()}`,
         clientId,
@@ -931,8 +942,11 @@ Rules:
         actions: tipData.actions || [],
         blockingFactors: tipData.blockingFactors || [],
         generatedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(), // 6 hours cache
+        expiresAt: new Date(expiresAt).toISOString(),
       };
+      
+      // Store in cache
+      movementTipsCache.set(clientId, { tip: result, expiresAt });
       
       res.json(result);
     } catch (error) {

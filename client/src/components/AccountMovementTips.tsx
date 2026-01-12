@@ -43,7 +43,7 @@ export function AccountMovementTips({ client, onActionTaken, triggerVariant = 'i
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
 
-  const generateTip = async () => {
+  const generateTip = async (forceRefresh: boolean = false) => {
     if (!orgId || !authReady) return;
     
     setIsLoading(true);
@@ -64,6 +64,7 @@ export function AccountMovementTips({ client, onActionTaken, triggerVariant = 'i
           activities,
           tasks,
           healthContributors,
+          forceRefresh,
         }),
       });
 
@@ -88,13 +89,13 @@ export function AccountMovementTips({ client, onActionTaken, triggerVariant = 'i
   const handleOpen = (open: boolean) => {
     setIsOpen(open);
     if (open && !tip) {
-      generateTip();
+      generateTip(false);
     }
   };
 
   const handleRefresh = () => {
     setTip(null);
-    generateTip();
+    generateTip(true);
   };
 
   return (
