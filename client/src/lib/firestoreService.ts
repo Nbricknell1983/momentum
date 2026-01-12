@@ -2136,6 +2136,57 @@ export async function fetchOverdueTasks(orgId: string, userId: string, beforeDat
 }
 
 // ============================================
+// Task Load Functions (for Smart Scheduling)
+// ============================================
+
+/**
+ * Fetch task counts per day for a date range (for workload balancing).
+ * Returns { "YYYY-MM-DD": count, ... }
+ */
+export async function fetchTaskLoadByDateRange(
+  orgId: string, 
+  userId: string, 
+  startDate: Date, 
+  endDate: Date, 
+  authReady: boolean = false
+): Promise<Record<string, number>> {
+  const path = `orgs/${orgId}/tasks`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return {};
+  }
+  
+  try {
+    const tasksRef = collection(db, 'orgs', orgId, 'tasks');
+    const startKey = startDate.toISOString().split('T')[0];
+    const endKey = endDate.toISOString().split('T')[0];
+    
+    const q = query(
+      tasksRef, 
+      where('userId', '==', userId),
+      where('planDateKey', '>=', startKey),
+      where('planDateKey', '<=', endKey)
+    );
+    const snapshot = await getDocs(q);
+    
+    const taskLoad: Record<string, number> = {};
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const dateKey = data.planDateKey;
+      if (dateKey) {
+        taskLoad[dateKey] = (taskLoad[dateKey] || 0) + 1;
+      }
+    });
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return taskLoad;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return {};
+  }
+}
+
+// ============================================
 // Action Recommendations Functions
 // ============================================
 

@@ -18,7 +18,7 @@ import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
-import { deleteLeadFromFirestore, logPipelineAction } from '@/lib/firestoreService';
+import { deleteLeadFromFirestore, logPipelineAction, updateLeadInFirestore, fetchTaskLoadByDateRange } from '@/lib/firestoreService';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -221,7 +221,63 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
       // Invalidate all Daily Plan queries for this org (partial match)
       queryClient.invalidateQueries({ queryKey: ['/plan-tasks', orgId] });
       
-      toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
+      // Smart scheduling: auto-set next contact date
+      try {
+        // Fetch real task load for the next 30 days
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 30);
+        const taskLoadByDate = await fetchTaskLoadByDateRange(
+          orgId, 
+          lead.userId, 
+          startDate, 
+          endDate, 
+          authReady
+        );
+        
+        const scheduleResponse = await fetch('/api/scheduling/suggest-next-contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            leadStage: lead.stage,
+            activityType: type,
+            taskLoadByDate,
+            maxTasksPerDay: 8, // TODO: Could be user preference
+            preferredDays: [1, 2, 3, 4, 5], // Mon-Fri
+            leadPriority: 'normal'
+          })
+        });
+        
+        if (scheduleResponse.ok) {
+          const scheduleData = await scheduleResponse.json();
+          const nextContactDate = new Date(scheduleData.suggestedDate);
+          
+          // Update lead with smart-scheduled next contact date
+          dispatch(updateLead({ 
+            ...lead, 
+            nextContactDate,
+            lastActivityAt: new Date(),
+            updatedAt: new Date() 
+          }));
+          
+          // Also update in Firestore
+          await updateLeadInFirestore(orgId, lead.id, { 
+            nextContactDate,
+            lastActivityAt: new Date(),
+            updatedAt: new Date()
+          }, authReady);
+          
+          toast({ 
+            title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, 
+            description: `Next follow-up: ${scheduleData.displayDate} (${scheduleData.reason})`
+          });
+        } else {
+          toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
+        }
+      } catch (schedError) {
+        console.error('[LeadCardExpanded] Smart scheduling failed:', schedError);
+        toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} logged`, description: 'Task added to Daily Plan' });
+      }
     } catch (error) {
       console.error('[LeadCardExpanded] Error logging activity:', error);
       toast({ title: 'Error', description: 'Failed to log activity', variant: 'destructive' });

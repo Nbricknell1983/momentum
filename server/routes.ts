@@ -1704,5 +1704,128 @@ Return valid JSON:
     }
   });
 
+  // ===============================
+  // SMART SCHEDULING API
+  // ===============================
+
+  // AI-powered next contact date suggestion
+  app.post("/api/scheduling/suggest-next-contact", async (req, res) => {
+    try {
+      const { 
+        leadStage, 
+        activityType, 
+        taskLoadByDate, // { "2026-01-12": 5, "2026-01-13": 3, ... }
+        maxTasksPerDay = 8,
+        preferredDays = [1, 2, 3, 4, 5], // Mon-Fri by default
+        leadPriority = 'normal' // 'high', 'normal', 'low'
+      } = req.body;
+
+      if (!leadStage || !activityType) {
+        return res.status(400).json({ error: "leadStage and activityType are required" });
+      }
+
+      // Calculate base follow-up interval based on stage
+      const stageIntervals: Record<string, { min: number; ideal: number; max: number }> = {
+        new: { min: 1, ideal: 2, max: 5 },
+        contacted: { min: 2, ideal: 3, max: 7 },
+        qualified: { min: 2, ideal: 5, max: 10 },
+        proposal: { min: 1, ideal: 3, max: 7 },
+        negotiation: { min: 1, ideal: 2, max: 5 },
+        won: { min: 7, ideal: 14, max: 30 },
+        lost: { min: 14, ideal: 30, max: 60 },
+        nurture: { min: 7, ideal: 14, max: 30 }
+      };
+
+      const interval = stageIntervals[leadStage] || stageIntervals.contacted;
+      
+      // Adjust based on priority
+      const priorityMultiplier = leadPriority === 'high' ? 0.7 : leadPriority === 'low' ? 1.5 : 1;
+      const adjustedIdeal = Math.round(interval.ideal * priorityMultiplier);
+
+      // Find optimal date considering task load
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      let selectedDate: Date | null = null;
+      let selectedReason = '';
+
+      // Check dates from min to max interval
+      for (let dayOffset = interval.min; dayOffset <= interval.max + 7; dayOffset++) {
+        const candidateDate = new Date(today);
+        candidateDate.setDate(today.getDate() + dayOffset);
+        
+        const dayOfWeek = candidateDate.getDay();
+        const dateKey = candidateDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        const taskCount = taskLoadByDate?.[dateKey] || 0;
+        
+        // Skip if not a preferred day
+        if (!preferredDays.includes(dayOfWeek)) continue;
+        
+        // Skip if day is overloaded
+        if (taskCount >= maxTasksPerDay) continue;
+        
+        // Found a good slot
+        if (!selectedDate) {
+          selectedDate = candidateDate;
+          if (dayOffset === adjustedIdeal) {
+            selectedReason = `Optimal follow-up timing for ${leadStage} stage`;
+          } else if (taskCount < maxTasksPerDay / 2) {
+            selectedReason = `Light workload day (${taskCount} tasks scheduled)`;
+          } else {
+            selectedReason = `Balanced workload (${taskCount}/${maxTasksPerDay} tasks)`;
+          }
+        }
+        
+        // Prefer the ideal day if it has capacity
+        if (dayOffset === adjustedIdeal && taskCount < maxTasksPerDay) {
+          selectedDate = candidateDate;
+          selectedReason = `Optimal ${adjustedIdeal}-day follow-up for ${leadStage} leads`;
+          break;
+        }
+      }
+
+      if (!selectedDate) {
+        // Fallback: find the next available preferred day beyond max interval
+        for (let dayOffset = interval.max + 1; dayOffset <= interval.max + 30; dayOffset++) {
+          const candidateDate = new Date(today);
+          candidateDate.setDate(today.getDate() + dayOffset);
+          const dayOfWeek = candidateDate.getDay();
+          
+          if (preferredDays.includes(dayOfWeek)) {
+            selectedDate = candidateDate;
+            selectedReason = `Next available workday (high workload period)`;
+            break;
+          }
+        }
+        
+        // Ultimate fallback if no preferred day found
+        if (!selectedDate) {
+          selectedDate = new Date(today);
+          selectedDate.setDate(today.getDate() + adjustedIdeal);
+          selectedReason = `Default ${adjustedIdeal}-day follow-up`;
+        }
+      }
+
+      // Format date as DD-MM-YYYY for display
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const year = selectedDate.getFullYear();
+      const displayDate = `${day}-${month}-${year}`;
+
+      res.json({
+        suggestedDate: selectedDate.toISOString(),
+        displayDate,
+        reason: selectedReason,
+        daysFromNow: Math.round((selectedDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
+        stage: leadStage,
+        activityType
+      });
+
+    } catch (error) {
+      console.error("Error suggesting next contact:", error);
+      res.status(500).json({ error: "Failed to suggest next contact date" });
+    }
+  });
+
   return httpServer;
 }
