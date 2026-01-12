@@ -60,11 +60,17 @@ export function AIMessageModal({
   const entityNotes = lead?.notes || client?.notes;
   const entityStage = lead?.stage;
 
+  const entityId = lead?.id || client?.id;
+  
   useEffect(() => {
     if (open && entity) {
+      setGenerated(null);
+      setEditedMessage('');
+      setEditedSubject('');
+      setUserContext('');
       generateMessage();
     }
-  }, [open]);
+  }, [open, entityId, channel]);
 
   useEffect(() => {
     if (generated) {

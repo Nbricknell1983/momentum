@@ -26,6 +26,7 @@ import { BusinessProfile, DEFAULT_BUSINESS_PROFILE, ServiceAreaType } from '@/li
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { DictationButton } from '@/components/DictationButton';
+import { AIMessageModal } from '@/components/AIMessageModal';
 
 const healthIcons: Record<HealthStatus, React.ReactNode> = {
   green: <CheckCircle className="h-4 w-4 text-green-500" />,
@@ -295,6 +296,16 @@ export default function ClientsPage() {
   const [aiToolInput, setAiToolInput] = useState('');
   const [aiToolResult, setAiToolResult] = useState<any>(null);
   const [generatingAI, setGeneratingAI] = useState(false);
+  
+  const [aiMessageModalOpen, setAiMessageModalOpen] = useState(false);
+  const [aiMessageChannel, setAiMessageChannel] = useState<'sms' | 'email'>('sms');
+  const [aiMessageClient, setAiMessageClient] = useState<Client | null>(null);
+  
+  const openAiMessageModal = (client: Client, channel: 'sms' | 'email') => {
+    setAiMessageClient(client);
+    setAiMessageChannel(channel);
+    setAiMessageModalOpen(true);
+  };
 
   const [activeClientTab, setActiveClientTab] = useState<string>('details');
   const [activeStrategySubTab, setActiveStrategySubTab] = useState<string>('overview');
@@ -2549,10 +2560,15 @@ export default function ClientsPage() {
                                   </div>
                                 )}
                               </div>
-                              {/* Quick Send Actions */}
+                              {/* Quick Send Actions with AI */}
                               {(client.phone || client.email) && (
                                 <div className="mt-3 pt-2 border-t">
-                                  <p className="text-xs font-medium mb-2">Quick Send</p>
+                                  <p className="text-xs font-medium mb-2 flex items-center gap-1.5">
+                                    Quick Send
+                                    <Badge variant="outline" className="text-[10px] h-4 px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300">
+                                      AI
+                                    </Badge>
+                                  </p>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {client.phone && (
                                       <>
@@ -2572,13 +2588,11 @@ export default function ClientsPage() {
                                           variant="outline"
                                           size="sm"
                                           className="gap-1.5 h-7 bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
-                                          asChild
+                                          onClick={() => openAiMessageModal(client, 'sms')}
                                           data-testid={`button-sms-client-${client.id}`}
                                         >
-                                          <a href={`sms:${client.phone}`}>
-                                            <MessageSquare className="h-3 w-3" />
-                                            Text
-                                          </a>
+                                          <MessageSquare className="h-3 w-3" />
+                                          Text
                                         </Button>
                                       </>
                                     )}
@@ -2587,13 +2601,11 @@ export default function ClientsPage() {
                                         variant="outline"
                                         size="sm"
                                         className="gap-1.5 h-7 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
-                                        asChild
+                                        onClick={() => openAiMessageModal(client, 'email')}
                                         data-testid={`button-email-client-${client.id}`}
                                       >
-                                        <a href={`mailto:${client.email}?subject=Following up - ${client.businessName}`}>
-                                          <Mail className="h-3 w-3" />
-                                          Email
-                                        </a>
+                                        <Mail className="h-3 w-3" />
+                                        Email
                                       </Button>
                                     )}
                                   </div>
@@ -5700,6 +5712,23 @@ export default function ClientsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* AI Message Modal for Client Communication */}
+      {aiMessageClient && (
+        <AIMessageModal
+          open={aiMessageModalOpen}
+          onOpenChange={setAiMessageModalOpen}
+          channel={aiMessageChannel}
+          client={{
+            id: aiMessageClient.id,
+            businessName: aiMessageClient.businessName,
+            phone: aiMessageClient.phone,
+            email: aiMessageClient.email,
+            contactName: aiMessageClient.primaryContactName,
+            notes: aiMessageClient.notes
+          }}
+        />
+      )}
     </div>
   );
 }
