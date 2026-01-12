@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles } from 'lucide-react';
+import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -111,6 +111,8 @@ export default function ResearchPage() {
   const [googleResults, setGoogleResults] = useState<GooglePlaceResult[]>([]);
   const [showOnlyNew, setShowOnlyNew] = useState(true);
   const [searchedLocation, setSearchedLocation] = useState<string | null>(null);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   
   // Shared state
   const [isSearching, setIsSearching] = useState(false);
@@ -157,9 +159,41 @@ export default function ResearchPage() {
     }
   };
 
+  // Get user's current location
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      return;
+    }
+    
+    setIsGettingLocation(true);
+    setError(null);
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserCoords({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setGoogleLocation('My Location');
+        setIsGettingLocation(false);
+        toast({
+          title: "Location found",
+          description: "Ready to search businesses near you"
+        });
+      },
+      (err) => {
+        console.error('Geolocation error:', err);
+        setError('Could not get your location. Please enter a location manually.');
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   // Google Places Search
   const handleGoogleSearch = async () => {
-    if (!googleLocation.trim()) return;
+    if (!googleLocation.trim() && !userCoords) return;
     
     setIsSearching(true);
     setError(null);
@@ -167,9 +201,16 @@ export default function ResearchPage() {
     
     try {
       const params = new URLSearchParams({
-        location: googleLocation,
         radius: googleRadius
       });
+      
+      // Use coordinates if available, otherwise use text location
+      if (userCoords && googleLocation === 'My Location') {
+        params.append('lat', userCoords.lat.toString());
+        params.append('lng', userCoords.lng.toString());
+      } else {
+        params.append('location', googleLocation);
+      }
       
       if (googleBusinessType !== 'all') {
         params.append('type', googleBusinessType);
@@ -392,15 +433,38 @@ export default function ResearchPage() {
           <Card className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <Label htmlFor="google-location">Location (suburb or postcode)</Label>
-                <Input
-                  id="google-location"
-                  placeholder="e.g., Brisbane, Gold Coast..."
-                  value={googleLocation}
-                  onChange={(e) => setGoogleLocation(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleGoogleSearch()}
-                  data-testid="input-google-location"
-                />
+                <Label htmlFor="google-location">Location</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="google-location"
+                    placeholder="e.g., Brisbane..."
+                    value={googleLocation}
+                    onChange={(e) => {
+                      setGoogleLocation(e.target.value);
+                      if (e.target.value !== 'My Location') {
+                        setUserCoords(null);
+                      }
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleGoogleSearch()}
+                    data-testid="input-google-location"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={handleUseMyLocation}
+                    disabled={isGettingLocation}
+                    title="Use my location"
+                    data-testid="button-use-my-location"
+                  >
+                    {isGettingLocation ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Navigation className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label htmlFor="business-type">Business Type</Label>
@@ -435,7 +499,7 @@ export default function ResearchPage() {
               <div className="flex items-end">
                 <Button 
                   onClick={handleGoogleSearch} 
-                  disabled={isSearching || !googleLocation.trim()} 
+                  disabled={isSearching || (!googleLocation.trim() && !userCoords)} 
                   className="w-full"
                   data-testid="button-google-search"
                 >

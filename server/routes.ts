@@ -1431,29 +1431,41 @@ Return valid JSON:
   // Search Google Places by location (postcode/city) and business type
   app.get("/api/google-places/search", async (req, res) => {
     try {
-      const { location, type, radius = 100000 } = req.query; // Default 100km radius
+      const { location, type, radius = 50000, lat: latParam, lng: lngParam } = req.query;
       const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
       if (!apiKey) {
         return res.status(500).json({ error: "Google Places API key not configured. Please add GOOGLE_PLACES_API_KEY to secrets." });
       }
 
-      if (!location) {
-        return res.status(400).json({ error: "Location is required" });
+      let lat: number;
+      let lng: number;
+      let locationAddress: string;
+
+      // If lat/lng provided directly, use them
+      if (latParam && lngParam) {
+        lat = parseFloat(latParam as string);
+        lng = parseFloat(lngParam as string);
+        locationAddress = 'Your Location';
+        console.log(`Using provided coordinates: ${lat}, ${lng}`);
+      } else if (location) {
+        // Geocode the text location to get coordinates
+        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location as string)}&key=${apiKey}&region=au`;
+        const geocodeResponse = await fetch(geocodeUrl);
+        const geocodeData = await geocodeResponse.json();
+
+        if (geocodeData.status !== 'OK' || !geocodeData.results?.[0]) {
+          console.error('Geocode failed:', geocodeData);
+          return res.status(400).json({ error: "Could not find location. Try a more specific address." });
+        }
+
+        lat = geocodeData.results[0].geometry.location.lat;
+        lng = geocodeData.results[0].geometry.location.lng;
+        locationAddress = geocodeData.results[0].formatted_address;
+        console.log(`Geocoded "${location}" to: ${lat}, ${lng}`);
+      } else {
+        return res.status(400).json({ error: "Location or coordinates required" });
       }
-
-      // Step 1: Geocode the location to get coordinates
-      const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location as string)}&key=${apiKey}&region=au`;
-      const geocodeResponse = await fetch(geocodeUrl);
-      const geocodeData = await geocodeResponse.json();
-
-      if (geocodeData.status !== 'OK' || !geocodeData.results?.[0]) {
-        console.error('Geocode failed:', geocodeData);
-        return res.status(400).json({ error: "Could not find location. Try a more specific address." });
-      }
-
-      const { lat, lng } = geocodeData.results[0].geometry.location;
-      console.log(`Geocoded "${location}" to: ${lat}, ${lng}`);
 
       // Step 2: Use Nearby Search (New) API with radius
       const nearbyUrl = 'https://places.googleapis.com/v1/places:searchNearby';
@@ -1514,7 +1526,7 @@ Return valid JSON:
       res.json({ 
         results: transformedResults,
         total: transformedResults.length,
-        searchLocation: { lat, lng, address: geocodeData.results[0].formatted_address }
+        searchLocation: { lat, lng, address: locationAddress }
       });
     } catch (error) {
       console.error("Error searching Google Places:", error);
