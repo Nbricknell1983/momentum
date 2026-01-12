@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Building2, MapPin, Calendar, Plus, Loader2, ExternalLink, AlertCircle } from 'lucide-react';
+import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { addLead } from '@/store';
@@ -46,34 +47,81 @@ interface ABNDetails {
   Message: string;
 }
 
+interface GooglePlaceResult {
+  placeId: string;
+  name: string;
+  address: string;
+  rating: number | null;
+  reviewCount: number;
+  types: string[];
+  phone: string | null;
+  website: string | null;
+  isLikelyNew: boolean;
+}
+
+const BUSINESS_TYPES = [
+  { value: 'all', label: 'All Business Types' },
+  { value: 'restaurant', label: 'Restaurants' },
+  { value: 'cafe', label: 'Cafes' },
+  { value: 'gym', label: 'Gyms & Fitness' },
+  { value: 'beauty_salon', label: 'Beauty Salons' },
+  { value: 'hair_salon', label: 'Hair Salons' },
+  { value: 'dentist', label: 'Dentists' },
+  { value: 'doctor', label: 'Medical Clinics' },
+  { value: 'lawyer', label: 'Law Firms' },
+  { value: 'accountant', label: 'Accountants' },
+  { value: 'real_estate_agency', label: 'Real Estate' },
+  { value: 'car_dealer', label: 'Car Dealers' },
+  { value: 'auto_repair', label: 'Auto Repair' },
+  { value: 'plumber', label: 'Plumbers' },
+  { value: 'electrician', label: 'Electricians' },
+  { value: 'roofing_contractor', label: 'Roofers' },
+  { value: 'florist', label: 'Florists' },
+  { value: 'pet_store', label: 'Pet Stores' },
+  { value: 'veterinary_care', label: 'Vets' },
+];
+
 export default function ResearchPage() {
   const dispatch = useDispatch();
   const { orgId, user, authReady } = useAuth();
   const { toast } = useToast();
   
-  const [searchType, setSearchType] = useState<'name' | 'postcode'>('name');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [results, setResults] = useState<ABRBusinessResult[]>([]);
+  // Data source selection
+  const [dataSource, setDataSource] = useState<'abr' | 'google'>('google');
+  
+  // ABR state
+  const [abrSearchType, setAbrSearchType] = useState<'name' | 'postcode'>('name');
+  const [abrQuery, setAbrQuery] = useState('');
+  const [abrResults, setAbrResults] = useState<ABRBusinessResult[]>([]);
   const [selectedAbn, setSelectedAbn] = useState<string | null>(null);
   const [abnDetails, setAbnDetails] = useState<ABNDetails | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [addingAbn, setAddingAbn] = useState<string | null>(null);
+  
+  // Google Places state
+  const [googleLocation, setGoogleLocation] = useState('');
+  const [googleBusinessType, setGoogleBusinessType] = useState('all');
+  const [googleResults, setGoogleResults] = useState<GooglePlaceResult[]>([]);
+  const [showOnlyNew, setShowOnlyNew] = useState(true);
+  
+  // Shared state
+  const [isSearching, setIsSearching] = useState(false);
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+  // ABR Search
+  const handleAbrSearch = async () => {
+    if (!abrQuery.trim()) return;
     
     setIsSearching(true);
     setError(null);
-    setResults([]);
+    setAbrResults([]);
     setSelectedAbn(null);
     setAbnDetails(null);
     
     try {
-      const endpoint = searchType === 'name' 
-        ? `/api/abr/search-name?name=${encodeURIComponent(searchQuery)}&maxResults=50`
-        : `/api/abr/search-postcode?postcode=${encodeURIComponent(searchQuery)}&maxResults=100`;
+      const endpoint = abrSearchType === 'name' 
+        ? `/api/abr/search-name?name=${encodeURIComponent(abrQuery)}&maxResults=50`
+        : `/api/abr/search-postcode?postcode=${encodeURIComponent(abrQuery)}&maxResults=100`;
       
       const response = await fetch(endpoint);
       const data: ABRSearchResponse = await response.json();
@@ -83,9 +131,8 @@ export default function ResearchPage() {
       }
       
       if (data.Names && data.Names.length > 0) {
-        // Filter to only active ABNs
         const activeResults = data.Names.filter(b => b.AbnStatus === 'Active' || b.IsCurrent);
-        setResults(activeResults);
+        setAbrResults(activeResults);
         
         if (activeResults.length === 0) {
           setError('No active businesses found matching your search.');
@@ -101,7 +148,45 @@ export default function ResearchPage() {
     }
   };
 
-  const handleViewDetails = async (abn: string) => {
+  // Google Places Search
+  const handleGoogleSearch = async () => {
+    if (!googleLocation.trim()) return;
+    
+    setIsSearching(true);
+    setError(null);
+    setGoogleResults([]);
+    
+    try {
+      const params = new URLSearchParams({
+        location: googleLocation,
+        maxResults: '20'
+      });
+      
+      if (googleBusinessType !== 'all') {
+        params.append('type', googleBusinessType);
+      }
+      
+      const response = await fetch(`/api/google-places/search?${params}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Search failed');
+      }
+      
+      setGoogleResults(data.results || []);
+      
+      if (data.results?.length === 0) {
+        setError('No businesses found in this location.');
+      }
+    } catch (err: any) {
+      console.error('Google search error:', err);
+      setError(err.message || 'Failed to search. Please check your Google API key is configured.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleViewAbnDetails = async (abn: string) => {
     setSelectedAbn(abn);
     setIsLoadingDetails(true);
     
@@ -126,17 +211,17 @@ export default function ResearchPage() {
     }
   };
 
-  const handleAddAsLead = async (business: ABRBusinessResult) => {
-    if (!orgId || !user || !authReady) {
+  const handleAddAbrLead = async (business: ABRBusinessResult) => {
+    if (!orgId || !user) {
       toast({
         title: 'Error',
-        description: 'Please sign in to add leads',
+        description: 'You must be logged in to add leads',
         variant: 'destructive',
       });
       return;
     }
     
-    setAddingAbn(business.Abn);
+    setAddingId(business.Abn);
     
     try {
       const newLead: Lead = {
@@ -186,73 +271,232 @@ export default function ResearchPage() {
         variant: 'destructive',
       });
     } finally {
-      setAddingAbn(null);
+      setAddingId(null);
     }
   };
+
+  const handleAddGoogleLead = async (place: GooglePlaceResult) => {
+    if (!orgId || !user) {
+      toast({
+        title: 'Error',
+        description: 'You must be logged in to add leads',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setAddingId(place.placeId);
+    
+    try {
+      const notes = [
+        `Source: Google Business Profile`,
+        place.address ? `Address: ${place.address}` : null,
+        place.phone ? `Phone: ${place.phone}` : null,
+        place.website ? `Website: ${place.website}` : null,
+        place.rating ? `Rating: ${place.rating}/5 (${place.reviewCount} reviews)` : null,
+        `Google Place ID: ${place.placeId}`
+      ].filter(Boolean).join('\n');
+
+      const newLead: Lead = {
+        id: uuidv4(),
+        userId: user.uid,
+        companyName: place.name,
+        territory: place.address?.split(',').slice(-2).join(',').trim() || '',
+        contactName: '',
+        email: '',
+        phone: place.phone || '',
+        stage: 'suspect',
+        mrr: 0,
+        notes,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        archived: false,
+        nurtureMode: 'none',
+        nurtureStatus: null,
+        nurtureCadenceId: null,
+        nurtureStepIndex: null,
+        enrolledInNurtureAt: null,
+        nextTouchAt: null,
+        lastTouchAt: null,
+        lastTouchChannel: null,
+        touchesNoResponse: 0,
+        engagementScore: 0,
+        nurturePriorityScore: 0,
+        regionId: undefined,
+        regionName: undefined,
+        areaId: undefined,
+        areaName: undefined,
+        territoryKey: undefined,
+      };
+      
+      const savedLead = await createLead(orgId, newLead, authReady);
+      dispatch(addLead(savedLead));
+      
+      toast({
+        title: 'Lead added',
+        description: `${place.name} has been added to your pipeline`,
+      });
+    } catch (err: any) {
+      console.error('Error adding lead:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to add lead',
+        variant: 'destructive',
+      });
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  const filteredGoogleResults = showOnlyNew 
+    ? googleResults.filter(r => r.isLikelyNew)
+    : googleResults;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold" data-testid="text-research-title">Leads Research</h1>
         <p className="text-sm text-muted-foreground">
-          Search for newly registered Australian businesses using the ABR database
+          Find new businesses to add to your pipeline
         </p>
       </div>
 
-      <Card className="p-6">
-        <Tabs value={searchType} onValueChange={(v) => setSearchType(v as 'name' | 'postcode')}>
-          <TabsList className="mb-4">
-            <TabsTrigger value="name" data-testid="tab-search-name">
-              <Building2 className="h-4 w-4 mr-2" />
-              Search by Name
-            </TabsTrigger>
-            <TabsTrigger value="postcode" data-testid="tab-search-postcode">
-              <MapPin className="h-4 w-4 mr-2" />
-              Search by Postcode
-            </TabsTrigger>
-          </TabsList>
+      {/* Data Source Tabs */}
+      <Tabs value={dataSource} onValueChange={(v) => {
+        setDataSource(v as 'abr' | 'google');
+        setError(null);
+      }}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="google" data-testid="tab-google-places" className="gap-2">
+            <Globe className="h-4 w-4" />
+            Google Business Profiles
+          </TabsTrigger>
+          <TabsTrigger value="abr" data-testid="tab-abr" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            Australian Business Register
+          </TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="name" className="space-y-4">
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <Label htmlFor="name-search" className="sr-only">Business Name</Label>
+        {/* Google Places Search */}
+        <TabsContent value="google">
+          <Card className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-1">
+                <Label htmlFor="google-location">Location (suburb or postcode)</Label>
                 <Input
-                  id="name-search"
-                  placeholder="Enter business name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  data-testid="input-search-name"
+                  id="google-location"
+                  placeholder="e.g., Brisbane 4000, Gold Coast..."
+                  value={googleLocation}
+                  onChange={(e) => setGoogleLocation(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGoogleSearch()}
+                  data-testid="input-google-location"
                 />
               </div>
-              <Button onClick={handleSearch} disabled={isSearching || !searchQuery.trim()} data-testid="button-search">
-                {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
-                Search
-              </Button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="postcode" className="space-y-4">
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <Label htmlFor="postcode-search" className="sr-only">Postcode</Label>
-                <Input
-                  id="postcode-search"
-                  placeholder="Enter postcode (e.g., 4000)..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  data-testid="input-search-postcode"
-                />
+              <div>
+                <Label htmlFor="business-type">Business Type</Label>
+                <Select value={googleBusinessType} onValueChange={setGoogleBusinessType}>
+                  <SelectTrigger id="business-type" data-testid="select-business-type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BUSINESS_TYPES.map(type => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Button onClick={handleSearch} disabled={isSearching || !searchQuery.trim()} data-testid="button-search-postcode">
-                {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
-                Search
-              </Button>
+              <div className="flex items-end">
+                <Button 
+                  onClick={handleGoogleSearch} 
+                  disabled={isSearching || !googleLocation.trim()} 
+                  className="w-full"
+                  data-testid="button-google-search"
+                >
+                  {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                  Search
+                </Button>
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
-      </Card>
+            
+            {googleResults.length > 0 && (
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  variant={showOnlyNew ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowOnlyNew(!showOnlyNew)}
+                  data-testid="button-filter-new"
+                >
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {showOnlyNew ? 'Showing New Only' : 'Show New Only'}
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {filteredGoogleResults.length} of {googleResults.length} results
+                </span>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* ABR Search */}
+        <TabsContent value="abr">
+          <Card className="p-6">
+            <Tabs value={abrSearchType} onValueChange={(v) => setAbrSearchType(v as 'name' | 'postcode')}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="name" data-testid="tab-search-name">
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Search by Name
+                </TabsTrigger>
+                <TabsTrigger value="postcode" data-testid="tab-search-postcode">
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Search by Postcode
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="name" className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Label htmlFor="name-search" className="sr-only">Business Name</Label>
+                    <Input
+                      id="name-search"
+                      placeholder="Enter business name..."
+                      value={abrQuery}
+                      onChange={(e) => setAbrQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAbrSearch()}
+                      data-testid="input-search-name"
+                    />
+                  </div>
+                  <Button onClick={handleAbrSearch} disabled={isSearching || !abrQuery.trim()} data-testid="button-search">
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                    Search
+                  </Button>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="postcode" className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Label htmlFor="postcode-search" className="sr-only">Postcode</Label>
+                    <Input
+                      id="postcode-search"
+                      placeholder="Enter postcode (e.g., 4000)..."
+                      value={abrQuery}
+                      onChange={(e) => setAbrQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAbrSearch()}
+                      data-testid="input-search-postcode"
+                    />
+                  </div>
+                  <Button onClick={handleAbrSearch} disabled={isSearching || !abrQuery.trim()} data-testid="button-search-postcode">
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                    Search
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {error && (
         <Card className="p-4 bg-destructive/10 border-destructive/20">
@@ -263,20 +507,98 @@ export default function ResearchPage() {
         </Card>
       )}
 
-      {results.length > 0 && (
+      {/* Google Results */}
+      {dataSource === 'google' && filteredGoogleResults.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium">
-              Results ({results.length})
+              Results ({filteredGoogleResults.length})
             </h2>
           </div>
 
           <div className="grid gap-3">
-            {results.map((business) => (
+            {filteredGoogleResults.map((place) => (
+              <Card 
+                key={place.placeId} 
+                className="p-4 hover-elevate"
+                data-testid={`card-place-${place.placeId}`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-medium">{place.name}</h3>
+                      {place.isLikelyNew && (
+                        <Badge variant="default" className="bg-green-600 shrink-0">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Likely New
+                        </Badge>
+                      )}
+                      {place.rating && (
+                        <Badge variant="outline" className="shrink-0">
+                          <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+                          {place.rating} ({place.reviewCount})
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">{place.address}</p>
+                    <div className="flex items-center gap-4 mt-2 text-sm">
+                      {place.phone && (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          <Phone className="h-3 w-3" />
+                          {place.phone}
+                        </span>
+                      )}
+                      {place.website && (
+                        <a 
+                          href={place.website} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Globe className="h-3 w-3" />
+                          Website
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleAddGoogleLead(place)}
+                    disabled={addingId === place.placeId}
+                    data-testid={`button-add-place-${place.placeId}`}
+                  >
+                    {addingId === place.placeId ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Lead
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ABR Results */}
+      {dataSource === 'abr' && abrResults.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium">
+              Results ({abrResults.length})
+            </h2>
+          </div>
+
+          <div className="grid gap-3">
+            {abrResults.map((business) => (
               <Card 
                 key={business.Abn} 
                 className={`p-4 hover-elevate cursor-pointer transition-colors ${selectedAbn === business.Abn ? 'ring-2 ring-primary' : ''}`}
-                onClick={() => handleViewDetails(business.Abn)}
+                onClick={() => handleViewAbnDetails(business.Abn)}
                 data-testid={`card-business-${business.Abn}`}
               >
                 <div className="flex items-start justify-between gap-4">
@@ -308,12 +630,12 @@ export default function ResearchPage() {
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleAddAsLead(business);
+                        handleAddAbrLead(business);
                       }}
-                      disabled={addingAbn === business.Abn}
+                      disabled={addingId === business.Abn}
                       data-testid={`button-add-lead-${business.Abn}`}
                     >
-                      {addingAbn === business.Abn ? (
+                      {addingId === business.Abn ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <>
@@ -330,7 +652,8 @@ export default function ResearchPage() {
         </div>
       )}
 
-      {selectedAbn && abnDetails && (
+      {/* ABN Details Panel */}
+      {dataSource === 'abr' && selectedAbn && abnDetails && (
         <Card className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium">Business Details</h2>
@@ -386,12 +709,25 @@ export default function ResearchPage() {
         </Card>
       )}
 
-      {!isSearching && results.length === 0 && !error && (
+      {/* Empty State */}
+      {!isSearching && 
+        ((dataSource === 'google' && googleResults.length === 0) || 
+         (dataSource === 'abr' && abrResults.length === 0)) && 
+        !error && (
         <Card className="p-12">
           <div className="text-center text-muted-foreground">
             <Search className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <p>Search for businesses by name or postcode to find new leads</p>
-            <p className="text-sm mt-2">Results are sourced from the Australian Business Register</p>
+            {dataSource === 'google' ? (
+              <>
+                <p>Search for businesses by location to find new leads</p>
+                <p className="text-sm mt-2">Results show businesses with fewer reviews first (likely newer)</p>
+              </>
+            ) : (
+              <>
+                <p>Search for businesses by name or postcode to find new leads</p>
+                <p className="text-sm mt-2">Results are sourced from the Australian Business Register</p>
+              </>
+            )}
           </div>
         </Card>
       )}

@@ -91,20 +91,27 @@ shared/           # Shared code between client/server
 
 ### Leads Research System
 - **Purpose**: Find newly registered Australian businesses to add as leads
-- **Data Source**: Australian Business Register (ABR) API
-- **Search Options**:
-  - Search by business name
-  - Search by postcode
-- **Features**:
-  - View ABN details, state, postcode
-  - One-click "Add as Lead" conversion to pipeline
-  - Saves ABN and source info in lead notes
+- **Data Sources**:
+  1. **Google Business Profiles** - Search local businesses by location and type
+  2. **Australian Business Register (ABR)** - Search registered ABNs by name or postcode
+- **Google Places Features**:
+  - Search by suburb/postcode and business type
+  - Filter for "Likely New" businesses (fewer than 50 reviews)
+  - Shows rating, phone, website
+  - One-click "Add as Lead" conversion
+- **ABR Features**:
+  - Search by business name or postcode
+  - View ABN details, entity type, GST status
+  - One-click "Add as Lead" conversion
 - **API Endpoints**:
-  - `GET /api/abr/search-by-name?name=...` - Search businesses by name
-  - `GET /api/abr/search-by-postcode?postcode=...` - Search businesses by postcode
+  - `GET /api/google-places/search?location=...&type=...` - Search Google Business Profiles
+  - `GET /api/google-places/details/:placeId` - Get place details
+  - `GET /api/abr/search-name?name=...` - Search ABR by name
+  - `GET /api/abr/search-postcode?postcode=...` - Search ABR by postcode
   - `GET /api/abr/abn/:abn` - Get detailed ABN information
 - **Requirements**:
-  - `ABR_GUID` environment variable (free API key from https://abr.business.gov.au/Tools/WebServices)
+  - `GOOGLE_PLACES_API_KEY` - Google Cloud Places API key
+  - `ABR_GUID` - Free API key from https://abr.business.gov.au/Tools/WebServices
 - **Location**: `client/src/pages/research.tsx`
 
 ### Client App Integration System

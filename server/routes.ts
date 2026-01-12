@@ -1424,5 +1424,124 @@ Return valid JSON:
     }
   });
 
+  // ===============================
+  // Google Places API Routes
+  // ===============================
+
+  // Search Google Places by location (postcode/city) and business type
+  app.get("/api/google-places/search", async (req, res) => {
+    try {
+      const { query, location, type, maxResults = 20 } = req.query;
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google Places API key not configured. Please add GOOGLE_PLACES_API_KEY to secrets." });
+      }
+
+      // Use Text Search API for more flexible queries
+      const url = 'https://places.googleapis.com/v1/places:searchText';
+      
+      // Build the query - combine location with optional type
+      let textQuery = location as string;
+      if (type) {
+        textQuery = `${type} in ${location}`;
+      }
+      if (query) {
+        textQuery = `${query} ${type ? type : ''} in ${location}`.trim();
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.userRatingCount,places.rating,places.types,places.nationalPhoneNumber,places.websiteUri,places.businessStatus'
+        },
+        body: JSON.stringify({
+          textQuery,
+          maxResultCount: Math.min(parseInt(maxResults as string), 20),
+          languageCode: 'en-AU'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('Google Places API error:', data);
+        return res.status(response.status).json({ error: data.error?.message || 'Google Places API error' });
+      }
+
+      // Filter and transform results - prioritize businesses with fewer reviews (likely newer)
+      const places = data.places || [];
+      const transformedResults = places
+        .filter((place: any) => place.businessStatus === 'OPERATIONAL')
+        .map((place: any) => ({
+          placeId: place.id,
+          name: place.displayName?.text || '',
+          address: place.formattedAddress || '',
+          rating: place.rating || null,
+          reviewCount: place.userRatingCount || 0,
+          types: place.types || [],
+          phone: place.nationalPhoneNumber || null,
+          website: place.websiteUri || null,
+          isLikelyNew: (place.userRatingCount || 0) < 50 // Fewer reviews = likely newer
+        }))
+        .sort((a: any, b: any) => a.reviewCount - b.reviewCount); // Sort by review count ascending (newest first)
+
+      res.json({ 
+        results: transformedResults,
+        total: transformedResults.length
+      });
+    } catch (error) {
+      console.error("Error searching Google Places:", error);
+      res.status(500).json({ error: "Failed to search businesses" });
+    }
+  });
+
+  // Get Place details by ID
+  app.get("/api/google-places/details/:placeId", async (req, res) => {
+    try {
+      const { placeId } = req.params;
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google Places API key not configured." });
+      }
+
+      const url = `https://places.googleapis.com/v1/places/${placeId}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'id,displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,websiteUri,rating,userRatingCount,types,businessStatus,primaryType,primaryTypeDisplayName,regularOpeningHours'
+        }
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        return res.status(response.status).json({ error: data.error?.message || 'Failed to fetch details' });
+      }
+
+      res.json({
+        placeId: data.id,
+        name: data.displayName?.text || '',
+        address: data.formattedAddress || '',
+        phone: data.nationalPhoneNumber || data.internationalPhoneNumber || null,
+        website: data.websiteUri || null,
+        rating: data.rating || null,
+        reviewCount: data.userRatingCount || 0,
+        types: data.types || [],
+        primaryType: data.primaryTypeDisplayName?.text || data.primaryType || null,
+        businessStatus: data.businessStatus || null,
+        openingHours: data.regularOpeningHours?.weekdayDescriptions || null
+      });
+    } catch (error) {
+      console.error("Error fetching place details:", error);
+      res.status(500).json({ error: "Failed to fetch place details" });
+    }
+  });
+
   return httpServer;
 }
