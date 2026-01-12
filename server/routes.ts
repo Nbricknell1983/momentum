@@ -1467,29 +1467,39 @@ Return valid JSON:
         return res.status(400).json({ error: "Location or coordinates required" });
       }
 
-      // Step 2: Use Nearby Search (New) API with radius
-      const nearbyUrl = 'https://places.googleapis.com/v1/places:searchNearby';
+      // Step 2: Use Text Search API for better filtering by business type
+      const searchUrl = 'https://places.googleapis.com/v1/places:searchText';
+      
+      // Build the text query combining location and business type
+      let textQuery = locationAddress;
+      if (type && type !== 'all') {
+        // Convert underscore types to readable text for search
+        const readableType = (type as string).replace(/_/g, ' ');
+        textQuery = `${readableType} near ${locationAddress}`;
+        console.log(`[Google Places] Text search query: "${textQuery}"`);
+      } else {
+        textQuery = `businesses near ${locationAddress}`;
+        console.log(`[Google Places] Generic business search near: ${locationAddress}`);
+      }
       
       const requestBody: any = {
-        locationRestriction: {
+        textQuery,
+        locationBias: {
           circle: {
             center: {
               latitude: lat,
               longitude: lng
             },
-            radius: Math.min(parseInt(radius as string), 50000) // Max 50km per API call
+            radius: Math.min(parseInt(radius as string), 50000)
           }
         },
         maxResultCount: 20,
         languageCode: 'en-AU'
       };
 
-      // Add business type filter if specified
-      if (type && type !== 'all') {
-        requestBody.includedTypes = [type as string];
-      }
+      console.log(`[Google Places] Request body:`, JSON.stringify(requestBody, null, 2));
 
-      const response = await fetch(nearbyUrl, {
+      const response = await fetch(searchUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
