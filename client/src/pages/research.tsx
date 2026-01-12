@@ -59,6 +59,13 @@ interface GooglePlaceResult {
   isLikelyNew: boolean;
 }
 
+const RADIUS_OPTIONS = [
+  { value: '5000', label: '5 km' },
+  { value: '10000', label: '10 km' },
+  { value: '25000', label: '25 km' },
+  { value: '50000', label: '50 km (max)' },
+];
+
 const BUSINESS_TYPES = [
   { value: 'all', label: 'All Business Types' },
   { value: 'restaurant', label: 'Restaurants' },
@@ -100,8 +107,10 @@ export default function ResearchPage() {
   // Google Places state
   const [googleLocation, setGoogleLocation] = useState('');
   const [googleBusinessType, setGoogleBusinessType] = useState('all');
+  const [googleRadius, setGoogleRadius] = useState('50000');
   const [googleResults, setGoogleResults] = useState<GooglePlaceResult[]>([]);
   const [showOnlyNew, setShowOnlyNew] = useState(true);
+  const [searchedLocation, setSearchedLocation] = useState<string | null>(null);
   
   // Shared state
   const [isSearching, setIsSearching] = useState(false);
@@ -159,7 +168,7 @@ export default function ResearchPage() {
     try {
       const params = new URLSearchParams({
         location: googleLocation,
-        maxResults: '20'
+        radius: googleRadius
       });
       
       if (googleBusinessType !== 'all') {
@@ -174,9 +183,10 @@ export default function ResearchPage() {
       }
       
       setGoogleResults(data.results || []);
+      setSearchedLocation(data.searchLocation?.address || googleLocation);
       
       if (data.results?.length === 0) {
-        setError('No businesses found in this location.');
+        setError('No businesses found in this area. Try a different location or business type.');
       }
     } catch (err: any) {
       console.error('Google search error:', err);
@@ -380,12 +390,12 @@ export default function ResearchPage() {
         {/* Google Places Search */}
         <TabsContent value="google">
           <Card className="p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
                 <Label htmlFor="google-location">Location (suburb or postcode)</Label>
                 <Input
                   id="google-location"
-                  placeholder="e.g., Brisbane 4000, Gold Coast..."
+                  placeholder="e.g., Brisbane, Gold Coast..."
                   value={googleLocation}
                   onChange={(e) => setGoogleLocation(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleGoogleSearch()}
@@ -402,6 +412,21 @@ export default function ResearchPage() {
                     {BUSINESS_TYPES.map(type => (
                       <SelectItem key={type.value} value={type.value}>
                         {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="radius">Search Radius</Label>
+                <Select value={googleRadius} onValueChange={setGoogleRadius}>
+                  <SelectTrigger id="radius" data-testid="select-radius">
+                    <SelectValue placeholder="Select radius" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RADIUS_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

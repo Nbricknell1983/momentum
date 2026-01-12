@@ -1431,37 +1431,60 @@ Return valid JSON:
   // Search Google Places by location (postcode/city) and business type
   app.get("/api/google-places/search", async (req, res) => {
     try {
-      const { query, location, type, maxResults = 20 } = req.query;
+      const { location, type, radius = 100000 } = req.query; // Default 100km radius
       const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
       if (!apiKey) {
         return res.status(500).json({ error: "Google Places API key not configured. Please add GOOGLE_PLACES_API_KEY to secrets." });
       }
 
-      // Use Text Search API for more flexible queries
-      const url = 'https://places.googleapis.com/v1/places:searchText';
-      
-      // Build the query - combine location with optional type
-      let textQuery = location as string;
-      if (type) {
-        textQuery = `${type} in ${location}`;
-      }
-      if (query) {
-        textQuery = `${query} ${type ? type : ''} in ${location}`.trim();
+      if (!location) {
+        return res.status(400).json({ error: "Location is required" });
       }
 
-      const response = await fetch(url, {
+      // Step 1: Geocode the location to get coordinates
+      const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location as string)}&key=${apiKey}&region=au`;
+      const geocodeResponse = await fetch(geocodeUrl);
+      const geocodeData = await geocodeResponse.json();
+
+      if (geocodeData.status !== 'OK' || !geocodeData.results?.[0]) {
+        console.error('Geocode failed:', geocodeData);
+        return res.status(400).json({ error: "Could not find location. Try a more specific address." });
+      }
+
+      const { lat, lng } = geocodeData.results[0].geometry.location;
+      console.log(`Geocoded "${location}" to: ${lat}, ${lng}`);
+
+      // Step 2: Use Nearby Search (New) API with radius
+      const nearbyUrl = 'https://places.googleapis.com/v1/places:searchNearby';
+      
+      const requestBody: any = {
+        locationRestriction: {
+          circle: {
+            center: {
+              latitude: lat,
+              longitude: lng
+            },
+            radius: Math.min(parseInt(radius as string), 50000) // Max 50km per API call
+          }
+        },
+        maxResultCount: 20,
+        languageCode: 'en-AU'
+      };
+
+      // Add business type filter if specified
+      if (type && type !== 'all') {
+        requestBody.includedTypes = [type as string];
+      }
+
+      const response = await fetch(nearbyUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Goog-Api-Key': apiKey,
           'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.userRatingCount,places.rating,places.types,places.nationalPhoneNumber,places.websiteUri,places.businessStatus'
         },
-        body: JSON.stringify({
-          textQuery,
-          maxResultCount: Math.min(parseInt(maxResults as string), 20),
-          languageCode: 'en-AU'
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json();
@@ -1490,7 +1513,8 @@ Return valid JSON:
 
       res.json({ 
         results: transformedResults,
-        total: transformedResults.length
+        total: transformedResults.length,
+        searchLocation: { lat, lng, address: geocodeData.results[0].formatted_address }
       });
     } catch (error) {
       console.error("Error searching Google Places:", error);
