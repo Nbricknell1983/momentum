@@ -12,6 +12,7 @@ import {
   Sun,
   Heart,
   Users,
+  Search,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -32,6 +33,7 @@ const navItems = [
   { title: 'Pipeline', url: '/pipeline', icon: Kanban },
   { title: 'Nurture', url: '/nurture', icon: Heart },
   { title: 'Clients', url: '/clients', icon: Users },
+  { title: 'Research', url: '/research', icon: Search },
   { title: 'List', url: '/list', icon: List },
   { title: 'Forecast', url: '/forecast', icon: TrendingUp },
   { title: 'Daily Plan', url: '/daily-plan', icon: Calendar },

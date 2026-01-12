@@ -19,6 +19,7 @@ import TasksPage from '@/pages/tasks';
 import DailyPlanPage from '@/pages/daily-plan';
 import SettingsPage from '@/pages/settings';
 import ClientsPage from '@/pages/clients';
+import ResearchPage from '@/pages/research';
 import LoginPage from '@/pages/login';
 import NotFound from '@/pages/not-found';
 import { fetchLeads, fetchAllActivities, fetchClients } from '@/lib/firestoreService';
@@ -31,6 +32,7 @@ function ProtectedRoutes() {
       <Route path="/pipeline" component={PipelinePage} />
       <Route path="/nurture" component={NurturePage} />
       <Route path="/clients" component={ClientsPage} />
+      <Route path="/research" component={ResearchPage} />
       <Route path="/list" component={PipelinePage} />
       <Route path="/forecast" component={DashboardPage} />
       <Route path="/daily-plan" component={DailyPlanPage} />

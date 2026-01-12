@@ -1343,7 +1343,7 @@ Return valid JSON:
       const text = await response.text();
       
       // ABR returns JSONP, need to extract JSON
-      const jsonMatch = text.match(/callback\((.*)\)/s);
+      const jsonMatch = text.match(/callback\(([^]*)\)/);
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[1]);
         res.json(data);
@@ -1379,7 +1379,7 @@ Return valid JSON:
       const text = await response.text();
       
       // ABR returns JSONP, need to extract JSON
-      const jsonMatch = text.match(/callback\((.*)\)/s);
+      const jsonMatch = text.match(/callback\(([^]*)\)/);
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[1]);
         res.json(data);
@@ -1410,7 +1410,7 @@ Return valid JSON:
       const text = await response.text();
       
       // ABR returns JSONP, need to extract JSON
-      const jsonMatch = text.match(/callback\((.*)\)/s);
+      const jsonMatch = text.match(/callback\(([^]*)\)/);
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[1]);
         res.json(data);
