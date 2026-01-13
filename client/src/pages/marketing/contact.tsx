@@ -9,34 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  MapPin, Mail, Phone, Clock, Calendar, 
-  CheckCircle2, Send, MessageSquare
+  Calendar, CheckCircle2, Send, MessageSquare
 } from 'lucide-react';
-
-const contactInfo = [
-  {
-    icon: MapPin,
-    title: 'Location',
-    details: ['Brisbane, QLD, Australia', 'Serving all of Queensland'],
-  },
-  {
-    icon: Mail,
-    title: 'Email',
-    details: ['hello@battlescore.com.au'],
-    link: 'mailto:hello@battlescore.com.au',
-  },
-  {
-    icon: Phone,
-    title: 'Phone',
-    details: ['+61 7 0000 0000'],
-    link: 'tel:+61700000000',
-  },
-  {
-    icon: Clock,
-    title: 'Business Hours',
-    details: ['Monday - Friday', '9:00 AM - 5:00 PM AEST'],
-  },
-];
 
 const services = [
   'Business Consulting',
@@ -265,29 +239,6 @@ export default function ContactPage() {
                 </CardContent>
               </Card>
 
-              <div className="space-y-4">
-                {contactInfo.map((item) => (
-                  <div key={item.title} className="flex items-start gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                      <item.icon className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-sm">{item.title}</h3>
-                      {item.details.map((detail, index) => (
-                        <p key={index} className="text-sm text-muted-foreground">
-                          {item.link && index === 0 ? (
-                            <a href={item.link} className="hover:text-primary">
-                              {detail}
-                            </a>
-                          ) : (
-                            detail
-                          )}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
 
               <Card className="bg-primary text-primary-foreground">
                 <CardContent className="p-6">
