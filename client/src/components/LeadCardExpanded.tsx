@@ -315,8 +315,6 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const trafficStatus = getTrafficLightStatus(lead);
 
   const handleStageChange = async (stage: Stage) => {
-    // IMMEDIATE alert for debugging
-    alert(`Stage changing to: ${stage}`);
     console.log('[LeadCard] handleStageChange called:', { leadId: lead.id, stage, currentNurtureMode: lead.nurtureMode });
     dispatch(updateLeadStage({ leadId: lead.id, stage }));
     
