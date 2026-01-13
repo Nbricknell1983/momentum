@@ -2566,19 +2566,56 @@ export default function ClientsPage() {
                   ) : (
                     <div className="space-y-2">
                       {(clientDeliverables[client.id] || []).map((deliverable) => (
-                        <div key={deliverable.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center gap-3">
-                            {deliverableStatusIcons[deliverable.status]}
-                            <div>
-                              <p className="text-sm font-medium">{deliverable.title}</p>
-                              {deliverable.nextFollowUpAt && (
-                                <p className="text-xs text-muted-foreground">
-                                  Follow-up: {format(new Date(deliverable.nextFollowUpAt), 'dd/MM/yyyy')}
-                                </p>
-                              )}
+                        <div key={deliverable.id} className="border rounded-lg p-3 space-y-2" data-testid={`kanban-deliverable-${deliverable.id}`}>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {deliverableStatusIcons[deliverable.status]}
+                              <span className="font-medium text-sm truncate">{deliverable.title}</span>
+                              <Badge variant="outline" className="text-xs">{deliverable.productType}</Badge>
                             </div>
+                            <Select
+                              value={deliverable.status}
+                              onValueChange={(val) => handleUpdateDeliverableStatus(client.id, deliverable.id, val as DeliverableStatus)}
+                            >
+                              <SelectTrigger className="w-28 h-7 text-xs" data-testid={`kanban-select-status-${deliverable.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="not_started">Not Started</SelectItem>
+                                <SelectItem value="in_progress">In Progress</SelectItem>
+                                <SelectItem value="blocked">Blocked</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
-                          <Badge variant="outline">{DELIVERABLE_STATUS_LABELS[deliverable.status]}</Badge>
+                          {deliverable.blocker && (
+                            <p className="text-xs text-red-500 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              Blocker: {deliverable.blocker}
+                            </p>
+                          )}
+                          {deliverable.milestones.length > 0 && (
+                            <div className="space-y-1 pt-1">
+                              {deliverable.milestones.map(milestone => (
+                                <div key={milestone.id} className="flex items-center gap-2 text-xs">
+                                  <Checkbox
+                                    checked={milestone.completed}
+                                    onCheckedChange={(checked) => handleToggleMilestone(client.id, deliverable.id, milestone.id, !!checked)}
+                                    className="h-3 w-3"
+                                    data-testid={`kanban-checkbox-milestone-${milestone.id}`}
+                                  />
+                                  <span className={milestone.completed ? 'line-through text-muted-foreground' : ''}>
+                                    {milestone.title}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {deliverable.nextFollowUpAt && (
+                            <p className="text-xs text-muted-foreground">
+                              Follow-up: {format(new Date(deliverable.nextFollowUpAt), 'dd/MM/yyyy')}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2586,66 +2623,221 @@ export default function ClientsPage() {
                 </TabsContent>
 
                 <TabsContent value="strategy" className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium flex items-center gap-2">
-                      <Target className="h-4 w-4" />
-                      Strategy Sessions
-                    </h4>
-                    <Button variant="outline" size="sm" onClick={() => setIsAddSessionOpen(true)}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Session
+                  {/* Strategy Engine State */}
+                  <div className="flex items-center justify-between gap-2 p-3 border rounded-lg bg-muted/20">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium">Strategy Engine</span>
+                      </div>
+                      <Badge variant={clientStrategyEngineOutput[client.id] ? 'default' : 'secondary'} className="text-xs">
+                        {clientStrategyEngineOutput[client.id] ? 'Strategy Active' : 'Not Started'}
+                      </Badge>
+                    </div>
+                    <Button 
+                      size="sm"
+                      onClick={() => handleRunStrategyEngine(client)}
+                      disabled={runningStrategyEngine === client.id}
+                      data-testid={`button-kanban-run-strategy-${client.id}`}
+                    >
+                      {runningStrategyEngine === client.id ? (
+                        <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Running...</>
+                      ) : (
+                        <><Sparkles className="h-4 w-4 mr-1" />{clientStrategyEngineOutput[client.id] ? 'Refresh' : 'Run'}</>
+                      )}
                     </Button>
                   </div>
-                  {loadingStrategy === client.id ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (clientStrategySessions[client.id] || []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No strategy sessions yet</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {(clientStrategySessions[client.id] || []).map((session) => (
-                        <div key={session.id} className="p-3 border rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-medium">{format(new Date(session.sessionDate), 'dd/MM/yyyy')}</p>
-                            <Badge variant="outline">Strategy Session</Badge>
+
+                  {/* Recommended Actions */}
+                  {clientStrategyActions[client.id]?.filter(a => a.status === 'pending').length > 0 && (
+                    <div className="p-3 border rounded-lg space-y-2 bg-primary/5">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium flex items-center gap-2">
+                          <Zap className="h-4 w-4 text-primary" />
+                          Recommended Actions
+                        </h4>
+                        <Badge variant="outline" className="text-xs">
+                          {clientStrategyActions[client.id]?.filter(a => a.status === 'pending').length} pending
+                        </Badge>
+                      </div>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {clientStrategyActions[client.id]?.filter(a => a.status === 'pending').slice(0, 3).map(action => (
+                          <div key={action.id} className="flex items-start gap-2 p-2 bg-background rounded border">
+                            <Badge variant={action.urgency === 'immediate' ? 'destructive' : 'default'} className="text-xs flex-shrink-0">
+                              {action.urgency === 'immediate' ? 'Now' : 'Soon'}
+                            </Badge>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium">{action.title}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() => handleConvertActionToTask(client.id, action)}
+                              data-testid={`button-kanban-convert-action-${action.id}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
                           </div>
-                          <p className="text-sm text-muted-foreground">{session.agenda}</p>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   )}
+
+                  {/* Strategic Summary */}
+                  {clientStrategyEngineOutput[client.id] && (
+                    <div className="p-3 border rounded-lg space-y-2">
+                      <h4 className="text-sm font-medium flex items-center gap-2">
+                        <Target className="h-4 w-4" />
+                        Strategic Direction
+                      </h4>
+                      <p className="text-xs text-muted-foreground">{clientStrategyEngineOutput[client.id]?.strategySummary}</p>
+                    </div>
+                  )}
+
+                  {/* Strategy Sessions */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Sessions
+                      </h4>
+                      <Button variant="outline" size="sm" onClick={() => setIsAddSessionOpen(true)}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                    {loadingStrategy === client.id ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (clientStrategySessions[client.id] || []).length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-2">No sessions yet</p>
+                    ) : (
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {(clientStrategySessions[client.id] || []).map((session) => (
+                          <div key={session.id} className="p-2 border rounded text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{format(new Date(session.sessionDate), 'dd/MM/yyyy')}</span>
+                            </div>
+                            <p className="text-muted-foreground truncate">{session.agenda}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="activity" className="space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <ClipboardList className="h-4 w-4" />
-                    <h4 className="text-sm font-medium">Recent Activity</h4>
-                  </div>
                   {loadingClientActivity === client.id ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
-                  ) : (clientActivities[client.id] || []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No activity logged yet</p>
                   ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {(clientActivities[client.id] || []).slice(0, 10).map((activity) => (
-                        <div key={activity.id} className="flex items-start gap-3 p-2 border-b last:border-0">
-                          <div className="flex-shrink-0 mt-1">
-                            {activity.type === 'call' && <Phone className="h-3 w-3 text-blue-500" />}
-                            {activity.type === 'email' && <Mail className="h-3 w-3 text-green-500" />}
-                            {activity.type === 'meeting' && <Users className="h-3 w-3 text-purple-500" />}
-                            {!['call', 'email', 'meeting'].includes(activity.type) && <FileText className="h-3 w-3 text-muted-foreground" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm">{activity.notes || ACTIVITY_LABELS[activity.type as ActivityType]}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm')}
-                            </p>
-                          </div>
+                    <div className="space-y-4">
+                      {/* Log Activity Buttons */}
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium flex items-center gap-2">
+                          <Sparkles className="h-4 w-4" />
+                          Log Activity
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleLogClientAction(client.id, client.businessName, 'call')}
+                            disabled={loggingAction}
+                            data-testid={`button-kanban-log-call-${client.id}`}
+                          >
+                            <Phone className="h-4 w-4 mr-2" />
+                            Call
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleLogClientAction(client.id, client.businessName, 'email')}
+                            disabled={loggingAction}
+                            data-testid={`button-kanban-log-email-${client.id}`}
+                          >
+                            <Mail className="h-4 w-4 mr-2" />
+                            Email
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleLogClientAction(client.id, client.businessName, 'meeting')}
+                            disabled={loggingAction}
+                            data-testid={`button-kanban-log-meeting-${client.id}`}
+                          >
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Meeting
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleLogClientAction(client.id, client.businessName, 'dropin')}
+                            disabled={loggingAction}
+                            data-testid={`button-kanban-log-dropin-${client.id}`}
+                          >
+                            <Navigation className="h-4 w-4 mr-2" />
+                            Drop-in
+                          </Button>
                         </div>
-                      ))}
+                      </div>
+
+                      {/* Add Note */}
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          Add Note
+                        </h4>
+                        <Textarea
+                          value={newClientNote}
+                          onChange={(e) => setNewClientNote(e.target.value)}
+                          placeholder="Add a note to client history..."
+                          className="min-h-[60px]"
+                          data-testid={`input-kanban-note-${client.id}`}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleAddClientNote(client.id)}
+                          disabled={savingNote || !newClientNote.trim()}
+                          data-testid={`button-kanban-save-note-${client.id}`}
+                        >
+                          {savingNote ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                          Save Note
+                        </Button>
+                      </div>
+
+                      {/* Recent Activity */}
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium flex items-center gap-2">
+                          <ClipboardList className="h-4 w-4" />
+                          Recent Activity
+                        </h4>
+                        {(clientActivities[client.id] || []).length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-2">No activity logged yet</p>
+                        ) : (
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {(clientActivities[client.id] || []).slice(0, 10).map((activity) => (
+                              <div key={activity.id} className="flex items-start gap-3 p-2 border-b last:border-0">
+                                <div className="flex-shrink-0 mt-1">
+                                  {activity.type === 'call' && <Phone className="h-3 w-3 text-blue-500" />}
+                                  {activity.type === 'email' && <Mail className="h-3 w-3 text-green-500" />}
+                                  {activity.type === 'meeting' && <Users className="h-3 w-3 text-purple-500" />}
+                                  {!['call', 'email', 'meeting'].includes(activity.type) && <FileText className="h-3 w-3 text-muted-foreground" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm">{activity.notes || ACTIVITY_LABELS[activity.type as ActivityType]}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm')}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </TabsContent>
