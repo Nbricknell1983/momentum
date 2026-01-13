@@ -319,6 +319,12 @@ export default function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [isInviting, setIsInviting] = useState(false);
+  
+  // Compute current user's role for RBAC
+  const currentUserRole = teamMembers.find(m => m.email === user?.email)?.role || 
+    (organization?.ownerId === user?.uid ? 'owner' : 'member');
+  const canManageTeam = currentUserRole === 'owner' || currentUserRole === 'admin';
+  const canEditOrgSettings = currentUserRole === 'owner' || currentUserRole === 'admin';
 
   // Load organization data
   useEffect(() => {
@@ -600,8 +606,14 @@ export default function SettingsPage() {
                       />
                     </div>
                     
-                    <div className="flex justify-end">
-                      <Button onClick={handleSaveOrganization} disabled={isSavingOrg} data-testid="button-save-business">
+                    <div className="flex items-center justify-between">
+                      {!canEditOrgSettings && (
+                        <p className="text-sm text-muted-foreground">
+                          Only admins and owners can edit settings
+                        </p>
+                      )}
+                      <div className="flex-1" />
+                      <Button onClick={handleSaveOrganization} disabled={isSavingOrg || !canEditOrgSettings} data-testid="button-save-business">
                         {isSavingOrg ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (
@@ -621,12 +633,18 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <h2 className="text-lg font-medium">Team Members</h2>
-                <p className="text-sm text-muted-foreground">Manage who has access to your organization</p>
+                <p className="text-sm text-muted-foreground">
+                  {canManageTeam 
+                    ? 'Manage who has access to your organization' 
+                    : 'View team members in your organization'}
+                </p>
               </div>
-              <Button onClick={() => setIsInviteDialogOpen(true)} data-testid="button-invite-member">
-                <UserPlus className="h-4 w-4 mr-1" />
-                Invite Member
-              </Button>
+              {canManageTeam && (
+                <Button onClick={() => setIsInviteDialogOpen(true)} data-testid="button-invite-member">
+                  <UserPlus className="h-4 w-4 mr-1" />
+                  Invite Member
+                </Button>
+              )}
             </div>
             
             <Card>
@@ -669,7 +687,7 @@ export default function SettingsPage() {
                                 Pending
                               </Badge>
                             )}
-                            {member.role !== 'owner' && (
+                            {canManageTeam && member.role !== 'owner' && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button size="icon" variant="ghost" data-testid={`button-remove-member-${member.id}`}>
