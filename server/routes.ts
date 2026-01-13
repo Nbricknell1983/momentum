@@ -2390,11 +2390,11 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
   });
 
   // ===============================
-  // ADMIN: USER PASSWORD MANAGEMENT
+  // ADMIN: USER & TEAM MANAGEMENT
   // ===============================
 
   // Helper to verify Firebase token and check admin role
-  async function verifyAdminAccess(authHeader: string | undefined, orgId: string): Promise<{ valid: boolean; error?: string; uid?: string }> {
+  async function verifyAdminAccessForTeam(authHeader: string | undefined, orgId: string): Promise<{ valid: boolean; error?: string; uid?: string }> {
     if (!authHeader?.startsWith('Bearer ')) {
       return { valid: false, error: 'Missing or invalid authorization header' };
     }
@@ -2407,14 +2407,14 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
       const decodedToken = await admin.auth().verifyIdToken(token);
       const requestingUid = decodedToken.uid;
 
-      // Check if user is org owner or admin in Firestore
+      // Check if user is org owner (check both ownerUid and ownerId for compatibility)
       const orgDoc = await firestore?.collection('orgs').doc(orgId).get();
       if (!orgDoc?.exists) {
         return { valid: false, error: 'Organization not found' };
       }
 
       const orgData = orgDoc.data();
-      const isOwner = orgData?.ownerUid === requestingUid;
+      const isOwner = orgData?.ownerId === requestingUid || orgData?.ownerUid === requestingUid;
 
       if (isOwner) {
         return { valid: true, uid: requestingUid };
@@ -2438,6 +2438,90 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
     }
   }
 
+  // Create a new team member with Firebase Auth account
+  app.post("/api/admin/create-team-member", async (req, res) => {
+    try {
+      const { email, password, orgId, role = 'member' } = req.body;
+
+      if (!email || !password || !orgId) {
+        return res.status(400).json({ error: "Email, password, and orgId are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      // Validate role - only allow 'admin' or 'member', never 'owner'
+      const allowedRoles = ['admin', 'member'];
+      const validatedRole = allowedRoles.includes(role) ? role : 'member';
+
+      if (!isFirebaseAdminReady()) {
+        return res.status(503).json({ error: "Firebase Admin not available" });
+      }
+
+      // Verify the requesting user has admin access
+      const authResult = await verifyAdminAccessForTeam(req.headers.authorization, orgId);
+      if (!authResult.valid) {
+        return res.status(403).json({ error: authResult.error || 'Access denied' });
+      }
+
+      const admin = (await import('./firebase')).default;
+      
+      // Check if user already exists
+      let userRecord;
+      let alreadyExists = false;
+      try {
+        userRecord = await admin.auth().getUserByEmail(email);
+        alreadyExists = true;
+      } catch (error: any) {
+        if (error.code !== 'auth/user-not-found') {
+          throw error;
+        }
+        // User doesn't exist, create them
+        userRecord = await admin.auth().createUser({
+          email,
+          password,
+          emailVerified: false,
+        });
+      }
+
+      // Always ensure the Firestore member document exists
+      if (firestore) {
+        const memberRef = firestore.collection('orgs').doc(orgId).collection('members').doc(userRecord.uid);
+        const memberDoc = await memberRef.get();
+        
+        if (!memberDoc.exists) {
+          await memberRef.set({
+            email,
+            role: validatedRole,
+            status: 'active',
+            active: true,
+            joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdByAdmin: true,
+          });
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        message: alreadyExists 
+          ? `User ${email} already exists. Added to team.`
+          : `Account created for ${email}`,
+        uid: userRecord.uid,
+        alreadyExists
+      });
+    } catch (error: any) {
+      console.error("Error creating team member:", error);
+      if (error.code === 'auth/email-already-exists') {
+        return res.status(400).json({ error: "An account with this email already exists" });
+      }
+      if (error.code === 'auth/invalid-email') {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+      res.status(500).json({ error: "Failed to create team member" });
+    }
+  });
+
   // Reset a team member's password (admin only)
   app.post("/api/admin/reset-password", async (req, res) => {
     try {
@@ -2456,7 +2540,7 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
       }
 
       // Verify the requesting user has admin access
-      const authResult = await verifyAdminAccess(req.headers.authorization, orgId);
+      const authResult = await verifyAdminAccessForTeam(req.headers.authorization, orgId);
       if (!authResult.valid) {
         return res.status(403).json({ error: authResult.error || 'Access denied' });
       }
@@ -2497,7 +2581,7 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
       }
 
       // Verify the requesting user has admin access
-      const authResult = await verifyAdminAccess(req.headers.authorization, orgId);
+      const authResult = await verifyAdminAccessForTeam(req.headers.authorization, orgId);
       if (!authResult.valid) {
         return res.status(403).json({ error: authResult.error || 'Access denied' });
       }

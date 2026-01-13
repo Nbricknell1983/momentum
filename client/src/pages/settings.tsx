@@ -317,8 +317,10 @@ export default function SettingsPage() {
   const [isLoadingTeam, setIsLoadingTeam] = useState(true);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePassword, setInvitePassword] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [isInviting, setIsInviting] = useState(false);
+  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   
   // Password reset state
   const [isPasswordResetDialogOpen, setIsPasswordResetDialogOpen] = useState(false);
@@ -393,26 +395,71 @@ export default function SettingsPage() {
   };
   
   const handleInviteMember = async () => {
-    if (!orgId || !authReady || !inviteEmail.trim()) return;
+    if (!orgId || !authReady || !inviteEmail.trim() || !invitePassword.trim()) return;
+    
+    if (invitePassword.length < 6) {
+      toast({ title: 'Error', description: 'Password must be at least 6 characters', variant: 'destructive' });
+      return;
+    }
     
     setIsInviting(true);
     try {
-      const newMember = await addTeamMember(orgId, {
-        email: inviteEmail.trim().toLowerCase(),
-        role: inviteRole,
-        status: 'pending',
-        invitedBy: user?.uid,
-      }, authReady);
+      // Get the current user's ID token for authentication
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
       
-      setTeamMembers([newMember, ...teamMembers]);
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Create Firebase Auth account via server
+      const response = await fetch('/api/admin/create-team-member', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          email: inviteEmail.trim().toLowerCase(),
+          password: invitePassword,
+          orgId,
+          role: inviteRole,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create team member');
+      }
+      
+      // Refresh team members list
+      const updatedMembers = await fetchTeamMembers(orgId, authReady);
+      setTeamMembers(updatedMembers);
+      
+      // Store the password to show it to the admin
+      setCreatedPassword(invitePassword);
+      
+      toast({ 
+        title: data.alreadyExists ? 'User already exists' : 'Team member created', 
+        description: data.alreadyExists 
+          ? `${inviteEmail} already has an account. They can log in with their existing password.`
+          : `Account created for ${inviteEmail}. Share the password with them.`
+      });
+      
+      // Reset form but keep dialog open to show the password
       setInviteEmail('');
+      setInvitePassword('');
       setInviteRole('member');
-      setIsInviteDialogOpen(false);
       
-      toast({ title: 'Invitation sent', description: `Invited ${inviteEmail} as ${ROLE_LABELS[inviteRole]}` });
-    } catch (error) {
+      if (data.alreadyExists) {
+        setIsInviteDialogOpen(false);
+        setCreatedPassword(null);
+      }
+    } catch (error: any) {
       console.error('[Settings] Error inviting member:', error);
-      toast({ title: 'Error', description: 'Failed to send invitation', variant: 'destructive' });
+      toast({ title: 'Error', description: error.message || 'Failed to create team member', variant: 'destructive' });
     } finally {
       setIsInviting(false);
     }
@@ -864,46 +911,100 @@ export default function SettingsPage() {
       </Dialog>
       
       {/* Invite Member Dialog */}
-      <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+      <Dialog open={isInviteDialogOpen} onOpenChange={(open) => {
+        setIsInviteDialogOpen(open);
+        if (!open) {
+          setCreatedPassword(null);
+          setInviteEmail('');
+          setInvitePassword('');
+          setInviteRole('member');
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invite Team Member</DialogTitle>
+            <DialogTitle>Add Team Member</DialogTitle>
             <DialogDescription>
-              Send an invitation to join your organization. They'll receive an email with instructions.
+              Create an account for a new team member. You'll set their initial password and share it with them.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="inviteEmail">Email Address</Label>
-              <Input
-                id="inviteEmail"
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="colleague@example.com"
-                data-testid="input-invite-email"
-              />
+          
+          {createdPassword ? (
+            <div className="space-y-4 py-4">
+              <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md p-4">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">Account created successfully!</p>
+                <p className="text-sm text-green-700 dark:text-green-300 mb-3">
+                  Share these login details with the team member:
+                </p>
+                <div className="bg-white dark:bg-gray-900 rounded p-3 space-y-2 font-mono text-sm">
+                  <p><span className="text-muted-foreground">Password:</span> {createdPassword}</p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  They can change their password after logging in.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => {
+                  setIsInviteDialogOpen(false);
+                  setCreatedPassword(null);
+                }}>
+                  Done
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="inviteRole">Role</Label>
-              <Select value={inviteRole} onValueChange={(v: 'admin' | 'member') => setInviteRole(v)}>
-                <SelectTrigger data-testid="select-invite-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member">Member - Can view and manage leads</SelectItem>
-                  <SelectItem value="admin">Admin - Full access including settings</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleInviteMember} disabled={isInviting || !inviteEmail.trim()} data-testid="button-send-invite">
-              {isInviting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
-              Send Invite
-            </Button>
-          </DialogFooter>
+          ) : (
+            <>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="inviteEmail">Email Address</Label>
+                  <Input
+                    id="inviteEmail"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="colleague@example.com"
+                    data-testid="input-invite-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invitePassword">Initial Password</Label>
+                  <Input
+                    id="invitePassword"
+                    type="text"
+                    value={invitePassword}
+                    onChange={(e) => setInvitePassword(e.target.value)}
+                    placeholder="Set a temporary password (min 6 characters)"
+                    data-testid="input-invite-password"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    You'll need to share this password with them securely.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inviteRole">Role</Label>
+                  <Select value={inviteRole} onValueChange={(v: 'admin' | 'member') => setInviteRole(v)}>
+                    <SelectTrigger data-testid="select-invite-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Member - Can view and manage leads</SelectItem>
+                      <SelectItem value="admin">Admin - Full access including settings</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>Cancel</Button>
+                <Button 
+                  onClick={handleInviteMember} 
+                  disabled={isInviting || !inviteEmail.trim() || invitePassword.length < 6} 
+                  data-testid="button-send-invite"
+                >
+                  {isInviting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
+                  Create Account
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
       
