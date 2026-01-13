@@ -54,6 +54,7 @@ interface LeadCardExpandedProps {
 
 function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
   const dispatch = useDispatch();
+  const { orgId, authReady } = useAuth();
   const cadences = useSelector((state: RootState) => state.app.cadences);
   const [selectedCadenceId, setSelectedCadenceId] = useState<string>('');
   
@@ -61,15 +62,35 @@ function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
   const passiveCadences = cadences.filter(c => c.mode === 'passive');
   const currentCadence = lead.nurtureCadenceId ? cadences.find(c => c.id === lead.nurtureCadenceId) : null;
 
-  const handleEnroll = (mode: 'active' | 'passive') => {
+  const handleEnroll = async (mode: 'active' | 'passive') => {
     const cadenceList = mode === 'active' ? activeCadences : passiveCadences;
     const selectedCadence = cadences.find(c => c.id === selectedCadenceId);
     const cadenceId = (selectedCadence && selectedCadence.mode === mode) 
       ? selectedCadenceId 
       : cadenceList[0]?.id;
     if (cadenceId) {
+      const cadence = cadences.find(c => c.id === cadenceId);
+      if (!cadence) return;
+      
       dispatch(enrollInNurture({ leadId: lead.id, mode, cadenceId }));
       setSelectedCadenceId('');
+      
+      // Persist to Firestore - must have both orgId and authReady
+      if (orgId && authReady) {
+        const now = new Date();
+        const { calculateNextTouchDate } = await import('@/lib/types');
+        const nurtureUpdates: Partial<Lead> = {
+          nurtureMode: mode,
+          nurtureCadenceId: cadenceId,
+          nurtureStatus: 'new',
+          nurtureStepIndex: 0,
+          enrolledInNurtureAt: now,
+          nextTouchAt: calculateNextTouchDate(now, 0, cadence),
+          touchesNoResponse: 0,
+          updatedAt: now,
+        };
+        updateLeadInFirestore(orgId, lead.id, nurtureUpdates, authReady).catch(console.error);
+      }
     }
   };
 

@@ -1112,7 +1112,9 @@ function NurtureDrawer({
 export default function NurturePage() {
   const dispatch = useDispatch();
   const leads = useSelector((state: RootState) => state.app.leads);
+  const cadences = useSelector((state: RootState) => state.app.cadences);
   const nurtureTab = useSelector((state: RootState) => state.app.nurtureTab);
+  const { orgId, authReady } = useAuth();
   const { toast } = useToast();
   
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -1130,12 +1132,23 @@ export default function NurturePage() {
   
   const selectedLead = selectedLeadId ? leads.find(l => l.id === selectedLeadId) || null : null;
 
+  // Helper to persist nurture status update to Firestore
+  const persistNurtureStatus = useCallback(async (leadId: string, status: NurtureStatus) => {
+    if (!orgId || !authReady) return;
+    try {
+      await updateLeadInFirestore(orgId, leadId, { nurtureStatus: status, updatedAt: new Date() }, authReady);
+    } catch (error) {
+      console.error('Failed to persist nurture status:', error);
+    }
+  }, [orgId, authReady]);
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
       const status = over.id as NurtureStatus;
       if (NURTURE_STATUS_ORDER.includes(status)) {
         dispatch(updateNurtureStatus({ leadId: active.id as string, status }));
+        persistNurtureStatus(active.id as string, status);
       }
     }
   };
@@ -1145,37 +1158,106 @@ export default function NurturePage() {
     setDrawerOpen(true);
   };
 
-  const handleAction = (leadId: string, action: string, data?: unknown) => {
+  const handleAction = async (leadId: string, action: string, data?: unknown) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    
+    const cadence = lead.nurtureCadenceId ? cadences.find(c => c.id === lead.nurtureCadenceId) : null;
+    const now = new Date();
+
     switch (action) {
       case 'call':
-        dispatch(logNurtureTouch({ leadId, channel: 'call', responseReceived: false }));
-        toast({ title: 'Call logged', description: 'Touch recorded' });
-        break;
       case 'sms':
-        dispatch(logNurtureTouch({ leadId, channel: 'sms', responseReceived: false }));
-        toast({ title: 'Text logged', description: 'Touch recorded' });
+      case 'email': {
+        const channel = action as 'call' | 'sms' | 'email';
+        dispatch(logNurtureTouch({ leadId, channel, responseReceived: false }));
+        toast({ title: `${action.charAt(0).toUpperCase() + action.slice(1)} logged`, description: 'Touch recorded' });
+        
+        // Persist to Firestore - EXACTLY mirror Redux logNurtureTouch logic
+        // Redux only updates if: nurtureMode !== 'none' && nurtureCadenceId && cadence exists
+        if (orgId && authReady && lead.nurtureMode !== 'none' && lead.nurtureCadenceId && cadence) {
+          const nextIndex = (lead.nurtureStepIndex ?? 0) + 1;
+          const { calculateNextTouchDate } = await import('@/lib/types');
+          const isCompleted = nextIndex >= cadence.steps.length;
+          
+          const updates: Partial<Lead> = {
+            lastTouchAt: now,
+            lastTouchChannel: channel,
+            touchesNoResponse: (lead.touchesNoResponse || 0) + 1,
+            nurtureStatus: isCompleted ? 'exit' : 'needs_touch',
+            nurtureStepIndex: nextIndex,
+            nextTouchAt: isCompleted ? null : (lead.enrolledInNurtureAt ? calculateNextTouchDate(lead.enrolledInNurtureAt, nextIndex, cadence) : null),
+            updatedAt: now,
+          };
+          
+          updateLeadInFirestore(orgId, leadId, updates, authReady).catch(console.error);
+          scriptsCache.delete(leadId);
+        }
         break;
-      case 'email':
-        dispatch(logNurtureTouch({ leadId, channel: 'email', responseReceived: false }));
-        toast({ title: 'Email logged', description: 'Touch recorded' });
-        break;
-      case 'response':
-        const lead = leads.find(l => l.id === leadId);
+      }
+      case 'response': {
+        const channel = lead.lastTouchChannel || 'call';
         dispatch(logNurtureTouch({ 
           leadId, 
-          channel: lead?.lastTouchChannel || 'call', 
+          channel, 
           responseReceived: true 
         }));
         toast({ title: 'Response recorded!', description: 'Lead is now engaged' });
+        
+        // Persist to Firestore - EXACTLY mirror Redux logNurtureTouch with responseReceived=true
+        // Redux sets touchesNoResponse=0, then advances cadence (setting final status to exit/needs_touch)
+        if (orgId && authReady && lead.nurtureMode !== 'none' && lead.nurtureCadenceId && cadence) {
+          const nextIndex = (lead.nurtureStepIndex ?? 0) + 1;
+          const { calculateNextTouchDate } = await import('@/lib/types');
+          const isCompleted = nextIndex >= cadence.steps.length;
+          
+          const updates: Partial<Lead> = {
+            lastTouchAt: now,
+            lastTouchChannel: channel,
+            touchesNoResponse: 0,
+            nurtureStatus: isCompleted ? 'exit' : 'needs_touch',
+            nurtureStepIndex: nextIndex,
+            nextTouchAt: isCompleted ? null : (lead.enrolledInNurtureAt ? calculateNextTouchDate(lead.enrolledInNurtureAt, nextIndex, cadence) : null),
+            updatedAt: now,
+          };
+          updateLeadInFirestore(orgId, leadId, updates, authReady).catch(console.error);
+          scriptsCache.delete(leadId);
+        }
         break;
-      case 'snooze':
-        dispatch(snoozeNurtureTouch({ leadId, days: data as number }));
-        toast({ title: 'Snoozed', description: `Next touch in ${data} days` });
+      }
+      case 'snooze': {
+        const days = data as number;
+        dispatch(snoozeNurtureTouch({ leadId, days }));
+        toast({ title: 'Snoozed', description: `Next touch in ${days} days` });
+        
+        // Persist to Firestore - Redux only updates if nurtureMode !== 'none'
+        if (orgId && authReady && lead.nurtureMode !== 'none') {
+          const newDate = new Date();
+          newDate.setDate(newDate.getDate() + days);
+          updateLeadInFirestore(orgId, leadId, { nextTouchAt: newDate, updatedAt: now }, authReady).catch(console.error);
+        }
         break;
-      case 'toPipeline':
+      }
+      case 'toPipeline': {
         dispatch(moveToPipeline({ leadId, stage: 'suspect' }));
         toast({ title: 'Moved to Pipeline', description: 'Lead is back in your sales pipeline' });
+        
+        // Persist to Firestore
+        if (orgId && authReady) {
+          const updates: Partial<Lead> = {
+            stage: 'suspect',
+            nurtureMode: 'none',
+            nurtureCadenceId: null,
+            nurtureStatus: null,
+            nurtureStepIndex: null,
+            enrolledInNurtureAt: null,
+            nextTouchAt: null,
+            updatedAt: now,
+          };
+          updateLeadInFirestore(orgId, leadId, updates, authReady).catch(console.error);
+        }
         break;
+      }
     }
   };
 
@@ -1210,7 +1292,10 @@ export default function NurturePage() {
                     key={status}
                     status={status}
                     leads={getLeadsByStatus(status)}
-                    onDrop={(leadId, newStatus) => dispatch(updateNurtureStatus({ leadId, status: newStatus }))}
+                    onDrop={(leadId, newStatus) => {
+                      dispatch(updateNurtureStatus({ leadId, status: newStatus }));
+                      persistNurtureStatus(leadId, newStatus);
+                    }}
                     onAction={handleAction}
                     onOpenLead={handleOpenLead}
                   />
@@ -1235,7 +1320,10 @@ export default function NurturePage() {
                     key={status}
                     status={status}
                     leads={getLeadsByStatus(status)}
-                    onDrop={(leadId, newStatus) => dispatch(updateNurtureStatus({ leadId, status: newStatus }))}
+                    onDrop={(leadId, newStatus) => {
+                      dispatch(updateNurtureStatus({ leadId, status: newStatus }));
+                      persistNurtureStatus(leadId, newStatus);
+                    }}
                     onAction={handleAction}
                     onOpenLead={handleOpenLead}
                   />
