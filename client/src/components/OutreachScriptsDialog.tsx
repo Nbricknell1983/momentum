@@ -8,13 +8,23 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Lead, LeadSourceData } from '@/lib/types';
+import { Lead, LeadSourceData, ActivityType } from '@/lib/types';
+import { format } from 'date-fns';
+
+interface ActivityHistoryItem {
+  type: ActivityType;
+  date: Date;
+  notes: string;
+}
 
 interface OutreachScriptsDialogProps {
   lead: Lead;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onScriptsGenerated?: (scripts: { textScript: string; emailScript: string; callScript: string }) => void;
+  notes?: string;
+  activityHistory?: ActivityHistoryItem[];
+  activityCounts?: Record<ActivityType, number>;
 }
 
 interface OutreachScripts {
@@ -23,7 +33,15 @@ interface OutreachScripts {
   callScript: string;
 }
 
-export function OutreachScriptsDialog({ lead, open, onOpenChange, onScriptsGenerated }: OutreachScriptsDialogProps) {
+export function OutreachScriptsDialog({ 
+  lead, 
+  open, 
+  onOpenChange, 
+  onScriptsGenerated,
+  notes,
+  activityHistory,
+  activityCounts 
+}: OutreachScriptsDialogProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'text' | 'email' | 'call'>('text');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -32,6 +50,34 @@ export function OutreachScriptsDialog({ lead, open, onOpenChange, onScriptsGener
 
   const sourceData = lead.sourceData as LeadSourceData | undefined;
   const existingScripts = sourceData && (sourceData.textScript || sourceData.emailScript || sourceData.callScript);
+  
+  const buildRelationshipContext = () => {
+    const context: string[] = [];
+    
+    if (notes) {
+      context.push(`Notes: ${notes}`);
+    }
+    
+    if (activityHistory && activityHistory.length > 0) {
+      const historyLines = activityHistory.map(a => 
+        `${format(new Date(a.date), 'dd-MM-yyyy')}: ${a.type}${a.notes ? ` - ${a.notes}` : ''}`
+      );
+      context.push(`Recent activity:\n${historyLines.join('\n')}`);
+    }
+    
+    if (activityCounts) {
+      const totalCalls = activityCounts.call || 0;
+      const totalTexts = activityCounts.sms || 0;
+      const totalEmails = activityCounts.email || 0;
+      const totalMeetings = activityCounts.meeting || 0;
+      
+      if (totalCalls + totalTexts + totalEmails + totalMeetings > 0) {
+        context.push(`Logged activities: ${totalCalls} calls, ${totalTexts} texts, ${totalEmails} emails, ${totalMeetings} meetings`);
+      }
+    }
+    
+    return context.join('\n\n');
+  };
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
@@ -65,6 +111,8 @@ export function OutreachScriptsDialog({ lead, open, onOpenChange, onScriptsGener
       }
       
       if (lead.website) businessSignals.push('Has website presence');
+      
+      const relationshipContext = buildRelationshipContext();
 
       const response = await fetch('/api/leads/generate-outreach-scripts', {
         method: 'POST',
@@ -80,6 +128,8 @@ export function OutreachScriptsDialog({ lead, open, onOpenChange, onScriptsGener
           source: sourceData?.source || 'manual',
           addedReason: reason || sourceData?.addedReason || 'Added as a potential prospect',
           businessSignals,
+          stage: lead.stage,
+          relationshipContext,
         }),
       });
 

@@ -845,19 +845,17 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 {!lead.phone && !lead.email && (
                   <span className="text-xs text-muted-foreground">Add phone or email to enable quick actions</span>
                 )}
-                {/* Outreach Scripts button for suspect stage */}
-                {lead.stage === 'suspect' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
-                    onClick={() => setOutreachScriptsOpen(true)}
-                    data-testid={`button-outreach-scripts-${lead.id}`}
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    Outreach Scripts
-                  </Button>
-                )}
+                {/* Outreach Scripts button for all pipeline stages */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                  onClick={() => setOutreachScriptsOpen(true)}
+                  data-testid={`button-outreach-scripts-${lead.id}`}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Outreach Scripts
+                </Button>
               </div>
             </div>
           </div>
@@ -1000,6 +998,16 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         lead={lead}
         open={outreachScriptsOpen}
         onOpenChange={setOutreachScriptsOpen}
+        notes={lead.notes}
+        activityHistory={activities
+          .filter(a => a.leadId === lead.id)
+          .slice(0, 10)
+          .map(a => ({
+            type: a.type,
+            date: a.createdAt,
+            notes: a.notes || ''
+          }))}
+        activityCounts={activityCounts}
       />
     </Card>
   );

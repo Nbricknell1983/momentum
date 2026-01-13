@@ -62,7 +62,10 @@ Configurable regions and areas with linked filtering capabilities for lead organ
 Discovers new Australian businesses via Google Business Profiles and the Australian Business Register (ABR). Features include:
 - **Auto-generated reasons**: "Why suggested" data from search results auto-populates the reason field when adding leads
 - **AI-powered outreach scripts**: Generates personalized Text, Email, and Call scripts using NEPQ, Jeb Blount, Chris Voss frameworks
-- **Outreach Scripts on Suspect Cards**: Leads in "suspect" stage have an "Outreach Scripts" button in Quick Actions (Pipeline page)
+- **Outreach Scripts on All Pipeline Stages**: All leads have an "Outreach Scripts" button in Quick Actions that:
+  - Leverages notes, activity history, and logged activities for contextual personalization
+  - Adjusts tone and approach based on pipeline stage (cold for suspect, warm for prospect, familiar for qualify+)
+  - References specific prior interactions when available
 
 ### Marketing Website
 An SEO-optimized public website (`battlescore.com.au`) targeting business consultancy keywords, with dynamic SEO features and structured data.

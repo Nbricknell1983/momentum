@@ -1923,6 +1923,8 @@ Return valid JSON:
         source, // 'abr' | 'google_places'
         addedReason, // User's reason for adding this lead
         businessSignals, // Detected signals like 'newly registered', 'few reviews'
+        stage, // Pipeline stage: 'suspect', 'prospect', 'qualify', 'present', 'propose', 'won', 'lost'
+        relationshipContext, // Notes, activity history, logged activities
       } = req.body;
 
       if (!businessName || !addedReason) {
@@ -1943,20 +1945,41 @@ Return valid JSON:
         signals: businessSignals || [],
       };
 
+      // Determine outreach approach based on pipeline stage
+      const stageGuidelines: Record<string, string> = {
+        suspect: 'First contact - they don\'t know you. Focus on creating curiosity and establishing credibility. Cold outreach approach.',
+        prospect: 'They\'ve shown some interest. Reference any prior interaction. Build on initial connection. Warmer tone.',
+        qualify: 'They\'re evaluating options. Focus on understanding their specific needs. Ask discovery questions. Position as a partner.',
+        present: 'Deep in discussions. Reference specific conversations. Provide value and address concerns. Consultative approach.',
+        propose: 'Decision phase. Be helpful, not pushy. Address any final objections. Create urgency without pressure.',
+        won: 'Customer relationship. Focus on onboarding, satisfaction, and upsell opportunities. Partner mindset.',
+        lost: 'Re-engagement approach. Acknowledge time passed. Offer new value or changed circumstances. Low-pressure reconnection.',
+      };
+
+      const currentStage = stage || 'suspect';
+      const stageContext = stageGuidelines[currentStage] || stageGuidelines.suspect;
+      const hasRelationshipHistory = relationshipContext && relationshipContext.trim().length > 0;
+
       const prompt = `You are an expert sales copywriter using proven frameworks (NEPQ, Jeb Blount "Fanatical Prospecting", Chris Voss "Never Split the Difference"). 
-Generate personalized cold outreach scripts for this newly discovered business lead.
+Generate personalized outreach scripts for this business lead at the "${currentStage}" stage.
 
 BUSINESS CONTEXT:
 ${JSON.stringify(businessContext, null, 2)}
+
+PIPELINE STAGE: ${currentStage}
+STAGE GUIDANCE: ${stageContext}
+
+${hasRelationshipHistory ? `RELATIONSHIP HISTORY (use this to personalize - reference specific interactions, notes, or prior conversations):
+${relationshipContext}` : 'No prior interactions logged.'}
 
 THE SALES REP'S REASON FOR REACHING OUT:
 "${addedReason}"
 
 Generate outreach scripts in this exact JSON format:
 {
-  "textScript": "SMS message (under 160 chars, conversational, creates curiosity, no hard sell, includes a soft CTA like 'quick question for you')",
-  "emailScript": "Email with Subject line and Body. Use NEPQ approach - start with a problem-focused question, acknowledge they're busy, offer value not features, end with low-pressure CTA. Max 150 words.",
-  "callScript": "Phone script with: 1) Pattern interrupt opener (not 'how are you'), 2) Permission-based transition, 3) Problem identification question (NEPQ), 4) Value statement tied to their situation, 5) Soft close for next step. Include exact words to say."
+  "textScript": "SMS message (under 160 chars, conversational, creates curiosity, no hard sell, includes a soft CTA like 'quick question for you')${hasRelationshipHistory ? ' - reference prior interaction if relevant' : ''}",
+  "emailScript": "Email with Subject line and Body. Use NEPQ approach - start with a problem-focused question, acknowledge they're busy, offer value not features, end with low-pressure CTA. Max 150 words.${hasRelationshipHistory ? ' Reference specific prior conversations or logged activities.' : ''}",
+  "callScript": "Phone script with: 1) Pattern interrupt opener (not 'how are you'), 2) Permission-based transition, 3) Problem identification question (NEPQ), 4) Value statement tied to their situation, 5) Soft close for next step. Include exact words to say.${hasRelationshipHistory ? ' Mention specific prior interactions when relevant.' : ''}"
 }
 
 FRAMEWORK GUIDELINES:
@@ -1965,12 +1988,13 @@ FRAMEWORK GUIDELINES:
 - Chris Voss: Use tactical empathy, labeling ("It seems like..."), calibrated questions ("How am I supposed to..."), and mirroring
 
 PERSONALIZATION RULES:
-1. If they're a new business (few reviews, new registration), acknowledge the challenge of getting started
+1. ${hasRelationshipHistory ? 'PRIORITY: Reference specific logged activities, notes, or prior conversations naturally' : 'If they\'re a new business (few reviews, new registration), acknowledge the challenge of getting started'}
 2. If they have a website but low reviews, that's a digital presence gap to mention
 3. Reference their specific industry/business type naturally
 4. Never use generic "I help businesses like yours" - be specific
 5. The SMS must feel like it's from a real person, not marketing
 6. The email subject line must create curiosity without being clickbait
+7. Adjust warmth and familiarity based on pipeline stage - ${currentStage === 'suspect' ? 'cold and professional' : currentStage === 'prospect' ? 'warmer, reference prior touch' : 'familiar, reference relationship'}
 
 TONE: Professional but warm. Confident but not pushy. Curious about THEIR business, not eager to pitch.`;
 
