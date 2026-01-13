@@ -274,10 +274,12 @@ export async function fetchLeads(orgId: string, authReady: boolean = false): Pro
     const leadsRef = collection(db, 'orgs', orgId, 'leads');
     const q = query(leadsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
-    const leads = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...convertTimestampToDate(doc.data()),
-    })) as Lead[];
+    const leads = snapshot.docs.map(doc => {
+      const data = convertTimestampToDate(doc.data());
+      // Use Firestore document ID, not any id field stored in the document data
+      const { id: _storedId, ...rest } = data as any;
+      return { ...rest, id: doc.id } as Lead;
+    });
     
     logFirestoreOperation('READ', path, orgId, true);
     return leads;
@@ -307,7 +309,10 @@ export async function fetchLead(orgId: string, id: string, authReady: boolean = 
     
     if (docSnap.exists()) {
       logFirestoreOperation('READ', path, orgId, true);
-      return { id: docSnap.id, ...convertTimestampToDate(docSnap.data()) } as Lead;
+      const data = convertTimestampToDate(docSnap.data());
+      // Use Firestore document ID, not any id field stored in the document data
+      const { id: _storedId, ...rest } = data as any;
+      return { ...rest, id: docSnap.id } as Lead;
     }
     
     logFirestoreOperation('READ', path, orgId, true);
@@ -327,8 +332,10 @@ export async function createLead(orgId: string, lead: Omit<Lead, 'id'>, authRead
   
   try {
     const cleanedLead = removeUndefinedFields(lead);
+    // Strip out any id field - Firestore document ID will be auto-generated
+    const { id: _existingId, ...leadWithoutId } = cleanedLead as any;
     const dataToSave = convertDatesToTimestamp({
-      ...cleanedLead,
+      ...leadWithoutId,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -336,7 +343,7 @@ export async function createLead(orgId: string, lead: Omit<Lead, 'id'>, authRead
     const docRef = await addDoc(leadsRef, dataToSave);
     
     logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
-    return { ...cleanedLead, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Lead;
+    return { ...leadWithoutId, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Lead;
   } catch (error: any) {
     logFirestoreOperation('WRITE', path, orgId, false, error);
     
@@ -360,8 +367,10 @@ export async function updateLeadInFirestore(orgId: string, id: string, updates: 
   try {
     const docRef = doc(db, 'orgs', orgId, 'leads', id);
     const cleanedUpdates = removeUndefinedFields(updates);
+    // Strip out id field - we don't want to store id in document data
+    const { id: _existingId, ...updatesWithoutId } = cleanedUpdates as any;
     const dataToUpdate = convertDatesToTimestamp({
-      ...cleanedUpdates,
+      ...updatesWithoutId,
       updatedAt: new Date(),
     });
     await updateDoc(docRef, dataToUpdate);
