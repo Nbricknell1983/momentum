@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { format } from 'date-fns';
@@ -25,6 +25,16 @@ interface OutreachScripts {
   emailScript: string;
   callScript: string;
 }
+
+interface CachedScripts {
+  scripts: OutreachScripts;
+  generatedAt: Date;
+  contextSummary: string;
+}
+
+// Cache for generated scripts per lead
+const scriptsCache = new Map<string, CachedScripts>();
+const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 function NurtureCard({ lead, onAction, onOpen }: { lead: Lead; onAction: (action: string, data?: unknown) => void; onOpen: () => void }) {
   const nextTouchDate = lead.nextTouchAt ? new Date(lead.nextTouchAt) : null;
@@ -302,35 +312,106 @@ function NurtureDrawer({
   
   const [activeScriptTab, setActiveScriptTab] = useState<'text' | 'email' | 'call'>('text');
   const [outreachScripts, setOutreachScripts] = useState<OutreachScripts | null>(null);
+  const [contextSummary, setContextSummary] = useState<string>('');
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const leadActivities = lead ? activities.filter(a => a.leadId === lead.id).slice(0, 5) : [];
+  const leadActivities = lead 
+    ? activities
+        .filter(a => a.leadId === lead.id)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 10) 
+    : [];
 
-  // Reset scripts when lead changes to prevent stale data
-  const leadId = lead?.id;
-  useEffect(() => {
-    setOutreachScripts(null);
-    setActiveScriptTab('text');
-  }, [leadId]);
+  // Build context summary for display
+  const buildContextSummary = useCallback((lead: Lead, leadActivities: Activity[]): string => {
+    const parts: string[] = [];
+    
+    if (lead.notes) {
+      parts.push(`Notes available`);
+    }
+    if (leadActivities.length > 0) {
+      const latestActivity = leadActivities[0];
+      parts.push(`${leadActivities.length} activities (last: ${format(new Date(latestActivity.createdAt), 'dd-MM-yyyy')})`);
+    }
+    if (lead.lastTouchChannel) {
+      parts.push(`Last contact: ${lead.lastTouchChannel}`);
+    }
+    if (lead.touchesNoResponse > 0) {
+      parts.push(`${lead.touchesNoResponse} unanswered touches`);
+    }
+    if (lead.nurtureStatus) {
+      parts.push(`Status: ${lead.nurtureStatus}`);
+    }
+    
+    return parts.length > 0 ? parts.join(' • ') : 'Basic lead info only';
+  }, []);
 
-  const generateOutreachScripts = async () => {
+  // Check if cache is valid
+  const isCacheValid = useCallback((leadId: string): boolean => {
+    const cached = scriptsCache.get(leadId);
+    if (!cached) return false;
+    const age = Date.now() - cached.generatedAt.getTime();
+    return age < CACHE_TTL_MS;
+  }, []);
+
+  // Generate scripts with caching
+  const generateOutreachScripts = useCallback(async (forceRegenerate: boolean = false) => {
     if (!lead) return;
+    
+    // Check cache first (unless forcing regeneration)
+    if (!forceRegenerate && isCacheValid(lead.id)) {
+      const cached = scriptsCache.get(lead.id)!;
+      setOutreachScripts(cached.scripts);
+      setContextSummary(cached.contextSummary);
+      return;
+    }
+    
+    // Abort any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
     
     setIsGeneratingScripts(true);
     
     try {
       const businessSignals: string[] = [];
       if (lead.touchesNoResponse > 0) businessSignals.push(`${lead.touchesNoResponse} previous touches with no response`);
-      if (lead.nurtureStatus === 'warming') businessSignals.push('Lead is warming up to engagement');
-      if (lead.nurtureStatus === 'engaged') businessSignals.push('Lead has shown engagement');
+      if (lead.nurtureStatus === 'touched_waiting') businessSignals.push('Lead has been touched - awaiting response');
+      if (lead.nurtureStatus === 'reengaged') businessSignals.push('Lead has shown re-engagement');
+      if (lead.nurtureStatus === 'dormant') businessSignals.push('Lead has gone dormant - needs re-engagement');
+      if (lead.nurtureStatus === 'needs_touch') businessSignals.push('Lead needs next touch');
       if (lead.website) businessSignals.push('Has website presence');
 
-      const relationshipContext = [
-        lead.notes ? `Notes: ${lead.notes}` : null,
-        leadActivities.length > 0 ? `Recent activities: ${leadActivities.map(a => `${a.type} on ${format(new Date(a.date), 'MMM d')}`).join(', ')}` : null,
-        lead.lastTouchChannel ? `Last contact via ${lead.lastTouchChannel}` : null,
-      ].filter(Boolean).join('\n');
+      // Build rich relationship context from history and notes
+      const contextParts: string[] = [];
+      
+      if (lead.notes) {
+        contextParts.push(`NOTES FROM SALES REP:\n${lead.notes}`);
+      }
+      
+      if (leadActivities.length > 0) {
+        const activitySummary = leadActivities.map(a => {
+          const dateStr = format(new Date(a.createdAt), 'dd-MM-yyyy');
+          const notesStr = a.notes ? `: ${a.notes}` : '';
+          return `- ${a.type.toUpperCase()} on ${dateStr}${notesStr}`;
+        }).join('\n');
+        contextParts.push(`ACTIVITY HISTORY (most recent first):\n${activitySummary}`);
+      }
+      
+      if (lead.lastTouchChannel && lead.lastTouchAt) {
+        contextParts.push(`Last contact was via ${lead.lastTouchChannel} on ${format(new Date(lead.lastTouchAt), 'dd-MM-yyyy')}`);
+      }
+      
+      if (lead.touchesNoResponse > 0) {
+        contextParts.push(`This lead has been contacted ${lead.touchesNoResponse} times without a response - scripts should acknowledge persistence without being pushy`);
+      }
+
+      const relationshipContext = contextParts.join('\n\n');
+      const summary = buildContextSummary(lead, leadActivities);
 
       const response = await fetch('/api/leads/generate-outreach-scripts', {
         method: 'POST',
@@ -342,11 +423,12 @@ function NurtureDrawer({
           phone: lead.phone,
           website: lead.website,
           source: 'nurture',
-          addedReason: `Nurturing lead - currently in ${lead.nurtureStatus || 'new'} status with ${lead.touchesNoResponse} touches without response`,
+          addedReason: `Nurturing lead - currently in ${lead.nurtureStatus || 'new'} status with ${lead.touchesNoResponse || 0} touches without response`,
           businessSignals,
           stage: 'nurture',
           relationshipContext,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
@@ -354,8 +436,20 @@ function NurtureDrawer({
       }
 
       const scripts = await response.json();
+      
+      // Cache the result
+      scriptsCache.set(lead.id, {
+        scripts,
+        generatedAt: new Date(),
+        contextSummary: summary,
+      });
+      
       setOutreachScripts(scripts);
+      setContextSummary(summary);
     } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        return; // Request was cancelled, ignore
+      }
       console.error('Error generating scripts:', err);
       toast({
         title: 'Error',
@@ -365,7 +459,36 @@ function NurtureDrawer({
     } finally {
       setIsGeneratingScripts(false);
     }
-  };
+  }, [lead, leadActivities, buildContextSummary, isCacheValid, toast]);
+
+  // Auto-generate scripts when drawer opens with a lead
+  useEffect(() => {
+    if (open && lead) {
+      generateOutreachScripts(false);
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [open, lead?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset state when lead changes
+  const leadId = lead?.id;
+  useEffect(() => {
+    setActiveScriptTab('text');
+    // Check if we have cached scripts for this lead
+    if (leadId && isCacheValid(leadId)) {
+      const cached = scriptsCache.get(leadId)!;
+      setOutreachScripts(cached.scripts);
+      setContextSummary(cached.contextSummary);
+    } else {
+      setOutreachScripts(null);
+      setContextSummary('');
+    }
+  }, [leadId, isCacheValid]);
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
@@ -387,7 +510,7 @@ function NurtureDrawer({
         leadId: lead.id,
         userId: user.uid,
         type: channel,
-        date: now,
+        createdAt: now,
         notes: notes || `Nurture ${channel} touch`,
       };
       
@@ -405,6 +528,9 @@ function NurtureDrawer({
       dispatch(updateLead({ ...lead, ...updatedLead }));
       
       dispatch(logNurtureTouch({ leadId: lead.id, channel, responseReceived: false }));
+      
+      // Invalidate cached scripts since context has changed
+      scriptsCache.delete(lead.id);
       
       toast({
         title: 'Touch logged',
@@ -432,13 +558,16 @@ function NurtureDrawer({
       
       const updatedLead: Partial<Lead> = {
         touchesNoResponse: 0,
-        nurtureStatus: 'engaged' as NurtureStatus,
+        nurtureStatus: 'reengaged' as NurtureStatus,
         updatedAt: now,
       };
       
       await updateLeadInFirestore(orgId, lead.id, updatedLead, authReady);
       dispatch(updateLead({ ...lead, ...updatedLead }));
-      dispatch(updateNurtureStatus({ leadId: lead.id, status: 'engaged' }));
+      dispatch(updateNurtureStatus({ leadId: lead.id, status: 'reengaged' }));
+      
+      // Invalidate cached scripts since status has changed
+      scriptsCache.delete(lead.id);
       
       toast({
         title: 'Response recorded',
@@ -581,7 +710,7 @@ function NurtureDrawer({
               <Button 
                 size="sm" 
                 variant="outline"
-                onClick={generateOutreachScripts}
+                onClick={() => generateOutreachScripts(true)}
                 disabled={isGeneratingScripts}
                 data-testid="button-generate-scripts"
               >
@@ -597,6 +726,19 @@ function NurtureDrawer({
                 )}
               </Button>
             </div>
+
+            {contextSummary && outreachScripts && (
+              <div className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2 mb-2" data-testid="context-summary">
+                <span className="font-medium">Context used: </span>{contextSummary}
+              </div>
+            )}
+
+            {isGeneratingScripts && (
+              <div className="flex items-center justify-center py-8 text-muted-foreground" data-testid="loading-scripts">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                <span>Analyzing history & generating personalized scripts...</span>
+              </div>
+            )}
 
             {outreachScripts && (
               <Tabs value={activeScriptTab} onValueChange={(v) => setActiveScriptTab(v as typeof activeScriptTab)}>
@@ -715,8 +857,8 @@ function NurtureDrawer({
             {!outreachScripts && !isGeneratingScripts && (
               <div className="text-center py-6 text-muted-foreground">
                 <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Generate AI-powered outreach scripts</p>
-                <p className="text-xs">Using NEPQ, Jeb Blount & Chris Voss frameworks</p>
+                <p className="text-sm">AI scripts will generate automatically</p>
+                <p className="text-xs">Using NEPQ, Jeb Blount & Chris Voss frameworks with your lead's history</p>
               </div>
             )}
           </div>
@@ -744,7 +886,7 @@ function NurtureDrawer({
                       {activity.type === 'sms' && <MessageSquare className="h-3 w-3" />}
                       <span className="capitalize">{activity.type}</span>
                       <span className="text-muted-foreground">
-                        {format(new Date(activity.date), 'MMM d, yyyy')}
+                        {format(new Date(activity.createdAt), 'MMM d, yyyy')}
                       </span>
                     </div>
                   ))}
