@@ -18,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CHANNEL_ICONS: Record<TouchChannel, typeof Phone> = {
@@ -320,6 +320,12 @@ export default function SettingsPage() {
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [isInviting, setIsInviting] = useState(false);
   
+  // Password reset state
+  const [isPasswordResetDialogOpen, setIsPasswordResetDialogOpen] = useState(false);
+  const [passwordResetMember, setPasswordResetMember] = useState<TeamMember | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  
   // Compute current user's role for RBAC
   const currentUserRole = teamMembers.find(m => m.email === user?.email)?.role || 
     (organization?.ownerId === user?.uid ? 'owner' : 'member');
@@ -422,6 +428,62 @@ export default function SettingsPage() {
     } catch (error) {
       console.error('[Settings] Error removing member:', error);
       toast({ title: 'Error', description: 'Failed to remove member', variant: 'destructive' });
+    }
+  };
+  
+  const openPasswordResetDialog = (member: TeamMember) => {
+    setPasswordResetMember(member);
+    setNewPassword('');
+    setIsPasswordResetDialogOpen(true);
+  };
+  
+  const handleResetPassword = async () => {
+    if (!orgId || !passwordResetMember || !newPassword) return;
+    
+    if (newPassword.length < 6) {
+      toast({ title: 'Error', description: 'Password must be at least 6 characters', variant: 'destructive' });
+      return;
+    }
+    
+    setIsResettingPassword(true);
+    try {
+      // Get the current user's ID token for authentication
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
+      
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+      
+      const response = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          email: passwordResetMember.email,
+          newPassword,
+          orgId,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset password');
+      }
+      
+      toast({ title: 'Password reset', description: `Password updated for ${passwordResetMember.email}` });
+      setIsPasswordResetDialogOpen(false);
+      setPasswordResetMember(null);
+      setNewPassword('');
+    } catch (error: any) {
+      console.error('[Settings] Error resetting password:', error);
+      toast({ title: 'Error', description: error.message || 'Failed to reset password', variant: 'destructive' });
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -688,25 +750,36 @@ export default function SettingsPage() {
                               </Badge>
                             )}
                             {canManageTeam && member.role !== 'owner' && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="icon" variant="ghost" data-testid={`button-remove-member-${member.id}`}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to remove {member.email} from your team? They will lose access to this organization.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleRemoveMember(member)}>Remove</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                              <>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  onClick={() => openPasswordResetDialog(member)}
+                                  title="Reset Password"
+                                  data-testid={`button-reset-password-${member.id}`}
+                                >
+                                  <KeyRound className="h-4 w-4" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button size="icon" variant="ghost" data-testid={`button-remove-member-${member.id}`}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to remove {member.email} from your team? They will lose access to this organization.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleRemoveMember(member)}>Remove</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
                             )}
                           </div>
                         </div>
@@ -829,6 +902,45 @@ export default function SettingsPage() {
             <Button onClick={handleInviteMember} disabled={isInviting || !inviteEmail.trim()} data-testid="button-send-invite">
               {isInviting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
               Send Invite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Password Reset Dialog */}
+      <Dialog open={isPasswordResetDialogOpen} onOpenChange={setIsPasswordResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for {passwordResetMember?.email}. They will need to use this password to log in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password (min 6 characters)"
+                data-testid="input-new-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                Make sure to share this password securely with the team member.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPasswordResetDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleResetPassword} 
+              disabled={isResettingPassword || newPassword.length < 6} 
+              data-testid="button-confirm-reset-password"
+            >
+              {isResettingPassword ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <KeyRound className="h-4 w-4 mr-2" />}
+              Reset Password
             </Button>
           </DialogFooter>
         </DialogContent>

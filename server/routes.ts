@@ -2389,5 +2389,137 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
     }
   });
 
+  // ===============================
+  // ADMIN: USER PASSWORD MANAGEMENT
+  // ===============================
+
+  // Helper to verify Firebase token and check admin role
+  async function verifyAdminAccess(authHeader: string | undefined, orgId: string): Promise<{ valid: boolean; error?: string; uid?: string }> {
+    if (!authHeader?.startsWith('Bearer ')) {
+      return { valid: false, error: 'Missing or invalid authorization header' };
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const admin = (await import('./firebase')).default;
+    
+    try {
+      // Verify the Firebase ID token
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      const requestingUid = decodedToken.uid;
+
+      // Check if user is org owner or admin in Firestore
+      const orgDoc = await firestore?.collection('orgs').doc(orgId).get();
+      if (!orgDoc?.exists) {
+        return { valid: false, error: 'Organization not found' };
+      }
+
+      const orgData = orgDoc.data();
+      const isOwner = orgData?.ownerUid === requestingUid;
+
+      if (isOwner) {
+        return { valid: true, uid: requestingUid };
+      }
+
+      // Check member role
+      const memberDoc = await firestore?.collection('orgs').doc(orgId).collection('members').doc(requestingUid).get();
+      if (!memberDoc?.exists) {
+        return { valid: false, error: 'Not a member of this organization' };
+      }
+
+      const memberData = memberDoc.data();
+      if (!['owner', 'admin'].includes(memberData?.role)) {
+        return { valid: false, error: 'Insufficient permissions - admin role required' };
+      }
+
+      return { valid: true, uid: requestingUid };
+    } catch (error) {
+      console.error('Token verification failed:', error);
+      return { valid: false, error: 'Invalid or expired token' };
+    }
+  }
+
+  // Reset a team member's password (admin only)
+  app.post("/api/admin/reset-password", async (req, res) => {
+    try {
+      const { email, newPassword, orgId } = req.body;
+
+      if (!email || !newPassword || !orgId) {
+        return res.status(400).json({ error: "Email, new password, and orgId are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      if (!isFirebaseAdminReady()) {
+        return res.status(503).json({ error: "Firebase Admin not available" });
+      }
+
+      // Verify the requesting user has admin access
+      const authResult = await verifyAdminAccess(req.headers.authorization, orgId);
+      if (!authResult.valid) {
+        return res.status(403).json({ error: authResult.error || 'Access denied' });
+      }
+
+      // Get user by email
+      const admin = (await import('./firebase')).default;
+      const userRecord = await admin.auth().getUserByEmail(email);
+
+      // Update the password
+      await admin.auth().updateUser(userRecord.uid, {
+        password: newPassword,
+      });
+
+      res.json({ 
+        success: true, 
+        message: `Password updated for ${email}` 
+      });
+    } catch (error: any) {
+      console.error("Error resetting password:", error);
+      if (error.code === 'auth/user-not-found') {
+        return res.status(404).json({ error: "User not found with that email" });
+      }
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
+  // Send password reset email to user (admin only)
+  app.post("/api/admin/send-password-reset", async (req, res) => {
+    try {
+      const { email, orgId } = req.body;
+
+      if (!email || !orgId) {
+        return res.status(400).json({ error: "Email and orgId are required" });
+      }
+
+      if (!isFirebaseAdminReady()) {
+        return res.status(503).json({ error: "Firebase Admin not available" });
+      }
+
+      // Verify the requesting user has admin access
+      const authResult = await verifyAdminAccess(req.headers.authorization, orgId);
+      if (!authResult.valid) {
+        return res.status(403).json({ error: authResult.error || 'Access denied' });
+      }
+
+      const admin = (await import('./firebase')).default;
+      
+      // Generate password reset link
+      const resetLink = await admin.auth().generatePasswordResetLink(email);
+
+      res.json({ 
+        success: true, 
+        message: `Password reset link generated for ${email}`,
+        resetLink // Admin can share this with the team member
+      });
+    } catch (error: any) {
+      console.error("Error generating password reset:", error);
+      if (error.code === 'auth/user-not-found') {
+        return res.status(404).json({ error: "User not found with that email" });
+      }
+      res.status(500).json({ error: "Failed to generate password reset link" });
+    }
+  });
+
   return httpServer;
 }
