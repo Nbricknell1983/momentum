@@ -2021,6 +2021,102 @@ TONE: Professional but warm. Confident but not pushy. Curious about THEIR busine
     }
   });
 
+  // Draft Email from Notes - generates follow-up emails based on call notes
+  app.post("/api/leads/draft-email-from-notes", async (req, res) => {
+    try {
+      const { 
+        businessName,
+        contactName,
+        notes,
+        recentActivities, // Array of recent activities with type, notes, createdAt
+        stage,
+        businessType,
+        location,
+        customInstructions // Optional: what specifically they asked for
+      } = req.body;
+
+      if (!businessName || !notes) {
+        return res.status(400).json({ error: "Business name and notes are required" });
+      }
+
+      // Build context from recent activities
+      let activityContext = '';
+      if (recentActivities && recentActivities.length > 0) {
+        const recentCalls = recentActivities
+          .filter((a: any) => a.type === 'call')
+          .slice(0, 3);
+        
+        if (recentCalls.length > 0) {
+          activityContext = recentCalls.map((a: any) => {
+            const date = new Date(a.createdAt);
+            const formattedDate = `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+            return `- Call on ${formattedDate}: ${a.notes || 'No notes'}`;
+          }).join('\n');
+        }
+      }
+
+      const prompt = `You are a professional business consultant drafting a follow-up email after a phone call.
+The client asked to receive some information via email. Generate a professional, personalized email based on the notes from the call.
+
+BUSINESS DETAILS:
+- Business Name: ${businessName}
+- Contact Name: ${contactName || 'the business owner'}
+- Business Type: ${businessType || 'Unknown'}
+- Location: ${location || 'Unknown'}
+- Pipeline Stage: ${stage || 'prospect'}
+
+YOUR NOTES FROM THE INTERACTION:
+${notes}
+
+${activityContext ? `RECENT CALL HISTORY:\n${activityContext}\n` : ''}
+${customInstructions ? `SPECIFIC REQUEST FROM LEAD:\n${customInstructions}\n` : ''}
+
+GUIDELINES:
+1. Start with a warm, personalized greeting referencing your conversation
+2. Acknowledge what they asked for and provide it clearly
+3. Structure information in easy-to-scan format (bullet points if multiple items)
+4. Include a clear next step or call-to-action
+5. Keep it concise - respect their time
+6. Professional but warm tone - you've already spoken, so be friendly
+7. End with an invitation to discuss further
+
+Return the email in this JSON format:
+{
+  "subject": "Email subject line - make it specific to what you're sending",
+  "greeting": "Personalized greeting",
+  "body": "Main email body with the information they requested",
+  "callToAction": "Clear next step suggestion",
+  "signature": "Professional sign-off"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 800,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      const email = JSON.parse(content);
+
+      // Compose full email
+      const fullEmail = `${email.greeting}\n\n${email.body}\n\n${email.callToAction}\n\n${email.signature}`;
+
+      res.json({
+        subject: email.subject || 'Following up on our conversation',
+        body: fullEmail,
+        greeting: email.greeting,
+        mainBody: email.body,
+        callToAction: email.callToAction,
+        signature: email.signature,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error generating draft email:", error);
+      res.status(500).json({ error: "Failed to generate draft email" });
+    }
+  });
+
   // ===============================
   // SMART SCHEDULING API
   // ===============================

@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
@@ -316,6 +317,13 @@ function NurtureDrawer({
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
   
+  // Draft Email from Notes state
+  const [draftEmail, setDraftEmail] = useState<{ subject: string; body: string } | null>(null);
+  const [editableDraftBody, setEditableDraftBody] = useState('');
+  const [editableDraftSubject, setEditableDraftSubject] = useState('');
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState('');
+  
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const leadActivities = lead 
@@ -460,6 +468,83 @@ function NurtureDrawer({
       setIsGeneratingScripts(false);
     }
   }, [lead, leadActivities, buildContextSummary, isCacheValid, toast]);
+
+  // Generate Draft Email from Notes
+  const generateDraftEmail = useCallback(async () => {
+    if (!lead || !lead.notes) {
+      toast({
+        title: 'Notes Required',
+        description: 'Add notes about your conversation before drafting an email',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setIsGeneratingDraft(true);
+    
+    try {
+      const recentActivities = leadActivities.map(a => ({
+        type: a.type,
+        notes: a.notes,
+        createdAt: a.createdAt,
+      }));
+
+      const response = await fetch('/api/leads/draft-email-from-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: lead.companyName,
+          contactName: lead.contactName,
+          notes: lead.notes,
+          recentActivities,
+          stage: lead.stage,
+          businessType: lead.territory,
+          location: lead.address || lead.territory,
+          customInstructions: customInstructions || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate draft email');
+      }
+
+      const data = await response.json();
+      setDraftEmail({ subject: data.subject, body: data.body });
+      setEditableDraftSubject(data.subject);
+      setEditableDraftBody(data.body);
+      
+      toast({
+        title: 'Email drafted',
+        description: 'Review and copy the email below',
+      });
+    } catch (err) {
+      console.error('Error generating draft email:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to generate draft email',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  }, [lead, leadActivities, customInstructions, toast]);
+
+  const copyDraftEmail = useCallback(() => {
+    const fullEmail = `Subject: ${editableDraftSubject}\n\n${editableDraftBody}`;
+    navigator.clipboard.writeText(fullEmail);
+    toast({
+      title: 'Copied',
+      description: 'Email copied to clipboard',
+    });
+  }, [editableDraftSubject, editableDraftBody, toast]);
+
+  // Reset draft email state when lead changes
+  useEffect(() => {
+    setDraftEmail(null);
+    setEditableDraftBody('');
+    setEditableDraftSubject('');
+    setCustomInstructions('');
+  }, [lead?.id]);
 
   // Auto-generate scripts when drawer opens with a lead
   useEffect(() => {
@@ -859,6 +944,108 @@ function NurtureDrawer({
                 <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">AI scripts will generate automatically</p>
                 <p className="text-xs">Using NEPQ, Jeb Blount & Chris Voss frameworks with your lead's history</p>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Draft Email from Notes Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-medium flex items-center gap-2">
+                <Mail className="h-4 w-4 text-primary" />
+                Draft Email from Notes
+              </h3>
+              <Button 
+                size="sm" 
+                variant={lead.notes ? "default" : "outline"}
+                onClick={generateDraftEmail}
+                disabled={isGeneratingDraft || !lead.notes}
+                data-testid="button-draft-email"
+              >
+                {isGeneratingDraft ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    Drafting...
+                  </>
+                ) : draftEmail ? (
+                  'Regenerate'
+                ) : (
+                  'Draft Email'
+                )}
+              </Button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground">
+              Asked to email information after a call? AI will draft a follow-up email based on your notes.
+            </p>
+
+            {!lead.notes && (
+              <div className="text-center py-4 text-muted-foreground bg-muted/50 rounded-md">
+                <p className="text-sm">Add notes about your conversation first</p>
+              </div>
+            )}
+
+            {lead.notes && !draftEmail && !isGeneratingDraft && (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Optional: What specifically did they ask for? (e.g., 'pricing info', 'case studies')"
+                  value={customInstructions}
+                  onChange={(e) => setCustomInstructions(e.target.value)}
+                  className="text-sm min-h-[60px]"
+                  data-testid="input-custom-instructions"
+                />
+              </div>
+            )}
+
+            {isGeneratingDraft && (
+              <div className="flex items-center justify-center py-6 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                <span>Drafting email from your notes...</span>
+              </div>
+            )}
+
+            {draftEmail && (
+              <div className="space-y-3 bg-muted/30 rounded-md p-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Subject</Label>
+                  <Input
+                    value={editableDraftSubject}
+                    onChange={(e) => setEditableDraftSubject(e.target.value)}
+                    className="text-sm"
+                    data-testid="input-draft-subject"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Email Body</Label>
+                  <Textarea
+                    value={editableDraftBody}
+                    onChange={(e) => setEditableDraftBody(e.target.value)}
+                    className="text-sm min-h-[200px]"
+                    data-testid="input-draft-body"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    onClick={copyDraftEmail}
+                    className="flex-1"
+                    data-testid="button-copy-draft"
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy Email
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={generateDraftEmail}
+                    disabled={isGeneratingDraft}
+                    data-testid="button-regenerate-draft"
+                  >
+                    Regenerate
+                  </Button>
+                </div>
               </div>
             )}
           </div>
