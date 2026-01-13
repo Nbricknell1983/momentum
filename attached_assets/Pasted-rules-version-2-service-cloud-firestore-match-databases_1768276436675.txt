@@ -1,0 +1,200 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ---------- HELPERS ---------- */
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isOrgOwner(orgId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/orgs/$(orgId)).data.ownerUid == request.auth.uid;
+    }
+
+    function isOrgMember(orgId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.active == true;
+    }
+
+    /* ---------- USERS ---------- */
+    match /users/{uid} {
+      allow read, create, update: if isSelf(uid);
+      allow delete: if false;
+    }
+
+    /* ---------- ORGS ---------- */
+    match /orgs/{orgId} {
+
+      /* Org bootstrap */
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      /* Org access */
+      allow read, update: if isOrgOwner(orgId) || isOrgMember(orgId);
+      allow delete: if false;
+
+      /* ---------- MEMBERS ---------- */
+      match /members/{uid} {
+        allow create: if isSelf(uid);
+        allow read: if isSelf(uid) || isOrgOwner(orgId) || isOrgMember(orgId);
+        allow update, delete: if isOrgOwner(orgId);
+      }
+
+      /* ---------- LEADS ---------- */
+      match /leads/{leadId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+
+        match /history/{eventId} {
+          allow read, create: if isOrgOwner(orgId) || isOrgMember(orgId);
+          allow update, delete: if false;
+        }
+      }
+
+      /* ---------- DEALS ---------- */
+      match /deals/{dealId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+
+        match /history/{eventId} {
+          allow read, create: if isOrgOwner(orgId) || isOrgMember(orgId);
+          allow update, delete: if false;
+        }
+      }
+
+      /* ---------- ORG-LEVEL STRATEGY JOBS ---------- */
+      match /strategyJobs/{jobId} {
+        allow read, create: if isOrgOwner(orgId) || isOrgMember(orgId);
+        allow update, delete: if false;
+      }
+
+      /* ---------- PAIRING CODES ---------- */
+      match /pairingCodes/{pairId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+
+      /* ---------- REJECTED BUSINESSES ---------- */
+      match /rejectedBusinesses/{rejectId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+
+      /* ---------- CLIENTS ---------- */
+      match /clients/{clientId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+
+        match /history/{eventId} {
+          allow read, create: if isOrgOwner(orgId) || isOrgMember(orgId);
+          allow update, delete: if false;
+        }
+
+        match /deliverables/{deliverableId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /strategySessions/{sessionId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /strategyPlan/{planId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /strategyPlans/{planId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /strategyEngine/{docId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /strategyActions/{actionId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /integrations/{integrationId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /insights/{insightId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /marketResearch/{reportId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /content/{contentId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /contentDrafts/{draftId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /share/{shareId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /strategyJobs/{jobId} {
+          allow read, create: if isOrgOwner(orgId) || isOrgMember(orgId);
+          allow update, delete: if false;
+        }
+
+        match /meetings/{meetingId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /evidenceTasks/{taskId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+
+        match /analyticsSnapshots/{snapId} {
+          allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+        }
+      }
+
+      /* ---------- ACTION QUEUE ---------- */
+      match /actionQueue/{actionId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+
+      /* ---------- ACTIVITIES ---------- */
+      match /activities/{activityId} {
+        allow read, create: if isOrgOwner(orgId) || isOrgMember(orgId);
+        allow update, delete: if false;
+      }
+
+      /* ---------- TASKS ---------- */
+      match /tasks/{taskId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+
+      /* ---------- DAILY PLANS ---------- */
+      match /dailyPlans/{planId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+
+      /* ---------- AI ---------- */
+      match /aiBriefs/{briefId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+
+      match /aiDebriefs/{debriefId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+
+      match /actionRecommendations/{recId} {
+        allow read, create, update, delete: if isOrgOwner(orgId) || isOrgMember(orgId);
+      }
+    }
+
+    /* ---------- DEFAULT DENY ---------- */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
