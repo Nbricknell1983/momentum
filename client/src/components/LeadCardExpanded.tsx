@@ -68,28 +68,43 @@ function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
     const cadenceId = (selectedCadence && selectedCadence.mode === mode) 
       ? selectedCadenceId 
       : cadenceList[0]?.id;
+    
+    console.log('[NurtureEnroll] Starting enrollment', { leadId: lead.id, mode, cadenceId, orgId, authReady });
+    
     if (cadenceId) {
       const cadence = cadences.find(c => c.id === cadenceId);
-      if (!cadence) return;
+      if (!cadence) {
+        console.error('[NurtureEnroll] Cadence not found:', cadenceId);
+        return;
+      }
       
       dispatch(enrollInNurture({ leadId: lead.id, mode, cadenceId }));
       setSelectedCadenceId('');
       
       // Persist to Firestore - must have both orgId and authReady
+      console.log('[NurtureEnroll] Checking Firestore persistence conditions:', { orgId, authReady });
       if (orgId && authReady) {
-        const now = new Date();
-        const { calculateNextTouchDate } = await import('@/lib/types');
-        const nurtureUpdates: Partial<Lead> = {
-          nurtureMode: mode,
-          nurtureCadenceId: cadenceId,
-          nurtureStatus: 'new',
-          nurtureStepIndex: 0,
-          enrolledInNurtureAt: now,
-          nextTouchAt: calculateNextTouchDate(now, 0, cadence),
-          touchesNoResponse: 0,
-          updatedAt: now,
-        };
-        updateLeadInFirestore(orgId, lead.id, nurtureUpdates, authReady).catch(console.error);
+        try {
+          const now = new Date();
+          const { calculateNextTouchDate } = await import('@/lib/types');
+          const nurtureUpdates: Partial<Lead> = {
+            nurtureMode: mode,
+            nurtureCadenceId: cadenceId,
+            nurtureStatus: 'new',
+            nurtureStepIndex: 0,
+            enrolledInNurtureAt: now,
+            nextTouchAt: calculateNextTouchDate(now, 0, cadence),
+            touchesNoResponse: 0,
+            updatedAt: now,
+          };
+          console.log('[NurtureEnroll] Persisting to Firestore:', nurtureUpdates);
+          await updateLeadInFirestore(orgId, lead.id, nurtureUpdates, authReady);
+          console.log('[NurtureEnroll] Firestore persistence successful');
+        } catch (error) {
+          console.error('[NurtureEnroll] Firestore persistence failed:', error);
+        }
+      } else {
+        console.warn('[NurtureEnroll] Skipping Firestore persistence - orgId or authReady is false');
       }
     }
   };
