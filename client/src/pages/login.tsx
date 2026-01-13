@@ -6,18 +6,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail } from 'lucide-react';
 import { SiGoogle } from 'react-icons/si';
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, user, loading } = useAuth();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, user, loading } = useAuth();
   const { toast } = useToast();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     if (!loading && user) {
@@ -108,6 +112,36 @@ export default function LoginPage() {
     }
   }
 
+  async function handleForgotPassword() {
+    if (!resetEmail) {
+      toast({
+        title: 'Email required',
+        description: 'Please enter your email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      await resetPassword(resetEmail);
+      toast({
+        title: 'Reset email sent',
+        description: 'Check your inbox for a password reset link',
+      });
+      setForgotPasswordOpen(false);
+      setResetEmail('');
+    } catch (error: any) {
+      toast({
+        title: 'Reset failed',
+        description: error.message || 'Could not send reset email',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  }
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md">
@@ -182,6 +216,17 @@ export default function LoginPage() {
                 )}
                 Sign In
               </Button>
+              <button
+                type="button"
+                className="w-full text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+                onClick={() => {
+                  setResetEmail(email);
+                  setForgotPasswordOpen(true);
+                }}
+                data-testid="button-forgot-password"
+              >
+                Forgot password?
+              </button>
             </TabsContent>
             
             <TabsContent value="signup" className="space-y-4 mt-4">
@@ -224,6 +269,43 @@ export default function LoginPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-forgot-password">
+          <DialogHeader>
+            <DialogTitle>Reset your password</DialogTitle>
+            <DialogDescription>
+              Enter your email address and we'll send you a link to reset your password.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email">Email</Label>
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="you@example.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                data-testid="input-reset-email"
+              />
+            </div>
+            <Button
+              className="w-full gap-2"
+              onClick={handleForgotPassword}
+              disabled={isResetting}
+              data-testid="button-send-reset"
+            >
+              {isResetting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Mail className="h-4 w-4" />
+              )}
+              Send Reset Link
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

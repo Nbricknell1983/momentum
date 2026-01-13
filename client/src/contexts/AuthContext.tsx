@@ -8,6 +8,7 @@ import {
   createUserWithEmailAndPassword, 
   signOut as firebaseSignOut, 
   onAuthStateChanged,
+  sendPasswordResetEmail,
   doc,
   getDoc,
   setDoc,
@@ -33,6 +34,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -252,6 +254,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function resetPassword(email: string) {
+    try {
+      console.log('[Auth] Sending password reset email to:', email);
+      await sendPasswordResetEmail(auth, email);
+      console.log('[Auth] Password reset email sent');
+    } catch (error) {
+      console.error('[Auth] Password reset error:', error);
+      throw error;
+    }
+  }
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -264,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithEmail,
       signUpWithEmail,
       signOut,
+      resetPassword,
     }}>
       {children}
     </AuthContext.Provider>
