@@ -294,7 +294,7 @@ export default function SettingsPage() {
   const dispatch = useDispatch();
   const { orgId, user, authReady } = useAuth();
   const { toast } = useToast();
-  const cadences = useSelector((state: RootState) => state.cadences.cadences);
+  const cadences = useSelector((state: RootState) => state.app.cadences);
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCadence, setEditingCadence] = useState<Cadence | null>(null);
