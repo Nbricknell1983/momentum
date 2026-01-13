@@ -1,0 +1,37 @@
+index-DU8Q7Du0.js:3945 [Firestore] READ DENIED/FAILED {operation: 'READ', path: 'orgs/n1mJyViaTf8SiDF1iaZv/tasks', uid: 'inzy8Uf4EiXyhQ63xOYNIH9K3ts2', orgId: 'n1mJyViaTf8SiDF1iaZv', success: false, …} FirebaseError: The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/prospectr-a8ef3/firestore/indexes?create_composite=Ck1wcm9qZWN0cy9wcm9zcGVjdHItYThlZjMvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL3Rhc2tzL2luZGV4ZXMvXxABGgoKBnVzZXJJZBABGg8KC3BsYW5EYXRlS2V5EAEaDAoIX19uYW1lX18QAQ
+de @ index-DU8Q7Du0.js:3945
+fqe @ index-DU8Q7Du0.js:3945
+await in fqe
+Se @ index-DU8Q7Du0.js:3957
+await in Se
+onClick @ index-DU8Q7Du0.js:3957
+fre @ index-DU8Q7Du0.js:37
+pre @ index-DU8Q7Du0.js:37
+mre @ index-DU8Q7Du0.js:37
+W4 @ index-DU8Q7Du0.js:37
+C9 @ index-DU8Q7Du0.js:37
+(anonymous) @ index-DU8Q7Du0.js:37
+uO @ index-DU8Q7Du0.js:40
+X8 @ index-DU8Q7Du0.js:37
+PE @ index-DU8Q7Du0.js:37
+Lk @ index-DU8Q7Du0.js:37
+kre @ index-DU8Q7Du0.js:37Understand this error
+index-DU8Q7Du0.js:3945 [Firestore] WRITE DENIED/FAILED {operation: 'WRITE', path: 'orgs/n1mJyViaTf8SiDF1iaZv/leads/1625e07e-2109-4a0b-982d-bf94cf3675ba', uid: 'inzy8Uf4EiXyhQ63xOYNIH9K3ts2', orgId: 'n1mJyViaTf8SiDF1iaZv', success: false, …} FirebaseError: No document to update: projects/prospectr-a8ef3/databases/(default)/documents/orgs/n1mJyViaTf8SiDF1iaZv/leads/1625e07e-2109-4a0b-982d-bf94cf3675ba
+de @ index-DU8Q7Du0.js:3945
+fu @ index-DU8Q7Du0.js:3945
+await in fu
+Se @ index-DU8Q7Du0.js:3957
+await in Se
+onClick @ index-DU8Q7Du0.js:3957
+fre @ index-DU8Q7Du0.js:37
+pre @ index-DU8Q7Du0.js:37
+mre @ index-DU8Q7Du0.js:37
+W4 @ index-DU8Q7Du0.js:37
+C9 @ index-DU8Q7Du0.js:37
+(anonymous) @ index-DU8Q7Du0.js:37
+uO @ index-DU8Q7Du0.js:40
+X8 @ index-DU8Q7Du0.js:37
+PE @ index-DU8Q7Du0.js:37
+Lk @ index-DU8Q7Du0.js:37
+kre @ index-DU8Q7Du0.js:37Understand this error
+index-DU8Q7Du0.js:3957 [LeadCardExpanded] Smart scheduling failed: FirebaseError: No document to update: projects/prospectr-a8ef3/databases/(default)/documents/orgs/n1mJyViaTf8SiDF1iaZv/leads/1625e07e-2109-4a0b-982d-bf94cf3675ba
