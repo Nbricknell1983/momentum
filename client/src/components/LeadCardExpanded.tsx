@@ -350,8 +350,12 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         console.log('[LeadCard] Persisting to Firestore:', { orgId, leadId: lead.id, firestoreUpdates });
         await updateLeadInFirestore(orgId, lead.id, firestoreUpdates, authReady);
         console.log('[LeadCard] Firestore update successful');
+        if (stage === 'nurture') {
+          toast({ title: 'Moved to Nurture', description: `Enrolled in passive cadence and saved to database` });
+        }
       } catch (error) {
         console.error('Error updating lead stage:', error);
+        toast({ title: 'Error', description: 'Failed to save stage change', variant: 'destructive' });
       }
     } else {
       console.log('[LeadCard] Skipping Firestore update - missing orgId or authReady:', { orgId, authReady });
