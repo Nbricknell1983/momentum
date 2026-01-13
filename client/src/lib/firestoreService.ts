@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit, setDoc } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction, RejectedBusiness } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction, RejectedBusiness, Organization, TeamMember } from './types';
 import { calculateClientHealth, createDefaultDailyPlanDoc, formatDateDDMMYYYY, activityTypeToTaskType, getCurrentTimeSlot, getTodayDDMMYYYY, toPlanDateKey, ACTIVITY_LABELS } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -81,6 +81,186 @@ function checkAuthReady(orgId: string | null, authReady: boolean, operation: str
   }
   
   return true;
+}
+
+// ============ Organization Functions ============
+
+export async function fetchOrganization(orgId: string, authReady: boolean = false): Promise<Organization | null> {
+  const path = `orgs/${orgId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return null;
+  }
+  
+  try {
+    const orgRef = doc(db, 'orgs', orgId);
+    const snapshot = await getDoc(orgRef);
+    
+    if (!snapshot.exists()) {
+      logFirestoreOperation('READ', path, orgId, true);
+      return null;
+    }
+    
+    const org = {
+      id: snapshot.id,
+      ...convertTimestampToDate(snapshot.data()),
+    } as Organization;
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return org;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateOrganization(
+  orgId: string, 
+  updates: Partial<Omit<Organization, 'id' | 'createdAt' | 'ownerId'>>,
+  authReady: boolean = false
+): Promise<void> {
+  const path = `orgs/${orgId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'UPDATE', path)) {
+    throw new Error('Cannot update organization: not authenticated or no orgId');
+  }
+  
+  try {
+    const orgRef = doc(db, 'orgs', orgId);
+    const dataToSave = convertDatesToTimestamp({
+      ...removeUndefinedFields(updates),
+      updatedAt: new Date(),
+    });
+    await updateDoc(orgRef, dataToSave);
+    
+    logFirestoreOperation('UPDATE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('UPDATE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function createOrganization(
+  org: Omit<Organization, 'id' | 'createdAt' | 'updatedAt'>,
+  authReady: boolean = false
+): Promise<Organization> {
+  const tempOrgId = 'temp'; // For logging only
+  const path = `orgs`;
+  
+  if (!authReady || !auth.currentUser) {
+    console.error('[Firestore] BLOCKED: CREATE org - authReady is false or no user');
+    throw new Error('Cannot create organization: not authenticated');
+  }
+  
+  try {
+    const dataToSave = convertDatesToTimestamp({
+      ...removeUndefinedFields(org),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const orgsRef = collection(db, 'orgs');
+    const docRef = await addDoc(orgsRef, dataToSave);
+    
+    logFirestoreOperation('CREATE', `${path}/${docRef.id}`, docRef.id, true);
+    return { ...org, id: docRef.id, createdAt: new Date(), updatedAt: new Date() } as Organization;
+  } catch (error: any) {
+    logFirestoreOperation('CREATE', path, tempOrgId, false, error);
+    throw error;
+  }
+}
+
+// ============ Team Member Functions ============
+
+export async function fetchTeamMembers(orgId: string, authReady: boolean = false): Promise<TeamMember[]> {
+  const path = `orgs/${orgId}/members`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const membersRef = collection(db, 'orgs', orgId, 'members');
+    const q = query(membersRef, orderBy('joinedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const members = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...convertTimestampToDate(doc.data()),
+    })) as TeamMember[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return members;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function addTeamMember(
+  orgId: string,
+  member: Omit<TeamMember, 'id' | 'joinedAt'>,
+  authReady: boolean = false
+): Promise<TeamMember> {
+  const path = `orgs/${orgId}/members`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot add team member: not authenticated or no orgId');
+  }
+  
+  try {
+    const dataToSave = convertDatesToTimestamp({
+      ...removeUndefinedFields(member),
+      joinedAt: new Date(),
+    });
+    const membersRef = collection(db, 'orgs', orgId, 'members');
+    const docRef = await addDoc(membersRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...member, id: docRef.id, joinedAt: new Date() } as TeamMember;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateTeamMember(
+  orgId: string,
+  memberId: string,
+  updates: Partial<Omit<TeamMember, 'id' | 'joinedAt'>>,
+  authReady: boolean = false
+): Promise<void> {
+  const path = `orgs/${orgId}/members/${memberId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'UPDATE', path)) {
+    throw new Error('Cannot update team member: not authenticated or no orgId');
+  }
+  
+  try {
+    const memberRef = doc(db, 'orgs', orgId, 'members', memberId);
+    await updateDoc(memberRef, removeUndefinedFields(updates));
+    
+    logFirestoreOperation('UPDATE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('UPDATE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function removeTeamMember(orgId: string, memberId: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/members/${memberId}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot remove team member: not authenticated or no orgId');
+  }
+  
+  try {
+    const memberRef = doc(db, 'orgs', orgId, 'members', memberId);
+    await deleteDoc(memberRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
 }
 
 export async function fetchLeads(orgId: string, authReady: boolean = false): Promise<Lead[]> {

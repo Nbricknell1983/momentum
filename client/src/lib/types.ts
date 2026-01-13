@@ -312,6 +312,49 @@ export interface RejectedBusiness {
   originalLeadId?: string;
 }
 
+// Organization / Tenant settings for multi-tenancy
+export type TeamMemberRole = 'owner' | 'admin' | 'member';
+
+export interface TeamMember {
+  id: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+  role: TeamMemberRole;
+  joinedAt: Date;
+  invitedBy?: string;
+  status: 'active' | 'pending' | 'disabled';
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  industry?: string;
+  email?: string;
+  phone?: string;
+  timezone: string;
+  serviceAreas?: string;
+  logoUrl?: string;
+  settings: {
+    enableEmergencyRules?: boolean;
+    defaultCurrency?: string;
+    fiscalYearStart?: number; // Month 1-12
+  };
+  createdAt: Date;
+  updatedAt: Date;
+  ownerId: string;
+}
+
+export const AUSTRALIAN_TIMEZONES = [
+  { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
+  { value: 'Australia/Melbourne', label: 'Melbourne (AEST/AEDT)' },
+  { value: 'Australia/Brisbane', label: 'Brisbane (AEST)' },
+  { value: 'Australia/Perth', label: 'Perth (AWST)' },
+  { value: 'Australia/Adelaide', label: 'Adelaide (ACST/ACDT)' },
+  { value: 'Australia/Darwin', label: 'Darwin (ACST)' },
+  { value: 'Australia/Hobart', label: 'Hobart (AEST/AEDT)' },
+];
+
 export interface Task {
   id: string;
   userId: string;
