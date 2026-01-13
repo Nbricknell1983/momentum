@@ -189,7 +189,7 @@ export default function PipelinePage() {
                 condition: stage === 'nurture' && lead && lead.nurtureMode === 'none'
               });
               
-              if (stage === 'nurture' && lead && lead.nurtureMode === 'none') {
+              if (stage === 'nurture' && lead && (!lead.nurtureMode || lead.nurtureMode === 'none')) {
                 const passiveCadence = cadences.find(c => c.mode === 'passive');
                 console.log('[Pipeline] Found passive cadence:', passiveCadence?.id);
                 if (passiveCadence) {

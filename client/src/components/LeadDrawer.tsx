@@ -74,7 +74,7 @@ export default function LeadDrawer() {
       try {
         const firestoreUpdates: Partial<Lead> = { stage, updatedAt: new Date() };
         
-        if (stage === 'nurture' && lead.nurtureMode === 'none') {
+        if (stage === 'nurture' && (!lead.nurtureMode || lead.nurtureMode === 'none')) {
           const passiveCadence = cadences.find(c => c.mode === 'passive');
           if (passiveCadence) {
             const now = new Date();
@@ -107,7 +107,7 @@ export default function LeadDrawer() {
         try {
           const firestoreUpdates: Partial<Lead> = { stage: newStage, updatedAt: new Date() };
           
-          if (newStage === 'nurture' && lead.nurtureMode === 'none') {
+          if (newStage === 'nurture' && (!lead.nurtureMode || lead.nurtureMode === 'none')) {
             const passiveCadence = cadences.find(c => c.mode === 'passive');
             if (passiveCadence) {
               const now = new Date();

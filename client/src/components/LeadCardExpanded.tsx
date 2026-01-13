@@ -330,7 +330,8 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         });
         
         // If moving to nurture stage and lead is not already in nurture, add nurture enrollment
-        if (stage === 'nurture' && lead.nurtureMode === 'none') {
+        // Check for 'none' or undefined (leads from Firestore may not have nurtureMode set)
+        if (stage === 'nurture' && (!lead.nurtureMode || lead.nurtureMode === 'none')) {
           const passiveCadence = cadences.find(c => c.mode === 'passive');
           console.log('[LeadCard] Found passive cadence:', passiveCadence?.id);
           if (passiveCadence) {
@@ -369,7 +370,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         try {
           const firestoreUpdates: Partial<Lead> = { stage: newStage, updatedAt: new Date() };
           
-          if (newStage === 'nurture' && lead.nurtureMode === 'none') {
+          if (newStage === 'nurture' && (!lead.nurtureMode || lead.nurtureMode === 'none')) {
             const passiveCadence = cadences.find(c => c.mode === 'passive');
             if (passiveCadence) {
               const now = new Date();
