@@ -1,8 +1,6 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { Lead, Activity, Task, DailyMetrics, UserProfile, Stage, NurtureMode, NurtureStatus, TouchChannel, Touch, Cadence, DEFAULT_CADENCES, calculateNextTouchDate, calculateNurturePriorityScore, DailyPlan, ActionQueueItem, TimeBlock, DailyPlanSummary, DailyDebrief, RouteStop, createDefaultDailyPlan, BATTLE_SCORE_POINTS, ActionType, NBAAction, FocusModeSettings, NBAActionStatus, Client, HealthStatus } from '@/lib/types';
-import { mockLeads, mockActivities, mockTasks, mockDailyMetrics, mockUser } from '@/lib/mockData';
-
-// todo: remove mock functionality - replace with Firebase
+// All data is now fetched from Firestore in App.tsx
 
 interface AppState {
   user: UserProfile | null;
@@ -30,14 +28,14 @@ interface AppState {
 }
 
 const initialState: AppState = {
-  user: mockUser,
-  leads: mockLeads,
+  user: null,
+  leads: [],
   clients: [],
-  activities: mockActivities,
-  tasks: mockTasks,
+  activities: [],
+  tasks: [],
   touches: [],
   cadences: [...DEFAULT_CADENCES],
-  dailyMetrics: mockDailyMetrics,
+  dailyMetrics: [],
   dailyPlan: createDefaultDailyPlan(new Date()),
   selectedLeadId: null,
   selectedClientId: null,
