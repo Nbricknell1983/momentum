@@ -315,6 +315,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const trafficStatus = getTrafficLightStatus(lead);
 
   const handleStageChange = async (stage: Stage) => {
+    console.log('[LeadCard] handleStageChange called:', { leadId: lead.id, stage, currentNurtureMode: lead.nurtureMode });
     dispatch(updateLeadStage({ leadId: lead.id, stage }));
     
     // Persist to Firestore with nurture enrollment if moving to nurture stage
@@ -322,9 +323,16 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
       try {
         const firestoreUpdates: Partial<Lead> = { stage, updatedAt: new Date() };
         
+        console.log('[LeadCard] Checking nurture enrollment:', { 
+          stage, 
+          nurtureMode: lead.nurtureMode,
+          shouldEnroll: stage === 'nurture' && lead.nurtureMode === 'none'
+        });
+        
         // If moving to nurture stage and lead is not already in nurture, add nurture enrollment
         if (stage === 'nurture' && lead.nurtureMode === 'none') {
           const passiveCadence = cadences.find(c => c.mode === 'passive');
+          console.log('[LeadCard] Found passive cadence:', passiveCadence?.id);
           if (passiveCadence) {
             const now = new Date();
             firestoreUpdates.nurtureMode = 'passive';
@@ -334,13 +342,18 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
             firestoreUpdates.enrolledInNurtureAt = now;
             firestoreUpdates.nextTouchAt = calculateNextTouchDate(now, 0, passiveCadence);
             firestoreUpdates.touchesNoResponse = 0;
+            console.log('[LeadCard] Adding nurture enrollment fields:', firestoreUpdates);
           }
         }
         
+        console.log('[LeadCard] Persisting to Firestore:', { orgId, leadId: lead.id, firestoreUpdates });
         await updateLeadInFirestore(orgId, lead.id, firestoreUpdates, authReady);
+        console.log('[LeadCard] Firestore update successful');
       } catch (error) {
         console.error('Error updating lead stage:', error);
       }
+    } else {
+      console.log('[LeadCard] Skipping Firestore update - missing orgId or authReady:', { orgId, authReady });
     }
   };
 
