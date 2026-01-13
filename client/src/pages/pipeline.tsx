@@ -181,8 +181,17 @@ export default function PipelinePage() {
               
               // If moving to nurture stage and lead is not already in nurture, add nurture enrollment fields
               // This mirrors the auto-enrollment logic in the Redux reducer
+              console.log('[Pipeline] Checking nurture enrollment:', { 
+                stage, 
+                leadId,
+                leadNurtureMode: lead?.nurtureMode,
+                hasLead: !!lead,
+                condition: stage === 'nurture' && lead && lead.nurtureMode === 'none'
+              });
+              
               if (stage === 'nurture' && lead && lead.nurtureMode === 'none') {
                 const passiveCadence = cadences.find(c => c.mode === 'passive');
+                console.log('[Pipeline] Found passive cadence:', passiveCadence?.id);
                 if (passiveCadence) {
                   const now = new Date();
                   firestoreUpdates.nurtureMode = 'passive';
@@ -192,11 +201,13 @@ export default function PipelinePage() {
                   firestoreUpdates.enrolledInNurtureAt = now;
                   firestoreUpdates.nextTouchAt = calculateNextTouchDate(now, 0, passiveCadence);
                   firestoreUpdates.touchesNoResponse = 0;
-                  console.log('[Pipeline] Auto-enrolling in passive nurture:', { leadId, cadenceId: passiveCadence.id });
+                  console.log('[Pipeline] Auto-enrolling in passive nurture:', { leadId, cadenceId: passiveCadence.id, firestoreUpdates });
                 }
               }
               
+              console.log('[Pipeline] Persisting to Firestore:', { orgId, leadId, firestoreUpdates });
               await updateLeadInFirestore(orgId, leadId, firestoreUpdates, authReady);
+              console.log('[Pipeline] Firestore update successful');
             }
           } catch (error) {
             console.error('Error updating lead stage in Firestore:', error);
