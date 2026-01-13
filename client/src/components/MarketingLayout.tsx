@@ -150,23 +150,6 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
               </ul>
             </div>
 
-            <div>
-              <h4 className="font-semibold mb-4">Contact</h4>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 flex-shrink-0" />
-                  <span>Brisbane, QLD, Australia</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 flex-shrink-0" />
-                  <a href="mailto:hello@battlescore.com.au" className="hover:text-primary">hello@battlescore.com.au</a>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 flex-shrink-0" />
-                  <a href="tel:+61700000000" className="hover:text-primary">+61 7 0000 0000</a>
-                </li>
-              </ul>
-            </div>
           </div>
 
           <div className="border-t mt-8 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">

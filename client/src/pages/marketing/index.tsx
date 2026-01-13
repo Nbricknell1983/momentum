@@ -1,13 +1,27 @@
+import { useState } from 'react';
 import MarketingLayout from '@/components/MarketingLayout';
 import SEOHead, { localBusinessSchema } from '@/components/SEOHead';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 import { Link } from 'wouter';
 import { 
   ChevronRight, Target, TrendingUp, Users, Zap, 
   BarChart3, Lightbulb, Award, CheckCircle2, ArrowRight,
-  Building2, Briefcase, LineChart, Clock
+  Building2, Briefcase, LineChart, Clock, Send, Calendar
 } from 'lucide-react';
+
+const contactServices = [
+  'Business Consulting',
+  'Sales Coaching',
+  'Growth Strategy',
+  'Leadership Development',
+  'Other',
+];
 
 const services = [
   {
@@ -58,6 +72,22 @@ const benefits = [
 ];
 
 export default function MarketingHome() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const { toast } = useToast();
+
+  const handleContactSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setIsSubmitting(false);
+    setSubmitted(true);
+    toast({
+      title: 'Message sent!',
+      description: "We'll get back to you within 24 hours.",
+    });
+  };
+
   const homeSchema = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -90,35 +120,167 @@ export default function MarketingHome() {
         structuredData={homeSchema}
       />
 
-      <section className="relative py-20 lg:py-32 overflow-hidden">
+      <section className="relative py-16 lg:py-24 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background" />
         <div className="container mx-auto px-4 relative">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
-              <Target className="h-4 w-4" />
-              Brisbane's Trusted Business Partner
+          <div className="grid lg:grid-cols-2 gap-12 items-start">
+            <div className="max-w-xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
+                <Target className="h-4 w-4" />
+                Brisbane's Trusted Business Partner
+              </div>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
+                Turn Business Challenges Into{' '}
+                <span className="text-primary">Competitive Advantages</span>
+              </h1>
+              <p className="text-xl text-muted-foreground mb-8">
+                Expert business consulting for Brisbane SMEs. We help you build momentum, 
+                close more deals, and achieve sustainable growth with proven strategies.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Link href="/services">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto" data-testid="button-hero-services">
+                    View Our Services
+                    <ChevronRight className="h-5 w-5 ml-2" />
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-              Turn Business Challenges Into{' '}
-              <span className="text-primary">Competitive Advantages</span>
-            </h1>
-            <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
-              Expert business consulting for Brisbane SMEs. We help you build momentum, 
-              close more deals, and achieve sustainable growth with proven strategies.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/contact">
-                <Button size="lg" className="w-full sm:w-auto" data-testid="button-hero-cta">
+
+            <Card className="shadow-lg">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Calendar className="h-5 w-5 text-primary" />
                   Book Your Free Strategy Call
-                  <ChevronRight className="h-5 w-5 ml-2" />
-                </Button>
-              </Link>
-              <Link href="/services">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto" data-testid="button-hero-services">
-                  View Our Services
-                </Button>
-              </Link>
-            </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {submitted ? (
+                  <div className="text-center py-8">
+                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle2 className="h-8 w-8 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">Thank You!</h3>
+                    <p className="text-muted-foreground mb-4">
+                      We'll get back to you within 24 hours to schedule your call.
+                    </p>
+                    <Button onClick={() => setSubmitted(false)} variant="outline" size="sm">
+                      Send Another Message
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleContactSubmit} className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="hero-firstName">First Name *</Label>
+                        <Input 
+                          id="hero-firstName" 
+                          name="firstName" 
+                          required 
+                          placeholder="John"
+                          data-testid="input-hero-first-name"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="hero-lastName">Last Name *</Label>
+                        <Input 
+                          id="hero-lastName" 
+                          name="lastName" 
+                          required 
+                          placeholder="Smith"
+                          data-testid="input-hero-last-name"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="hero-email">Email *</Label>
+                        <Input 
+                          id="hero-email" 
+                          name="email" 
+                          type="email" 
+                          required 
+                          placeholder="john@company.com.au"
+                          data-testid="input-hero-email"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="hero-phone">Phone</Label>
+                        <Input 
+                          id="hero-phone" 
+                          name="phone" 
+                          type="tel" 
+                          placeholder="+61 4XX XXX XXX"
+                          data-testid="input-hero-phone"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="hero-company">Company *</Label>
+                        <Input 
+                          id="hero-company" 
+                          name="company" 
+                          required 
+                          placeholder="Your Company Pty Ltd"
+                          data-testid="input-hero-company"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="hero-service">Service Interest *</Label>
+                        <Select name="service" required>
+                          <SelectTrigger data-testid="select-hero-service">
+                            <SelectValue placeholder="Select a service" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {contactServices.map((service) => (
+                              <SelectItem key={service} value={service.toLowerCase().replace(/\s+/g, '-')}>
+                                {service}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="hero-message">How can we help? *</Label>
+                      <Textarea 
+                        id="hero-message" 
+                        name="message" 
+                        required 
+                        rows={3}
+                        placeholder="Tell us about your business challenges..."
+                        data-testid="textarea-hero-message"
+                      />
+                    </div>
+
+                    <Button 
+                      type="submit" 
+                      size="lg" 
+                      className="w-full"
+                      disabled={isSubmitting}
+                      data-testid="button-hero-submit"
+                    >
+                      {isSubmitting ? (
+                        <>Sending...</>
+                      ) : (
+                        <>
+                          Book Free Strategy Call
+                          <Send className="h-4 w-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+
+                    <p className="text-xs text-muted-foreground text-center">
+                      Free 30-minute call. No obligation.
+                    </p>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
