@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RootState, toggleDrawer, updateLead, updateLeadStage, addActivity, archiveLead, deleteLead } from '@/store';
-import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType } from '@/lib/types';
+import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, calculateNextTouchDate } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, getTerritoryDisplayName } from '@/lib/territoryConfig';
 import { countActivitiesByType } from '@/lib/mockData';
 import ActivityButton from './ActivityButton';
@@ -21,7 +21,7 @@ import { getTrafficLightStatus } from '@/lib/types';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
-import { logPipelineAction, createRejectedBusiness, deleteLeadFromFirestore } from '@/lib/firestoreService';
+import { logPipelineAction, createRejectedBusiness, deleteLeadFromFirestore, updateLeadInFirestore } from '@/lib/firestoreService';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -51,6 +51,7 @@ export default function LeadDrawer() {
   const isOpen = useSelector((state: RootState) => state.app.isDrawerOpen);
   const selectedLeadId = useSelector((state: RootState) => state.app.selectedLeadId);
   const leads = useSelector((state: RootState) => state.app.leads);
+  const cadences = useSelector((state: RootState) => state.app.cadences);
   const lead = leads.find(l => l.id === selectedLeadId);
   const [isRecording, setIsRecording] = useState(false);
   const [isMarkingNotInterested, setIsMarkingNotInterested] = useState(false);
@@ -65,15 +66,66 @@ export default function LeadDrawer() {
     dispatch(toggleDrawer(false));
   };
 
-  const handleStageChange = (stage: Stage) => {
+  const handleStageChange = async (stage: Stage) => {
     dispatch(updateLeadStage({ leadId: lead.id, stage }));
+    
+    // Persist to Firestore with nurture enrollment if moving to nurture stage
+    if (orgId && authReady) {
+      try {
+        const firestoreUpdates: Partial<Lead> = { stage, updatedAt: new Date() };
+        
+        if (stage === 'nurture' && lead.nurtureMode === 'none') {
+          const passiveCadence = cadences.find(c => c.mode === 'passive');
+          if (passiveCadence) {
+            const now = new Date();
+            firestoreUpdates.nurtureMode = 'passive';
+            firestoreUpdates.nurtureCadenceId = passiveCadence.id;
+            firestoreUpdates.nurtureStatus = 'new';
+            firestoreUpdates.nurtureStepIndex = 0;
+            firestoreUpdates.enrolledInNurtureAt = now;
+            firestoreUpdates.nextTouchAt = calculateNextTouchDate(now, 0, passiveCadence);
+            firestoreUpdates.touchesNoResponse = 0;
+          }
+        }
+        
+        await updateLeadInFirestore(orgId, lead.id, firestoreUpdates, authReady);
+      } catch (error) {
+        console.error('Error updating lead stage:', error);
+      }
+    }
   };
 
-  const handleMoveStage = (direction: 'left' | 'right') => {
+  const handleMoveStage = async (direction: 'left' | 'right') => {
     const currentIndex = STAGE_ORDER.indexOf(lead.stage);
     const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
     if (newIndex >= 0 && newIndex < STAGE_ORDER.length) {
-      dispatch(updateLeadStage({ leadId: lead.id, stage: STAGE_ORDER[newIndex] }));
+      const newStage = STAGE_ORDER[newIndex];
+      dispatch(updateLeadStage({ leadId: lead.id, stage: newStage }));
+      
+      // Persist to Firestore with nurture enrollment if moving to nurture stage
+      if (orgId && authReady) {
+        try {
+          const firestoreUpdates: Partial<Lead> = { stage: newStage, updatedAt: new Date() };
+          
+          if (newStage === 'nurture' && lead.nurtureMode === 'none') {
+            const passiveCadence = cadences.find(c => c.mode === 'passive');
+            if (passiveCadence) {
+              const now = new Date();
+              firestoreUpdates.nurtureMode = 'passive';
+              firestoreUpdates.nurtureCadenceId = passiveCadence.id;
+              firestoreUpdates.nurtureStatus = 'new';
+              firestoreUpdates.nurtureStepIndex = 0;
+              firestoreUpdates.enrolledInNurtureAt = now;
+              firestoreUpdates.nextTouchAt = calculateNextTouchDate(now, 0, passiveCadence);
+              firestoreUpdates.touchesNoResponse = 0;
+            }
+          }
+          
+          await updateLeadInFirestore(orgId, lead.id, firestoreUpdates, authReady);
+        } catch (error) {
+          console.error('Error updating lead stage:', error);
+        }
+      }
     }
   };
 

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setRegionFilter, setAreaFilter, addClient, archiveLead } from '@/store';
-import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS, Client, DEFAULT_CLIENT_FIELDS } from '@/lib/types';
+import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS, Client, DEFAULT_CLIENT_FIELDS, calculateNextTouchDate } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, isAreaRequiredForRegion, validateTerritorySelection } from '@/lib/territoryConfig';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function PipelinePage() {
   const dispatch = useDispatch();
   const leads = useSelector((state: RootState) => state.app.leads);
+  const cadences = useSelector((state: RootState) => state.app.cadences);
   const searchQuery = useSelector((state: RootState) => state.app.searchQuery);
   const stageFilter = useSelector((state: RootState) => state.app.stageFilter);
   const regionFilter = useSelector((state: RootState) => state.app.regionFilter);
@@ -175,7 +176,27 @@ export default function PipelinePage() {
           dispatch(updateLeadStage({ leadId, stage }));
           try {
             if (orgId && authReady) {
-              await updateLeadInFirestore(orgId, leadId, { stage, updatedAt: new Date() }, authReady);
+              // Build the Firestore update - must match Redux updateLeadStage logic
+              const firestoreUpdates: Partial<Lead> = { stage, updatedAt: new Date() };
+              
+              // If moving to nurture stage and lead is not already in nurture, add nurture enrollment fields
+              // This mirrors the auto-enrollment logic in the Redux reducer
+              if (stage === 'nurture' && lead && lead.nurtureMode === 'none') {
+                const passiveCadence = cadences.find(c => c.mode === 'passive');
+                if (passiveCadence) {
+                  const now = new Date();
+                  firestoreUpdates.nurtureMode = 'passive';
+                  firestoreUpdates.nurtureCadenceId = passiveCadence.id;
+                  firestoreUpdates.nurtureStatus = 'new';
+                  firestoreUpdates.nurtureStepIndex = 0;
+                  firestoreUpdates.enrolledInNurtureAt = now;
+                  firestoreUpdates.nextTouchAt = calculateNextTouchDate(now, 0, passiveCadence);
+                  firestoreUpdates.touchesNoResponse = 0;
+                  console.log('[Pipeline] Auto-enrolling in passive nurture:', { leadId, cadenceId: passiveCadence.id });
+                }
+              }
+              
+              await updateLeadInFirestore(orgId, leadId, firestoreUpdates, authReady);
             }
           } catch (error) {
             console.error('Error updating lead stage in Firestore:', error);
