@@ -2009,7 +2009,7 @@ TONE: Professional but warm. Confident but not pushy. Curious about THEIR busine
       const scripts = JSON.parse(content);
 
       res.json({
-        textScript: scripts.textScript || '',
+        smsScript: scripts.textScript || scripts.smsScript || '',
         emailScript: scripts.emailScript || '',
         callScript: scripts.callScript || '',
         generatedAt: new Date().toISOString(),
