@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit, setDoc } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction, RejectedBusiness } from './types';
 import { calculateClientHealth, createDefaultDailyPlanDoc, formatDateDDMMYYYY, activityTypeToTaskType, getCurrentTimeSlot, getTodayDDMMYYYY, toPlanDateKey, ACTIVITY_LABELS } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -209,6 +209,118 @@ export async function deleteLeadFromFirestore(orgId: string, id: string, authRea
     logFirestoreOperation('DELETE', path, orgId, false, error);
     throw error;
   }
+}
+
+// ============================================
+// Rejected/Not Interested Business Functions
+// ============================================
+
+export async function fetchRejectedBusinesses(orgId: string, authReady: boolean = false): Promise<RejectedBusiness[]> {
+  const path = `orgs/${orgId}/rejectedBusinesses`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const rejectedRef = collection(db, 'orgs', orgId, 'rejectedBusinesses');
+    const q = query(rejectedRef, orderBy('rejectedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const rejected = snapshot.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...convertTimestampToDate(docSnap.data()),
+    })) as RejectedBusiness[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return rejected;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createRejectedBusiness(
+  orgId: string, 
+  rejected: Omit<RejectedBusiness, 'id'>, 
+  authReady: boolean = false
+): Promise<RejectedBusiness> {
+  const path = `orgs/${orgId}/rejectedBusinesses`;
+  
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) {
+    throw new Error('Cannot create rejected business: not authenticated or no orgId');
+  }
+  
+  try {
+    const cleanedData = removeUndefinedFields(rejected);
+    const dataToSave = convertDatesToTimestamp({
+      ...cleanedData,
+      rejectedAt: new Date(),
+    });
+    const rejectedRef = collection(db, 'orgs', orgId, 'rejectedBusinesses');
+    const docRef = await addDoc(rejectedRef, dataToSave);
+    
+    logFirestoreOperation('WRITE', `${path}/${docRef.id}`, orgId, true);
+    return { ...cleanedData, id: docRef.id, rejectedAt: new Date() } as RejectedBusiness;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function deleteRejectedBusiness(orgId: string, id: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/rejectedBusinesses/${id}`;
+  
+  if (!checkAuthReady(orgId, authReady, 'DELETE', path)) {
+    throw new Error('Cannot delete rejected business: not authenticated or no orgId');
+  }
+  
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'rejectedBusinesses', id);
+    await deleteDoc(docRef);
+    
+    logFirestoreOperation('DELETE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// Check if a business matches any rejected entry (by phone, email, placeId, or ABN)
+export function checkIfBusinessRejected(
+  business: { phone?: string; email?: string; googlePlaceId?: string; abn?: string; businessName?: string },
+  rejectedList: RejectedBusiness[]
+): RejectedBusiness | null {
+  if (!rejectedList || rejectedList.length === 0) return null;
+  
+  // Normalize phone number for comparison
+  const normalizePhone = (p?: string) => p?.replace(/[\s\-\(\)]/g, '') || '';
+  const businessPhone = normalizePhone(business.phone);
+  
+  for (const rejected of rejectedList) {
+    // Match by Google Place ID (most reliable)
+    if (business.googlePlaceId && rejected.googlePlaceId && 
+        business.googlePlaceId === rejected.googlePlaceId) {
+      return rejected;
+    }
+    
+    // Match by ABN (very reliable for Australian businesses)
+    if (business.abn && rejected.abn && business.abn === rejected.abn) {
+      return rejected;
+    }
+    
+    // Match by phone number
+    if (businessPhone && normalizePhone(rejected.phone) === businessPhone) {
+      return rejected;
+    }
+    
+    // Match by email (case-insensitive)
+    if (business.email && rejected.email && 
+        business.email.toLowerCase() === rejected.email.toLowerCase()) {
+      return rejected;
+    }
+  }
+  
+  return null;
 }
 
 export async function fetchActivities(orgId: string, leadId: string, authReady: boolean = false): Promise<Activity[]> {

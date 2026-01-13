@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar, Check, ChevronsUpDown, Mail, MessageSquare, Copy } from 'lucide-react';
+import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar, Check, ChevronsUpDown, Mail, MessageSquare, Copy, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,9 +17,9 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { addLead } from '@/store';
-import { createLead } from '@/lib/firestoreService';
+import { createLead, fetchRejectedBusinesses, checkIfBusinessRejected } from '@/lib/firestoreService';
 import { v4 as uuidv4 } from 'uuid';
-import type { Lead, LeadSourceData } from '@/lib/types';
+import type { Lead, LeadSourceData, RejectedBusiness } from '@/lib/types';
 
 interface AddLeadDialogData {
   type: 'abr' | 'google';
@@ -222,6 +222,19 @@ export default function ResearchPage() {
   const [isGeneratingScripts, setIsGeneratingScripts] = useState(false);
   const [isSavingLead, setIsSavingLead] = useState(false);
   const [activeScriptTab, setActiveScriptTab] = useState<'text' | 'email' | 'call'>('text');
+  
+  // Rejected businesses state
+  const [rejectedBusinesses, setRejectedBusinesses] = useState<RejectedBusiness[]>([]);
+  const [matchedRejection, setMatchedRejection] = useState<RejectedBusiness | null>(null);
+
+  // Fetch rejected businesses on mount
+  useEffect(() => {
+    if (orgId && authReady) {
+      fetchRejectedBusinesses(orgId, authReady)
+        .then(setRejectedBusinesses)
+        .catch(console.error);
+    }
+  }, [orgId, authReady]);
 
   // ABR Search
   const handleAbrSearch = async () => {
@@ -399,6 +412,14 @@ export default function ResearchPage() {
   // Open add lead dialog for ABR business
   const openAddLeadDialogAbr = (business: ABRBusinessResult) => {
     const autoReason = generateAbrWhySuggested(business);
+    
+    // Check if this business was previously rejected
+    const rejected = checkIfBusinessRejected(
+      { abn: business.Abn, businessName: business.Name },
+      rejectedBusinesses
+    );
+    setMatchedRejection(rejected);
+    
     setAddLeadData({
       type: 'abr',
       businessName: business.Name,
@@ -416,6 +437,14 @@ export default function ResearchPage() {
   const openAddLeadDialogGoogle = (place: GooglePlaceResult) => {
     const selectedType = BUSINESS_TYPES.find(t => t.value === googleBusinessType);
     const autoReason = generateGoogleWhySuggested(place);
+    
+    // Check if this business was previously rejected
+    const rejected = checkIfBusinessRejected(
+      { googlePlaceId: place.placeId, phone: place.phone, businessName: place.name },
+      rejectedBusinesses
+    );
+    setMatchedRejection(rejected);
+    
     setAddLeadData({
       type: 'google',
       businessName: place.name,
@@ -1150,6 +1179,7 @@ export default function ResearchPage() {
           setAddLeadData(null);
           setAddedReason('');
           setOutreachScripts(null);
+          setMatchedRejection(null);
         }
       }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-add-lead">
@@ -1165,6 +1195,33 @@ export default function ResearchPage() {
 
           {addLeadData && (
             <div className="space-y-6">
+              {/* Previously Rejected Warning */}
+              {matchedRejection && (
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg" data-testid="alert-previously-rejected">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h4 className="font-medium text-amber-800 dark:text-amber-200">Previously Marked Not Interested</h4>
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        This business was rejected on{' '}
+                        {matchedRejection.rejectedAt instanceof Date 
+                          ? matchedRejection.rejectedAt.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                          : new Date(matchedRejection.rejectedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        .
+                      </p>
+                      {matchedRejection.reason && (
+                        <p className="text-sm text-amber-700 dark:text-amber-300">
+                          <strong>Reason:</strong> {matchedRejection.reason}
+                        </p>
+                      )}
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                        You can still add this lead if circumstances have changed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Business Summary */}
               <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                 <h3 className="font-medium">{addLeadData.businessName}</h3>

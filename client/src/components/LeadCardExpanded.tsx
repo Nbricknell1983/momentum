@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -21,7 +21,7 @@ import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
-import { deleteLeadFromFirestore, logPipelineAction, updateLeadInFirestore, fetchTaskLoadByDateRange } from '@/lib/firestoreService';
+import { deleteLeadFromFirestore, logPipelineAction, updateLeadInFirestore, fetchTaskLoadByDateRange, createRejectedBusiness } from '@/lib/firestoreService';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -178,6 +178,8 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const [outreachScriptsOpen, setOutreachScriptsOpen] = useState(false);
   const [contactReason, setContactReason] = useState(lead.nextContactReason || '');
   const [isSavingDate, setIsSavingDate] = useState(false);
+  const [isMarkingNotInterested, setIsMarkingNotInterested] = useState(false);
+  const [notInterestedReason, setNotInterestedReason] = useState('');
 
   const openAiMessageModal = (channel: 'sms' | 'email') => {
     setAiMessageChannel(channel);
@@ -419,6 +421,43 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
       toast({ title: 'Error', description: 'Failed to delete deal', variant: 'destructive' });
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleMarkNotInterested = async () => {
+    if (!orgId || !authReady) {
+      toast({ title: 'Error', description: 'Not authenticated', variant: 'destructive' });
+      return;
+    }
+    
+    setIsMarkingNotInterested(true);
+    try {
+      await createRejectedBusiness(orgId, {
+        businessName: lead.companyName,
+        phone: lead.phone,
+        email: lead.email,
+        address: lead.address,
+        googlePlaceId: lead.sourceData?.googlePlaceId,
+        abn: lead.sourceData?.abn,
+        reason: notInterestedReason || 'Not interested',
+        rejectedAt: new Date(),
+        rejectedBy: 'user',
+        originalLeadId: lead.id,
+      }, authReady);
+      
+      await deleteLeadFromFirestore(orgId, lead.id, authReady);
+      dispatch(deleteLead(lead.id));
+      
+      toast({ 
+        title: 'Marked as not interested', 
+        description: 'This business will be flagged if you try to add them again' 
+      });
+      setNotInterestedReason('');
+    } catch (error) {
+      console.error('[LeadCardExpanded] Error marking not interested:', error);
+      toast({ title: 'Error', description: 'Failed to mark as not interested', variant: 'destructive' });
+    } finally {
+      setIsMarkingNotInterested(false);
     }
   };
 
@@ -940,8 +979,8 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
             </button>
           </div>
 
-          {/* Archive/Delete */}
-          <div className="flex items-center gap-4 pt-2">
+          {/* Archive/Delete/Not Interested */}
+          <div className="flex items-center gap-4 pt-2 flex-wrap">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <button className="text-sm underline text-muted-foreground">Archive</button>
@@ -956,6 +995,40 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction onClick={handleArchive}>Archive</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button className="text-sm underline text-amber-600 flex items-center gap-1" disabled={isMarkingNotInterested}>
+                  <ThumbsDown className="h-3 w-3" />
+                  {isMarkingNotInterested ? 'Saving...' : 'Not Interested'}
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Mark as Not Interested?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove the lead and flag the business so you'll be warned if you try to add them again.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4">
+                  <Label htmlFor="not-interested-reason" className="text-sm">Reason (optional)</Label>
+                  <Textarea
+                    id="not-interested-reason"
+                    placeholder="e.g., Already has marketing agency, not a good fit..."
+                    value={notInterestedReason}
+                    onChange={(e) => setNotInterestedReason(e.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isMarkingNotInterested}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleMarkNotInterested} disabled={isMarkingNotInterested}>
+                    {isMarkingNotInterested ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ThumbsDown className="h-4 w-4 mr-2" />}
+                    Not Interested
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { X, ChevronLeft, ChevronRight, Archive, Trash2, Phone, Mail, ExternalLink, Copy, Mic, Calendar, MessageSquare } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Archive, Trash2, Phone, Mail, ExternalLink, Copy, Mic, Calendar, MessageSquare, ThumbsDown } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ import { getTrafficLightStatus } from '@/lib/types';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/contexts/AuthContext';
-import { logPipelineAction } from '@/lib/firestoreService';
+import { logPipelineAction, createRejectedBusiness, deleteLeadFromFirestore } from '@/lib/firestoreService';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -53,6 +53,8 @@ export default function LeadDrawer() {
   const leads = useSelector((state: RootState) => state.app.leads);
   const lead = leads.find(l => l.id === selectedLeadId);
   const [isRecording, setIsRecording] = useState(false);
+  const [isMarkingNotInterested, setIsMarkingNotInterested] = useState(false);
+  const [notInterestedReason, setNotInterestedReason] = useState('');
 
   if (!lead) return null;
 
@@ -123,9 +125,57 @@ export default function LeadDrawer() {
     handleClose();
   };
 
-  const handleDelete = () => {
-    dispatch(deleteLead(lead.id));
-    handleClose();
+  const handleDelete = async () => {
+    if (!orgId || !authReady) {
+      toast({ title: 'Error', description: 'Not authenticated', variant: 'destructive' });
+      return;
+    }
+    try {
+      await deleteLeadFromFirestore(orgId, lead.id, authReady);
+      dispatch(deleteLead(lead.id));
+      handleClose();
+    } catch (error) {
+      console.error('[LeadDrawer] Error deleting lead:', error);
+      toast({ title: 'Error', description: 'Failed to delete deal', variant: 'destructive' });
+    }
+  };
+
+  const handleMarkNotInterested = async () => {
+    if (!orgId || !authReady) {
+      toast({ title: 'Error', description: 'Not authenticated', variant: 'destructive' });
+      return;
+    }
+    
+    setIsMarkingNotInterested(true);
+    try {
+      await createRejectedBusiness(orgId, {
+        businessName: lead.companyName,
+        phone: lead.phone,
+        email: lead.email,
+        address: lead.address,
+        googlePlaceId: lead.sourceData?.googlePlaceId,
+        abn: lead.sourceData?.abn,
+        reason: notInterestedReason || 'Not interested',
+        rejectedAt: new Date(),
+        rejectedBy: user?.uid || 'user',
+        originalLeadId: lead.id,
+      }, authReady);
+      
+      await deleteLeadFromFirestore(orgId, lead.id, authReady);
+      dispatch(deleteLead(lead.id));
+      
+      toast({ 
+        title: 'Marked as not interested', 
+        description: 'This business will be flagged if you try to add them again' 
+      });
+      setNotInterestedReason('');
+      handleClose();
+    } catch (error) {
+      console.error('[LeadDrawer] Error marking not interested:', error);
+      toast({ title: 'Error', description: 'Failed to mark as not interested', variant: 'destructive' });
+    } finally {
+      setIsMarkingNotInterested(false);
+    }
   };
 
   const toggleRecording = () => {
@@ -447,45 +497,86 @@ export default function LeadDrawer() {
           <Separator />
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" className="flex-1 gap-2" data-testid="button-archive">
-                  <Archive className="h-4 w-4" />
-                  Archive
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Archive this lead?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will move the lead to the archive. You can restore it later.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleArchive}>Archive</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" className="flex-1 gap-2" data-testid="button-archive">
+                    <Archive className="h-4 w-4" />
+                    Archive
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Archive this lead?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will move the lead to the archive. You can restore it later.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleArchive}>Archive</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="flex-1 gap-2" data-testid="button-delete">
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action cannot be undone. The lead and all associated data will be permanently deleted.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" className="flex-1 gap-2" data-testid="button-delete">
-                  <Trash2 className="h-4 w-4" />
-                  Delete
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2 text-amber-600 border-amber-200 hover:bg-amber-50 dark:border-amber-800 dark:hover:bg-amber-900/30" 
+                  disabled={isMarkingNotInterested}
+                  data-testid="button-not-interested"
+                >
+                  <ThumbsDown className="h-4 w-4" />
+                  {isMarkingNotInterested ? 'Saving...' : 'Not Interested'}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                  <AlertDialogTitle>Mark as Not Interested?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action cannot be undone. The lead and all associated data will be permanently deleted.
+                    This will remove the lead and flag the business so you'll be warned if you try to add them again.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
+                <div className="py-4">
+                  <Label htmlFor="drawer-not-interested-reason" className="text-sm">Reason (optional)</Label>
+                  <Textarea
+                    id="drawer-not-interested-reason"
+                    placeholder="e.g., Already has marketing agency, not a good fit..."
+                    value={notInterestedReason}
+                    onChange={(e) => setNotInterestedReason(e.target.value)}
+                    className="mt-2"
+                  />
+                </div>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                  <AlertDialogCancel disabled={isMarkingNotInterested}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleMarkNotInterested} disabled={isMarkingNotInterested}>
+                    <ThumbsDown className="h-4 w-4 mr-2" />
+                    Not Interested
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

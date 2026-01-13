@@ -297,6 +297,21 @@ export interface Activity {
   metadata?: Record<string, any>;
 }
 
+// Rejected/Not Interested business tracking
+export interface RejectedBusiness {
+  id: string;
+  businessName: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  googlePlaceId?: string;
+  abn?: string;
+  reason?: string;
+  rejectedAt: Date;
+  rejectedBy: string;
+  originalLeadId?: string;
+}
+
 export interface Task {
   id: string;
   userId: string;
