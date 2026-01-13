@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { X, ChevronLeft, ChevronRight, Archive, Trash2, Phone, Mail, ExternalLink, Copy, Mic, Calendar } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Archive, Trash2, Phone, Mail, ExternalLink, Copy, Mic, Calendar, MessageSquare } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -318,11 +318,18 @@ export default function LeadDrawer() {
                 data-testid="input-phone"
               />
               {lead.phone && (
-                <Button variant="outline" size="icon" asChild>
-                  <a href={`tel:${lead.phone}`} data-testid="button-call">
-                    <Phone className="h-4 w-4" />
-                  </a>
-                </Button>
+                <>
+                  <Button variant="outline" size="icon" asChild>
+                    <a href={`tel:${lead.phone}`} data-testid="button-call">
+                      <Phone className="h-4 w-4" />
+                    </a>
+                  </Button>
+                  <Button variant="outline" size="icon" asChild>
+                    <a href={`sms:${lead.phone}`} data-testid="button-sms">
+                      <MessageSquare className="h-4 w-4" />
+                    </a>
+                  </Button>
+                </>
               )}
             </div>
             <div className="flex items-center gap-2">

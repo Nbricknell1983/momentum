@@ -822,11 +822,13 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                       variant="outline"
                       size="sm"
                       className="gap-1.5 bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
-                      onClick={() => openAiMessageModal('sms')}
+                      asChild
                       data-testid={`button-sms-${lead.id}`}
                     >
-                      <MessageSquare className="h-3 w-3" />
-                      Text
+                      <a href={`sms:${lead.phone}`}>
+                        <MessageSquare className="h-3 w-3" />
+                        Text
+                      </a>
                     </Button>
                   </>
                 )}

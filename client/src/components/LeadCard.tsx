@@ -62,10 +62,14 @@ export default function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
           </div>
         )}
         {lead.phone && (
-          <div className="flex items-center gap-1 truncate">
+          <a 
+            href={`tel:${lead.phone}`} 
+            className="flex items-center gap-1 truncate hover:text-foreground"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Phone className="h-3 w-3 shrink-0" />
             <span className="truncate">{lead.phone}</span>
-          </div>
+          </a>
         )}
       </div>
 

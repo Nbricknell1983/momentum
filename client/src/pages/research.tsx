@@ -932,10 +932,14 @@ export default function ResearchPage() {
 
                     <div className="flex items-center gap-4 mt-2 text-sm">
                       {place.phone && (
-                        <span className="flex items-center gap-1 text-muted-foreground">
+                        <a 
+                          href={`tel:${place.phone}`}
+                          className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Phone className="h-3 w-3" />
                           {place.phone}
-                        </span>
+                        </a>
                       )}
                       {place.website && (
                         <a 
@@ -1172,10 +1176,14 @@ export default function ResearchPage() {
                     </span>
                   )}
                   {addLeadData.phone && (
-                    <span className="flex items-center gap-1">
+                    <a 
+                      href={`tel:${addLeadData.phone}`}
+                      className="flex items-center gap-1 hover:text-foreground"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Phone className="h-3 w-3" />
                       {addLeadData.phone}
-                    </span>
+                    </a>
                   )}
                   {addLeadData.website && (
                     <span className="flex items-center gap-1">

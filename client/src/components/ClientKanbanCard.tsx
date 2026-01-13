@@ -138,48 +138,60 @@ export default function ClientKanbanCard({ client, onClick, onQuickAction }: Cli
 
       {/* Quick action buttons */}
       <div className="flex items-center gap-1 pt-2 border-t">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.('call'); }}
-              data-testid={`button-call-${client.id}`}
-            >
-              <Phone className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Log Call</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.('email'); }}
-              data-testid={`button-email-${client.id}`}
-            >
-              <Mail className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Log Email</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); onQuickAction?.('sms'); }}
-              data-testid={`button-sms-${client.id}`}
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Log SMS</TooltipContent>
-        </Tooltip>
+        {client.phone && (
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  asChild
+                  data-testid={`button-direct-call-${client.id}`}
+                >
+                  <a href={`tel:${client.phone}`} onClick={(e) => e.stopPropagation()}>
+                    <Phone className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Call</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  asChild
+                  data-testid={`button-direct-sms-${client.id}`}
+                >
+                  <a href={`sms:${client.phone}`} onClick={(e) => e.stopPropagation()}>
+                    <MessageSquare className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Text</TooltipContent>
+            </Tooltip>
+          </>
+        )}
+        {client.email && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                asChild
+                data-testid={`button-direct-email-${client.id}`}
+              >
+                <a href={`mailto:${client.email}`} onClick={(e) => e.stopPropagation()}>
+                  <Mail className="h-3.5 w-3.5" />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Email</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <span onClick={(e) => e.stopPropagation()}>
