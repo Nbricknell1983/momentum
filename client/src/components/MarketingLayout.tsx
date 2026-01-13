@@ -9,10 +9,10 @@ interface MarketingLayoutProps {
 }
 
 const navLinks = [
-  { href: '/marketing', label: 'Home' },
-  { href: '/marketing/services', label: 'Services' },
-  { href: '/marketing/about', label: 'About' },
-  { href: '/marketing/contact', label: 'Contact' },
+  { href: '/', label: 'Home' },
+  { href: '/services', label: 'Services' },
+  { href: '/about', label: 'About' },
+  { href: '/contact', label: 'Contact' },
 ];
 
 function ThemeToggle() {
@@ -32,7 +32,7 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <nav className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/marketing" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <Target className="h-8 w-8 text-primary" />
             <span className="text-xl font-bold">BattleScore</span>
           </Link>
@@ -58,7 +58,7 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                 Client Login
               </Button>
             </Link>
-            <Link href="/marketing/contact">
+            <Link href="/contact">
               <Button size="sm" data-testid="button-book-call">
                 Book a Call
                 <ChevronRight className="h-4 w-4 ml-1" />
@@ -95,7 +95,7 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
                     Client Login
                   </Button>
                 </Link>
-                <Link href="/marketing/contact">
+                <Link href="/contact">
                   <Button className="w-full" size="sm">
                     Book a Call
                   </Button>
@@ -134,18 +134,18 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
             <div>
               <h4 className="font-semibold mb-4">Services</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/marketing/services" className="hover:text-primary">Business Consulting</Link></li>
-                <li><Link href="/marketing/services" className="hover:text-primary">Sales Coaching</Link></li>
-                <li><Link href="/marketing/services" className="hover:text-primary">Growth Strategy</Link></li>
-                <li><Link href="/marketing/services" className="hover:text-primary">Leadership Development</Link></li>
+                <li><Link href="/services" className="hover:text-primary">Business Consulting</Link></li>
+                <li><Link href="/services" className="hover:text-primary">Sales Coaching</Link></li>
+                <li><Link href="/services" className="hover:text-primary">Growth Strategy</Link></li>
+                <li><Link href="/services" className="hover:text-primary">Leadership Development</Link></li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/marketing/about" className="hover:text-primary">About Us</Link></li>
-                <li><Link href="/marketing/contact" className="hover:text-primary">Contact</Link></li>
+                <li><Link href="/about" className="hover:text-primary">About Us</Link></li>
+                <li><Link href="/contact" className="hover:text-primary">Contact</Link></li>
                 <li><Link href="/login" className="hover:text-primary">Client Portal</Link></li>
               </ul>
             </div>

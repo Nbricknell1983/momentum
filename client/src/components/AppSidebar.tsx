@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { useTheme } from './ThemeProvider';
 
 const navItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Pipeline', url: '/pipeline', icon: Kanban },
   { title: 'Nurture', url: '/nurture', icon: Heart },
   { title: 'Clients', url: '/clients', icon: Users },
@@ -48,7 +48,7 @@ export default function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="h-16 flex items-center px-4 border-b border-sidebar-border">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
             <Zap className="h-5 w-5 text-primary-foreground" />
           </div>
@@ -61,7 +61,7 @@ export default function AppSidebar() {
             <SidebarMenu>
               {navItems.map((item) => {
                 const isActive = location === item.url || 
-                  (item.url !== '/' && location.startsWith(item.url));
+                  (item.url !== '/dashboard' && location.startsWith(item.url));
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>

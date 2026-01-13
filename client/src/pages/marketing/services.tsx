@@ -112,7 +112,7 @@ export default function ServicesPage() {
         title="Business Consulting Services Brisbane | Sales Coaching & Growth Strategy | BattleScore"
         description="Comprehensive business consulting services in Brisbane. Expert sales coaching, growth strategy, and leadership development for Queensland SMEs. Book your free consultation."
         keywords="business consulting brisbane, sales coaching brisbane, growth strategy brisbane, leadership development queensland, business advisor brisbane, small business consultant"
-        canonicalUrl="https://battlescore.com.au/marketing/services"
+        canonicalUrl="https://battlescore.com.au/services"
         structuredData={servicesSchema}
       />
 
@@ -126,7 +126,7 @@ export default function ServicesPage() {
               Expert business advice, sales coaching, and growth strategy tailored for 
               Queensland SMEs. We help you build momentum and achieve sustainable success.
             </p>
-            <Link href="/marketing/contact">
+            <Link href="/contact">
               <Button size="lg" data-testid="button-services-cta">
                 Discuss Your Needs
                 <ChevronRight className="h-5 w-5 ml-2" />
@@ -162,7 +162,7 @@ export default function ServicesPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link href="/marketing/contact">
+                  <Link href="/contact">
                     <Button data-testid={`button-${service.id}-cta`}>
                       Learn More
                       <ArrowRight className="h-4 w-4 ml-2" />
@@ -274,7 +274,7 @@ export default function ServicesPage() {
             Book a free 30-minute discovery call to discuss your business needs 
             and explore how we can help.
           </p>
-          <Link href="/marketing/contact">
+          <Link href="/contact">
             <Button size="lg" variant="secondary" data-testid="button-services-cta-bottom">
               Book Your Free Discovery Call
               <ChevronRight className="h-5 w-5 ml-2" />

@@ -73,7 +73,7 @@ export default function MarketingHome() {
       {
         '@type': 'WebSite',
         '@id': 'https://battlescore.com.au/#website',
-        url: 'https://battlescore.com.au/marketing',
+        url: 'https://battlescore.com.au/',
         name: 'BattleScore Business Consulting',
         publisher: { '@id': 'https://battlescore.com.au/#business' },
       },
@@ -86,7 +86,7 @@ export default function MarketingHome() {
         title="Business Consultant Brisbane | Expert Business Advice | BattleScore"
         description="Brisbane's leading business consulting firm. Get expert business advice, sales coaching, and growth strategy tailored for Queensland SMEs. Book your free discovery call today."
         keywords="business consultant brisbane, business advisor brisbane, business coaching brisbane, small business advisor brisbane, business mentor brisbane, business consulting queensland, growth strategy brisbane"
-        canonicalUrl="https://battlescore.com.au/marketing"
+        canonicalUrl="https://battlescore.com.au/"
         structuredData={homeSchema}
       />
 
@@ -107,13 +107,13 @@ export default function MarketingHome() {
               close more deals, and achieve sustainable growth with proven strategies.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/marketing/contact">
+              <Link href="/contact">
                 <Button size="lg" className="w-full sm:w-auto" data-testid="button-hero-cta">
                   Book Your Free Strategy Call
                   <ChevronRight className="h-5 w-5 ml-2" />
                 </Button>
               </Link>
-              <Link href="/marketing/services">
+              <Link href="/services">
                 <Button variant="outline" size="lg" className="w-full sm:w-auto" data-testid="button-hero-services">
                   View Our Services
                 </Button>
@@ -154,7 +154,7 @@ export default function MarketingHome() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">{service.title}</h3>
                   <p className="text-sm text-muted-foreground mb-4">{service.description}</p>
-                  <Link href="/marketing/services" className="text-sm font-medium text-primary inline-flex items-center hover:underline">
+                  <Link href="/services" className="text-sm font-medium text-primary inline-flex items-center hover:underline">
                     Learn more <ArrowRight className="h-4 w-4 ml-1" />
                   </Link>
                 </CardContent>
@@ -188,7 +188,7 @@ export default function MarketingHome() {
                 ))}
               </div>
               <div className="mt-8">
-                <Link href="/marketing/about">
+                <Link href="/about">
                   <Button variant="outline" data-testid="button-learn-more">
                     Learn More About Us
                     <ArrowRight className="h-4 w-4 ml-2" />
@@ -253,7 +253,7 @@ export default function MarketingHome() {
             Book a free 30-minute strategy call and discover how we can help your 
             Brisbane business achieve its growth goals.
           </p>
-          <Link href="/marketing/contact">
+          <Link href="/contact">
             <Button size="lg" variant="secondary" data-testid="button-cta-bottom">
               Book Your Free Strategy Call
               <ChevronRight className="h-5 w-5 ml-2" />

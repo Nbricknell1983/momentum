@@ -71,8 +71,8 @@ export default function ContactPage() {
       localBusinessSchema,
       {
         '@type': 'ContactPage',
-        '@id': 'https://battlescore.com.au/marketing/contact/#webpage',
-        url: 'https://battlescore.com.au/marketing/contact',
+        '@id': 'https://battlescore.com.au/contact/#webpage',
+        url: 'https://battlescore.com.au/contact',
         name: 'Contact BattleScore | Business Consultant Brisbane',
         description: 'Contact BattleScore Consulting for expert business advice in Brisbane. Book a free strategy call today.',
         isPartOf: { '@id': 'https://battlescore.com.au/#website' },
@@ -86,7 +86,7 @@ export default function ContactPage() {
         title="Contact Us | Business Consultant Brisbane | BattleScore"
         description="Contact BattleScore Consulting for expert business advice in Brisbane. Book a free 30-minute strategy call and discover how we can help your business grow."
         keywords="contact business consultant brisbane, brisbane business advisor contact, book business consultation brisbane, free business strategy call"
-        canonicalUrl="https://battlescore.com.au/marketing/contact"
+        canonicalUrl="https://battlescore.com.au/contact"
         structuredData={contactSchema}
       />
 

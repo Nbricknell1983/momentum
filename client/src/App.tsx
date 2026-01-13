@@ -32,7 +32,7 @@ import { Loader2 } from 'lucide-react';
 function ProtectedRoutes() {
   return (
     <Switch>
-      <Route path="/" component={DashboardPage} />
+      <Route path="/dashboard" component={DashboardPage} />
       <Route path="/pipeline" component={PipelinePage} />
       <Route path="/nurture" component={NurturePage} />
       <Route path="/clients" component={ClientsPage} />
@@ -55,8 +55,8 @@ function AppLayout() {
 
   useEffect(() => {
     if (authReady && !user) {
-      console.log('[App] authReady and no user, redirecting to login');
-      setLocation('/login');
+      console.log('[App] authReady and no user, redirecting to home');
+      setLocation('/');
     }
   }, [authReady, user, setLocation]);
 
@@ -148,11 +148,16 @@ function AppLayout() {
 function AppRoutes() {
   return (
     <Switch>
+      <Route path="/" component={MarketingHome} />
       <Route path="/marketing" component={MarketingHome} />
       <Route path="/marketing/services" component={MarketingServices} />
       <Route path="/marketing/about" component={MarketingAbout} />
       <Route path="/marketing/contact" component={MarketingContact} />
+      <Route path="/services" component={MarketingServices} />
+      <Route path="/about" component={MarketingAbout} />
+      <Route path="/contact" component={MarketingContact} />
       <Route path="/login" component={LoginPage} />
+      <Route path="/signin" component={LoginPage} />
       <Route component={AppLayout} />
     </Switch>
   );

@@ -25,7 +25,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      setLocation('/');
+      setLocation('/dashboard');
     }
   }, [loading, user, setLocation]);
 
@@ -41,7 +41,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await signInWithGoogle();
-      setLocation('/');
+      setLocation('/dashboard');
     } catch (error: any) {
       toast({
         title: 'Sign-in failed',
@@ -66,7 +66,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await signInWithEmail(email, password);
-      setLocation('/');
+      setLocation('/dashboard');
     } catch (error: any) {
       toast({
         title: 'Sign-in failed',
@@ -100,7 +100,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await signUpWithEmail(email, password);
-      setLocation('/');
+      setLocation('/dashboard');
     } catch (error: any) {
       toast({
         title: 'Sign-up failed',
