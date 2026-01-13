@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
+import { v4 as uuidv4 } from 'uuid';
 import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List } from 'lucide-react';
 import { DndContext, DragEndEvent, rectIntersection, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import ClientKanbanColumn from '@/components/ClientKanbanColumn';
@@ -413,6 +414,13 @@ export default function ClientsPage() {
   const [editingProductClientId, setEditingProductClientId] = useState<string | null>(null);
   const [editingProducts, setEditingProducts] = useState<{ productType: string; monthlyValue: number }[]>([]);
   const [savingProducts, setSavingProducts] = useState(false);
+
+  // Pain points management state
+  const [isAddPainPointOpen, setIsAddPainPointOpen] = useState(false);
+  const [editingPainPointClientId, setEditingPainPointClientId] = useState<string | null>(null);
+  const [newPainPointDescription, setNewPainPointDescription] = useState('');
+  const [newPainPointBudget, setNewPainPointBudget] = useState('');
+  const [savingPainPoint, setSavingPainPoint] = useState(false);
 
   const searchString = useSearch();
 
@@ -1377,6 +1385,57 @@ export default function ClientsPage() {
       toast({ title: "Error", description: "Failed to save products.", variant: "destructive" });
     } finally {
       setSavingProducts(false);
+    }
+  };
+
+  // Pain Points handlers
+  const handleAddPainPoint = async () => {
+    if (!orgId || !editingPainPointClientId || !newPainPointDescription.trim()) return;
+    
+    const client = clients.find(c => c.id === editingPainPointClientId);
+    if (!client) return;
+    
+    const newPainPoint = {
+      id: uuidv4(),
+      description: newPainPointDescription.trim(),
+      budget: newPainPointBudget ? parseFloat(newPainPointBudget) : undefined,
+      priority: 'medium' as const,
+      createdAt: new Date(),
+    };
+    
+    const updatedPainPoints = [...(client.painPoints || []), newPainPoint];
+    
+    setSavingPainPoint(true);
+    try {
+      await updateClientInFirestore(orgId, editingPainPointClientId, { painPoints: updatedPainPoints }, authReady);
+      dispatch(updateClient({ ...client, painPoints: updatedPainPoints }));
+      toast({ title: "Pain Point Added", description: newPainPoint.description });
+      setIsAddPainPointOpen(false);
+      setNewPainPointDescription('');
+      setNewPainPointBudget('');
+    } catch (error) {
+      console.error('Error adding pain point:', error);
+      toast({ title: "Error", description: "Failed to add pain point.", variant: "destructive" });
+    } finally {
+      setSavingPainPoint(false);
+    }
+  };
+
+  const handleRemovePainPoint = async (clientId: string, painPointId: string) => {
+    if (!orgId) return;
+    
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+    
+    const updatedPainPoints = (client.painPoints || []).filter(p => p.id !== painPointId);
+    
+    try {
+      await updateClientInFirestore(orgId, clientId, { painPoints: updatedPainPoints }, authReady);
+      dispatch(updateClient({ ...client, painPoints: updatedPainPoints }));
+      toast({ title: "Pain Point Removed" });
+    } catch (error) {
+      console.error('Error removing pain point:', error);
+      toast({ title: "Error", description: "Failed to remove pain point.", variant: "destructive" });
     }
   };
 
@@ -2544,6 +2603,58 @@ export default function ClientsPage() {
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">{client.notes}</p>
                     </div>
                   )}
+
+                  {/* Pain Points / Current Focus - Editable */}
+                  <div className="space-y-3 p-3 rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                        <AlertCircle className="h-4 w-4" />
+                        Pain Points / Blockers
+                      </h4>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setEditingPainPointClientId(client.id);
+                          setNewPainPointDescription('');
+                          setNewPainPointBudget('');
+                          setIsAddPainPointOpen(true);
+                        }}
+                        data-testid="button-add-pain-point"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                    {(client.painPoints || []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic">No pain points recorded. Add blockers like "waiting on DNS update" or project budgets like "Google Ads campaign with $2000".</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {(client.painPoints || []).map((point) => (
+                          <div key={point.id} className="flex items-start justify-between gap-2 p-2 rounded bg-white dark:bg-gray-900 border border-orange-200 dark:border-orange-800">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{point.description}</p>
+                              {point.budget && (
+                                <Badge variant="outline" className="mt-1 text-xs bg-orange-100 dark:bg-orange-900/30 border-orange-300 text-orange-700 dark:text-orange-400">
+                                  Budget: ${point.budget.toLocaleString()}
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleRemovePainPoint(client.id, point.id)}
+                              data-testid={`button-remove-pain-point-${point.id}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="deliverables" className="space-y-4">
@@ -3353,6 +3464,58 @@ export default function ClientsPage() {
                               <p className="text-sm text-muted-foreground">{client.notes}</p>
                             </div>
                           )}
+
+                          {/* Pain Points / Current Focus - Editable */}
+                          <div className="space-y-3 p-3 rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-semibold flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                                <AlertCircle className="h-4 w-4" />
+                                Pain Points / Blockers
+                              </h4>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  setEditingPainPointClientId(client.id);
+                                  setNewPainPointDescription('');
+                                  setNewPainPointBudget('');
+                                  setIsAddPainPointOpen(true);
+                                }}
+                                data-testid={`button-add-pain-point-${client.id}`}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
+                              </Button>
+                            </div>
+                            {(client.painPoints || []).length === 0 ? (
+                              <p className="text-sm text-muted-foreground italic">No pain points recorded. Add blockers like "waiting on DNS update" or project budgets like "Google Ads campaign with $2000".</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {(client.painPoints || []).map((point) => (
+                                  <div key={point.id} className="flex items-start justify-between gap-2 p-2 rounded bg-white dark:bg-gray-900 border border-orange-200 dark:border-orange-800">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium">{point.description}</p>
+                                      {point.budget && (
+                                        <Badge variant="outline" className="mt-1 text-xs bg-orange-100 dark:bg-orange-900/30 border-orange-300 text-orange-700 dark:text-orange-400">
+                                          Budget: ${point.budget.toLocaleString()}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() => handleRemovePainPoint(client.id, point.id)}
+                                      data-testid={`button-remove-pain-point-${point.id}`}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </TabsContent>
 
                         <TabsContent value="deliverables" className="space-y-3">
@@ -6389,6 +6552,66 @@ export default function ClientsPage() {
               <Button onClick={handleSaveProducts} disabled={savingProducts} data-testid="button-save-products">
                 {savingProducts && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Save Products
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Pain Point Dialog */}
+      <Dialog open={isAddPainPointOpen} onOpenChange={(open) => { if (!open) { setIsAddPainPointOpen(false); setEditingPainPointClientId(null); setNewPainPointDescription(''); setNewPainPointBudget(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+              <AlertCircle className="h-5 w-5" />
+              Add Pain Point / Blocker
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Record current blockers, challenges, or project focus areas. These will be prominently displayed on client cards.
+            </p>
+            
+            <div className="space-y-2">
+              <Label htmlFor="pain-point-description">Description</Label>
+              <Textarea
+                id="pain-point-description"
+                value={newPainPointDescription}
+                onChange={(e) => setNewPainPointDescription(e.target.value)}
+                placeholder="e.g., Waiting on DNS update so new website can go live"
+                data-testid="input-pain-point-description"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="pain-point-budget">Budget (optional)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  id="pain-point-budget"
+                  type="number"
+                  value={newPainPointBudget}
+                  onChange={(e) => setNewPainPointBudget(e.target.value)}
+                  placeholder="e.g., 2000"
+                  className="flex-1"
+                  data-testid="input-pain-point-budget"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Enter budget for projects like "Google Ads campaign with $2000"
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsAddPainPointOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={handleAddPainPoint} 
+                disabled={savingPainPoint || !newPainPointDescription.trim()} 
+                className="bg-orange-600 hover:bg-orange-700"
+                data-testid="button-save-pain-point"
+              >
+                {savingPainPoint && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Add Pain Point
               </Button>
             </div>
           </div>

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Client, HealthStatus, HEALTH_STATUS_LABELS, ClientBoardStage } from '@/lib/types';
+import { Client, HealthStatus, HEALTH_STATUS_LABELS, ClientBoardStage, ClientPainPoint } from '@/lib/types';
 import { AccountMovementTips } from './AccountMovementTips';
 
 interface ClientKanbanCardProps {
@@ -134,6 +134,29 @@ export default function ClientKanbanCard({ client, onClick, onQuickAction }: Cli
           <Sparkles className="h-2.5 w-2.5 mr-1" />
           {client.upsellReadiness === 'hot' ? 'Hot Upsell' : 'Upsell Ready'}
         </Badge>
+      )}
+
+      {/* Pain Points / Blockers - Prominent Display */}
+      {client.painPoints && client.painPoints.length > 0 && (
+        <div className="mb-2 space-y-1.5 p-2 rounded-md bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800" data-testid={`painpoints-${client.id}`}>
+          <div className="flex items-center gap-1 text-[10px] font-semibold text-orange-700 dark:text-orange-400 uppercase">
+            <AlertCircle className="h-3 w-3" />
+            Current Focus
+          </div>
+          {client.painPoints.slice(0, 2).map((point) => (
+            <div key={point.id} className="text-xs text-orange-800 dark:text-orange-300">
+              <span className="font-medium">{point.description}</span>
+              {point.budget && (
+                <Badge variant="outline" className="ml-1.5 text-[9px] px-1 py-0 h-4 bg-orange-100 dark:bg-orange-900/30 border-orange-300 text-orange-700 dark:text-orange-400">
+                  ${point.budget.toLocaleString()}
+                </Badge>
+              )}
+            </div>
+          ))}
+          {client.painPoints.length > 2 && (
+            <p className="text-[10px] text-orange-600 dark:text-orange-500">+{client.painPoints.length - 2} more</p>
+          )}
+        </div>
       )}
 
       {/* Quick action buttons */}

@@ -1283,6 +1283,14 @@ export interface ClientTaskStats {
   lastTaskDueAt?: Date;
 }
 
+export interface ClientPainPoint {
+  id: string;
+  description: string;
+  budget?: number;
+  priority: 'high' | 'medium' | 'low';
+  createdAt: Date;
+}
+
 export interface Client {
   id: string;
   userId: string;
@@ -1321,6 +1329,7 @@ export interface Client {
   lastContactDate?: Date;
   nextContactDate?: Date;
   notes?: string;
+  painPoints?: ClientPainPoint[];
   createdAt: Date;
   updatedAt: Date;
   archived: boolean;
