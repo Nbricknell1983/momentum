@@ -1126,17 +1126,6 @@ export default function NurturePage() {
     })
   );
 
-  // Debug: Log what leads are in nurture stage vs what have nurtureMode set
-  const nurtureStageLeads = leads.filter(lead => lead.stage === 'nurture' && !lead.archived);
-  const nurtureModeLeads = leads.filter(lead => lead.nurtureMode && lead.nurtureMode !== 'none' && !lead.archived);
-  console.log('[Nurture] Leads with stage=nurture:', nurtureStageLeads.length, nurtureStageLeads.map(l => ({ id: l.id, name: l.companyName, nurtureMode: l.nurtureMode, stage: l.stage })));
-  console.log('[Nurture] Leads with nurtureMode set:', nurtureModeLeads.length, nurtureModeLeads.map(l => ({ id: l.id, name: l.companyName, nurtureMode: l.nurtureMode, stage: l.stage })));
-  console.log('[Nurture] Current tab:', nurtureTab);
-  // Count by mode
-  const activeCount = leads.filter(l => l.nurtureMode === 'active' && !l.archived).length;
-  const passiveCount = leads.filter(l => l.nurtureMode === 'passive' && !l.archived).length;
-  console.log('[Nurture] Active mode count:', activeCount, 'Passive mode count:', passiveCount);
-  
   const nurtureLeads = leads.filter(lead => 
     lead.nurtureMode === nurtureTab && !lead.archived
   );

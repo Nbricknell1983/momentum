@@ -47,7 +47,7 @@ const initialState: AppState = {
   regionFilter: 'all',
   areaFilter: 'all',
   healthFilter: 'all',
-  nurtureTab: 'active',
+  nurtureTab: 'passive',
   nbaQueue: [],
   focusMode: null,
 };
