@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { format } from 'date-fns';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
 import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List } from 'lucide-react';
@@ -2570,9 +2571,9 @@ export default function ClientsPage() {
                             {deliverableStatusIcons[deliverable.status]}
                             <div>
                               <p className="text-sm font-medium">{deliverable.title}</p>
-                              {deliverable.dueDate && (
+                              {deliverable.nextFollowUpAt && (
                                 <p className="text-xs text-muted-foreground">
-                                  Due: {format(new Date(deliverable.dueDate), 'dd/MM/yyyy')}
+                                  Follow-up: {format(new Date(deliverable.nextFollowUpAt), 'dd/MM/yyyy')}
                                 </p>
                               )}
                             </div>
@@ -2606,8 +2607,8 @@ export default function ClientsPage() {
                       {(clientStrategySessions[client.id] || []).map((session) => (
                         <div key={session.id} className="p-3 border rounded-lg">
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-medium">{format(new Date(session.date), 'dd/MM/yyyy')}</p>
-                            <Badge variant="outline">{session.type}</Badge>
+                            <p className="text-sm font-medium">{format(new Date(session.sessionDate), 'dd/MM/yyyy')}</p>
+                            <Badge variant="outline">Strategy Session</Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">{session.agenda}</p>
                         </div>
@@ -2621,7 +2622,7 @@ export default function ClientsPage() {
                     <ClipboardList className="h-4 w-4" />
                     <h4 className="text-sm font-medium">Recent Activity</h4>
                   </div>
-                  {loadingClientActivities === client.id ? (
+                  {loadingClientActivity === client.id ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
@@ -2635,7 +2636,7 @@ export default function ClientsPage() {
                             {activity.type === 'call' && <Phone className="h-3 w-3 text-blue-500" />}
                             {activity.type === 'email' && <Mail className="h-3 w-3 text-green-500" />}
                             {activity.type === 'meeting' && <Users className="h-3 w-3 text-purple-500" />}
-                            {activity.type === 'note' && <FileText className="h-3 w-3 text-muted-foreground" />}
+                            {!['call', 'email', 'meeting'].includes(activity.type) && <FileText className="h-3 w-3 text-muted-foreground" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm">{activity.notes || ACTIVITY_LABELS[activity.type as ActivityType]}</p>
@@ -2661,7 +2662,7 @@ export default function ClientsPage() {
                   ) : (clientIntegrations[client.id] || []).length === 0 ? (
                     <div className="text-center py-4">
                       <p className="text-sm text-muted-foreground mb-3">No apps connected</p>
-                      <Button variant="outline" size="sm" onClick={() => handleGeneratePairingCode(client.id)}>
+                      <Button variant="outline" size="sm" onClick={() => handleGeneratePairingCode(client.id, client.businessName)}>
                         <Link2 className="h-4 w-4 mr-1" />
                         Connect App
                       </Button>
@@ -2675,7 +2676,7 @@ export default function ClientsPage() {
                             <div>
                               <p className="text-sm font-medium">{integration.appName}</p>
                               <p className="text-xs text-muted-foreground">
-                                Connected {format(new Date(integration.connectedAt), 'dd/MM/yyyy')}
+                                Connected {format(new Date(integration.createdAt), 'dd/MM/yyyy')}
                               </p>
                             </div>
                           </div>
