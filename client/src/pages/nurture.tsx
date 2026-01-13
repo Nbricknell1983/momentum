@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { format } from 'date-fns';
@@ -21,7 +21,7 @@ import { Lead, NurtureStatus, NURTURE_STATUS_LABELS, NURTURE_STATUS_ORDER, Touch
 import { updateLeadInFirestore, createActivity } from '@/lib/firestoreService';
 
 interface OutreachScripts {
-  textScript: string;
+  smsScript: string;
   emailScript: string;
   callScript: string;
 }
@@ -306,6 +306,13 @@ function NurtureDrawer({
   const [isLogging, setIsLogging] = useState(false);
 
   const leadActivities = lead ? activities.filter(a => a.leadId === lead.id).slice(0, 5) : [];
+
+  // Reset scripts when lead changes to prevent stale data
+  const leadId = lead?.id;
+  useEffect(() => {
+    setOutreachScripts(null);
+    setActiveScriptTab('text');
+  }, [leadId]);
 
   const generateOutreachScripts = async () => {
     if (!lead) return;
@@ -610,7 +617,7 @@ function NurtureDrawer({
                 <TabsContent value="text" className="mt-3">
                   <div className="relative">
                     <Textarea 
-                      value={outreachScripts.textScript} 
+                      value={outreachScripts.smsScript} 
                       readOnly 
                       className="min-h-[150px] text-sm"
                       data-testid="script-text"
@@ -619,7 +626,7 @@ function NurtureDrawer({
                       size="sm" 
                       variant="ghost" 
                       className="absolute top-2 right-2"
-                      onClick={() => copyToClipboard(outreachScripts.textScript, 'Text')}
+                      onClick={() => copyToClipboard(outreachScripts.smsScript, 'Text')}
                       data-testid="button-copy-text"
                     >
                       <Copy className="h-4 w-4" />
@@ -628,8 +635,8 @@ function NurtureDrawer({
                   <Button 
                     className="w-full mt-2" 
                     onClick={() => {
-                      copyToClipboard(outreachScripts.textScript, 'Text');
-                      logTouchAndUpdate('sms', outreachScripts.textScript);
+                      copyToClipboard(outreachScripts.smsScript, 'Text');
+                      logTouchAndUpdate('sms', outreachScripts.smsScript);
                     }}
                     disabled={isLogging}
                     data-testid="button-send-text"
