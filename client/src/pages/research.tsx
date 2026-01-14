@@ -541,9 +541,9 @@ export default function ResearchPage() {
             abnPostcode: addLeadData.abnPostcode,
             addedReason: addedReason || 'Found via ABR business registry search',
             businessSignals,
-            textScript: outreachScripts?.textScript,
-            emailScript: outreachScripts?.emailScript,
-            callScript: outreachScripts?.callScript,
+            ...(outreachScripts?.textScript && { textScript: outreachScripts.textScript }),
+            ...(outreachScripts?.emailScript && { emailScript: outreachScripts.emailScript }),
+            ...(outreachScripts?.callScript && { callScript: outreachScripts.callScript }),
           }
         : {
             source: 'google_places',
@@ -552,9 +552,9 @@ export default function ResearchPage() {
             googleReviewCount: addLeadData.reviewCount,
             addedReason: addedReason || `Found via Google Business search for "${searchedLocation || googleLocation}"`,
             businessSignals,
-            textScript: outreachScripts?.textScript,
-            emailScript: outreachScripts?.emailScript,
-            callScript: outreachScripts?.callScript,
+            ...(outreachScripts?.textScript && { textScript: outreachScripts.textScript }),
+            ...(outreachScripts?.emailScript && { emailScript: outreachScripts.emailScript }),
+            ...(outreachScripts?.callScript && { callScript: outreachScripts.callScript }),
           };
 
       const notes = addLeadData.type === 'abr'
