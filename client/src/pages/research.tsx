@@ -548,8 +548,8 @@ export default function ResearchPage() {
         : {
             source: 'google_places',
             googlePlaceId: addLeadData.placeId,
-            googleRating: addLeadData.rating,
-            googleReviewCount: addLeadData.reviewCount,
+            ...(addLeadData.rating !== undefined && { googleRating: addLeadData.rating }),
+            ...(addLeadData.reviewCount !== undefined && { googleReviewCount: addLeadData.reviewCount }),
             addedReason: addedReason || `Found via Google Business search for "${searchedLocation || googleLocation}"`,
             businessSignals,
             ...(outreachScripts?.textScript && { textScript: outreachScripts.textScript }),
@@ -584,8 +584,6 @@ export default function ResearchPage() {
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,
-        website: addLeadData.website,
-        address: addLeadData.address,
         sourceData,
         nurtureMode: 'none',
         nurtureStatus: null,
@@ -598,11 +596,8 @@ export default function ResearchPage() {
         touchesNoResponse: 0,
         engagementScore: 0,
         nurturePriorityScore: 0,
-        regionId: undefined,
-        regionName: undefined,
-        areaId: undefined,
-        areaName: undefined,
-        territoryKey: undefined,
+        ...(addLeadData.website && { website: addLeadData.website }),
+        ...(addLeadData.address && { address: addLeadData.address }),
       };
 
       const savedLead = await createLead(orgId, newLead, authReady);
