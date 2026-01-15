@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import { Phone, Users, FileText, DollarSign, Target, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Phone, Users, FileText, DollarSign, Target, AlertTriangle, CheckCircle, Clock, Mail, MessageSquare, CalendarCheck, MapPin, Send } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import StatCard from '@/components/StatCard';
@@ -40,7 +40,10 @@ export default function DashboardPage() {
       emails: todayActivities.filter(a => a.type === 'email').length,
       sms: todayActivities.filter(a => a.type === 'sms').length,
       meetings: todayActivities.filter(a => a.type === 'meeting').length,
+      meetingsBooked: todayActivities.filter(a => a.type === 'meeting_booked').length,
       dropins: todayActivities.filter(a => a.type === 'dropin').length,
+      proposalsSent: todayActivities.filter(a => a.type === 'proposal_sent').length,
+      proposalsWon: todayActivities.filter(a => a.type === 'proposal_won').length,
     };
   }, [activities]);
 
@@ -213,8 +216,8 @@ export default function DashboardPage() {
 
   const wonMrr = useMemo(() => {
     return activities
-      .filter(a => a.type === 'deal' || (a.type === 'stage_change' && a.metadata?.newStage === 'won'))
-      .reduce((sum, a) => sum + (Number(a.metadata?.mrr) || 0), 0);
+      .filter(a => a.type === 'deal' || a.type === 'proposal_won' || (a.type === 'stage_change' && a.metadata?.newStage === 'won'))
+      .reduce((sum, a) => sum + (Number(a.metadata?.mrr) || Number(a.metadata?.wonMrr) || 0), 0);
   }, [activities]);
 
   return (
@@ -233,24 +236,53 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <StatCard
-          title="Calls Today"
+          title="Calls"
           value={todayActivityCounts.calls}
           target={targets.calls}
           change={todayActivityCounts.calls > 0 ? Math.round((todayActivityCounts.calls / targets.calls) * 100) - 100 : 0}
           icon={<Phone className="h-5 w-5" />}
         />
         <StatCard
-          title="Meetings"
+          title="Emails Sent"
+          value={todayActivityCounts.emails}
+          icon={<Mail className="h-5 w-5" />}
+        />
+        <StatCard
+          title="SMS Sent"
+          value={todayActivityCounts.sms}
+          icon={<MessageSquare className="h-5 w-5" />}
+        />
+        <StatCard
+          title="Meetings Booked"
+          value={todayActivityCounts.meetingsBooked}
+          icon={<CalendarCheck className="h-5 w-5" />}
+        />
+        <StatCard
+          title="Meetings Held"
           value={todayActivityCounts.meetings}
           target={targets.meetings}
           icon={<Users className="h-5 w-5" />}
         />
         <StatCard
-          title="Proposals"
-          value={todayMetrics.proposals}
+          title="Drop-ins"
+          value={todayActivityCounts.dropins}
+          target={targets.doors}
+          icon={<MapPin className="h-5 w-5" />}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Proposals Sent"
+          value={todayActivityCounts.proposalsSent}
           target={targets.proposals}
+          icon={<Send className="h-5 w-5" />}
+        />
+        <StatCard
+          title="Proposals Won"
+          value={todayActivityCounts.proposalsWon}
           icon={<FileText className="h-5 w-5" />}
         />
         <StatCard
