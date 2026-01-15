@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, CalendarCheck, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List } from 'lucide-react';
 import { DndContext, DragEndEvent, rectIntersection, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import ClientKanbanColumn from '@/components/ClientKanbanColumn';
 import { ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, getDefaultClientBoardStage } from '@/lib/types';
@@ -2886,6 +2886,16 @@ export default function ClientsPage() {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => handleLogClientAction(client.id, client.businessName, 'meeting_booked')}
+                            disabled={loggingAction}
+                            data-testid={`button-kanban-log-meeting-booked-${client.id}`}
+                          >
+                            <CalendarCheck className="h-4 w-4 mr-2" />
+                            Meeting Booked
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => handleLogClientAction(client.id, client.businessName, 'dropin')}
                             disabled={loggingAction}
                             data-testid={`button-kanban-log-dropin-${client.id}`}
@@ -2936,7 +2946,9 @@ export default function ClientsPage() {
                                   {activity.type === 'call' && <Phone className="h-3 w-3 text-blue-500" />}
                                   {activity.type === 'email' && <Mail className="h-3 w-3 text-green-500" />}
                                   {activity.type === 'meeting' && <Users className="h-3 w-3 text-purple-500" />}
-                                  {!['call', 'email', 'meeting'].includes(activity.type) && <FileText className="h-3 w-3 text-muted-foreground" />}
+                                  {activity.type === 'meeting_booked' && <CalendarCheck className="h-3 w-3 text-purple-500" />}
+                                  {activity.type === 'dropin' && <Navigation className="h-3 w-3 text-orange-500" />}
+                                  {!['call', 'email', 'meeting', 'meeting_booked', 'dropin'].includes(activity.type) && <FileText className="h-3 w-3 text-muted-foreground" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm">{activity.notes || ACTIVITY_LABELS[activity.type as ActivityType]}</p>
@@ -5330,6 +5342,16 @@ export default function ClientsPage() {
                                   >
                                     <Calendar className="h-4 w-4 mr-2" />
                                     Meeting
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleLogClientAction(client.id, client.businessName, 'meeting_booked')}
+                                    disabled={loggingAction}
+                                    data-testid={`button-log-meeting-booked-${client.id}`}
+                                  >
+                                    <CalendarCheck className="h-4 w-4 mr-2" />
+                                    Meeting Booked
                                   </Button>
                                   <Button
                                     size="sm"
