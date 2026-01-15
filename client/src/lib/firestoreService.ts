@@ -658,6 +658,7 @@ export async function logClientAction(
     type: Activity['type'];
     clientName: string;
     notes?: string;
+    metadata?: Record<string, any>;
   },
   authReady: boolean = false
 ): Promise<{ activity: Activity; task: Task }> {
@@ -671,6 +672,7 @@ export async function logClientAction(
     clientId: activityData.clientId,
     type: activityData.type,
     notes: activityData.notes,
+    metadata: activityData.metadata,
     createdAt: now,
   }, authReady);
   

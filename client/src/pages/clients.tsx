@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, CalendarCheck, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, CalendarCheck, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List, FileSignature, DollarSign } from 'lucide-react';
 import { DndContext, DragEndEvent, rectIntersection, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import ClientKanbanColumn from '@/components/ClientKanbanColumn';
 import { ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, getDefaultClientBoardStage } from '@/lib/types';
@@ -23,7 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient } from '@/store';
+import { RootState, setHealthFilter, setRegionFilter, setAreaFilter, addClient, updateClient, selectClient, addActivity } from '@/store';
 import { Client, HealthStatus, HEALTH_STATUS_LABELS, CADENCE_TIER_LABELS, StrategyStatus, ChannelStatuses, Deliverable, DeliverableStatus, DELIVERABLE_STATUS_LABELS, StrategySession, StrategyPlan, PRIMARY_GOAL_LABELS, PrimaryGoal, ContentDraft, ContentDraftStatus, ContentDraftType, NBAAction, NBAActionType, ChannelInsight, InsightChannel, INSIGHT_CHANNEL_LABELS, DEFAULT_CHANNEL_EVIDENCE, AnalysisStatus, ANALYSIS_STATUS_LABELS, EvidenceTask, EvidenceTaskStatus, AnalyticsSnapshot, Activity, ACTIVITY_LABELS, Task, getTodayDDMMYYYY, formatDateDDMMYYYY, toPlanDateKey, TaskType, ActivityType, AITaskAssistResponse, TaskChecklistItem, TaskPriority, calculateClientHealth, HealthContributor, StrategyEngineState, StrategyEngineOutput, StrategyAction, STRATEGY_QUESTIONS, STRATEGY_QUESTION_CATEGORY_LABELS, StrategyQuestionAnswer, PairingCode, ClientIntegration } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, validateTerritorySelection } from '@/lib/territoryConfig';
 import { createClient as createClientInFirestore, updateClientInFirestore, fetchDeliverables, createDeliverable, updateDeliverable, deleteDeliverable, fetchStrategySessions, createStrategySession, deleteStrategySession, fetchStrategyPlan, saveStrategyPlan, fetchContentDrafts, updateContentDraft, createNBAAction, fetchChannelInsights, saveChannelInsight, fetchEvidenceTasks, createEvidenceTask, updateEvidenceTask, fetchAnalyticsSnapshots, createAnalyticsSnapshot, logClientAction, createClientTask, addClientNote, fetchClientActivities, fetchClientTasks, updatePlanTask, fetchAllOrgTasks, fetchStrategyEngineState, saveStrategyEngineState, fetchStrategyEngineOutput, saveStrategyEngineOutput, fetchStrategyActions, saveStrategyActions, updateStrategyAction, savePairingCode, fetchClientIntegrations, updateClientIntegration, fetchPendingPairingCodeForClient } from '@/lib/firestoreService';
@@ -369,6 +369,10 @@ export default function ClientsPage() {
   const [loggingAction, setLoggingAction] = useState(false);
   const [newClientNote, setNewClientNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [proposalWonDialogOpen, setProposalWonDialogOpen] = useState(false);
+  const [proposalWonClientId, setProposalWonClientId] = useState<string | null>(null);
+  const [proposalWonClientName, setProposalWonClientName] = useState('');
+  const [proposalWonMrr, setProposalWonMrr] = useState('');
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskType, setNewTaskType] = useState<TaskType>('check_in');
@@ -547,12 +551,15 @@ export default function ClientsPage() {
     if (!orgId || !userId) return;
     setLoggingAction(true);
     try {
-      await logClientAction(orgId, {
+      const { activity } = await logClientAction(orgId, {
         userId,
         clientId,
         type: actionType,
         clientName,
       }, authReady);
+      
+      // Add to Redux store for dashboard visibility
+      dispatch(addActivity(activity));
       
       // Refresh activities
       const activities = await fetchClientActivities(orgId, clientId, authReady);
@@ -565,6 +572,57 @@ export default function ClientsPage() {
     } catch (error) {
       console.error('Error logging client action:', error);
       toast({ title: 'Error', description: 'Failed to log activity.', variant: 'destructive' });
+    } finally {
+      setLoggingAction(false);
+    }
+  };
+
+  // Handler to log proposal won with MRR
+  const handleProposalWon = async () => {
+    if (!orgId || !userId || !proposalWonClientId) return;
+    setLoggingAction(true);
+    try {
+      const mrrAmount = parseFloat(proposalWonMrr) || 0;
+      const { activity } = await logClientAction(orgId, {
+        userId,
+        clientId: proposalWonClientId,
+        type: 'proposal_won',
+        clientName: proposalWonClientName,
+        notes: mrrAmount > 0 ? `Won MRR: $${mrrAmount}/mo` : undefined,
+        metadata: { wonMrr: mrrAmount },
+      }, authReady);
+      
+      // Add to Redux store for dashboard visibility
+      dispatch(addActivity(activity));
+      
+      // Update client's totalMRR if amount was provided
+      if (mrrAmount > 0) {
+        const client = clients.find(c => c.id === proposalWonClientId);
+        if (client) {
+          const updatedMrr = (client.totalMRR || 0) + mrrAmount;
+          await updateClientInFirestore(orgId, proposalWonClientId, { totalMRR: updatedMrr }, authReady);
+          dispatch(updateClient({ ...client, totalMRR: updatedMrr }));
+        }
+      }
+      
+      // Refresh activities
+      const activities = await fetchClientActivities(orgId, proposalWonClientId, authReady);
+      setClientActivities(prev => ({ ...prev, [proposalWonClientId]: activities }));
+      
+      toast({ 
+        title: 'Proposal Won!', 
+        description: mrrAmount > 0 
+          ? `Logged $${mrrAmount}/mo MRR won for ${proposalWonClientName}` 
+          : `Proposal won logged for ${proposalWonClientName}` 
+      });
+      
+      setProposalWonDialogOpen(false);
+      setProposalWonClientId(null);
+      setProposalWonClientName('');
+      setProposalWonMrr('');
+    } catch (error) {
+      console.error('Error logging proposal won:', error);
+      toast({ title: 'Error', description: 'Failed to log proposal won.', variant: 'destructive' });
     } finally {
       setLoggingAction(false);
     }
@@ -2903,6 +2961,31 @@ export default function ClientsPage() {
                             <Navigation className="h-4 w-4 mr-2" />
                             Drop-in
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleLogClientAction(client.id, client.businessName, 'proposal_sent')}
+                            disabled={loggingAction}
+                            data-testid={`button-kanban-log-proposal-sent-${client.id}`}
+                          >
+                            <FileSignature className="h-4 w-4 mr-2" />
+                            Proposal Sent
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                            onClick={() => {
+                              setProposalWonClientId(client.id);
+                              setProposalWonClientName(client.businessName);
+                              setProposalWonDialogOpen(true);
+                            }}
+                            disabled={loggingAction}
+                            data-testid={`button-kanban-log-proposal-won-${client.id}`}
+                          >
+                            <DollarSign className="h-4 w-4 mr-2" />
+                            Proposal Won
+                          </Button>
                         </div>
                       </div>
 
@@ -2948,7 +3031,9 @@ export default function ClientsPage() {
                                   {activity.type === 'meeting' && <Users className="h-3 w-3 text-purple-500" />}
                                   {activity.type === 'meeting_booked' && <CalendarCheck className="h-3 w-3 text-purple-500" />}
                                   {activity.type === 'dropin' && <Navigation className="h-3 w-3 text-orange-500" />}
-                                  {!['call', 'email', 'meeting', 'meeting_booked', 'dropin'].includes(activity.type) && <FileText className="h-3 w-3 text-muted-foreground" />}
+                                  {activity.type === 'proposal_sent' && <FileSignature className="h-3 w-3 text-amber-500" />}
+                                  {activity.type === 'proposal_won' && <DollarSign className="h-3 w-3 text-green-600" />}
+                                  {!['call', 'email', 'meeting', 'meeting_booked', 'dropin', 'proposal_sent', 'proposal_won'].includes(activity.type) && <FileText className="h-3 w-3 text-muted-foreground" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm">{activity.notes || ACTIVITY_LABELS[activity.type as ActivityType]}</p>
@@ -5363,6 +5448,31 @@ export default function ClientsPage() {
                                     <Navigation className="h-4 w-4 mr-2" />
                                     Drop-in
                                   </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleLogClientAction(client.id, client.businessName, 'proposal_sent')}
+                                    disabled={loggingAction}
+                                    data-testid={`button-log-proposal-sent-${client.id}`}
+                                  >
+                                    <FileSignature className="h-4 w-4 mr-2" />
+                                    Proposal Sent
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                                    onClick={() => {
+                                      setProposalWonClientId(client.id);
+                                      setProposalWonClientName(client.businessName);
+                                      setProposalWonDialogOpen(true);
+                                    }}
+                                    disabled={loggingAction}
+                                    data-testid={`button-log-proposal-won-${client.id}`}
+                                  >
+                                    <DollarSign className="h-4 w-4 mr-2" />
+                                    Proposal Won
+                                  </Button>
                                 </div>
                               </div>
 
@@ -6656,6 +6766,60 @@ export default function ClientsPage() {
           }}
         />
       )}
+
+      {/* Proposal Won Dialog */}
+      <Dialog open={proposalWonDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setProposalWonDialogOpen(false);
+          setProposalWonClientId(null);
+          setProposalWonClientName('');
+          setProposalWonMrr('');
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+              <DollarSign className="h-5 w-5" />
+              Log Proposal Won
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Record a won proposal for <span className="font-medium">{proposalWonClientName}</span>. Enter the MRR amount to track your revenue growth.
+            </p>
+            
+            <div className="space-y-2">
+              <Label htmlFor="proposal-won-mrr">Monthly Recurring Revenue (MRR)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  id="proposal-won-mrr"
+                  type="number"
+                  value={proposalWonMrr}
+                  onChange={(e) => setProposalWonMrr(e.target.value)}
+                  placeholder="0"
+                  className="flex-1"
+                  data-testid="input-proposal-won-mrr"
+                />
+                <span className="text-muted-foreground">/mo</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setProposalWonDialogOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={handleProposalWon} 
+                disabled={loggingAction}
+                className="bg-green-600 hover:bg-green-700"
+                data-testid="button-confirm-proposal-won"
+              >
+                {loggingAction && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Log Won Proposal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
