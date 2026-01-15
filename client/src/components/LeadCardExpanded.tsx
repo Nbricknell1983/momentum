@@ -629,9 +629,9 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         data-testid={`lead-header-${lead.id}`}
       >
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start gap-2">
-              <h3 className="font-semibold text-sm break-words">{lead.companyName}</h3>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex items-start gap-2 min-w-0">
+              <h3 className="font-semibold text-sm break-words overflow-hidden min-w-0 flex-1">{lead.companyName}</h3>
               <TrafficLight status={trafficStatus} size="sm" className="shrink-0 mt-0.5" />
             </div>
             {lead.territory && (
