@@ -220,6 +220,18 @@ export default function DashboardPage() {
       .reduce((sum, a) => sum + (Number(a.metadata?.mrr) || Number(a.metadata?.wonMrr) || 0), 0);
   }, [activities]);
 
+  // Total cumulative activity counts (all time, not just today)
+  const totalActivityCounts = useMemo(() => {
+    return {
+      proposalsSent: activities.filter(a => a.type === 'proposal_sent').length,
+      proposalsWon: activities.filter(a => a.type === 'proposal_won').length,
+      calls: activities.filter(a => a.type === 'call').length,
+      emails: activities.filter(a => a.type === 'email').length,
+      meetings: activities.filter(a => a.type === 'meeting').length,
+      meetingsBooked: activities.filter(a => a.type === 'meeting_booked').length,
+    };
+  }, [activities]);
+
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -275,18 +287,17 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Proposals Sent"
-          value={todayActivityCounts.proposalsSent}
-          target={targets.proposals}
+          title="Total Proposals Sent"
+          value={totalActivityCounts.proposalsSent}
           icon={<Send className="h-5 w-5" />}
         />
         <StatCard
-          title="Proposals Won"
-          value={todayActivityCounts.proposalsWon}
+          title="Total Proposals Won"
+          value={totalActivityCounts.proposalsWon}
           icon={<FileText className="h-5 w-5" />}
         />
         <StatCard
-          title="Won MRR"
+          title="Total Won MRR"
           value={`$${wonMrr.toLocaleString()}`}
           icon={<DollarSign className="h-5 w-5" />}
         />
