@@ -619,7 +619,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
 
   return (
     <Card 
-      className={`transition-all duration-200 ${isExpanded ? 'ring-2 ring-primary' : ''}`}
+      className={`transition-all duration-200 overflow-hidden ${isExpanded ? 'ring-2 ring-primary' : ''}`}
       data-testid={`card-lead-${lead.id}`}
     >
       {/* Collapsed Header - Always Visible */}
@@ -653,7 +653,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="px-3 pb-3 space-y-4 border-t pt-3">
+        <div className="px-3 pb-3 space-y-4 border-t pt-3 overflow-hidden break-words">
           {/* Stage */}
           <div className="space-y-1">
             <Label className="text-xs">Stage</Label>
@@ -1033,7 +1033,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 </Button>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground break-words">
               Stored per-deal in your browser (local). No CRM writeback.
             </p>
           </div>
