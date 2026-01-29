@@ -628,21 +628,16 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         onClick={onToggle}
         data-testid={`lead-header-${lead.id}`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <div className="flex items-start gap-2 min-w-0">
-              <h3 className="font-semibold text-sm break-words overflow-hidden min-w-0 flex-1">{lead.companyName}</h3>
-              <TrafficLight status={trafficStatus} size="sm" className="shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start gap-2">
+              <h3 className="font-semibold text-sm line-clamp-2 flex-1 min-w-0">{lead.companyName}</h3>
+              <TrafficLight status={trafficStatus} size="sm" className="shrink-0 mt-1" />
             </div>
-            {lead.territory && (
-              <p className="text-xs text-muted-foreground truncate">{lead.territory}</p>
+            {(lead.territory || lead.address) && (
+              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{lead.address || lead.territory}</p>
             )}
           </div>
-          {lead.nextContactDate && (
-            <Badge variant="outline" className="text-xs shrink-0">
-              Next: {format(new Date(lead.nextContactDate), 'dd/MM/yyyy')}
-            </Badge>
-          )}
         </div>
         {!isExpanded && lead.lastActivityAt && (
           <p className="text-xs text-muted-foreground mt-1">
