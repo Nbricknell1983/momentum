@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core';
 import { format } from 'date-fns';
-import { Phone, Mail, MessageSquare, DollarSign, Calendar, AlertCircle, CheckCircle, AlertTriangle, Sparkles, ChevronRight, Lightbulb } from 'lucide-react';
+import { Phone, Mail, MessageSquare, DollarSign, Calendar, AlertCircle, CheckCircle, AlertTriangle, Sparkles, ChevronRight, Lightbulb, GripVertical } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,22 +50,28 @@ export default function ClientKanbanCard({ client, onClick, onQuickAction }: Cli
     <Card
       ref={setNodeRef}
       style={style}
-      className={`p-3 cursor-grab transition-shadow hover-elevate ${
+      className={`p-3 transition-shadow hover-elevate ${
         isDragging ? 'opacity-50 shadow-lg ring-2 ring-primary' : ''
       } ${healthBgColors[client.healthStatus]}`}
       data-testid={`card-client-${client.id}`}
-      {...attributes}
-      {...listeners}
     >
-      {/* Header: Business name + Health badge */}
-      <div className="flex items-start justify-between gap-2 mb-2">
+      {/* Header: Drag handle + Business name + Health badge */}
+      <div className="flex items-start gap-2 mb-2">
+        {/* Drag handle */}
+        <div 
+          className="flex-shrink-0 cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
         <div 
           className="flex-1 min-w-0 cursor-pointer"
-          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          onClick={onClick}
         >
-          <h4 className="font-semibold text-sm truncate">{client.businessName}</h4>
+          <h4 className="font-semibold text-sm break-words">{client.businessName}</h4>
           {client.primaryContactName && (
-            <p className="text-xs text-muted-foreground truncate">{client.primaryContactName}</p>
+            <p className="text-xs text-muted-foreground break-words">{client.primaryContactName}</p>
           )}
         </div>
         <Tooltip>
@@ -228,7 +234,7 @@ export default function ClientKanbanCard({ client, onClick, onQuickAction }: Cli
           variant="ghost"
           size="sm"
           className="h-7 text-xs gap-1"
-          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          onClick={onClick}
           data-testid={`button-open-${client.id}`}
         >
           Open

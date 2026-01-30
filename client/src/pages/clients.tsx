@@ -693,7 +693,7 @@ export default function ClientsPage() {
     setProcessingMeetingNotes(true);
     try {
       const client = clients.find(c => c.id === meetingNotesClientId);
-      const clientContext = client ? `MRR: $${client.totalMRR || 0}/mo, Lifecycle: ${client.lifecycleStage || 'Unknown'}, Health: ${client.healthStatus || 'Unknown'}` : '';
+      const clientContext = client ? `MRR: $${client.totalMRR || 0}/mo, Health: ${client.healthStatus || 'Unknown'}, Board Stage: ${client.boardStage || 'Unknown'}` : '';
       
       const response = await fetch('/api/ai/process-meeting-notes', {
         method: 'POST',
