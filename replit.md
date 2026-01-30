@@ -73,6 +73,17 @@ An SEO-optimized public website (`battlescore.com.au`) targeting business consul
 ### AI Movement Tips System
 Provides AI-generated strategic recommendations for moving clients between lifecycle stages, leveraging GPT-4o-mini and sales frameworks.
 
+### AI Meeting Notes System
+AI-powered meeting notes processing with voice dictation support:
+- **Voice Dictation**: Web Speech API integration for hands-free note-taking via DictationButton component
+- **AI Processing**: OpenAI extracts meeting summaries, key discussion points, and actionable items
+- **Action Item Extraction**: Automatically identifies tasks with priorities, due dates, and task types
+- **Sentiment Analysis**: Detects client sentiment (positive/neutral/negative) from meeting content
+- **Risk Detection**: Flags potential concerns like budget issues, timeline concerns, or scope creep
+- **Auto-Task Creation**: Users can select extracted action items to create tasks automatically
+- **Endpoint**: POST `/api/ai/process-meeting-notes` handles AI processing
+- **Response Validation**: Sanitizes AI responses with safe defaults for all fields
+
 ### Client App Integration System
 Enables secure pairing and data exchange with external client business applications via pairing codes and permanent integration secrets. Supports various event types like KPI snapshots and bookings.
 
