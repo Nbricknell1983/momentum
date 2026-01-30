@@ -373,6 +373,30 @@ export default function ClientsPage() {
   const [proposalWonClientId, setProposalWonClientId] = useState<string | null>(null);
   const [proposalWonClientName, setProposalWonClientName] = useState('');
   const [proposalWonMrr, setProposalWonMrr] = useState('');
+  
+  // Meeting Notes Dialog state
+  const [meetingNotesDialogOpen, setMeetingNotesDialogOpen] = useState(false);
+  const [meetingNotesClientId, setMeetingNotesClientId] = useState<string | null>(null);
+  const [meetingNotesClientName, setMeetingNotesClientName] = useState('');
+  const [meetingNotes, setMeetingNotes] = useState('');
+  const [processingMeetingNotes, setProcessingMeetingNotes] = useState(false);
+  const [meetingAIResult, setMeetingAIResult] = useState<{
+    summary: string;
+    keyPoints: string[];
+    actionItems: Array<{
+      title: string;
+      taskType: string;
+      priority: string;
+      suggestedDueDays: number;
+      notes?: string;
+    }>;
+    nextSteps: string;
+    clientSentiment: string;
+    riskFlags: string[];
+  } | null>(null);
+  const [selectedActionItems, setSelectedActionItems] = useState<number[]>([]);
+  const [savingMeetingNotes, setSavingMeetingNotes] = useState(false);
+  
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskType, setNewTaskType] = useState<TaskType>('check_in');
@@ -650,6 +674,127 @@ export default function ClientsPage() {
       toast({ title: 'Error', description: 'Failed to add note.', variant: 'destructive' });
     } finally {
       setSavingNote(false);
+    }
+  };
+
+  // Handler to open meeting notes dialog
+  const handleOpenMeetingNotes = (clientId: string, clientName: string) => {
+    setMeetingNotesClientId(clientId);
+    setMeetingNotesClientName(clientName);
+    setMeetingNotes('');
+    setMeetingAIResult(null);
+    setSelectedActionItems([]);
+    setMeetingNotesDialogOpen(true);
+  };
+
+  // Handler to process meeting notes with AI
+  const handleProcessMeetingNotes = async () => {
+    if (!meetingNotes.trim()) return;
+    setProcessingMeetingNotes(true);
+    try {
+      const client = clients.find(c => c.id === meetingNotesClientId);
+      const clientContext = client ? `MRR: $${client.totalMRR || 0}/mo, Lifecycle: ${client.lifecycleStage || 'Unknown'}, Health: ${client.healthStatus || 'Unknown'}` : '';
+      
+      const response = await fetch('/api/ai/process-meeting-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notes: meetingNotes,
+          clientName: meetingNotesClientName,
+          clientContext,
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to process meeting notes');
+      const result = await response.json();
+      setMeetingAIResult(result);
+      // Pre-select all action items by default
+      setSelectedActionItems(result.actionItems?.map((_: any, i: number) => i) || []);
+      toast({ title: 'Meeting analyzed', description: 'AI has extracted insights and action items.' });
+    } catch (error) {
+      console.error('Error processing meeting notes:', error);
+      toast({ title: 'Error', description: 'Failed to process meeting notes with AI.', variant: 'destructive' });
+    } finally {
+      setProcessingMeetingNotes(false);
+    }
+  };
+
+  // Handler to save meeting and create action item tasks
+  const handleSaveMeetingNotes = async () => {
+    if (!orgId || !userId || !meetingNotesClientId) return;
+    setSavingMeetingNotes(true);
+    try {
+      // Build the full meeting note with AI summary
+      let fullNotes = meetingNotes;
+      if (meetingAIResult) {
+        fullNotes = `**Meeting Summary:** ${meetingAIResult.summary}\n\n**Key Points:**\n${meetingAIResult.keyPoints.map(p => `- ${p}`).join('\n')}\n\n**Next Steps:** ${meetingAIResult.nextSteps}\n\n**Raw Notes:**\n${meetingNotes}`;
+      }
+      
+      // Log the meeting activity
+      const { activity } = await logClientAction(orgId, {
+        userId,
+        clientId: meetingNotesClientId,
+        type: 'meeting',
+        clientName: meetingNotesClientName,
+        notes: fullNotes,
+        metadata: {
+          aiProcessed: !!meetingAIResult,
+          sentiment: meetingAIResult?.clientSentiment,
+          riskFlags: meetingAIResult?.riskFlags,
+        },
+      }, authReady);
+      dispatch(addActivity(activity));
+      
+      // Create tasks from selected action items
+      if (meetingAIResult && selectedActionItems.length > 0) {
+        const today = new Date();
+        for (const idx of selectedActionItems) {
+          const item = meetingAIResult.actionItems[idx];
+          if (item) {
+            const dueDate = new Date(today);
+            dueDate.setDate(dueDate.getDate() + (item.suggestedDueDays || 3));
+            const dueDateStr = formatDateDDMMYYYY(dueDate);
+            
+            await createClientTask(orgId, {
+              userId,
+              clientId: meetingNotesClientId,
+              clientName: meetingNotesClientName,
+              title: item.title,
+              taskType: (item.taskType as TaskType) || 'check_in',
+              dueDate: dueDateStr,
+              notes: item.notes,
+              priority: (item.priority as TaskPriority) || 'medium',
+              aiEnhanced: true,
+            }, authReady);
+          }
+        }
+        toast({ 
+          title: 'Meeting logged', 
+          description: `Meeting recorded with ${selectedActionItems.length} action item${selectedActionItems.length !== 1 ? 's' : ''} created.` 
+        });
+      } else {
+        toast({ title: 'Meeting logged', description: 'Meeting has been recorded.' });
+      }
+      
+      // Refresh activities and tasks
+      const activities = await fetchClientActivities(orgId, meetingNotesClientId, authReady);
+      setClientActivities(prev => ({ ...prev, [meetingNotesClientId]: activities }));
+      
+      const tasks = await fetchClientTasks(orgId, meetingNotesClientId, authReady);
+      setClientTasks(prev => ({ ...prev, [meetingNotesClientId]: tasks }));
+      
+      // Close dialog and reset
+      setMeetingNotesDialogOpen(false);
+      setMeetingNotesClientId(null);
+      setMeetingNotesClientName('');
+      setMeetingNotes('');
+      setMeetingAIResult(null);
+      setSelectedActionItems([]);
+    } catch (error) {
+      console.error('Error saving meeting notes:', error);
+      toast({ title: 'Error', description: 'Failed to save meeting notes.', variant: 'destructive' });
+    } finally {
+      setSavingMeetingNotes(false);
     }
   };
 
@@ -2934,7 +3079,8 @@ export default function ClientsPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleLogClientAction(client.id, client.businessName, 'meeting')}
+                            className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                            onClick={() => handleOpenMeetingNotes(client.id, client.businessName)}
                             disabled={loggingAction}
                             data-testid={`button-kanban-log-meeting-${client.id}`}
                           >
@@ -2991,14 +3137,20 @@ export default function ClientsPage() {
 
                       {/* Add Note */}
                       <div className="space-y-2">
-                        <h4 className="text-sm font-medium flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4" />
-                          Add Note
-                        </h4>
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-medium flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4" />
+                            Add Note
+                          </h4>
+                          <DictationButton
+                            onTranscript={(text) => setNewClientNote(prev => prev + (prev ? ' ' : '') + text)}
+                            data-testid={`button-kanban-dictate-note-${client.id}`}
+                          />
+                        </div>
                         <Textarea
                           value={newClientNote}
                           onChange={(e) => setNewClientNote(e.target.value)}
-                          placeholder="Add a note to client history..."
+                          placeholder="Add a note to client history... (or use microphone to dictate)"
                           className="min-h-[60px]"
                           data-testid={`input-kanban-note-${client.id}`}
                         />
@@ -5421,7 +5573,8 @@ export default function ClientsPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => handleLogClientAction(client.id, client.businessName, 'meeting')}
+                                    className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                                    onClick={() => handleOpenMeetingNotes(client.id, client.businessName)}
                                     disabled={loggingAction}
                                     data-testid={`button-log-meeting-${client.id}`}
                                   >
@@ -6815,6 +6968,200 @@ export default function ClientsPage() {
               >
                 {loggingAction && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Log Won Proposal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Meeting Notes Dialog */}
+      <Dialog open={meetingNotesDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setMeetingNotesDialogOpen(false);
+          setMeetingNotesClientId(null);
+          setMeetingNotesClientName('');
+          setMeetingNotes('');
+          setMeetingAIResult(null);
+          setSelectedActionItems([]);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-400">
+              <Calendar className="h-5 w-5" />
+              Log Meeting with {meetingNotesClientName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Add your meeting notes below. Use the microphone button to dictate, then let AI extract action items.
+            </p>
+            
+            {/* Meeting Notes Input */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>Meeting Notes</Label>
+                <DictationButton
+                  onTranscript={(text) => setMeetingNotes(prev => prev + (prev ? ' ' : '') + text)}
+                  data-testid="button-dictate-meeting-notes"
+                />
+              </div>
+              <Textarea
+                value={meetingNotes}
+                onChange={(e) => setMeetingNotes(e.target.value)}
+                placeholder="Describe what was discussed in the meeting... (or use microphone to dictate)"
+                className="min-h-[120px]"
+                data-testid="input-meeting-notes"
+              />
+              
+              {/* AI Process Button */}
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleProcessMeetingNotes}
+                  disabled={processingMeetingNotes || !meetingNotes.trim()}
+                  data-testid="button-process-meeting-notes"
+                >
+                  {processingMeetingNotes ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Analyzing...</>
+                  ) : (
+                    <><Sparkles className="h-4 w-4 mr-2" />Extract Action Items</>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* AI Results */}
+            {meetingAIResult && (
+              <div className="space-y-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                {/* Summary */}
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-purple-600" />
+                    Summary
+                  </h4>
+                  <p className="text-sm text-muted-foreground">{meetingAIResult.summary}</p>
+                </div>
+
+                {/* Key Points */}
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <Target className="h-4 w-4 text-purple-600" />
+                    Key Points
+                  </h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {meetingAIResult.keyPoints.map((point, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Circle className="h-2 w-2 mt-1.5 flex-shrink-0 fill-current" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Sentiment & Risks */}
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={
+                    meetingAIResult.clientSentiment === 'positive' ? 'default' :
+                    meetingAIResult.clientSentiment === 'concerned' ? 'destructive' : 'secondary'
+                  }>
+                    Sentiment: {meetingAIResult.clientSentiment}
+                  </Badge>
+                  {meetingAIResult.riskFlags?.length > 0 && (
+                    <Badge variant="destructive">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {meetingAIResult.riskFlags.length} risk{meetingAIResult.riskFlags.length !== 1 ? 's' : ''} identified
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Action Items */}
+                {meetingAIResult.actionItems?.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium flex items-center gap-2">
+                      <CheckSquare className="h-4 w-4 text-purple-600" />
+                      Action Items (select to create tasks)
+                    </h4>
+                    <div className="space-y-2">
+                      {meetingAIResult.actionItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded border bg-background cursor-pointer transition-colors ${
+                            selectedActionItems.includes(idx)
+                              ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30'
+                              : 'border-border hover:border-purple-300'
+                          }`}
+                          onClick={() => {
+                            setSelectedActionItems(prev =>
+                              prev.includes(idx)
+                                ? prev.filter(i => i !== idx)
+                                : [...prev, idx]
+                            );
+                          }}
+                          data-testid={`action-item-${idx}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={selectedActionItems.includes(idx)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedActionItems(prev => [...prev, idx]);
+                                } else {
+                                  setSelectedActionItems(prev => prev.filter(i => i !== idx));
+                                }
+                              }}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{item.title}</p>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <Badge variant="outline" className="text-xs">{item.taskType}</Badge>
+                                <Badge variant={
+                                  item.priority === 'urgent' ? 'destructive' :
+                                  item.priority === 'high' ? 'default' : 'secondary'
+                                } className="text-xs">
+                                  {item.priority}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  Due in {item.suggestedDueDays} day{item.suggestedDueDays !== 1 ? 's' : ''}
+                                </Badge>
+                              </div>
+                              {item.notes && (
+                                <p className="text-xs text-muted-foreground mt-1">{item.notes}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Next Steps */}
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-purple-600" />
+                    Next Steps
+                  </h4>
+                  <p className="text-sm text-muted-foreground">{meetingAIResult.nextSteps}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Save Buttons */}
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button variant="outline" onClick={() => setMeetingNotesDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={handleSaveMeetingNotes}
+                disabled={savingMeetingNotes || !meetingNotes.trim()}
+                className="bg-purple-600 hover:bg-purple-700"
+                data-testid="button-save-meeting-notes"
+              >
+                {savingMeetingNotes && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {meetingAIResult && selectedActionItems.length > 0
+                  ? `Save Meeting & Create ${selectedActionItems.length} Task${selectedActionItems.length !== 1 ? 's' : ''}`
+                  : 'Save Meeting'
+                }
               </Button>
             </div>
           </div>

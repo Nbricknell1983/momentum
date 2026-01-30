@@ -2605,5 +2605,77 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
     }
   });
 
+  // ===============================
+  // AI MEETING NOTES PROCESSING
+  // ===============================
+
+  app.post("/api/ai/process-meeting-notes", async (req, res) => {
+    try {
+      const { notes, clientName, clientContext } = req.body;
+
+      if (!notes) {
+        return res.status(400).json({ error: "Meeting notes are required" });
+      }
+
+      const systemPrompt = `You are an AI assistant for a marketing agency. You help extract actionable insights from meeting notes with clients.
+
+Your task is to analyze meeting notes and extract:
+1. A concise summary (2-3 sentences)
+2. Key discussion points (bullet points)
+3. Action items with clear ownership and suggested due dates
+4. Next steps and follow-up recommendations
+
+Focus on actionable outcomes that move the client relationship forward. Be specific about deliverables and timelines.
+
+Respond in JSON format:
+{
+  "summary": "Brief meeting summary",
+  "keyPoints": ["Point 1", "Point 2"],
+  "actionItems": [
+    {
+      "title": "Action item description",
+      "taskType": "check_in|proposal|strategy_review|content_review|campaign_launch|reporting|onboarding|training|other",
+      "priority": "low|medium|high|urgent",
+      "suggestedDueDays": 3,
+      "notes": "Additional context"
+    }
+  ],
+  "nextSteps": "Recommended next steps",
+  "clientSentiment": "positive|neutral|concerned",
+  "riskFlags": ["Any concerns or risks identified"]
+}`;
+
+      const userPrompt = `Client: ${clientName || 'Unknown'}
+${clientContext ? `Context: ${clientContext}` : ''}
+
+Meeting Notes:
+${notes}
+
+Please analyze these meeting notes and extract actionable insights.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.5,
+        response_format: { type: "json_object" }
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("No response from AI");
+      }
+
+      const result = JSON.parse(content);
+      res.json(result);
+
+    } catch (error) {
+      console.error("Error processing meeting notes:", error);
+      res.status(500).json({ error: "Failed to process meeting notes" });
+    }
+  });
+
   return httpServer;
 }
