@@ -707,9 +707,26 @@ export default function ClientsPage() {
       
       if (!response.ok) throw new Error('Failed to process meeting notes');
       const result = await response.json();
-      setMeetingAIResult(result);
+      
+      // Validate and sanitize the response with safe defaults
+      const sanitizedResult = {
+        summary: result.summary || 'Meeting notes processed.',
+        keyPoints: Array.isArray(result.keyPoints) ? result.keyPoints : [],
+        actionItems: Array.isArray(result.actionItems) ? result.actionItems.map((item: any) => ({
+          title: item.title || 'Action item',
+          taskType: item.taskType || 'check_in',
+          priority: item.priority || 'medium',
+          suggestedDueDays: item.suggestedDueDays || 3,
+          notes: item.notes || '',
+        })) : [],
+        nextSteps: result.nextSteps || 'Follow up as needed.',
+        clientSentiment: result.clientSentiment || 'neutral',
+        riskFlags: Array.isArray(result.riskFlags) ? result.riskFlags : [],
+      };
+      
+      setMeetingAIResult(sanitizedResult);
       // Pre-select all action items by default
-      setSelectedActionItems(result.actionItems?.map((_: any, i: number) => i) || []);
+      setSelectedActionItems(sanitizedResult.actionItems.map((_: any, i: number) => i));
       toast({ title: 'Meeting analyzed', description: 'AI has extracted insights and action items.' });
     } catch (error) {
       console.error('Error processing meeting notes:', error);
@@ -3078,8 +3095,7 @@ export default function ClientsPage() {
                           </Button>
                           <Button
                             size="sm"
-                            variant="outline"
-                            className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                            variant="secondary"
                             onClick={() => handleOpenMeetingNotes(client.id, client.businessName)}
                             disabled={loggingAction}
                             data-testid={`button-kanban-log-meeting-${client.id}`}
@@ -5572,8 +5588,7 @@ export default function ClientsPage() {
                                   </Button>
                                   <Button
                                     size="sm"
-                                    variant="outline"
-                                    className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                                    variant="secondary"
                                     onClick={() => handleOpenMeetingNotes(client.id, client.businessName)}
                                     disabled={loggingAction}
                                     data-testid={`button-log-meeting-${client.id}`}
@@ -7154,7 +7169,6 @@ export default function ClientsPage() {
               <Button
                 onClick={handleSaveMeetingNotes}
                 disabled={savingMeetingNotes || !meetingNotes.trim()}
-                className="bg-purple-600 hover:bg-purple-700"
                 data-testid="button-save-meeting-notes"
               >
                 {savingMeetingNotes && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

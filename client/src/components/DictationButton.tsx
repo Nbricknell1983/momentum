@@ -49,7 +49,7 @@ export function DictationButton({
           variant={isListening ? 'default' : 'outline'}
           onClick={handleClick}
           disabled={disabled}
-          className={`${className} ${isListening ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' : ''}`}
+          className={`${className} ${isListening ? 'bg-destructive text-destructive-foreground animate-pulse' : ''}`}
           data-testid={testId}
         >
           {isListening ? (
