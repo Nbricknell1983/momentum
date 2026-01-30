@@ -64,6 +64,7 @@ export function useSpeechRecognition(
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const shouldRestartRef = useRef(false);
 
   const isSupported = typeof window !== 'undefined' && 
     (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
@@ -101,15 +102,40 @@ export function useSpeechRecognition(
 
     recognition.onerror = (event: SpeechRecognitionErrorEventType) => {
       console.error('Speech recognition error:', event.error);
+      // Don't stop for no-speech or aborted errors - just restart
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        // Auto-restart if we're supposed to be listening
+        if (shouldRestartRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {
+            // Ignore start errors during restart
+          }
+        }
+        return;
+      }
       setError(event.error);
       setIsListening(false);
+      shouldRestartRef.current = false;
     };
 
     recognition.onend = () => {
-      setIsListening(false);
+      // Auto-restart if we're supposed to still be listening (paused speech)
+      if (shouldRestartRef.current) {
+        try {
+          recognition.start();
+        } catch (e) {
+          // If restart fails, stop listening
+          setIsListening(false);
+          shouldRestartRef.current = false;
+        }
+      } else {
+        setIsListening(false);
+      }
     };
 
     return () => {
+      shouldRestartRef.current = false;
       recognition.stop();
     };
   }, [isSupported, onResult]);
@@ -119,6 +145,7 @@ export function useSpeechRecognition(
     
     setError(null);
     setTranscript('');
+    shouldRestartRef.current = true;
     
     try {
       recognitionRef.current.start();
@@ -126,11 +153,14 @@ export function useSpeechRecognition(
     } catch (err) {
       console.error('Failed to start speech recognition:', err);
       setError('Failed to start');
+      shouldRestartRef.current = false;
     }
   }, [isListening]);
 
   const stopListening = useCallback(() => {
     if (!recognitionRef.current) return;
+    
+    shouldRestartRef.current = false;
     
     try {
       recognitionRef.current.stop();

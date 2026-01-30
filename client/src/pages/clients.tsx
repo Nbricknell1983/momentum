@@ -652,23 +652,43 @@ export default function ClientsPage() {
     }
   };
 
-  // Handler to add a note to client history
+  // Handler to add a note to client history AND update client notes field
   const handleAddClientNote = async (clientId: string) => {
     if (!orgId || !userId || !newClientNote.trim()) return;
     setSavingNote(true);
     try {
+      const noteText = newClientNote.trim();
+      const now = new Date();
+      const dateStr = format(now, 'dd-MM-yyyy HH:mm');
+      
+      // Get current client to append to existing notes
+      const client = clients.find(c => c.id === clientId);
+      const existingNotes = client?.notes || '';
+      const updatedNotes = existingNotes 
+        ? `${existingNotes}\n\n[${dateStr}]\n${noteText}` 
+        : `[${dateStr}]\n${noteText}`;
+      
+      // Update client notes field (visible on card)
+      await updateClientInFirestore(orgId, clientId, { notes: updatedNotes }, authReady);
+      
+      // Also log to activity history
       await addClientNote(orgId, {
         userId,
         clientId,
-        notes: newClientNote.trim(),
+        notes: noteText,
       }, authReady);
+      
+      // Update local client state
+      if (client) {
+        dispatch(updateClient({ ...client, notes: updatedNotes, updatedAt: now }));
+      }
       
       // Refresh activities
       const activities = await fetchClientActivities(orgId, clientId, authReady);
       setClientActivities(prev => ({ ...prev, [clientId]: activities }));
       setNewClientNote('');
       
-      toast({ title: 'Note added', description: 'Note has been saved to client history.' });
+      toast({ title: 'Note added', description: 'Note has been saved to client record.' });
     } catch (error) {
       console.error('Error adding note:', error);
       toast({ title: 'Error', description: 'Failed to add note.', variant: 'destructive' });
