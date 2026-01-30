@@ -3484,10 +3484,10 @@ export default function ClientsPage() {
                             {healthIcons[client.healthStatus]}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <CardTitle className="text-base truncate" data-testid={`text-client-name-${client.id}`}>
+                            <CardTitle className="text-base break-words" data-testid={`text-client-name-${client.id}`}>
                               {client.businessName}
                             </CardTitle>
-                            <p className="text-sm text-muted-foreground truncate">
+                            <p className="text-sm text-muted-foreground break-words">
                               {client.primaryContactName}
                               {client.regionName && ` • ${client.regionName}${client.areaName ? ` - ${client.areaName}` : ''}`}
                             </p>
