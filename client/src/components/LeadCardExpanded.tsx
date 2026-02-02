@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -823,10 +823,17 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
             <ActivityButton type="dropin" label="Log Drop-in" />
           </div>
 
-          {/* Playbooks */}
-          <div className="p-3 bg-muted/50 rounded-md">
-            <p className="text-sm font-medium">Playbooks (stage-aware templates)</p>
-          </div>
+          {/* Playbooks - opens outreach scripts */}
+          <Button
+            variant="outline"
+            className="w-full gap-2 justify-start"
+            onClick={() => setOutreachScriptsOpen(true)}
+            data-testid={`button-playbooks-${lead.id}`}
+          >
+            <FileText className="h-4 w-4" />
+            <span className="font-medium">Playbooks</span>
+            <Badge variant="secondary" className="ml-auto text-xs">Stage-aware</Badge>
+          </Button>
 
           {/* NEPQ Label */}
           <div className="space-y-1">
