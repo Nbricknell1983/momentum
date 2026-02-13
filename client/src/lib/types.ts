@@ -1341,6 +1341,7 @@ export interface Client {
   daysSinceContact?: number;  // Computed field for quick access
   // Kanban board stage (user-overridable, defaults from health/status)
   boardStage?: ClientBoardStage;
+  crmLink?: string;
 }
 
 export interface Deliverable {

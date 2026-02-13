@@ -9,7 +9,6 @@ import { RootState, updateClient, setRegionFilter, setAreaFilter } from '@/store
 import { Client, ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, CLIENT_BOARD_STAGE_LABELS, CLIENT_BOARD_STAGE_COLORS, getDefaultClientBoardStage } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion } from '@/lib/territoryConfig';
 import ClientPipelineCard from '@/components/ClientPipelineCard';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { updateClientInFirestore, createClientHistoryEntry } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,12 +30,12 @@ function ClientPipelineColumn({ stage, clients, expandedClientId, onClientToggle
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col min-w-72 max-w-80 bg-muted/50 rounded-lg ${
+      className={`flex flex-col min-w-72 max-w-80 h-full bg-muted/50 rounded-lg ${
         isOver ? 'ring-2 ring-primary ring-dashed' : ''
       }`}
       data-testid={`column-client-pipeline-${stage}`}
     >
-      <div className="sticky top-0 z-10 p-3 bg-muted/80 backdrop-blur rounded-t-lg border-b">
+      <div className="p-3 bg-muted/80 rounded-t-lg border-b shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${stageColor}`} />
@@ -52,7 +51,7 @@ function ClientPipelineColumn({ stage, clients, expandedClientId, onClientToggle
           </p>
         )}
       </div>
-      <ScrollArea className="flex-1 p-3">
+      <div className="flex-1 overflow-y-auto p-3">
         <SortableContext items={clients.map(c => c.id)} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-3">
             {clients.map((client) => (
@@ -70,7 +69,7 @@ function ClientPipelineColumn({ stage, clients, expandedClientId, onClientToggle
             )}
           </div>
         </SortableContext>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -251,26 +250,23 @@ export default function ClientPipelinePage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
-          <ScrollArea className="h-full">
-            <div className="flex gap-4 p-4 min-h-full">
-              {CLIENT_BOARD_STAGE_ORDER.map((stage) => (
-                <ClientPipelineColumn
-                  key={stage}
-                  stage={stage}
-                  clients={clientsByStage[stage]}
-                  expandedClientId={expandedClientId}
-                  onClientToggle={setExpandedClientId}
-                />
-              ))}
-            </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+          <div className="flex gap-4 p-4 h-full min-w-max">
+            {CLIENT_BOARD_STAGE_ORDER.map((stage) => (
+              <ClientPipelineColumn
+                key={stage}
+                stage={stage}
+                clients={clientsByStage[stage]}
+                expandedClientId={expandedClientId}
+                onClientToggle={setExpandedClientId}
+              />
+            ))}
+          </div>
         </DndContext>
       </div>
     </div>

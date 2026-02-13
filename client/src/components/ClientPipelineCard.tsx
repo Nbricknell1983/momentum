@@ -1,15 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Loader2, Globe, MessageSquare, Send, GripVertical, FileText, Calendar } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Loader2, Globe, MessageSquare, Send, GripVertical, FileText, Calendar, Link2 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -38,6 +39,14 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [outreachScriptsOpen, setOutreachScriptsOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [editingCrmLink, setEditingCrmLink] = useState(false);
+  const [crmLinkValue, setCrmLinkValue] = useState(client.crmLink || '');
+
+  useEffect(() => {
+    if (!editingCrmLink) {
+      setCrmLinkValue(client.crmLink || '');
+    }
+  }, [client.crmLink, editingCrmLink]);
   
   const {
     attributes,
@@ -120,6 +129,19 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
       toast({ title: 'Error', description: 'Failed to save note', variant: 'destructive' });
     } finally {
       setIsSavingNote(false);
+    }
+  };
+
+  const handleSaveCrmLink = async () => {
+    if (!orgId || !authReady) return;
+    try {
+      const updates = { crmLink: crmLinkValue.trim() || undefined, updatedAt: new Date() };
+      await updateClientInFirestore(orgId, client.id, updates, authReady);
+      dispatch(updateClient({ ...client, ...updates }));
+      setEditingCrmLink(false);
+      toast({ title: 'Salesforce link saved' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to save link', variant: 'destructive' });
     }
   };
 
@@ -285,6 +307,66 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
                 <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
                   <a href={client.linkedinUrl} target="_blank" rel="noopener noreferrer"><SiLinkedin className="h-3 w-3" /></a>
                 </Button>
+              )}
+            </div>
+
+            <Separator />
+
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <Label className="text-xs font-medium">Salesforce</Label>
+                {!editingCrmLink && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs gap-1"
+                    onClick={() => { setCrmLinkValue(client.crmLink || ''); setEditingCrmLink(true); }}
+                    data-testid={`button-edit-crm-${client.id}`}
+                  >
+                    <Link2 className="h-3 w-3" />
+                    {client.crmLink ? 'Edit' : 'Add link'}
+                  </Button>
+                )}
+              </div>
+              {client.crmLink && !editingCrmLink && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-2 justify-start"
+                    asChild
+                    data-testid={`button-open-salesforce-${client.id}`}
+                  >
+                    <a href={client.crmLink} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 shrink-0" />
+                      <span className="truncate text-sm">Open in Salesforce</span>
+                    </a>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handleCopyToClipboard(client.crmLink!, 'Salesforce link')}
+                    data-testid={`button-copy-crm-${client.id}`}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              {editingCrmLink && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={crmLinkValue}
+                    onChange={(e) => setCrmLinkValue(e.target.value)}
+                    placeholder="Paste Salesforce link..."
+                    className="flex-1 text-sm"
+                    data-testid={`input-crm-link-${client.id}`}
+                  />
+                  <Button size="sm" onClick={handleSaveCrmLink} data-testid={`button-save-crm-${client.id}`}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingCrmLink(false)}>
+                    Cancel
+                  </Button>
+                </div>
               )}
             </div>
 
