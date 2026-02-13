@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Loader2, Globe, MessageSquare, Send, GripVertical, FileText, Calendar, Link2, Clock, ClipboardCheck, BarChart3, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Loader2, Globe, MessageSquare, Send, GripVertical, FileText, Calendar, Link2, Clock, ClipboardCheck, BarChart3, Users, Target, Check, Pencil, X } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -58,12 +58,21 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [editingCrmLink, setEditingCrmLink] = useState(false);
   const [crmLinkValue, setCrmLinkValue] = useState(client.crmLink || '');
+  const [editingNextAction, setEditingNextAction] = useState(false);
+  const [nextActionValue, setNextActionValue] = useState(client.nextAction || '');
+  const [isSavingNextAction, setIsSavingNextAction] = useState(false);
 
   useEffect(() => {
     if (!editingCrmLink) {
       setCrmLinkValue(client.crmLink || '');
     }
   }, [client.crmLink, editingCrmLink]);
+
+  useEffect(() => {
+    if (!editingNextAction) {
+      setNextActionValue(client.nextAction || '');
+    }
+  }, [client.nextAction, editingNextAction]);
 
   const {
     attributes,
@@ -134,7 +143,7 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
         createdAt: now,
       }, authReady);
 
-      toast({ title: 'Touchpoint logged', description: `${label} recorded. Next touchpoint set for ${format(nextDate, 'dd/MM/yyyy')}` });
+      toast({ title: 'Touchpoint logged', description: `${label} recorded. Next touchpoint set for ${format(nextDate, 'dd-MM-yyyy')}` });
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to log touchpoint', variant: 'destructive' });
     } finally {
@@ -210,6 +219,77 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
     }
   };
 
+  const handleSaveNextAction = async () => {
+    if (!orgId || !authReady) return;
+    setIsSavingNextAction(true);
+
+    try {
+      const now = new Date();
+      const actionText = nextActionValue.trim();
+      const updates: Partial<Client> = {
+        nextAction: actionText || undefined,
+        nextActionSetAt: actionText ? now : undefined,
+        updatedAt: now,
+      };
+
+      dispatch(updateClient({ ...client, ...updates }));
+      await updateClientInFirestore(orgId, client.id, updates, authReady);
+
+      if (actionText) {
+        await createClientHistoryEntry(orgId, client.id, {
+          clientId: client.id,
+          type: 'activity',
+          summary: `Next action set: ${actionText}`,
+          userId: authUser?.uid,
+          metadata: { actionType: 'next_action_set' },
+          createdAt: now,
+        }, authReady);
+      }
+
+      setEditingNextAction(false);
+      toast({ title: actionText ? 'Next action updated' : 'Next action cleared' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to save next action', variant: 'destructive' });
+    } finally {
+      setIsSavingNextAction(false);
+    }
+  };
+
+  const handleCompleteNextAction = async () => {
+    if (!orgId || !authReady || !client.nextAction) return;
+    setIsSavingNextAction(true);
+
+    try {
+      const now = new Date();
+      const completedAction = client.nextAction;
+
+      await createClientHistoryEntry(orgId, client.id, {
+        clientId: client.id,
+        type: 'activity',
+        summary: `Next action completed: ${completedAction}`,
+        userId: authUser?.uid,
+        metadata: { actionType: 'next_action_completed' },
+        createdAt: now,
+      }, authReady);
+
+      const updates: Partial<Client> = {
+        nextAction: undefined,
+        nextActionSetAt: undefined,
+        updatedAt: now,
+      };
+
+      dispatch(updateClient({ ...client, ...updates }));
+      await updateClientInFirestore(orgId, client.id, updates, authReady);
+
+      setNextActionValue('');
+      toast({ title: 'Action completed', description: `"${completedAction}" marked as done` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to complete action', variant: 'destructive' });
+    } finally {
+      setIsSavingNextAction(false);
+    }
+  };
+
   const handleSetNextContactDate = async (date: Date) => {
     if (!orgId || !authReady) return;
 
@@ -218,7 +298,7 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
       await updateClientInFirestore(orgId, client.id, updates, authReady);
       dispatch(updateClient({ ...client, ...updates }));
       setIsDatePickerOpen(false);
-      toast({ title: 'Next touchpoint date set', description: format(date, 'dd/MM/yyyy') });
+      toast({ title: 'Next touchpoint date set', description: format(date, 'dd-MM-yyyy') });
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to set date', variant: 'destructive' });
     }
@@ -367,7 +447,14 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
                 )}
               </div>
 
-              {client.notes && !isExpanded && (
+              {client.nextAction && !isExpanded && (
+                <div className="flex items-start gap-1.5 mt-1.5" data-testid={`next-action-preview-${client.id}`}>
+                  <Target className="h-3 w-3 text-foreground shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-foreground line-clamp-2 break-words">{client.nextAction}</p>
+                </div>
+              )}
+
+              {client.notes && !isExpanded && !client.nextAction && (
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-1 break-words">{client.notes.split('\n')[0]}</p>
               )}
             </div>
@@ -376,6 +463,84 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
 
         {isExpanded && (
           <div className="border-t px-3 pb-3 pt-2 space-y-3">
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  <Target className="h-3.5 w-3.5 text-foreground" />
+                  Next Action
+                </Label>
+                {!editingNextAction && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs gap-1"
+                    onClick={() => { setNextActionValue(client.nextAction || ''); setEditingNextAction(true); }}
+                    data-testid={`button-edit-next-action-${client.id}`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                    {client.nextAction ? 'Edit' : 'Set'}
+                  </Button>
+                )}
+              </div>
+
+              {client.nextAction && !editingNextAction && (
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 text-sm break-words" data-testid={`text-next-action-${client.id}`}>
+                    {client.nextAction}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 shrink-0"
+                    onClick={handleCompleteNextAction}
+                    disabled={isSavingNextAction}
+                    data-testid={`button-complete-action-${client.id}`}
+                  >
+                    {isSavingNextAction ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Done
+                  </Button>
+                </div>
+              )}
+
+              {!client.nextAction && !editingNextAction && (
+                <p className="text-xs text-muted-foreground">No next action set</p>
+              )}
+
+              {editingNextAction && (
+                <div className="space-y-2">
+                  <Input
+                    value={nextActionValue}
+                    onChange={(e) => setNextActionValue(e.target.value)}
+                    placeholder="e.g. Reach out to hosting provider about DNS records..."
+                    className="text-sm"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveNextAction(); if (e.key === 'Escape') setEditingNextAction(false); }}
+                    autoFocus
+                    data-testid={`input-next-action-${client.id}`}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveNextAction}
+                      disabled={isSavingNextAction}
+                      data-testid={`button-save-next-action-${client.id}`}
+                    >
+                      {isSavingNextAction ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingNextAction(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
             <div>
               <Label className="text-xs font-medium mb-2 block">Touchpoint Schedule</Label>
               <div className="flex items-center gap-2 mb-2">
@@ -398,7 +563,7 @@ export default function ClientPipelineCard({ client, isExpanded, onToggle }: Cli
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="gap-1 shrink-0" data-testid={`button-set-date-${client.id}`}>
                       <Calendar className="h-3 w-3" />
-                      {client.nextContactDate ? format(new Date(client.nextContactDate), 'dd/MM/yy') : 'Pick date'}
+                      {client.nextContactDate ? format(new Date(client.nextContactDate), 'dd-MM-yy') : 'Pick date'}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="end">

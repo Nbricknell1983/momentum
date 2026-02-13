@@ -93,6 +93,7 @@ A dedicated Kanban board (`/client-pipeline`) for quick client management with:
 - **Auto-scheduling**: Logging a touchpoint automatically sets the next contact date based on cadence
 - **Quick Adjust**: +1w, +2w, +1m, +3m buttons to adjust next touchpoint date
 - **Salesforce Integration**: CRM link field on each client card for quick access
+- **Next Best Action**: Prominent "Next Action" field on each card showing the current next step (e.g., "Reach out to hosting provider about DNS"), visible on collapsed cards, with mark-done and history logging
 - **Stage-aware Playbooks**: AI outreach scripts adapted to client lifecycle stage
 
 ### Client App Integration System
