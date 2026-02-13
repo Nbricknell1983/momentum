@@ -84,6 +84,17 @@ AI-powered meeting notes processing with voice dictation support:
 - **Endpoint**: POST `/api/ai/process-meeting-notes` handles AI processing
 - **Response Validation**: Sanitizes AI responses with safe defaults for all fields
 
+### Client Pipeline & Touchpoint System
+A dedicated Kanban board (`/client-pipeline`) for quick client management with:
+- **Client Pipeline Kanban**: 5-column board (Onboarding, Steady State, Growth Plays, Watchlist, Churned) with drag-and-drop
+- **Touchpoint Schedule**: Configurable cadence per client (Weekly/Fortnightly/Monthly/Bi-monthly/Quarterly)
+- **Traffic Light Status**: Green/Amber/Red indicators based on touchpoint schedule adherence
+- **Touchpoint Types**: Check-in Call, Report Sent, Strategy Review, QBR, Ad-hoc
+- **Auto-scheduling**: Logging a touchpoint automatically sets the next contact date based on cadence
+- **Quick Adjust**: +1w, +2w, +1m, +3m buttons to adjust next touchpoint date
+- **Salesforce Integration**: CRM link field on each client card for quick access
+- **Stage-aware Playbooks**: AI outreach scripts adapted to client lifecycle stage
+
 ### Client App Integration System
 Enables secure pairing and data exchange with external client business applications via pairing codes and permanent integration secrets. Supports various event types like KPI snapshots and bookings.
 

@@ -1760,6 +1760,74 @@ export const CADENCE_TIER_DAYS: Record<CadenceTier, number> = {
   low_touch: 30,
 };
 
+export type ClientTouchpointType = 'check_in' | 'report_sent' | 'strategy_review' | 'qbr' | 'ad_hoc';
+
+export const CLIENT_TOUCHPOINT_LABELS: Record<ClientTouchpointType, string> = {
+  check_in: 'Check-in Call',
+  report_sent: 'Report Sent',
+  strategy_review: 'Strategy Review',
+  qbr: 'Quarterly Business Review',
+  ad_hoc: 'Ad-hoc',
+};
+
+export const CLIENT_CADENCE_OPTIONS = [
+  { label: 'Weekly', days: 7 },
+  { label: 'Fortnightly', days: 14 },
+  { label: 'Monthly', days: 30 },
+  { label: 'Bi-monthly', days: 60 },
+  { label: 'Quarterly', days: 90 },
+] as const;
+
+export type ClientTrafficLight = 'green' | 'amber' | 'red' | 'none';
+
+export function getClientTrafficLight(client: Client): ClientTrafficLight {
+  if (!client.nextContactDate && !client.lastContactDate) {
+    return 'none';
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cadenceDays = client.preferredContactCadenceDays || 14;
+
+  if (client.nextContactDate) {
+    const nextDate = new Date(client.nextContactDate);
+    nextDate.setHours(0, 0, 0, 0);
+
+    const daysUntilDue = Math.floor((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysUntilDue > 3) return 'green';
+    if (daysUntilDue >= 0) return 'amber';
+    return 'red';
+  }
+
+  if (client.lastContactDate) {
+    const lastDate = new Date(client.lastContactDate);
+    const daysSince = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysSince <= cadenceDays * 0.7) return 'green';
+    if (daysSince <= cadenceDays) return 'amber';
+    return 'red';
+  }
+
+  return 'none';
+}
+
+export function getClientDaysInfo(client: Client): { daysSinceContact: number | null; daysUntilDue: number | null; cadenceDays: number } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cadenceDays = client.preferredContactCadenceDays || 14;
+
+  const daysSinceContact = client.lastContactDate
+    ? Math.floor((today.getTime() - new Date(client.lastContactDate).getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  const daysUntilDue = client.nextContactDate
+    ? Math.floor((new Date(client.nextContactDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  return { daysSinceContact, daysUntilDue, cadenceDays };
+}
+
 export interface ClientHealthResult {
   churnRiskScore: number;
   healthStatus: HealthStatus;
