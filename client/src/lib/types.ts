@@ -1342,6 +1342,9 @@ export interface Client {
   // Kanban board stage (user-overridable, defaults from health/status)
   boardStage?: ClientBoardStage;
   crmLink?: string;
+  // Next Best Action - highlights what needs to happen next for this client
+  nextAction?: string;
+  nextActionSetAt?: Date;
 }
 
 export interface Deliverable {
