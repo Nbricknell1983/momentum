@@ -30,7 +30,7 @@ function ClientPipelineColumn({ stage, clients, expandedClientId, onClientToggle
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col min-w-72 max-w-80 h-full bg-muted/50 rounded-lg ${
+      className={`flex flex-col min-w-72 max-w-80 h-full min-h-0 bg-muted/50 rounded-lg ${
         isOver ? 'ring-2 ring-primary ring-dashed' : ''
       }`}
       data-testid={`column-client-pipeline-${stage}`}
@@ -51,7 +51,7 @@ function ClientPipelineColumn({ stage, clients, expandedClientId, onClientToggle
           </p>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
         <SortableContext items={clients.map(c => c.id)} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-3">
             {clients.map((client) => (
@@ -250,7 +250,7 @@ export default function ClientPipelinePage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+      <div className="flex-1 min-h-0 overflow-x-auto">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
