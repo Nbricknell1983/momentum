@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { X, ChevronLeft, ChevronRight, Archive, Trash2, Phone, Mail, ExternalLink, Copy, Mic, Calendar, MessageSquare, ThumbsDown } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -160,20 +160,48 @@ export default function LeadDrawer() {
     }
   };
 
+  const firestoreDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const handleUpdateField = (field: keyof Lead, value: any) => {
     dispatch(updateLead({ ...lead, [field]: value, updatedAt: new Date() }));
+
+    if (orgId && authReady) {
+      if (firestoreDebounceRef.current[field]) {
+        clearTimeout(firestoreDebounceRef.current[field]);
+      }
+      firestoreDebounceRef.current[field] = setTimeout(() => {
+        updateLeadInFirestore(orgId, lead.id, { [field]: value, updatedAt: new Date() }, authReady)
+          .catch(err => console.error(`[LeadDrawer] Failed to persist ${field} to Firestore:`, err));
+        delete firestoreDebounceRef.current[field];
+      }, 800);
+    }
   };
 
-  const handleMarkContactedToday = () => {
+  const handleMarkContactedToday = async () => {
+    const now = new Date();
     dispatch(updateLead({
       ...lead,
-      lastContactDate: new Date(),
-      updatedAt: new Date(),
+      lastContactDate: now,
+      updatedAt: now,
     }));
+    if (orgId && authReady) {
+      try {
+        await updateLeadInFirestore(orgId, lead.id, { lastContactDate: now, updatedAt: now }, authReady);
+      } catch (err) {
+        console.error('[LeadDrawer] Failed to persist lastContactDate to Firestore:', err);
+      }
+    }
   };
 
-  const handleArchive = () => {
+  const handleArchive = async () => {
     dispatch(archiveLead(lead.id));
+    if (orgId && authReady) {
+      try {
+        await updateLeadInFirestore(orgId, lead.id, { archived: true, updatedAt: new Date() }, authReady);
+      } catch (err) {
+        console.error('[LeadDrawer] Failed to persist archive to Firestore:', err);
+      }
+    }
     handleClose();
   };
 
@@ -317,8 +345,7 @@ export default function LeadDrawer() {
                 value={lead.regionId || ''} 
                 onValueChange={(val) => {
                   const fields = computeTerritoryFields(val, null);
-                  dispatch(updateLead({
-                    ...lead,
+                  const updates = {
                     regionId: fields.regionId,
                     regionName: fields.regionName,
                     areaId: null,
@@ -326,7 +353,12 @@ export default function LeadDrawer() {
                     territoryKey: fields.territoryKey,
                     territory: fields.regionName,
                     updatedAt: new Date(),
-                  }));
+                  };
+                  dispatch(updateLead({ ...lead, ...updates }));
+                  if (orgId && authReady) {
+                    updateLeadInFirestore(orgId, lead.id, updates, authReady)
+                      .catch(err => console.error('[LeadDrawer] Failed to persist territory to Firestore:', err));
+                  }
                 }}
               >
                 <SelectTrigger className="flex-1" data-testid="select-edit-region">
@@ -343,14 +375,18 @@ export default function LeadDrawer() {
                 onValueChange={(val) => {
                   if (lead.regionId) {
                     const fields = computeTerritoryFields(lead.regionId, val);
-                    dispatch(updateLead({
-                      ...lead,
+                    const updates = {
                       areaId: fields.areaId,
                       areaName: fields.areaName,
                       territoryKey: fields.territoryKey,
                       territory: getTerritoryDisplayName(lead.regionId, val),
                       updatedAt: new Date(),
-                    }));
+                    };
+                    dispatch(updateLead({ ...lead, ...updates }));
+                    if (orgId && authReady) {
+                      updateLeadInFirestore(orgId, lead.id, updates, authReady)
+                        .catch(err => console.error('[LeadDrawer] Failed to persist area to Firestore:', err));
+                    }
                   }
                 }}
                 disabled={!lead.regionId || getAreasForRegion(lead.regionId || '').length === 0}

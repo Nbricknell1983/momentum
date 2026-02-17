@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText } from 'lucide-react';
@@ -504,12 +504,32 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
     }
   };
 
+  const firestoreDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const handleUpdateField = (field: keyof Lead, value: any) => {
     dispatch(updateLead({ ...lead, [field]: value, updatedAt: new Date() }));
+
+    if (orgId && authReady) {
+      if (firestoreDebounceRef.current[field]) {
+        clearTimeout(firestoreDebounceRef.current[field]);
+      }
+      firestoreDebounceRef.current[field] = setTimeout(() => {
+        updateLeadInFirestore(orgId, lead.id, { [field]: value, updatedAt: new Date() }, authReady)
+          .catch(err => console.error(`[LeadCard] Failed to persist ${field} to Firestore:`, err));
+        delete firestoreDebounceRef.current[field];
+      }, 800);
+    }
   };
 
-  const handleArchive = () => {
+  const handleArchive = async () => {
     dispatch(archiveLead(lead.id));
+    if (orgId && authReady) {
+      try {
+        await updateLeadInFirestore(orgId, lead.id, { archived: true, updatedAt: new Date() }, authReady);
+      } catch (err) {
+        console.error('[LeadCard] Failed to persist archive to Firestore:', err);
+      }
+    }
   };
 
   const handleDelete = async () => {
