@@ -60,6 +60,9 @@ export default function DashboardPage() {
   [dailyMetrics]);
 
   const momentum = useMemo((): MomentumResult => {
+    const TARGET_KEY_TO_ACTIVITY_TYPE: Record<string, string> = {
+      calls: 'call', sms: 'sms', emails: 'email', dropins: 'dropin', meetings: 'meeting'
+    };
     const ACTIVITY_WEIGHTS: Record<string, number> = {
       call: 1.0, sms: 0.6, email: 0.4, dropin: 1.2, meeting: 0.5
     };
@@ -76,9 +79,10 @@ export default function DashboardPage() {
     let weightedSum = 0;
     let targetSum = 0;
     
-    Object.entries(activityTargets).forEach(([type, target]) => {
-      const count = todayActivities.filter(a => a.type === type).length;
-      const weight = ACTIVITY_WEIGHTS[type] || 0.5;
+    Object.entries(activityTargets).forEach(([targetKey, target]) => {
+      const activityType = TARGET_KEY_TO_ACTIVITY_TYPE[targetKey] || targetKey;
+      const count = todayActivities.filter(a => a.type === activityType).length;
+      const weight = ACTIVITY_WEIGHTS[activityType] || 0.5;
       weightedSum += Math.min(count / Math.max(target, 1), 1.5) * weight;
       targetSum += weight;
     });
