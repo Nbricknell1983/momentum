@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText } from 'lucide-react';
@@ -505,18 +505,48 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   };
 
   const firestoreDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingWritesRef = useRef<Record<string, any>>({});
+  const leadIdRef = useRef(lead.id);
+  leadIdRef.current = lead.id;
+
+  const flushPendingWrites = useCallback(() => {
+    const pending = pendingWritesRef.current;
+    const timers = firestoreDebounceRef.current;
+    for (const field of Object.keys(timers)) {
+      clearTimeout(timers[field]);
+      delete timers[field];
+    }
+    if (Object.keys(pending).length > 0 && orgId && authReady) {
+      const updates = { ...pending, updatedAt: new Date() };
+      pendingWritesRef.current = {};
+      updateLeadInFirestore(orgId, leadIdRef.current, updates, authReady)
+        .catch(err => console.error('[LeadCard] Failed to flush pending writes to Firestore:', err));
+    }
+  }, [orgId, authReady]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => flushPendingWrites();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushPendingWrites();
+    };
+  }, [flushPendingWrites]);
 
   const handleUpdateField = (field: keyof Lead, value: any) => {
     dispatch(updateLead({ ...lead, [field]: value, updatedAt: new Date() }));
 
     if (orgId && authReady) {
+      pendingWritesRef.current[field] = value;
       if (firestoreDebounceRef.current[field]) {
         clearTimeout(firestoreDebounceRef.current[field]);
       }
       firestoreDebounceRef.current[field] = setTimeout(() => {
-        updateLeadInFirestore(orgId, lead.id, { [field]: value, updatedAt: new Date() }, authReady)
-          .catch(err => console.error(`[LeadCard] Failed to persist ${field} to Firestore:`, err));
+        const pendingValue = pendingWritesRef.current[field];
+        delete pendingWritesRef.current[field];
         delete firestoreDebounceRef.current[field];
+        updateLeadInFirestore(orgId, lead.id, { [field]: pendingValue, updatedAt: new Date() }, authReady)
+          .catch(err => console.error(`[LeadCard] Failed to persist ${field} to Firestore:`, err));
       }, 800);
     }
   };
