@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText, Check, AlertCircle, Cloud } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -508,6 +508,16 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
   const pendingWritesRef = useRef<Record<string, any>>({});
   const leadIdRef = useRef(lead.id);
   leadIdRef.current = lead.id;
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showSaveStatus = useCallback((status: 'saving' | 'saved' | 'error') => {
+    setSaveStatus(status);
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    if (status === 'saved') {
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+    }
+  }, []);
 
   const flushPendingWrites = useCallback(() => {
     const pending = pendingWritesRef.current;
@@ -519,10 +529,15 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
     if (Object.keys(pending).length > 0 && orgId && authReady) {
       const updates = { ...pending, updatedAt: new Date() };
       pendingWritesRef.current = {};
+      showSaveStatus('saving');
       updateLeadInFirestore(orgId, leadIdRef.current, updates, authReady)
-        .catch(err => console.error('[LeadCard] Failed to flush pending writes to Firestore:', err));
+        .then(() => showSaveStatus('saved'))
+        .catch(err => {
+          console.error('[LeadCard] Failed to flush pending writes to Firestore:', err);
+          showSaveStatus('error');
+        });
     }
-  }, [orgId, authReady]);
+  }, [orgId, authReady, showSaveStatus]);
 
   useEffect(() => {
     const handleBeforeUnload = () => flushPendingWrites();
@@ -538,6 +553,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
 
     if (orgId && authReady) {
       pendingWritesRef.current[field] = value;
+      showSaveStatus('saving');
       if (firestoreDebounceRef.current[field]) {
         clearTimeout(firestoreDebounceRef.current[field]);
       }
@@ -546,7 +562,15 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
         delete pendingWritesRef.current[field];
         delete firestoreDebounceRef.current[field];
         updateLeadInFirestore(orgId, lead.id, { [field]: pendingValue, updatedAt: new Date() }, authReady)
-          .catch(err => console.error(`[LeadCard] Failed to persist ${field} to Firestore:`, err));
+          .then(() => {
+            if (Object.keys(pendingWritesRef.current).length === 0) {
+              showSaveStatus('saved');
+            }
+          })
+          .catch(err => {
+            console.error(`[LeadCard] Failed to persist ${field} to Firestore:`, err);
+            showSaveStatus('error');
+          });
       }, 800);
     }
   };
@@ -699,6 +723,17 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
       {/* Expanded Content */}
       {isExpanded && (
         <div className="px-3 pb-3 space-y-4 border-t pt-3 overflow-hidden break-words">
+          {saveStatus !== 'idle' && (
+            <div className={`flex items-center gap-1.5 text-xs transition-opacity duration-300 ${
+              saveStatus === 'saving' ? 'text-muted-foreground' :
+              saveStatus === 'saved' ? 'text-green-600 dark:text-green-400' :
+              'text-red-600 dark:text-red-400'
+            }`} data-testid={`save-status-${lead.id}`}>
+              {saveStatus === 'saving' && <><Loader2 className="h-3 w-3 animate-spin" /> Saving...</>}
+              {saveStatus === 'saved' && <><Check className="h-3 w-3" /> Saved</>}
+              {saveStatus === 'error' && <><AlertCircle className="h-3 w-3" /> Save failed</>}
+            </div>
+          )}
           {/* Stage */}
           <div className="space-y-1">
             <Label className="text-xs">Stage</Label>

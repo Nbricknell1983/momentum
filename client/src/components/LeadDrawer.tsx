@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { X, ChevronLeft, ChevronRight, Archive, Trash2, Phone, Mail, ExternalLink, Copy, Mic, Calendar, MessageSquare, ThumbsDown } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Archive, Trash2, Phone, Mail, ExternalLink, Copy, Mic, Calendar, MessageSquare, ThumbsDown, Loader2, Check, AlertCircle } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -164,6 +164,16 @@ export default function LeadDrawer() {
   const pendingWritesRef = useRef<Record<string, any>>({});
   const leadIdRef = useRef(lead.id);
   leadIdRef.current = lead.id;
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showSaveStatus = useCallback((status: 'saving' | 'saved' | 'error') => {
+    setSaveStatus(status);
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    if (status === 'saved') {
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+    }
+  }, []);
 
   const flushPendingWrites = useCallback(() => {
     const pending = pendingWritesRef.current;
@@ -175,10 +185,15 @@ export default function LeadDrawer() {
     if (Object.keys(pending).length > 0 && orgId && authReady) {
       const updates = { ...pending, updatedAt: new Date() };
       pendingWritesRef.current = {};
+      showSaveStatus('saving');
       updateLeadInFirestore(orgId, leadIdRef.current, updates, authReady)
-        .catch(err => console.error('[LeadDrawer] Failed to flush pending writes to Firestore:', err));
+        .then(() => showSaveStatus('saved'))
+        .catch(err => {
+          console.error('[LeadDrawer] Failed to flush pending writes to Firestore:', err);
+          showSaveStatus('error');
+        });
     }
-  }, [orgId, authReady]);
+  }, [orgId, authReady, showSaveStatus]);
 
   useEffect(() => {
     const handleBeforeUnload = () => flushPendingWrites();
@@ -194,6 +209,7 @@ export default function LeadDrawer() {
 
     if (orgId && authReady) {
       pendingWritesRef.current[field] = value;
+      showSaveStatus('saving');
       if (firestoreDebounceRef.current[field]) {
         clearTimeout(firestoreDebounceRef.current[field]);
       }
@@ -202,7 +218,15 @@ export default function LeadDrawer() {
         delete pendingWritesRef.current[field];
         delete firestoreDebounceRef.current[field];
         updateLeadInFirestore(orgId, lead.id, { [field]: pendingValue, updatedAt: new Date() }, authReady)
-          .catch(err => console.error(`[LeadDrawer] Failed to persist ${field} to Firestore:`, err));
+          .then(() => {
+            if (Object.keys(pendingWritesRef.current).length === 0) {
+              showSaveStatus('saved');
+            }
+          })
+          .catch(err => {
+            console.error(`[LeadDrawer] Failed to persist ${field} to Firestore:`, err);
+            showSaveStatus('error');
+          });
       }, 800);
     }
   };
@@ -305,9 +329,22 @@ export default function LeadDrawer() {
                 {lead.companyName}
               </SheetTitle>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleClose} data-testid="button-close-drawer">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {saveStatus !== 'idle' && (
+                <div className={`flex items-center gap-1 text-xs transition-opacity duration-300 ${
+                  saveStatus === 'saving' ? 'text-muted-foreground' :
+                  saveStatus === 'saved' ? 'text-green-600 dark:text-green-400' :
+                  'text-red-600 dark:text-red-400'
+                }`} data-testid="save-status-drawer">
+                  {saveStatus === 'saving' && <><Loader2 className="h-3 w-3 animate-spin" /> Saving...</>}
+                  {saveStatus === 'saved' && <><Check className="h-3 w-3" /> Saved</>}
+                  {saveStatus === 'error' && <><AlertCircle className="h-3 w-3" /> Failed</>}
+                </div>
+              )}
+              <Button variant="ghost" size="icon" onClick={handleClose} data-testid="button-close-drawer">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </SheetHeader>
 
