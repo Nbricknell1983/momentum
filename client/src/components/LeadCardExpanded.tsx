@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { addDays, addWeeks, addMonths } from 'date-fns';
-import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus, NURTURE_STATUS_LABELS, calculateNextTouchDate } from '@/lib/types';
+import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus, NURTURE_STATUS_LABELS, calculateNextTouchDate, CONVERSATION_STAGE_LABELS, CONVERSATION_STAGE_COLORS, ConversationStage } from '@/lib/types';
 import { updateLead, updateLeadStage, addActivity, archiveLead, deleteLead, enrollInNurture, removeFromNurture } from '@/store';
 import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
@@ -706,7 +706,18 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-2">
               <h3 className="font-semibold text-sm line-clamp-2 flex-1 min-w-0">{lead.companyName}</h3>
-              <TrafficLight status={trafficStatus} size="sm" className="shrink-0 mt-1" />
+              <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                {lead.conversationStage && lead.conversationStage !== 'not_started' && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-white leading-none"
+                    style={{ backgroundColor: CONVERSATION_STAGE_COLORS[lead.conversationStage] }}
+                    data-testid={`badge-conv-stage-${lead.id}`}
+                  >
+                    {CONVERSATION_STAGE_LABELS[lead.conversationStage]}
+                  </span>
+                )}
+                <TrafficLight status={trafficStatus} size="sm" />
+              </div>
             </div>
             {(lead.territory || lead.address) && (
               <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{lead.address || lead.territory}</p>

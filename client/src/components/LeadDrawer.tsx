@@ -16,6 +16,7 @@ import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, calculateNextTouc
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, getTerritoryDisplayName } from '@/lib/territoryConfig';
 import { countActivitiesByType } from '@/lib/mockData';
 import ActivityButton from './ActivityButton';
+import ConversationIntelligence from './ConversationIntelligence';
 import TrafficLight from './TrafficLight';
 import { getTrafficLightStatus } from '@/lib/types';
 import { format } from 'date-fns';
@@ -472,10 +473,15 @@ export default function LeadDrawer() {
 
           <Separator />
 
-          {/* Activity Logging */}
+          {/* Conversation Intelligence */}
+          <ConversationIntelligence lead={lead} />
+
+          <Separator />
+
+          {/* Quick Activity Logging */}
           <div className="space-y-3">
-            <Label>Log Activity</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <Label className="text-xs text-muted-foreground">Quick Activity Log</Label>
+            <div className="grid grid-cols-5 gap-1.5">
               <ActivityButton type="call" count={activityCounts.call} onLog={() => handleLogActivity('call')} />
               <ActivityButton type="email" count={activityCounts.email} onLog={() => handleLogActivity('email')} />
               <ActivityButton type="sms" count={activityCounts.sms} onLog={() => handleLogActivity('sms')} />

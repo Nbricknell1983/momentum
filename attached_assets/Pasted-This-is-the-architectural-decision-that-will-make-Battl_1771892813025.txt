@@ -1,0 +1,209 @@
+This is the architectural decision that will make BattleScore different from every CRM you’ve ever used.
+
+Let me explain clearly why.
+
+Why Conversation Stage ≠ Pipeline Stage
+
+Right now your pipeline shows:
+
+Suspect → Contacted → Engaged → Qualified
+
+That is:
+
+Where the deal is.
+
+But Conversation Intelligence tracks:
+
+Attempted → Connected → Discovery → Qualified → Objection → Proposal → Booked
+
+That is:
+
+What just happened.
+
+These are NOT the same thing.
+
+And when CRMs merge them, everything becomes dumb.
+
+Real Example (from your screenshot)
+
+Lead: Reno Revivals
+
+Pipeline Stage = Contacted
+
+Today you call and have a strong discovery chat.
+
+What changed?
+
+Conversation Stage moved from:
+
+Connected → Discovery
+
+But the pipeline stage might stay Contacted until later.
+
+If you tie them together:
+
+Momentum becomes fake
+
+AI coaching becomes useless
+
+Pipeline gets messy
+
+The Big Insight
+
+Pipeline is a snapshot.
+
+Conversation is a timeline.
+
+BattleScore should treat them as two layers:
+
+PIPELINE LAYER
+Deal Position
+(Suspect / Engaged / Qualified)
+
+CONVERSATION LAYER
+Behaviour + Progress
+(Discovery / Objection / Proposal)
+
+This is what gives you:
+
+True Momentum.
+
+How This Makes BattleScore 5 Years Ahead
+
+Most CRMs force reps to move cards just to show progress.
+
+BattleScore will show progress automatically because conversations evolve.
+
+Meaning:
+
+A lead can sit in “Contacted” but Momentum still increases because:
+
+Discovery conversations happened.
+
+That’s powerful.
+
+The Model I Recommend (BattleScore Architecture)
+Pipeline Stage (existing — keep exactly as is)
+
+Suspect
+
+Contacted
+
+Engaged
+
+Qualified
+
+Proposal
+
+Won / Lost
+
+DO NOT change this.
+
+Conversation Stage (NEW layer)
+
+Attempted
+
+Connected
+
+Discovery
+
+Qualified
+
+Objection
+
+Proposal
+
+Booked
+
+Every logged conversation updates this independently.
+
+Momentum Score Should Read THIS — Not Activity
+
+Momentum = function of:
+
+Conversation Stage Movement
+
+Conversation Frequency
+
+Next Step Freshness
+
+Pipeline Health
+
+Not calls/emails count.
+
+How the UI Should Actually Feel (Based on Your Screenshots)
+
+Inside the right drawer, above where your coloured buttons currently sit:
+
+Add:
+
+Conversation Intelligence
+
+Current Conversation Stage: Discovery
+Last Real Conversation: 2 days ago
+Momentum Impact: +3
+
+AI Insight:
+“Two discovery conversations logged. No proposal yet.”
+
+Then below that:
+
+Primary Button:
+Log Conversation
+
+Secondary:
+Log Attempt
+
+Your existing coloured buttons become channel selectors inside the drawer, not main actions.
+
+Why I’m Strongly Steering You This Way
+
+Nathan — BattleScore is not trying to be:
+
+HubSpot
+Pipedrive
+GoHighLevel
+
+You are building:
+
+A behavioural performance engine for trades businesses.
+
+And behaviour lives in conversations, not stages.
+
+Separating them gives you:
+
+Real AI coaching
+
+Real Momentum scoring
+
+Real Action Queue intelligence
+
+Without breaking your current pipeline board.
+
+The Expert Call
+
+So I’m not “suggesting”.
+
+I am recommending:
+
+Conversation Stage must be a separate dimension from Pipeline Stage.
+
+This is the correct long-term architecture for what you’re building.
+
+If you want, I’ll now go one level deeper and design something VERY specific for BattleScore:
+
+A Conversation Momentum Dial (segmented ring — fits your brand) that sits on every lead card and shows:
+
+Grey = Attempts
+
+Blue = Connected
+
+Orange = Discovery
+
+Purple = Qualified
+
+Green = Booked
+
+It will make the platform feel insanely premium and visually different from every CRM.
+
+Want me to design that next?

@@ -12,7 +12,7 @@ export type Stage =
   | 'lost'
   | 'nurture';
 
-export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'meeting_booked' | 'dropin' | 'followup' | 'proposal' | 'proposal_sent' | 'proposal_won' | 'deal' | 'nba_completed' | 'nba_dismissed' | 'stage_change';
+export type ActivityType = 'call' | 'email' | 'sms' | 'meeting' | 'meeting_booked' | 'dropin' | 'followup' | 'proposal' | 'proposal_sent' | 'proposal_won' | 'deal' | 'nba_completed' | 'nba_dismissed' | 'stage_change' | 'conversation' | 'attempt';
 
 export type TaskStatus = 'pending' | 'completed' | 'snoozed';
 
@@ -282,7 +282,120 @@ export interface Lead {
   touchesNoResponse: number;
   engagementScore: number;
   nurturePriorityScore: number;
+  conversationStage?: ConversationStage;
+  lastConversationAt?: Date;
+  lastAttemptAt?: Date;
+  conversationCount?: number;
+  attemptCount?: number;
+  nextConversationStep?: string;
 }
+
+export type ConversationStage =
+  | 'not_started'
+  | 'attempted'
+  | 'connected'
+  | 'discovery'
+  | 'qualified'
+  | 'objection'
+  | 'proposal'
+  | 'booked';
+
+export const CONVERSATION_STAGE_ORDER: ConversationStage[] = [
+  'not_started',
+  'attempted',
+  'connected',
+  'discovery',
+  'qualified',
+  'objection',
+  'proposal',
+  'booked',
+];
+
+export const CONVERSATION_STAGE_LABELS: Record<ConversationStage, string> = {
+  not_started: 'Not Started',
+  attempted: 'Attempted',
+  connected: 'Connected',
+  discovery: 'Discovery',
+  qualified: 'Qualified',
+  objection: 'Objection',
+  proposal: 'Proposal',
+  booked: 'Booked',
+};
+
+export const CONVERSATION_STAGE_COLORS: Record<ConversationStage, string> = {
+  not_started: '#94a3b8',
+  attempted: '#6b7280',
+  connected: '#3b82f6',
+  discovery: '#f97316',
+  qualified: '#8b5cf6',
+  objection: '#ef4444',
+  proposal: '#ec4899',
+  booked: '#22c55e',
+};
+
+export type ConversationChannel = 'call' | 'email' | 'sms' | 'meeting' | 'dropin' | 'video';
+
+export type ConversationOutcome = 'no_answer' | 'voicemail' | 'gatekeeper' | 'connected' | 'discovery_held' | 'objection_raised' | 'proposal_discussed' | 'meeting_booked' | 'follow_up_agreed';
+
+export interface ConversationLog {
+  id: string;
+  leadId: string;
+  userId: string;
+  type: 'conversation' | 'attempt';
+  channel: ConversationChannel;
+  outcome?: ConversationOutcome;
+  conversationStageBefore: ConversationStage;
+  conversationStageAfter: ConversationStage;
+  notes?: string;
+  duration?: number;
+  nextStep?: string;
+  createdAt: Date;
+}
+
+export const CONVERSATION_OUTCOME_LABELS: Record<ConversationOutcome, string> = {
+  no_answer: 'No Answer',
+  voicemail: 'Left Voicemail',
+  gatekeeper: 'Spoke to Gatekeeper',
+  connected: 'Connected / Brief Chat',
+  discovery_held: 'Discovery Conversation',
+  objection_raised: 'Objection Raised',
+  proposal_discussed: 'Proposal Discussed',
+  meeting_booked: 'Meeting Booked',
+  follow_up_agreed: 'Follow-up Agreed',
+};
+
+export const ATTEMPT_OUTCOMES: ConversationOutcome[] = ['no_answer', 'voicemail', 'gatekeeper'];
+export const CONVERSATION_OUTCOMES: ConversationOutcome[] = ['connected', 'discovery_held', 'objection_raised', 'proposal_discussed', 'meeting_booked', 'follow_up_agreed'];
+
+export function getConversationStageFromOutcome(outcome: ConversationOutcome, currentStage: ConversationStage): ConversationStage {
+  const stageIndex = CONVERSATION_STAGE_ORDER.indexOf(currentStage);
+  switch (outcome) {
+    case 'no_answer':
+    case 'voicemail':
+    case 'gatekeeper':
+      return stageIndex < 1 ? 'attempted' : currentStage;
+    case 'connected':
+      return stageIndex < 2 ? 'connected' : currentStage;
+    case 'discovery_held':
+      return stageIndex < 3 ? 'discovery' : currentStage;
+    case 'objection_raised':
+      return 'objection';
+    case 'proposal_discussed':
+      return stageIndex < 6 ? 'proposal' : currentStage;
+    case 'meeting_booked':
+      return 'booked';
+    case 'follow_up_agreed':
+      return currentStage;
+    default:
+      return currentStage;
+  }
+}
+
+export const DEFAULT_CONVERSATION_FIELDS = {
+  conversationStage: 'not_started' as ConversationStage,
+  conversationCount: 0,
+  attemptCount: 0,
+};
 
 export interface Activity {
   id: string;
@@ -537,6 +650,8 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   nba_completed: 'NBA Completed',
   nba_dismissed: 'NBA Dismissed',
   stage_change: 'Stage Change',
+  conversation: 'Conversation',
+  attempt: 'Attempt',
 };
 
 export function getTrafficLightStatus(lead: Lead): TrafficLightStatus {

@@ -1,6 +1,6 @@
-import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit, setDoc } from './firebase';
+import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit, setDoc, writeBatch } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction, RejectedBusiness, Organization, TeamMember } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction, RejectedBusiness, Organization, TeamMember, ConversationLog } from './types';
 import { calculateClientHealth, createDefaultDailyPlanDoc, formatDateDDMMYYYY, activityTypeToTaskType, getCurrentTimeSlot, getTodayDDMMYYYY, toPlanDateKey, ACTIVITY_LABELS } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -276,9 +276,14 @@ export async function fetchLeads(orgId: string, authReady: boolean = false): Pro
     const snapshot = await getDocs(q);
     const leads = snapshot.docs.map(doc => {
       const data = convertTimestampToDate(doc.data());
-      // Use Firestore document ID, not any id field stored in the document data
       const { id: _storedId, ...rest } = data as any;
-      return { ...rest, id: doc.id } as Lead;
+      return {
+        ...rest,
+        id: doc.id,
+        conversationStage: rest.conversationStage || 'not_started',
+        conversationCount: rest.conversationCount || 0,
+        attemptCount: rest.attemptCount || 0,
+      } as Lead;
     });
     
     logFirestoreOperation('READ', path, orgId, true);
@@ -396,6 +401,69 @@ export async function deleteLeadFromFirestore(orgId: string, id: string, authRea
     logFirestoreOperation('DELETE', path, orgId, true);
   } catch (error: any) {
     logFirestoreOperation('DELETE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+// ============================================
+// Conversation Log Functions
+// ============================================
+
+export async function fetchConversationLogs(orgId: string, leadId: string, authReady: boolean = false): Promise<ConversationLog[]> {
+  const path = `orgs/${orgId}/leads/${leadId}/conversations`;
+  
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) {
+    return [];
+  }
+  
+  try {
+    const convoRef = collection(db, 'orgs', orgId, 'leads', leadId, 'conversations');
+    const q = query(convoRef, orderBy('createdAt', 'desc'), limit(50));
+    const snapshot = await getDocs(q);
+    const logs = snapshot.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...convertTimestampToDate(docSnap.data()),
+    })) as ConversationLog[];
+    
+    logFirestoreOperation('READ', path, orgId, true);
+    return logs;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function createConversationLog(
+  orgId: string,
+  leadId: string,
+  log: Omit<ConversationLog, 'id'>,
+  authReady: boolean = false,
+  leadUpdates?: Partial<Lead>
+): Promise<ConversationLog> {
+  const path = `orgs/${orgId}/leads/${leadId}/conversations`;
+  
+  if (!checkAuthReady(orgId, authReady, 'CREATE', path)) {
+    throw new Error('Cannot create conversation log: not authenticated or no orgId');
+  }
+  
+  try {
+    if (leadUpdates && Object.keys(leadUpdates).length > 0) {
+      const batch = writeBatch(db);
+      const convoDocRef = doc(collection(db, 'orgs', orgId, 'leads', leadId, 'conversations'));
+      batch.set(convoDocRef, convertDatesToTimestamp(removeUndefinedFields(log)));
+      const leadDocRef = doc(db, 'orgs', orgId, 'leads', leadId);
+      batch.update(leadDocRef, convertDatesToTimestamp(removeUndefinedFields(leadUpdates)));
+      await batch.commit();
+      logFirestoreOperation('BATCH_CREATE', path, orgId, true);
+      return { id: convoDocRef.id, ...log };
+    } else {
+      const convoRef = collection(db, 'orgs', orgId, 'leads', leadId, 'conversations');
+      const docRef = await addDoc(convoRef, convertDatesToTimestamp(removeUndefinedFields(log)));
+      logFirestoreOperation('CREATE', path, orgId, true);
+      return { id: docRef.id, ...log };
+    }
+  } catch (error: any) {
+    logFirestoreOperation('CREATE', path, orgId, false, error);
     throw error;
   }
 }

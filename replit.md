@@ -40,6 +40,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Key Features
 - **Pipeline Management**: Kanban board with drag-and-drop lead management.
+- **Conversation Intelligence**: Separate conversation layer tracking behavioral progression (Attempted → Connected → Discovery → Qualified → Objection → Proposal → Booked) independent from pipeline stage.
 - **Lead & Client Management**: Expandable lead cards, quick actions, activity logging, and client lifecycle management with AI Movement Tips.
 - **Territory System**: Hierarchical region/area filtering for leads.
 - **Nurture System**: Active and passive nurture modes with cadence automation.
@@ -83,6 +84,19 @@ AI-powered meeting notes processing with voice dictation support:
 - **Auto-Task Creation**: Users can select extracted action items to create tasks automatically
 - **Endpoint**: POST `/api/ai/process-meeting-notes` handles AI processing
 - **Response Validation**: Sanitizes AI responses with safe defaults for all fields
+
+### Conversation Intelligence System
+A conversation-first architecture that separates behavioral progression from pipeline position:
+- **Two-Layer Architecture**: Pipeline Stage (deal position) and Conversation Stage (behavioral progress) are independent dimensions
+- **Conversation Stages**: Not Started → Attempted → Connected → Discovery → Qualified → Objection → Proposal → Booked
+- **Pipeline Stages**: Unchanged (Suspect → Contacted → Engaged → Qualified → Discovery → Proposal → Won/Lost/Nurture)
+- **Log Conversation / Log Attempt**: Primary actions in the lead drawer, replacing activity buttons as the main workflow
+- **Conversation Stage Dial**: Segmented ring visualization showing conversation progression on each lead
+- **Auto Stage Movement**: Conversation stage updates automatically based on logged outcomes (e.g., "Discovery Conversation" moves stage to Discovery)
+- **Momentum Impact**: Conversation progression, frequency, and next-step freshness drive momentum rather than raw activity counts
+- **Firestore Storage**: Conversation logs stored as subcollection `orgs/{orgId}/leads/{leadId}/conversations`
+- **Lead Fields**: `conversationStage`, `lastConversationAt`, `lastAttemptAt`, `conversationCount`, `attemptCount`, `nextConversationStep`
+- **Component**: `ConversationIntelligence.tsx` provides the panel with dial, insight, logging flow, and recent conversation history
 
 ### Client Pipeline & Touchpoint System
 A dedicated Kanban board (`/client-pipeline`) for quick client management with:
