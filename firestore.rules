@@ -3,66 +3,113 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Helper function to check if user is a member of the organization
     function isOrgMember(orgId) {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.active == true;
     }
     
-    // User profiles - source of truth for org membership
+    function getMemberRole(orgId) {
+      return get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role;
+    }
+    
+    function isOrgManager(orgId) {
+      return isOrgMember(orgId) && getMemberRole(orgId) in ['owner', 'admin'];
+    }
+    
+    function isOwnerOrSelf(orgId, resourceUserId) {
+      return isOrgMember(orgId) && (
+        getMemberRole(orgId) in ['owner', 'admin'] ||
+        resourceUserId == request.auth.uid
+      );
+    }
+    
     match /users/{userId} {
-      // Users can only read/write their own profile
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Global memberships collection - legacy, kept for backwards compatibility
     match /memberships/{membershipId} {
-      // Users can read their own memberships
       allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
-      // Users can create their own membership (during org creation)
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      // Users can update their own membership
       allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
     
-    // Organizations
     match /orgs/{orgId} {
-      // Only authenticated users can create orgs
       allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
-      // Only org members can read org data
       allow read: if isOrgMember(orgId);
-      // Only org members can update org data
-      allow update: if isOrgMember(orgId);
+      allow update: if isOrgManager(orgId);
       
-      // Organization members subcollection
       match /members/{userId} {
-        // Members can read member list
         allow read: if isOrgMember(orgId);
-        // Only org creator can add the first member (themselves)
         allow create: if isAuthenticated() && 
           (request.auth.uid == userId && request.resource.data.role == 'owner');
-        // Members with appropriate roles can manage members
-        allow update, delete: if isOrgMember(orgId);
+        allow update, delete: if isOrgManager(orgId);
       }
       
-      // Leads subcollection - only org members can access
       match /leads/{leadId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId) && request.resource.data.userId == request.auth.uid;
+        allow update: if isOwnerOrSelf(orgId, resource.data.userId);
+        allow delete: if isOrgManager(orgId);
+      }
+      
+      match /leads/{leadId}/conversations/{convoId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+      }
+      
+      match /leads/{leadId}/history/{historyId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+      }
+      
+      match /activities/{activityId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId) && request.resource.data.userId == request.auth.uid;
+        allow update: if isOwnerOrSelf(orgId, resource.data.userId);
+        allow delete: if isOrgManager(orgId);
+      }
+      
+      match /clients/{clientId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+        allow update: if isOwnerOrSelf(orgId, resource.data.userId);
+        allow delete: if isOrgManager(orgId);
+      }
+      
+      match /clients/{clientId}/{subcollection=**} {
         allow read, write: if isOrgMember(orgId);
       }
       
-      // Activities subcollection - only org members can access
-      match /activities/{activityId} {
+      match /dailyPlans/{planId} {
+        allow read, write: if isOrgMember(orgId);
+      }
+      
+      match /tasks/{taskId} {
+        allow read, write: if isOrgMember(orgId);
+      }
+      
+      match /actionQueue/{actionId} {
+        allow read, write: if isOrgMember(orgId);
+      }
+      
+      match /userSettings/{settingsUserId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == settingsUserId;
+      }
+      
+      match /rejectedBusinesses/{businessId} {
         allow read, write: if isOrgMember(orgId);
       }
     }
     
-    // Deny all other access by default
+    match /users/{userId}/settings/{settingId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
     match /{document=**} {
       allow read, write: if false;
     }

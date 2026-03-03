@@ -132,6 +132,17 @@ Enables secure pairing and data exchange with external client business applicati
 - **Firebase Authentication**: For user authentication (Google Sign-In, Email/Password).
 - **Firebase Firestore**: Main NoSQL database for application data, structured under an organization scope (`orgs/{orgId}/`). Requires specific composite indexes for efficient querying.
 
+### Multi-Tenant RBAC Architecture
+Role-based data isolation for organisations with multiple sales reps (50+ user scale):
+- **Roles**: `owner` (full access + management), `admin` (management access), `member` (rep - own data only)
+- **Data Isolation**: Reps only see leads, activities, and clients where `userId` matches their Firebase UID. Managers (owner/admin) see all org data.
+- **AuthContext**: Exposes `userRole` (TeamMemberRole) and `isManager` (boolean) derived from Firestore member document role field
+- **Firestore Queries**: `fetchLeads`, `fetchClients`, `fetchAllActivities` accept optional `filterByUserId` param. When provided, adds `where('userId', '==', userId)` filter. Reps pass their UID; managers pass undefined (no filter).
+- **App-Level Loading**: `App.tsx` determines `userFilter` based on `isManager` and passes it to all data fetch calls
+- **Management Dashboard**: `/management` page visible only to admin/owner roles. Shows team overview with per-rep metrics: active deals, lead counts, activity volume, pipeline value, conversation counts. Drill-down into individual rep performance with pipeline distribution and activity breakdown.
+- **Sidebar**: "Management" section appears only for manager roles. Footer shows current user identity.
+- **Data Preservation**: Lead `userId` field travels with the lead through all stage transitions. No data loss when moving deals between pipeline stages.
+
 ### Third-Party APIs
 - **Google Places API**: For business research.
 - **Australian Business Register (ABR) API**: For Australian business data.

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { 
   auth, 
   db, 
@@ -15,6 +15,7 @@ import {
   collection,
   type User 
 } from '@/lib/firebase';
+import type { TeamMemberRole } from '@/lib/types';
 
 interface AuthUser {
   uid: string;
@@ -26,6 +27,8 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   orgId: string | null;
+  userRole: TeamMemberRole | null;
+  isManager: boolean;
   loading: boolean;
   authReady: boolean;
   membershipReady: boolean;
@@ -42,10 +45,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<TeamMemberRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [membershipReady, setMembershipReady] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
+
+  const isManager = useMemo(() => userRole === 'owner' || userRole === 'admin', [userRole]);
 
   useEffect(() => {
     console.log('[Auth] Setting up onAuthStateChanged listener');
@@ -103,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[Auth] No user, clearing state');
         setUser(null);
         setOrgId(null);
+        setUserRole(null);
         setMembershipReady(false);
         setAuthReady(true);
       }
@@ -132,13 +139,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (memberSnap.exists()) {
         const memberData = memberSnap.data();
         console.log('[Auth] Member doc found:', memberData);
+        const role = (memberData.role as TeamMemberRole) || 'member';
+        setUserRole(role);
+        console.log('[Auth] User role:', role, '| isManager:', role === 'owner' || role === 'admin');
         return memberData.active === true;
       }
       
       console.log('[Auth] Member doc not found');
+      setUserRole(null);
       return false;
     } catch (error: any) {
       console.error('[Auth] Error verifying membership:', error);
+      setUserRole(null);
       return false;
     }
   }
@@ -269,6 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user,
       orgId,
+      userRole,
+      isManager,
       loading,
       authReady,
       membershipReady,

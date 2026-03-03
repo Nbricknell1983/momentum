@@ -21,6 +21,7 @@ import SettingsPage from '@/pages/settings';
 import ClientsPage from '@/pages/clients';
 import ClientPipelinePage from '@/pages/client-pipeline';
 import ResearchPage from '@/pages/research';
+import ManagementPage from '@/pages/management';
 import LoginPage from '@/pages/login';
 import NotFound from '@/pages/not-found';
 import MarketingHome from '@/pages/marketing/index';
@@ -44,6 +45,7 @@ function ProtectedRoutes() {
       <Route path="/daily-plan" component={DailyPlanPage} />
       <Route path="/tasks" component={TasksPage} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/management" component={ManagementPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -52,7 +54,7 @@ function ProtectedRoutes() {
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const dispatch = useDispatch();
-  const { user, orgId, loading, authReady, membershipReady, orgError } = useAuth();
+  const { user, orgId, loading, authReady, membershipReady, orgError, isManager } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
@@ -64,16 +66,17 @@ function AppLayout() {
 
   useEffect(() => {
     async function loadData() {
-      if (!authReady || !membershipReady || !orgId) {
+      if (!authReady || !membershipReady || !orgId || !user) {
         console.log('[App] Skipping data fetch - authReady:', authReady, 'membershipReady:', membershipReady, 'orgId:', orgId);
         return;
       }
-      console.log('[App] Auth and membership ready, fetching data for org:', orgId);
+      const userFilter = isManager ? undefined : user.uid;
+      console.log('[App] Auth and membership ready, fetching data for org:', orgId, '| isManager:', isManager, '| userFilter:', userFilter || 'ALL');
       try {
         const [leads, activities, clients] = await Promise.all([
-          fetchLeads(orgId, true),
-          fetchAllActivities(orgId, true),
-          fetchClients(orgId, true),
+          fetchLeads(orgId, true, userFilter),
+          fetchAllActivities(orgId, true, userFilter),
+          fetchClients(orgId, true, userFilter),
         ]);
         console.log('[App] Fetched', leads.length, 'leads,', activities.length, 'activities, and', clients.length, 'clients');
         dispatch(setLeads(leads));
@@ -86,7 +89,7 @@ function AppLayout() {
     if (authReady && membershipReady && user && orgId) {
       loadData();
     }
-  }, [dispatch, user, orgId, authReady, membershipReady]);
+  }, [dispatch, user, orgId, authReady, membershipReady, isManager]);
 
   if (loading || !authReady) {
     return (

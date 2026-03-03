@@ -13,12 +13,14 @@ import {
   Heart,
   Users,
   Search,
+  BarChart3,
 } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -27,6 +29,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { useTheme } from './ThemeProvider';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
@@ -42,9 +45,14 @@ const navItems = [
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
+const managerNavItems = [
+  { title: 'Management', url: '/management', icon: BarChart3 },
+];
+
 export default function AppSidebar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { isManager, user } = useAuth();
 
   return (
     <Sidebar>
@@ -77,20 +85,55 @@ export default function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {isManager && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Management</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {managerNavItems.map((item) => {
+                  const isActive = location === item.url;
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={isActive}>
+                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="p-4 border-t border-sidebar-border">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleTheme}
-          data-testid="button-theme-toggle"
-        >
-          {theme === 'light' ? (
-            <Moon className="h-4 w-4" />
-          ) : (
-            <Sun className="h-4 w-4" />
-          )}
-        </Button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <span className="text-[10px] font-medium text-foreground">
+                {(user?.displayName || user?.email || '?').charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <span className="text-xs text-muted-foreground truncate" data-testid="text-sidebar-user">
+              {user?.displayName || user?.email || ''}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={toggleTheme}
+            data-testid="button-theme-toggle"
+          >
+            {theme === 'light' ? (
+              <Moon className="h-3.5 w-3.5" />
+            ) : (
+              <Sun className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

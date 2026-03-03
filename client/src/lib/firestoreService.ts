@@ -263,7 +263,7 @@ export async function removeTeamMember(orgId: string, memberId: string, authRead
   }
 }
 
-export async function fetchLeads(orgId: string, authReady: boolean = false): Promise<Lead[]> {
+export async function fetchLeads(orgId: string, authReady: boolean = false, filterByUserId?: string): Promise<Lead[]> {
   const path = `orgs/${orgId}/leads`;
   
   if (!checkAuthReady(orgId, authReady, 'READ', path)) {
@@ -272,7 +272,9 @@ export async function fetchLeads(orgId: string, authReady: boolean = false): Pro
   
   try {
     const leadsRef = collection(db, 'orgs', orgId, 'leads');
-    const q = query(leadsRef, orderBy('updatedAt', 'desc'));
+    const q = filterByUserId
+      ? query(leadsRef, where('userId', '==', filterByUserId), orderBy('updatedAt', 'desc'))
+      : query(leadsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
     const leads = snapshot.docs.map(doc => {
       const data = convertTimestampToDate(doc.data());
@@ -604,7 +606,7 @@ export async function fetchActivities(orgId: string, leadId: string, authReady: 
   }
 }
 
-export async function fetchAllActivities(orgId: string, authReady: boolean = false): Promise<Activity[]> {
+export async function fetchAllActivities(orgId: string, authReady: boolean = false, filterByUserId?: string): Promise<Activity[]> {
   const path = `orgs/${orgId}/activities`;
   
   if (!checkAuthReady(orgId, authReady, 'READ', path)) {
@@ -613,7 +615,9 @@ export async function fetchAllActivities(orgId: string, authReady: boolean = fal
   
   try {
     const activitiesRef = collection(db, 'orgs', orgId, 'activities');
-    const q = query(activitiesRef, orderBy('createdAt', 'desc'));
+    const q = filterByUserId
+      ? query(activitiesRef, where('userId', '==', filterByUserId), orderBy('createdAt', 'desc'))
+      : query(activitiesRef, orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
     const activities = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -1250,7 +1254,7 @@ export async function saveFocusModeSettings(
 // Client Management Functions
 // ============================================
 
-export async function fetchClients(orgId: string, authReady: boolean = false): Promise<Client[]> {
+export async function fetchClients(orgId: string, authReady: boolean = false, filterByUserId?: string): Promise<Client[]> {
   const path = `orgs/${orgId}/clients`;
   
   if (!checkAuthReady(orgId, authReady, 'READ', path)) {
@@ -1259,7 +1263,9 @@ export async function fetchClients(orgId: string, authReady: boolean = false): P
   
   try {
     const clientsRef = collection(db, 'orgs', orgId, 'clients');
-    const q = query(clientsRef, orderBy('updatedAt', 'desc'));
+    const q = filterByUserId
+      ? query(clientsRef, where('userId', '==', filterByUserId), orderBy('updatedAt', 'desc'))
+      : query(clientsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
     const clients = snapshot.docs.map(doc => {
       const clientData = {

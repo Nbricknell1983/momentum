@@ -456,7 +456,7 @@ function TargetProgress({ label, icon, target, completed }: TargetProgressProps)
 
 export default function DailyPlanPage() {
   const { toast } = useToast();
-  const { user, orgId, authReady, membershipReady } = useAuth();
+  const { user, orgId, authReady, membershipReady, isManager } = useAuth();
   const queryClient = useQueryClient();
   const userId = user?.uid || '';
   
@@ -503,20 +503,22 @@ export default function DailyPlanPage() {
     enabled: !!orgId && !!userId && authReady && membershipReady,
   });
   
+  const userFilter = isManager ? undefined : user?.uid;
+  
   const { data: leads = [] } = useQuery({
-    queryKey: ['/api/leads', orgId],
+    queryKey: ['/api/leads', orgId, userFilter],
     queryFn: async () => {
       if (!orgId) return [];
-      return await fetchLeads(orgId, authReady);
+      return await fetchLeads(orgId, authReady, userFilter);
     },
     enabled: !!orgId && authReady && membershipReady,
   });
   
   const { data: clients = [] } = useQuery({
-    queryKey: ['/api/clients', orgId],
+    queryKey: ['/api/clients', orgId, userFilter],
     queryFn: async () => {
       if (!orgId) return [];
-      return await fetchClients(orgId, authReady);
+      return await fetchClients(orgId, authReady, userFilter);
     },
     enabled: !!orgId && authReady && membershipReady,
   });
