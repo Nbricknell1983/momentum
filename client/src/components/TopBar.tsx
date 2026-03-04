@@ -1,10 +1,11 @@
 import { Search, Bell, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, setSearchQuery } from '@/store';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TopBarProps {
   onAgentClick?: () => void;
@@ -12,7 +13,7 @@ interface TopBarProps {
 
 export default function TopBar({ onAgentClick }: TopBarProps) {
   const dispatch = useDispatch();
-  const user = useSelector((state: RootState) => state.app.user);
+  const { user: authUser } = useAuth();
   const searchQuery = useSelector((state: RootState) => state.app.searchQuery);
 
   return (
@@ -46,8 +47,9 @@ export default function TopBar({ onAgentClick }: TopBarProps) {
           <Bell className="h-4 w-4" />
         </Button>
         <Avatar className="h-8 w-8" data-testid="avatar-user">
+          {authUser?.photoURL && <AvatarImage src={authUser.photoURL} alt={authUser.displayName || ''} />}
           <AvatarFallback className="text-xs">
-            {user?.name?.split(' ').map(n => n[0]).join('') || 'U'}
+            {authUser?.displayName?.split(' ').map(n => n[0]).join('') || authUser?.email?.charAt(0).toUpperCase() || 'U'}
           </AvatarFallback>
         </Avatar>
       </div>
