@@ -405,6 +405,11 @@ export default function LeadDrawer() {
 
           <Separator />
 
+          {/* Conversation Intelligence - Primary workflow action */}
+          <ConversationIntelligence lead={lead} />
+
+          <Separator />
+
           {/* Territory */}
           <div className="space-y-2">
             <Label>Territory</Label>
@@ -470,11 +475,6 @@ export default function LeadDrawer() {
               </Select>
             </div>
           </div>
-
-          <Separator />
-
-          {/* Conversation Intelligence */}
-          <ConversationIntelligence lead={lead} />
 
           <Separator />
 
