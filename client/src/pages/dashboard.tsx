@@ -10,6 +10,7 @@ import { RootState } from '@/store';
 import { calculateRollingAverage, detectTrendAlert, getMomentumStatusColor, getMomentumStatus, getMomentumStatusLabel } from '@/lib/momentumEngine';
 import type { ActivityTargets, MomentumResult } from '@/lib/momentumEngine';
 import { format, isToday } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   LineChart,
   Line,
@@ -24,7 +25,9 @@ import {
 } from 'recharts';
 
 export default function DashboardPage() {
+  const { user: authUser } = useAuth();
   const user = useSelector((state: RootState) => state.app.user);
+  const leads = useSelector((state: RootState) => state.app.leads);
   const activities = useSelector((state: RootState) => state.app.activities);
   const dailyMetrics = useSelector((state: RootState) => state.app.dailyMetrics);
 
@@ -197,14 +200,11 @@ export default function DashboardPage() {
   }, [activities]);
 
   const funnelData = useMemo(() => {
-    const stageChanges = activities.filter(a => a.type === 'stage_change');
+    const activeLeads = leads.filter(l => !l.archived);
     const stageCounts: Record<string, number> = {};
     
-    stageChanges.forEach(a => {
-      const newStage = a.metadata?.newStage as string;
-      if (newStage) {
-        stageCounts[newStage] = (stageCounts[newStage] || 0) + 1;
-      }
+    activeLeads.forEach(l => {
+      stageCounts[l.stage] = (stageCounts[l.stage] || 0) + 1;
     });
     
     return [
@@ -216,7 +216,7 @@ export default function DashboardPage() {
       { stage: 'Proposal', count: stageCounts['proposal'] || 0 },
       { stage: 'Won', count: stageCounts['won'] || 0 },
     ];
-  }, [activities]);
+  }, [leads]);
 
   const wonMrr = useMemo(() => {
     return activities
@@ -241,7 +241,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-dashboard-title">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back, {user?.name || 'User'}</p>
+          <p className="text-muted-foreground">Welcome back, {authUser?.displayName || authUser?.email || 'User'}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="gap-2 text-base py-1 px-3">
@@ -387,7 +387,7 @@ export default function DashboardPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="font-semibold">Pipeline Funnel</h2>
-            <Badge variant="secondary">{funnelData.reduce((sum, d) => sum + d.count, 0)} Stage Changes</Badge>
+            <Badge variant="secondary">{funnelData.reduce((sum, d) => sum + d.count, 0)} Leads</Badge>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
