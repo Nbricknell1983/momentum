@@ -2689,15 +2689,24 @@ Please analyze these meeting notes and extract actionable insights.`;
         return res.status(400).json({ error: "Business name is required" });
       }
 
-      const prompt = `I'm a digital marketing sales consultant calling:
+      const hasGbp = gbpLink && gbpLink.trim().length > 0;
+      const hasWebsite = website && website.trim().length > 0;
+
+      const prompt = `I'm a digital marketing sales consultant about to call this business:
 
 Business Name: ${businessName}
 Location: ${location || "Not specified"}
-Website: ${website || "Not specified"}
+Website: ${hasWebsite ? website : "No website found"}
 Industry: ${industry || "Not specified"}
-Google Business Profile: ${gbpLink || "Not available"}
+Google Business Profile: ${hasGbp ? `YES — they have a GBP (${gbpLink})` : "No GBP found"}
 
-In 60 seconds give me a JSON response with these exact fields:
+IMPORTANT RULES:
+- ${hasGbp ? "This business HAS a Google Business Profile. Do NOT say they are missing one." : "This business does NOT appear to have a GBP — that is a valid gap."}
+- ${hasWebsite ? "This business HAS a website. Do NOT say they are missing one." : "This business does NOT appear to have a website — that is a valid gap."}
+- Only flag things as gaps if they are genuinely missing based on the data above. Do not guess or assume things are missing.
+- Focus gaps on things like: review count/quality, SEO optimisation, social media presence, content marketing, paid ads, local citations, mobile optimisation, conversion funnels, etc.
+
+Give me a JSON response with these exact fields:
 {
   "whatTheyDo": "2 sentences about what they do and who they serve",
   "strengths": ["Strength 1 in their online presence", "Strength 2", "Strength 3"],
@@ -2707,7 +2716,7 @@ In 60 seconds give me a JSON response with these exact fields:
   "curiosityQuestion": "A curiosity-driven question that gets them talking"
 }
 
-Keep it concise and practical. Base your analysis on the business type, location, and any available online presence information.`;
+Keep it concise and practical.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
