@@ -480,11 +480,11 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
 
       {result && (
         <div className="space-y-3 pt-1">
-          <ResultCard title="What They Do" content={result.whatTheyDo} onSave={hasLead ? onSaveToNotes : undefined} />
-          <ResultCard title="Strengths" content={result.strengths.map((s, i) => `${i + 1}. ${s}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
-          <ResultCard title="Gaps & Opportunities" content={result.gaps.map((g, i) => `${i + 1}. ${g}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
-          <ResultCard title="Biggest Revenue Opportunity" content={result.biggestRevenueOpportunity} onSave={hasLead ? onSaveToNotes : undefined} highlight />
-          <ResultCard title="Opening Line" content={result.openingLine} onSave={hasLead ? onSaveToNotes : undefined} />
+          <ResultCard title="What they do and who they serve" content={result.whatTheyDo} onSave={hasLead ? onSaveToNotes : undefined} />
+          <ResultCard title="3 strengths in their online presence" content={result.strengths.map((s, i) => `${i + 1}. ${s}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
+          <ResultCard title="3 gaps or missed opportunities" content={result.gaps.map((g, i) => `${i + 1}. ${g}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
+          <ResultCard title="The biggest revenue opportunity" content={result.biggestRevenueOpportunity} onSave={hasLead ? onSaveToNotes : undefined} highlight />
+          <ResultCard title="A strong opening line for my call" content={result.openingLine} onSave={hasLead ? onSaveToNotes : undefined} />
           <ResultCard title="Curiosity Question" content={result.curiosityQuestion} onSave={hasLead ? onSaveToNotes : undefined} />
           <Button variant="outline" size="sm" onClick={onGenerate} className="w-full gap-1 text-xs" data-testid="button-regenerate-precall">
             <RotateCcw className="h-3 w-3" /> Regenerate
