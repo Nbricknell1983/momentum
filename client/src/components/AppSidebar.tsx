@@ -2,8 +2,6 @@ import { Link, useLocation } from 'wouter';
 import {
   LayoutDashboard,
   Kanban,
-  List,
-  TrendingUp,
   Calendar,
   CheckSquare,
   Settings,
@@ -38,8 +36,6 @@ const navItems = [
   { title: 'Client Pipeline', url: '/client-pipeline', icon: Kanban },
   { title: 'Clients', url: '/clients', icon: Users },
   { title: 'Research', url: '/research', icon: Search },
-  { title: 'List', url: '/list', icon: List },
-  { title: 'Forecast', url: '/forecast', icon: TrendingUp },
   { title: 'Daily Plan', url: '/daily-plan', icon: Calendar },
   { title: 'Tasks', url: '/tasks', icon: CheckSquare },
   { title: 'Settings', url: '/settings', icon: Settings },
