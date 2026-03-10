@@ -1266,7 +1266,7 @@ export default function NurturePage() {
   };
 
   return (
-    <div className="flex flex-col h-full p-4">
+    <div className="flex flex-col h-full p-4 overflow-y-auto">
       <Tabs value={nurtureTab} onValueChange={(v) => dispatch(setNurtureTab(v as 'active' | 'passive'))}>
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
           <TabsList>
