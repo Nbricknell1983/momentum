@@ -22,6 +22,7 @@ interface AISalesEngineProps {
   onClose: () => void;
   activeSection?: EngineSection | null;
   selectedLeadOverride?: Lead | null;
+  embedded?: boolean;
 }
 
 interface PreCallResult {
@@ -103,7 +104,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
   );
 }
 
-export default function AISalesEngine({ isOpen, onClose, activeSection: externalSection, selectedLeadOverride }: AISalesEngineProps) {
+export default function AISalesEngine({ isOpen, onClose, activeSection: externalSection, selectedLeadOverride, embedded }: AISalesEngineProps) {
   const leads = useSelector((state: RootState) => state.app.leads);
   const selectedLeadId = useSelector((state: RootState) => state.app.selectedLeadId);
   const dispatch = useDispatch();
@@ -297,6 +298,106 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
 
   const sections: EngineSection[] = ['pre_call', 'objection', 'follow_up', 'prospect'];
 
+  const sectionContent = (
+    <div className={embedded ? "space-y-1" : "p-3 space-y-1"}>
+      {sections.map((sectionKey) => {
+        const config = SECTION_CONFIG[sectionKey];
+        const Icon = config.icon;
+        const isSectionOpen = openSection === sectionKey;
+
+        return (
+          <div key={sectionKey} className="border rounded-lg overflow-hidden" data-testid={`section-${sectionKey}`}>
+            <button
+              onClick={() => setOpenSection(sectionKey)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 ${isSectionOpen ? 'bg-muted/30' : ''}`}
+              data-testid={`button-toggle-${sectionKey}`}
+            >
+              <Icon className="h-4 w-4 text-amber-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{config.title}</p>
+                <p className="text-[11px] text-muted-foreground">{config.subtitle}</p>
+              </div>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isSectionOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isSectionOpen && (
+              <div className="px-3 pb-3 space-y-3">
+                <Separator />
+                {sectionKey === 'pre_call' && (
+                  <PreCallSection
+                    inputs={preCallInputs}
+                    setInputs={setPreCallInputs}
+                    loading={preCallLoading}
+                    result={preCallResult}
+                    error={preCallError}
+                    onGenerate={handlePreCall}
+                    onSaveToNotes={saveToNotes}
+                    hasLead={!!selectedLead}
+                  />
+                )}
+                {sectionKey === 'objection' && (
+                  <ObjectionSection
+                    selectedObjections={selectedObjections}
+                    setSelectedObjections={setSelectedObjections}
+                    customObjection={customObjection}
+                    setCustomObjection={setCustomObjection}
+                    loading={objectionLoading}
+                    results={objectionResults}
+                    error={objectionError}
+                    onGenerate={handleObjection}
+                    onSaveToNotes={saveToNotes}
+                    hasLead={!!selectedLead}
+                  />
+                )}
+                {sectionKey === 'follow_up' && (
+                  <FollowUpSection
+                    inputs={followUpInputs}
+                    setInputs={setFollowUpInputs}
+                    loading={followUpLoading}
+                    result={followUpResult}
+                    error={followUpError}
+                    onGenerate={handleFollowUp}
+                    onSaveToNotes={saveToNotes}
+                    hasLead={!!selectedLead}
+                  />
+                )}
+                {sectionKey === 'prospect' && (
+                  <ProspectSection
+                    inputs={prospectInputs}
+                    setInputs={setProspectInputs}
+                    loading={prospectLoading}
+                    results={prospectResults}
+                    error={prospectError}
+                    onGenerate={handleProspect}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex flex-col h-full" data-testid="panel-ai-sales-engine-embedded">
+        <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
+          <Sparkles className="h-4 w-4 text-amber-500" />
+          <div>
+            <h3 className="font-semibold text-sm">AI Sales Engine</h3>
+            <p className="text-[11px] text-muted-foreground">Prep. Handle. Follow up. Multiply.</p>
+          </div>
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="p-3">
+            {sectionContent}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed top-0 right-0 h-full w-[420px] bg-background border-l shadow-xl z-50 flex flex-col" data-testid="panel-ai-sales-engine">
       <div className="flex items-center justify-between gap-2 p-4 border-b shrink-0">
@@ -320,84 +421,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       )}
 
       <ScrollArea className="flex-1">
-        <div className="p-3 space-y-1">
-          {sections.map((sectionKey) => {
-            const config = SECTION_CONFIG[sectionKey];
-            const Icon = config.icon;
-            const isExpanded = openSection === sectionKey;
-
-            return (
-              <div key={sectionKey} className="border rounded-lg overflow-hidden" data-testid={`section-${sectionKey}`}>
-                <button
-                  onClick={() => setOpenSection(isExpanded ? sectionKey : sectionKey)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 ${isExpanded ? 'bg-muted/30' : ''}`}
-                  data-testid={`button-toggle-${sectionKey}`}
-                >
-                  <Icon className="h-4 w-4 text-amber-600 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{config.title}</p>
-                    <p className="text-[11px] text-muted-foreground">{config.subtitle}</p>
-                  </div>
-                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isExpanded && (
-                  <div className="px-3 pb-3 space-y-3">
-                    <Separator />
-                    {sectionKey === 'pre_call' && (
-                      <PreCallSection
-                        inputs={preCallInputs}
-                        setInputs={setPreCallInputs}
-                        loading={preCallLoading}
-                        result={preCallResult}
-                        error={preCallError}
-                        onGenerate={handlePreCall}
-                        onSaveToNotes={saveToNotes}
-                        hasLead={!!selectedLead}
-                      />
-                    )}
-                    {sectionKey === 'objection' && (
-                      <ObjectionSection
-                        selectedObjections={selectedObjections}
-                        setSelectedObjections={setSelectedObjections}
-                        customObjection={customObjection}
-                        setCustomObjection={setCustomObjection}
-                        loading={objectionLoading}
-                        results={objectionResults}
-                        error={objectionError}
-                        onGenerate={handleObjection}
-                        onSaveToNotes={saveToNotes}
-                        hasLead={!!selectedLead}
-                      />
-                    )}
-                    {sectionKey === 'follow_up' && (
-                      <FollowUpSection
-                        inputs={followUpInputs}
-                        setInputs={setFollowUpInputs}
-                        loading={followUpLoading}
-                        result={followUpResult}
-                        error={followUpError}
-                        onGenerate={handleFollowUp}
-                        onSaveToNotes={saveToNotes}
-                        hasLead={!!selectedLead}
-                      />
-                    )}
-                    {sectionKey === 'prospect' && (
-                      <ProspectSection
-                        inputs={prospectInputs}
-                        setInputs={setProspectInputs}
-                        loading={prospectLoading}
-                        results={prospectResults}
-                        error={prospectError}
-                        onGenerate={handleProspect}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {sectionContent}
       </ScrollArea>
     </div>
   );

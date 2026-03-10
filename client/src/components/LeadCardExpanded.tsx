@@ -51,6 +51,8 @@ interface LeadCardExpandedProps {
   lead: Lead;
   isExpanded: boolean;
   onToggle: () => void;
+  focusMode?: boolean;
+  onAiSectionChange?: (section: 'pre_call' | 'objection' | 'follow_up' | 'prospect') => void;
 }
 
 function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
@@ -201,7 +203,7 @@ function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
   );
 }
 
-export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCardExpandedProps) {
+export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode, onAiSectionChange }: LeadCardExpandedProps) {
   const dispatch = useDispatch();
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
@@ -693,55 +695,57 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
     );
   };
 
+  const showExpanded = isExpanded || focusMode;
+
   return (
     <Card 
-      className={`transition-all duration-200 overflow-hidden ${isExpanded ? 'ring-2 ring-primary' : ''}`}
+      className={`transition-all duration-200 overflow-hidden ${focusMode ? 'border-0 shadow-none rounded-none' : isExpanded ? 'ring-2 ring-primary' : ''}`}
       data-testid={`card-lead-${lead.id}`}
     >
-      {/* Collapsed Header - Always Visible */}
-      <div 
-        className="p-3 cursor-pointer hover-elevate"
-        onClick={onToggle}
-        data-testid={`lead-header-${lead.id}`}
-      >
-        <div className="flex items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start gap-2">
-              <h3 className="font-semibold text-sm line-clamp-2 flex-1 min-w-0">{lead.companyName}</h3>
-              <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                <span
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${MOMENTUM_STATUS_COLORS[momentumResult.status]}`}
-                  data-testid={`badge-momentum-${lead.id}`}
-                >
-                  {momentumResult.score} {momentumResult.label}
-                </span>
-                {lead.conversationStage && lead.conversationStage !== 'not_started' && (
+      {!focusMode && (
+        <div 
+          className="p-3 cursor-pointer hover-elevate"
+          onClick={onToggle}
+          data-testid={`lead-header-${lead.id}`}
+        >
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-2">
+                <h3 className="font-semibold text-sm line-clamp-2 flex-1 min-w-0">{lead.companyName}</h3>
+                <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
                   <span
-                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-white leading-none"
-                    style={{ backgroundColor: CONVERSATION_STAGE_COLORS[lead.conversationStage] }}
-                    data-testid={`badge-conv-stage-${lead.id}`}
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${MOMENTUM_STATUS_COLORS[momentumResult.status]}`}
+                    data-testid={`badge-momentum-${lead.id}`}
                   >
-                    {CONVERSATION_STAGE_LABELS[lead.conversationStage]}
+                    {momentumResult.score} {momentumResult.label}
                   </span>
-                )}
-                <TrafficLight status={trafficStatus} size="sm" />
+                  {lead.conversationStage && lead.conversationStage !== 'not_started' && (
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-white leading-none"
+                      style={{ backgroundColor: CONVERSATION_STAGE_COLORS[lead.conversationStage] }}
+                      data-testid={`badge-conv-stage-${lead.id}`}
+                    >
+                      {CONVERSATION_STAGE_LABELS[lead.conversationStage]}
+                    </span>
+                  )}
+                  <TrafficLight status={trafficStatus} size="sm" />
+                </div>
               </div>
+              {(lead.territory || lead.address) && (
+                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{lead.address || lead.territory}</p>
+              )}
             </div>
-            {(lead.territory || lead.address) && (
-              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{lead.address || lead.territory}</p>
-            )}
           </div>
+          {!isExpanded && lead.lastActivityAt && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {lead.lastActivityAt && `Call`} - {lead.lastActivityAt && format(new Date(lead.lastActivityAt), 'dd/MM/yyyy')}
+            </p>
+          )}
         </div>
-        {!isExpanded && lead.lastActivityAt && (
-          <p className="text-xs text-muted-foreground mt-1">
-            {lead.lastActivityAt && `Call`} - {lead.lastActivityAt && format(new Date(lead.lastActivityAt), 'dd/MM/yyyy')}
-          </p>
-        )}
-      </div>
+      )}
 
-      {/* Expanded Content */}
-      {isExpanded && (
-        <div className="px-3 pb-3 space-y-4 border-t pt-3 overflow-hidden break-words">
+      {showExpanded && (
+        <div className={`${focusMode ? '' : 'px-3 pb-3 border-t pt-3'} space-y-4 overflow-hidden break-words`}>
           {saveStatus !== 'idle' && (
             <div className={`flex items-center gap-1.5 text-xs transition-opacity duration-300 ${
               saveStatus === 'saving' ? 'text-muted-foreground' :
@@ -1117,8 +1121,10 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                   size="sm"
                   className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
                   onClick={() => {
-                    dispatch(selectLead(lead.id));
-                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'pre_call' } }));
+                    if (onAiSectionChange) { onAiSectionChange('pre_call'); } else {
+                      dispatch(selectLead(lead.id));
+                      window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'pre_call' } }));
+                    }
                   }}
                   data-testid={`button-prep-call-${lead.id}`}
                 >
@@ -1130,8 +1136,10 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                   size="sm"
                   className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
                   onClick={() => {
-                    dispatch(selectLead(lead.id));
-                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'objection' } }));
+                    if (onAiSectionChange) { onAiSectionChange('objection'); } else {
+                      dispatch(selectLead(lead.id));
+                      window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'objection' } }));
+                    }
                   }}
                   data-testid={`button-handle-objection-${lead.id}`}
                 >
@@ -1143,8 +1151,10 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                   size="sm"
                   className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
                   onClick={() => {
-                    dispatch(selectLead(lead.id));
-                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'follow_up' } }));
+                    if (onAiSectionChange) { onAiSectionChange('follow_up'); } else {
+                      dispatch(selectLead(lead.id));
+                      window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'follow_up' } }));
+                    }
                   }}
                   data-testid={`button-draft-followup-${lead.id}`}
                 >
@@ -1156,8 +1166,10 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                   size="sm"
                   className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
                   onClick={() => {
-                    dispatch(selectLead(lead.id));
-                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'prospect' } }));
+                    if (onAiSectionChange) { onAiSectionChange('prospect'); } else {
+                      dispatch(selectLead(lead.id));
+                      window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'prospect' } }));
+                    }
                   }}
                   data-testid={`button-find-prospects-${lead.id}`}
                 >

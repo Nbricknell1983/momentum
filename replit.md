@@ -39,7 +39,7 @@ Preferred communication style: Simple, everyday language.
 - Uses a fixed left sidebar, a top bar, a main content area, and a right drawer overlay.
 
 ### Key Features
-- **Pipeline Management**: Kanban board with drag-and-drop lead management.
+- **Pipeline Management**: Kanban board with drag-and-drop lead management. Clicking a lead card opens a Pipedrive-style **Lead Focus View** — a full-screen overlay with lead details on the left and embedded AI Sales Engine on the right. Keyboard navigation: Escape closes, arrow keys navigate between leads.
 - **Conversation Intelligence**: Separate conversation layer tracking behavioral progression (Attempted → Connected → Discovery → Qualified → Objection → Proposal → Booked) independent from pipeline stage.
 - **Lead & Client Management**: Expandable lead cards, quick actions, activity logging, and client lifecycle management with AI Movement Tips.
 - **Territory System**: Hierarchical region/area filtering for leads.

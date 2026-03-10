@@ -12,6 +12,7 @@ import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setReg
 import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS, Client, DEFAULT_CLIENT_FIELDS, calculateNextTouchDate } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, isAreaRequiredForRegion, validateTerritorySelection } from '@/lib/territoryConfig';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
+import LeadFocusView from '@/components/LeadFocusView';
 import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { createLead as createLeadInFirestore, updateLeadInFirestore, createClient as createClientInFirestore, createClientHistoryEntry } from '@/lib/firestoreService';
@@ -30,7 +31,6 @@ export default function PipelinePage() {
   const { toast } = useToast();
   const { user: authUser, orgId, authReady, membershipReady } = useAuth();
   
-  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newStage, setNewStage] = useState<Stage>('suspect');
@@ -56,7 +56,7 @@ export default function PipelinePage() {
     if (openType === 'lead' && openId) {
       const matchingLead = leads.find(l => l.id === openId);
       if (matchingLead) {
-        setExpandedLeadId(openId);
+        setFocusedLeadId(openId);
         window.history.replaceState(null, '', '/pipeline');
       }
     }
@@ -393,12 +393,46 @@ export default function PipelinePage() {
     }
   };
 
+  const [focusedLeadId, setFocusedLeadId] = useState<string | null>(null);
+
+  const focusedLead = focusedLeadId ? filteredLeads.find(l => l.id === focusedLeadId) || leads.find(l => l.id === focusedLeadId) : null;
+
+  const handleFocusNavigate = (direction: 'prev' | 'next') => {
+    if (!focusedLeadId) return;
+    const allVisible = filteredLeads.filter(l => !l.archived);
+    const idx = allVisible.findIndex(l => l.id === focusedLeadId);
+    if (idx === -1) return;
+    const newIdx = direction === 'prev' ? idx - 1 : idx + 1;
+    if (newIdx >= 0 && newIdx < allVisible.length) {
+      setFocusedLeadId(allVisible[newIdx].id);
+    }
+  };
+
+  const focusedLeadIndex = focusedLeadId ? filteredLeads.filter(l => !l.archived).findIndex(l => l.id === focusedLeadId) : -1;
+  const totalVisibleLeads = filteredLeads.filter(l => !l.archived).length;
+
   const getLeadsByStage = (stage: Stage) => {
     return filteredLeads.filter(lead => lead.stage === stage);
   };
 
+  const handleLeadClick = (leadId: string | null) => {
+    if (leadId) {
+      setFocusedLeadId(leadId);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
+      {focusedLead && (
+        <LeadFocusView
+          lead={focusedLead}
+          onClose={() => setFocusedLeadId(null)}
+          onNavigate={handleFocusNavigate}
+          hasPrev={focusedLeadIndex > 0}
+          hasNext={focusedLeadIndex < totalVisibleLeads - 1}
+        />
+      )}
+
       {/* Pipeline Controls */}
       <div className="flex items-center justify-between gap-4 p-4 border-b flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
@@ -584,8 +618,8 @@ export default function PipelinePage() {
                   key={stage}
                   stage={stage}
                   leads={getLeadsByStage(stage)}
-                  expandedLeadId={expandedLeadId}
-                  onLeadToggle={setExpandedLeadId}
+                  expandedLeadId={null}
+                  onLeadToggle={handleLeadClick}
                   onAddLead={() => {
                     setNewStage(stage);
                     setIsAddDialogOpen(true);
