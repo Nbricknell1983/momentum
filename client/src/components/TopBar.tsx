@@ -52,7 +52,7 @@ export default function TopBar({ onAgentClick }: TopBarProps) {
           data-testid="button-agent"
         >
           <Sparkles className="h-4 w-4" />
-          <span className="hidden sm:inline">Agent</span>
+          <span className="hidden sm:inline">AI Sales Engine</span>
         </Button>
         <Button variant="ghost" size="icon" data-testid="button-notifications">
           <Bell className="h-4 w-4" />

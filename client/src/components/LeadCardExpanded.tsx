@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText, Check, AlertCircle, Cloud } from 'lucide-react';
+import { RootState, selectLead } from '@/store';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText, Check, AlertCircle, Cloud, Shield, Users } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { addDays, addWeeks, addMonths } from 'date-fns';
 import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus, NURTURE_STATUS_LABELS, calculateNextTouchDate, CONVERSATION_STAGE_LABELS, CONVERSATION_STAGE_COLORS, ConversationStage } from '@/lib/types';
+import { calculateDealMomentumScore, MOMENTUM_STATUS_COLORS } from '@/lib/dealMomentumScore';
 import { updateLead, updateLeadStage, addActivity, archiveLead, deleteLead, enrollInNurture, removeFromNurture } from '@/store';
 import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
@@ -313,6 +314,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
     }, {} as Record<ActivityType, number>);
   
   const trafficStatus = getTrafficLightStatus(lead);
+  const momentumResult = calculateDealMomentumScore(lead, activities);
 
   const handleStageChange = async (stage: Stage) => {
     console.log('[LeadCard] handleStageChange called:', { leadId: lead.id, stage, currentNurtureMode: lead.nurtureMode });
@@ -707,6 +709,12 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
             <div className="flex items-start gap-2">
               <h3 className="font-semibold text-sm line-clamp-2 flex-1 min-w-0">{lead.companyName}</h3>
               <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                <span
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${MOMENTUM_STATUS_COLORS[momentumResult.status]}`}
+                  data-testid={`badge-momentum-${lead.id}`}
+                >
+                  {momentumResult.score} {momentumResult.label}
+                </span>
                 {lead.conversationStage && lead.conversationStage !== 'not_started' && (
                   <span
                     className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-white leading-none"
@@ -1101,6 +1109,60 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle }: LeadCar
                 >
                   <Sparkles className="h-3 w-3" />
                   Outreach Scripts
+                </Button>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                  onClick={() => {
+                    dispatch(selectLead(lead.id));
+                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'pre_call' } }));
+                  }}
+                  data-testid={`button-prep-call-${lead.id}`}
+                >
+                  <Phone className="h-3 w-3" />
+                  Prep Call
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                  onClick={() => {
+                    dispatch(selectLead(lead.id));
+                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'objection' } }));
+                  }}
+                  data-testid={`button-handle-objection-${lead.id}`}
+                >
+                  <Shield className="h-3 w-3" />
+                  Handle Objection
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                  onClick={() => {
+                    dispatch(selectLead(lead.id));
+                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'follow_up' } }));
+                  }}
+                  data-testid={`button-draft-followup-${lead.id}`}
+                >
+                  <Mail className="h-3 w-3" />
+                  Draft Follow-Up
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                  onClick={() => {
+                    dispatch(selectLead(lead.id));
+                    window.dispatchEvent(new CustomEvent('openAISalesEngine', { detail: { section: 'prospect' } }));
+                  }}
+                  data-testid={`button-find-prospects-${lead.id}`}
+                >
+                  <Users className="h-3 w-3" />
+                  Find Prospects
                 </Button>
               </div>
             </div>

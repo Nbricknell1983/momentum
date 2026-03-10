@@ -13,6 +13,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RootState, toggleDrawer, updateLead, updateLeadStage, addActivity, archiveLead, deleteLead } from '@/store';
 import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, calculateNextTouchDate } from '@/lib/types';
+import { calculateDealMomentumScore, MOMENTUM_STATUS_COLORS } from '@/lib/dealMomentumScore';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, getTerritoryDisplayName } from '@/lib/territoryConfig';
 import { countActivitiesByType } from '@/lib/mockData';
 import ActivityButton from './ActivityButton';
@@ -52,6 +53,7 @@ export default function LeadDrawer() {
   const isOpen = useSelector((state: RootState) => state.app.isDrawerOpen);
   const selectedLeadId = useSelector((state: RootState) => state.app.selectedLeadId);
   const leads = useSelector((state: RootState) => state.app.leads);
+  const allActivities = useSelector((state: RootState) => state.app.activities);
   const cadences = useSelector((state: RootState) => state.app.cadences);
   const lead = leads.find(l => l.id === selectedLeadId);
   const [isRecording, setIsRecording] = useState(false);
@@ -62,6 +64,7 @@ export default function LeadDrawer() {
 
   const activityCounts = countActivitiesByType(lead.id);
   const trafficStatus = getTrafficLightStatus(lead);
+  const momentumResult = calculateDealMomentumScore(lead, allActivities);
 
   const handleClose = () => {
     dispatch(toggleDrawer(false));
@@ -385,6 +388,41 @@ export default function LeadDrawer() {
               </Button>
             </div>
           </div>
+
+          {/* Deal Momentum Score */}
+          <div className="space-y-2" data-testid="section-momentum-score">
+            <Label className="text-xs text-muted-foreground">Deal Momentum</Label>
+            <div className="flex items-center gap-3">
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-semibold ${MOMENTUM_STATUS_COLORS[momentumResult.status]}`}>
+                <span data-testid="text-momentum-score">{momentumResult.score}</span>
+                <span data-testid="text-momentum-label">{momentumResult.label}</span>
+              </div>
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    momentumResult.status === 'strong' ? 'bg-green-500' :
+                    momentumResult.status === 'active' ? 'bg-blue-500' :
+                    momentumResult.status === 'at_risk' ? 'bg-amber-500' :
+                    'bg-red-500'
+                  }`}
+                  style={{ width: `${momentumResult.score}%` }}
+                />
+              </div>
+            </div>
+            <ul className="space-y-1">
+              {momentumResult.reasons.map((reason, i) => (
+                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                  <span className="mt-1 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                  {reason}
+                </li>
+              ))}
+            </ul>
+            <div className="text-xs text-foreground/80 bg-muted/50 rounded-md p-2" data-testid="text-momentum-next-step">
+              <span className="font-medium">Next step:</span> {momentumResult.suggestedNextStep}
+            </div>
+          </div>
+
+          <Separator />
 
           {/* MRR */}
           <div className="space-y-2">

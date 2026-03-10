@@ -1,0 +1,1330 @@
+Build this as a phased extension inside momentum.battlescore.com.au.
+
+This is not a redesign of the platform. It is an additive sales execution layer for Momentum that helps reps prepare for calls, handle objections, follow up faster, generate more prospects, stay focused daily, and identify stalled deals before they are lost.
+
+The goal is to turn Momentum from a pipeline tracker into a sales execution platform.
+
+1. Product objective
+
+Create a new sales intelligence and execution layer inside Momentum with four connected capabilities:
+
+AI Sales Engine
+
+Live Call Intelligence
+
+Momentum Dashboard
+
+Deal Momentum Score
+
+These features must work together, but should be built in phases to reduce risk, protect the current architecture, and avoid unnecessary rework.
+
+2. Problem we are solving
+
+Reps currently have to think across too many disconnected tasks:
+
+who to contact
+
+how to prepare
+
+what to say
+
+how to handle objections
+
+how to follow up
+
+how to create more pipeline
+
+which deals are actually moving versus stalling
+
+This creates hesitation, inconsistent follow-up, poor pipeline hygiene, and missed sales opportunities.
+
+Momentum should solve this by giving the rep a guided workflow directly inside the pipeline.
+
+3. In scope
+
+Build the following inside momentum.battlescore.com.au only:
+
+A. AI Sales Engine
+
+A right-side lead-aware panel that supports:
+
+Win Before You Dial
+
+Control the Call
+
+Win the Follow-Up
+
+Multiply Your Pipeline
+
+B. Live Call Intelligence
+
+A live mode within AI Sales Engine that helps during calls using typed call notes initially.
+
+C. Momentum Dashboard
+
+A daily sales dashboard that shows:
+
+Momentum Score
+
+Today’s Mission
+
+AI Next Best Actions
+
+Pipeline Health
+
+Momentum Streak
+
+Prospect Generator
+
+Weekly Wins
+
+D. Deal Momentum Score
+
+A score on each lead and in lead detail that indicates deal health:
+
+Strong
+
+Active
+
+At Risk
+
+Stalled
+
+4. Out of scope
+
+Do not:
+
+redesign the entire Momentum product
+
+move this into the CRM deal page
+
+rewrite the lead panel architecture
+
+rewrite kanban pipeline logic
+
+change auth
+
+change tenant resolution
+
+affect public websites
+
+affect booking widgets
+
+affect quotes, invoices, jobs, or marketing site modules
+
+auto-send email or SMS without explicit user action
+
+introduce cross-tenant prompt history or AI output leakage
+
+This must remain a focused extension of Momentum only.
+
+5. Tenant and architecture guardrails
+
+This is critical.
+
+All AI outputs, scores, dashboard data, and lead actions must remain strictly scoped by:
+
+tenantId
+
+leadId
+
+userId where relevant
+
+Do not allow:
+
+cross-tenant access
+
+shared prompt history between tenants
+
+shared dashboard metrics between tenants
+
+lead suggestions or scores leaking between orgs
+
+Preserve existing working functionality. Prefer extending existing patterns rather than creating parallel or duplicate systems.
+
+PHASED DELIVERY PLAN
+Phase 1 — AI Sales Engine
+Objective
+
+Add a right-side panel inside Momentum called:
+
+AI Sales Engine
+Subtitle: Prep. Handle. Follow up. Multiply.
+
+Placement
+
+Use the current 3-zone Momentum layout:
+
+left = selected lead workspace
+
+center = kanban pipeline
+
+right = AI Sales Engine
+
+Do not remove or replace the existing layout.
+
+Behaviour
+
+When a lead is selected, AI Sales Engine becomes contextual to that lead.
+
+Add compact buttons in the left lead panel:
+
+Prep Call
+
+Handle Objection
+
+Draft Follow-Up
+
+Find Prospects
+
+Clicking each should open the matching section in the right panel.
+
+AI Sales Engine sections
+
+Use 4 accordion sections.
+
+1 — Win Before You Dial
+
+Inputs:
+
+business name
+
+suburb
+
+website
+
+industry
+
+Google Business Profile link if available
+
+Auto-fill from selected lead when possible.
+
+Button:
+
+Generate Call Prep
+
+Outputs:
+
+what they do
+
+3 strengths
+
+3 gaps or missed opportunities
+
+biggest revenue opportunity
+
+strong opening line
+
+curiosity-driven question
+
+Actions:
+
+copy
+
+save to notes
+
+pin to lead
+
+regenerate
+
+2 — Control the Call
+
+Support:
+
+preset objections
+
+custom objection input
+
+Preset objections:
+
+We tried SEO before
+
+We already have someone doing marketing
+
+We don’t have the budget
+
+Digital doesn’t work for our industry
+
+Just send me some info
+
+Button:
+
+Generate Response
+
+Outputs:
+
+real concern behind objection
+
+what to say
+
+question to regain control
+
+Actions:
+
+copy response
+
+copy question
+
+save to notes
+
+use in call log if existing call log flow supports it
+
+3 — Win the Follow-Up
+
+Inputs:
+
+business
+
+industry
+
+location
+
+meeting notes
+
+services discussed
+
+next step
+
+Button:
+
+Generate Follow-Up
+
+Output tabs:
+
+Email
+
+SMS
+
+Proposal Intro
+
+Actions:
+
+copy
+
+save to notes
+
+push to draft only if draft flow already exists
+
+regenerate
+
+4 — Multiply Your Pipeline
+
+Inputs:
+
+business type
+
+suburb
+
+nearby suburbs or radius
+
+Button:
+
+Find Similar Prospects
+
+Outputs for each suggested prospect:
+
+business name
+
+suburb
+
+likely pain point
+
+why strong prospect
+
+opening line
+
+Actions:
+
+add as lead
+
+add to suspect
+
+copy opening line
+
+Batch actions:
+
+add selected
+
+save list
+
+Stage-aware defaults
+
+Use lead stage to decide which section opens first:
+
+Suspect / Contacted / Engaged → Win Before You Dial
+
+Qualified / Discovery → Control the Call
+
+Proposal / post-meeting → Win the Follow-Up
+
+UI rules
+
+use scan-friendly structured cards
+
+do not use a chatbot layout
+
+right panel must be collapsible
+
+long outputs must wrap correctly
+
+on smaller screens, right panel becomes slide-over drawer
+
+include empty, loading, retry, and error states
+
+Data storage
+
+Use a deal- or lead-scoped structure, for example:
+
+salesEngineSessions
+
+Suggested fields:
+
+tenantId
+
+leadId
+
+promptType
+
+input
+
+output
+
+createdBy
+
+createdAt
+
+updatedAt
+
+Prompt types:
+
+pre_call
+
+objection
+
+follow_up
+
+pipeline
+
+Do not create duplicate CRM entities.
+
+Acceptance criteria
+
+selecting a lead activates AI Sales Engine
+
+outputs are contextual to the selected lead
+
+left-panel shortcuts open the correct AI section
+
+existing pipeline interaction remains unchanged
+
+copy/save actions work
+
+create-lead action works only if lead creation already exists
+
+no regressions to lead selection, notes, or drag/drop
+
+Phase 2 — Live Call Intelligence
+Objective
+
+Extend AI Sales Engine with a fifth mode:
+
+Live Call Intelligence
+Subtitle: Guidance while you're on the call
+
+Trigger
+
+When user clicks:
+
+Log Call
+
+Start Call
+
+for the selected lead, switch AI Sales Engine into Live Mode.
+
+V1 scope
+
+Use typed call notes only.
+Do not require live voice transcription in V1.
+
+Live mode sections
+
+Show 3 live sections:
+
+A. Conversation Guidance
+
+Generate suggested discovery questions based on:
+
+selected lead context
+
+business type
+
+current stage
+
+notes typed during the call
+
+B. Objection Detection
+
+When objection-like language appears in notes, generate:
+
+likely concern
+
+conversational response
+
+regain-control question
+
+C. Next Best Action
+
+Suggest:
+
+what to ask next
+
+what close to attempt
+
+what next step to propose
+
+Actions
+
+copy question
+
+copy response
+
+save to notes
+
+Guardrails
+
+only activate for selected lead
+
+do not interfere with current call logging flow
+
+do not require telephony integration in V1
+
+all outputs remain scoped to tenantId and leadId
+
+Future-ready note
+
+Structure Live Call Intelligence so voice transcription can be added later via Twilio / AssemblyAI / Deepgram / Whisper, but do not implement that now unless already planned.
+
+Acceptance criteria
+
+clicking Log Call or Start Call activates Live Mode
+
+typed notes trigger useful suggestions
+
+objection-like text produces structured objection help
+
+outputs can be copied and saved
+
+existing call logging flow remains intact
+
+Phase 3 — Momentum Dashboard
+Objective
+
+Create a new page inside Momentum that becomes the rep’s daily operating screen.
+
+Suggested route:
+momentum.battlescore.com.au/dashboard
+
+Sections
+1. Momentum Score
+
+Show a score out of 100 for the logged-in user based on:
+
+calls logged
+
+leads added
+
+follow-ups sent
+
+meetings booked
+
+deals moved forward
+
+2. Today’s Mission
+
+Show 3–5 recommended tasks, such as:
+
+call 5 suspects
+
+follow up 3 engaged leads
+
+book 1 discovery meeting
+
+add 5 new prospects
+
+Each item must link to the relevant lead, filtered view, or action.
+
+3. AI Next Best Actions
+
+Display lead-specific recommended actions generated from existing lead and activity context.
+
+For each:
+
+lead name
+
+stage
+
+suggested action
+
+button to open lead or relevant AI Sales Engine section
+
+4. Pipeline Health
+
+Show counts by stage:
+
+Suspect
+
+Contacted
+
+Engaged
+
+Qualified
+
+Proposal
+
+Won
+
+Flag issues such as:
+
+low suspect volume
+
+deals stuck in stage
+
+overdue follow-ups
+
+5. Momentum Streak
+
+Track consecutive days where the user moved at least one deal forward.
+
+6. Prospect Generator
+
+Quick entry form connected to Multiply Your Pipeline:
+
+business type
+
+suburb
+
+radius
+
+Allow results to be added into Suspect where appropriate.
+
+7. Weekly Wins
+
+Display:
+
+calls made
+
+meetings booked
+
+proposals sent
+
+deals won
+
+Data approach
+
+Use existing CRM activity and lead data wherever possible.
+
+Suggested support collections if needed:
+
+momentumDailyStats
+
+momentumActions
+
+momentumScores
+
+Keep this minimal and avoid duplicating lead activity systems.
+
+Guardrails
+
+dashboard should read from existing data where possible
+
+do not rewrite lead lifecycle logic
+
+keep all dashboard metrics tenant- and user-scoped
+
+responsive for laptop first
+
+Acceptance criteria
+
+dashboard loads correctly for logged-in user
+
+daily score is visible
+
+mission tasks are actionable
+
+AI next best actions open the right lead or workflow
+
+pipeline health reflects current live data
+
+no regression to existing Momentum pipeline screen
+
+Phase 4 — Deal Momentum Score
+Objective
+
+Show which deals are progressing and which are stalling.
+
+This must appear:
+
+on each lead card
+
+in the selected lead panel
+
+in the Momentum Dashboard as a prioritisation signal
+
+V1 scoring model
+
+Base score: 50
+
+Add:
+
+call logged in last 3 days: +10
+
+meeting logged in last 5 days: +15
+
+follow-up sent in last 3 days: +8
+
+next action scheduled: +10
+
+stage moved in last 7 days: +15
+
+proposal sent in last 7 days: +12
+
+Subtract:
+
+no activity in 7+ days: -15
+
+no next action set: -12
+
+overdue next action: -15
+
+same stage for 10+ days: -10
+
+proposal sent with no follow-up in 5+ days: -12
+
+multiple touches without reply: -8
+
+Clamp score between 0 and 100.
+
+Status bands
+
+80–100 = Strong
+
+60–79 = Active
+
+35–59 = At Risk
+
+0–34 = Stalled
+
+UI requirements
+On lead cards
+
+Add a small badge or pill, for example:
+
+82 Strong
+
+61 Active
+
+34 At Risk
+
+12 Stalled
+
+Do not let this dominate the card.
+
+In selected lead panel
+
+Add a section near the top:
+
+Deal Momentum Score
+
+Show:
+
+score out of 100
+
+status label
+
+2–3 reasons for current score
+
+suggested next step
+
+Example reasons:
+
+No contact logged in 9 days
+
+No next step scheduled
+
+Proposal sent 6 days ago with no follow-up
+
+In dashboard
+
+Add sections for:
+
+lowest momentum deals
+
+stalled deals needing attention
+
+Data approach
+
+Prefer one of these:
+
+compute on read from existing lead activity
+
+cache on lead document for performance
+
+Suggested cached fields on lead:
+
+momentumScore
+
+momentumStatus
+
+momentumReasons
+
+momentumUpdatedAt
+
+Guardrails
+
+do not create unnecessary duplicate systems
+
+do not slow down board rendering
+
+preserve drag/drop and lead card interactions
+
+keep score computation tenant-scoped
+
+Acceptance criteria
+
+each lead card shows a score badge
+
+selected lead panel shows score, reasons, next step
+
+score updates when activity changes
+
+dashboard can surface low-momentum deals
+
+no regression to board performance or usability
+
+6. Design direction
+
+This should feel like premium SaaS sales tooling, not a novelty AI add-on.
+
+Visual rules
+
+Use:
+
+structured cards
+
+subtle borders
+
+clean typography
+
+compact spacing
+
+clear section hierarchy
+
+strong scanability
+
+Avoid:
+
+chatbot bubbles
+
+noisy gradients
+
+gimmicky AI visuals
+
+anything that disrupts current Momentum usability
+
+Interaction rules
+
+support empty state, loading state, retry state, and error state
+
+keep interactions fast
+
+preserve keyboard and click flow where possible
+
+wrap long AI outputs correctly
+
+mobile/smaller laptop should degrade cleanly into drawer/slide-over patterns
+
+7. High-risk areas to protect
+
+Before implementation, review these carefully:
+
+shared Momentum layout components
+
+kanban board rendering and drag/drop
+
+selected lead panel state management
+
+notes save flow
+
+call logging flow
+
+lead creation flow
+
+tenant-scoped queries and writes
+
+any feature flags or admin gating patterns already in place
+
+Do not rewrite tightly coupled areas unless absolutely necessary. Extend existing patterns.
+
+8. QA and regression checklist
+Core functional QA
+
+selecting a lead updates the AI panel correctly
+
+AI outputs save and reload correctly for the same lead
+
+AI outputs do not appear on another lead
+
+create lead action works correctly from generated prospects
+
+call log still works
+
+notes still work
+
+proposal and follow-up draft flows still work if they already exist
+
+dashboard metrics reflect current user/tenant data
+
+momentum score updates after activity changes
+
+Multi-tenant QA
+
+tenant A cannot see tenant B outputs
+
+tenant A cannot see tenant B scores
+
+dashboard is tenant- and user-scoped
+
+lead suggestions and history stay isolated
+
+Regression QA
+
+kanban drag/drop still works
+
+card rendering remains stable
+
+selected lead panel still works
+
+no breakage to filters or stage transitions
+
+no impact on unrelated modules
+
+no impact on public websites or widgets
+
+Responsive QA
+
+laptop widths
+
+smaller laptop widths
+
+drawer/slide-over states
+
+long text wrapping
+
+card density under realistic data volume
+
+9. Build order
+
+Implement in this order:
+
+Step 1
+
+AI Sales Engine
+
+Step 2
+
+Live Call Intelligence
+
+Step 3
+
+Momentum Dashboard
+
+Step 4
+
+Deal Momentum Score
+
+This order gives the fastest visible value with the least risk and avoids overbuilding too early.
+
+10. Definition of done
+
+This initiative is complete when:
+
+Momentum contains a usable right-side AI Sales Engine
+
+reps can generate prep, objection handling, follow-up text, and new prospect suggestions from the selected lead
+
+live typed-note call assistance works in Live Mode
+
+a dashboard exists that tells reps what to do today
+
+each lead has a visible Momentum Score that reflects activity health
+
+existing Momentum workflows remain stable
+
+no tenant isolation issues are introduced
+
+no unrelated modules are affected
+
+Final copy-paste prompt for Replit
+
+Build a phased AI-powered sales execution layer inside momentum.battlescore.com.au called AI Sales Engine. This is an additive feature inside Momentum only. Do not redesign the entire product or move this into the CRM deal page.
+
+The feature set must be implemented in phases and must preserve tenant isolation, existing lead workflows, kanban drag/drop, notes, and call logging.
+
+Phase 1 — AI Sales Engine
+
+Add a right-side panel to the existing Momentum 3-zone layout:
+
+left = selected lead workspace
+
+center = kanban pipeline
+
+right = AI Sales Engine
+
+Add compact left-panel shortcuts:
+
+Prep Call
+
+Handle Objection
+
+Draft Follow-Up
+
+Find Prospects
+
+The right panel must contain 4 accordion sections:
+
+Win Before You Dial
+
+auto-fill business name, suburb, website, industry, GBP link if available
+
+generate:
+
+what they do
+
+3 strengths
+
+3 gaps
+
+biggest revenue opportunity
+
+opening line
+
+curiosity question
+
+actions:
+
+copy
+
+save to notes
+
+pin to lead
+
+regenerate
+
+Control the Call
+
+support preset objections and custom objection input
+
+preset objections:
+
+We tried SEO before
+
+We already have someone doing marketing
+
+We don’t have the budget
+
+Digital doesn’t work for our industry
+
+Just send me some info
+
+generate:
+
+real concern
+
+what to say
+
+question to regain control
+
+actions:
+
+copy response
+
+copy question
+
+save to notes
+
+use in call log if supported
+
+Win the Follow-Up
+
+inputs:
+
+business
+
+industry
+
+location
+
+meeting notes
+
+services discussed
+
+next step
+
+output tabs:
+
+Email
+
+SMS
+
+Proposal Intro
+
+actions:
+
+copy
+
+save to notes
+
+push to draft if draft flow already exists
+
+regenerate
+
+Multiply Your Pipeline
+
+inputs:
+
+business type
+
+suburb
+
+nearby suburbs or radius
+
+output rows:
+
+business name
+
+suburb
+
+likely pain point
+
+why strong prospect
+
+opening line
+
+actions:
+
+add as lead
+
+add to suspect
+
+copy opening line
+
+add selected
+
+save list
+
+Use stage-aware defaults:
+
+Suspect / Contacted / Engaged → Win Before You Dial
+
+Qualified / Discovery → Control the Call
+
+Proposal / post-meeting → Win the Follow-Up
+
+Store AI output in a lead-scoped structure such as salesEngineSessions with:
+
+tenantId
+
+leadId
+
+promptType
+
+input
+
+output
+
+createdBy
+
+createdAt
+
+updatedAt
+
+Phase 2 — Live Call Intelligence
+
+When user clicks Log Call or Start Call for the selected lead, switch AI Sales Engine into Live Call Intelligence mode.
+
+In Live Mode show:
+
+Conversation Guidance
+
+Objection Detection
+
+Next Best Action
+
+Use typed call notes in V1.
+Generate:
+
+suggested discovery questions
+
+objection help
+
+next-step suggestions
+
+Allow copy and save-to-notes actions.
+Do not require voice transcription in V1.
+Future support for transcription can be added later.
+
+Phase 3 — Momentum Dashboard
+
+Create a new page inside Momentum for the logged-in user showing:
+
+Momentum Score out of 100 based on:
+
+calls logged
+
+leads added
+
+follow-ups sent
+
+meetings booked
+
+deals moved
+
+Today’s Mission
+
+3–5 recommended actions with direct links to leads or views
+
+AI Next Best Actions
+
+lead name
+
+stage
+
+suggested action
+
+open lead button
+
+Pipeline Health
+
+counts by stage
+
+warnings for low suspect count, stalled deals, overdue follow-ups
+
+Momentum Streak
+
+consecutive days with deal movement
+
+Prospect Generator
+
+quick form tied to Multiply Your Pipeline
+
+Weekly Wins
+
+calls made
+
+meetings booked
+
+proposals sent
+
+deals won
+
+Keep this dashboard tenant- and user-scoped and reuse existing lead/activity data wherever possible.
+
+Phase 4 — Deal Momentum Score
+
+Add a Deal Momentum Score to each lead card, selected lead panel, and dashboard.
+
+V1 scoring model:
+
+base score = 50
+
+add:
+
+call logged in last 3 days +10
+
+meeting logged in last 5 days +15
+
+follow-up sent in last 3 days +8
+
+next action scheduled +10
+
+stage moved in last 7 days +15
+
+proposal sent in last 7 days +12
+
+subtract:
+
+no activity in 7+ days -15
+
+no next action set -12
+
+overdue next action -15
+
+same stage for 10+ days -10
+
+proposal with no follow-up in 5+ days -12
+
+multiple touches without reply -8
+
+clamp to 0–100
+
+Status bands:
+
+80–100 Strong
+
+60–79 Active
+
+35–59 At Risk
+
+0–34 Stalled
+
+Display:
+
+lead card badge
+
+lead panel score section
+
+score reasons
+
+suggested next step
+
+dashboard list of low-momentum/stalled deals
+
+It is acceptable to cache these fields on the lead:
+
+momentumScore
+
+momentumStatus
+
+momentumReasons
+
+momentumUpdatedAt
+
+Guardrails
+
+do not change auth
+
+do not change tenant resolution
+
+do not break kanban drag/drop
+
+do not rewrite lead workflows
+
+do not affect public websites, widgets, quotes, invoices, jobs, or unrelated modules
+
+all AI outputs and scores must be tenant-scoped and lead-scoped
+
+preserve existing Momentum functionality
+
+QA requirements
+
+test across multiple tenants for isolation
+
+test existing pipeline workflows for regression
+
+test notes, call logs, lead creation, and stage movement
+
+test long AI outputs and responsive behaviour
+
+test feature-flag-off state if feature flags exist
+
+confirm no UI leakage into unrelated modules

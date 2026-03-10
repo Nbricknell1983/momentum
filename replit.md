@@ -47,7 +47,8 @@ Preferred communication style: Simple, everyday language.
 - **Activity Tracking**: One-click logging for sales activities.
 - **Traffic Light Status**: Visual indicators for lead follow-up urgency.
 - **Momentum Scoring**: Tracks daily/weekly metrics against targets.
-- **AI Agent Panel**: Context-aware AI assistance.
+- **AI Sales Engine**: 4-prompt AI sales execution layer (Win Before You Dial, Control the Call, Win the Follow-Up, Multiply Your Pipeline).
+- **Deal Momentum Score**: Health scoring for each lead (Strong/Active/At Risk/Stalled) with reasons and next step suggestions.
 - **Strategy Engine**: AI-powered decision engine generating strategic pillars and actionable tasks.
 - **Leads Research**: Integrates with ABR and Google Business Profiles to discover new businesses, including AI-generated outreach scripts.
 - **Marketing Website**: SEO-optimized public website at `/marketing` for lead generation.
@@ -97,6 +98,26 @@ A conversation-first architecture that separates behavioral progression from pip
 - **Firestore Storage**: Conversation logs stored as subcollection `orgs/{orgId}/leads/{leadId}/conversations`
 - **Lead Fields**: `conversationStage`, `lastConversationAt`, `lastAttemptAt`, `conversationCount`, `attemptCount`, `nextConversationStep`
 - **Component**: `ConversationIntelligence.tsx` provides the panel with dial, insight, logging flow, and recent conversation history
+
+### AI Sales Engine
+A 4-prompt AI sales execution layer built into the right-side panel, powered by OpenAI GPT-4o-mini:
+- **Win Before You Dial**: Pre-call intelligence — auto-fills from lead data, generates business analysis (strengths, gaps, revenue opportunity), opening line, and curiosity question
+- **Control the Call**: Objection handling — preset common objections + custom input, generates real concern analysis, conversational response, and regain-control question
+- **Win the Follow-Up**: Post-call content — generates personalized follow-up Email, SMS, and Proposal Intro based on meeting notes and services discussed
+- **Multiply Your Pipeline**: Prospect generation — finds similar businesses in surrounding suburbs with pain points, prospect strength, and opening lines
+- **Stage-aware defaults**: Panel auto-opens the most relevant section based on lead's pipeline stage
+- **Lead shortcuts**: "Prep Call", "Handle Objection", "Draft Follow-Up", "Find Prospects" buttons on each lead card open the AI panel to the right section
+- **Actions**: Copy, save to notes, regenerate on all generated content
+- **Component**: `AISalesEngine.tsx` replaces the old `AgentPanel.tsx`
+- **Endpoints**: `POST /api/ai/sales-engine/pre-call`, `/objection`, `/follow-up`, `/prospect`
+
+### Deal Momentum Score
+A health scoring system for each lead based on activity patterns:
+- **Scoring Model**: Base 50, adjusts based on activity recency, stage movement, follow-up scheduling, MRR presence
+- **Status Bands**: Strong (80-100), Active (60-79), At Risk (35-59), Stalled (0-34)
+- **UI**: Score badge on collapsed lead cards, detailed breakdown in lead drawer with reasons and suggested next step
+- **Engine**: `client/src/lib/dealMomentumScore.ts` — pure client-side computation from existing lead + activity data
+- **Colors**: Green (Strong), Blue (Active), Amber (At Risk), Red (Stalled)
 
 ### Client Pipeline & Touchpoint System
 A dedicated Kanban board (`/client-pipeline`) for quick client management with:

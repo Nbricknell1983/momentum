@@ -11,7 +11,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import AppSidebar from '@/components/AppSidebar';
 import TopBar from '@/components/TopBar';
-import AgentPanel from '@/components/AgentPanel';
+import AISalesEngine from '@/components/AISalesEngine';
 import DashboardPage from '@/pages/dashboard';
 import PipelinePage from '@/pages/pipeline';
 import NurturePage from '@/pages/nurture';
@@ -51,8 +51,11 @@ function ProtectedRoutes() {
   );
 }
 
+type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'prospect';
+
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [aiSection, setAiSection] = useState<EngineSection | null>(null);
   const dispatch = useDispatch();
   const { user, orgId, loading, authReady, membershipReady, orgError, isManager } = useAuth();
   const [, setLocation] = useLocation();
@@ -63,6 +66,15 @@ function AppLayout() {
       setLocation('/');
     }
   }, [authReady, user, setLocation]);
+
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ section: EngineSection }>) => {
+      setAiSection(e.detail.section);
+      setIsAgentOpen(true);
+    };
+    window.addEventListener('openAISalesEngine', handler as EventListener);
+    return () => window.removeEventListener('openAISalesEngine', handler as EventListener);
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -141,10 +153,10 @@ function AppLayout() {
           </main>
         </div>
       </div>
-      <AgentPanel 
+      <AISalesEngine 
         isOpen={isAgentOpen} 
-        onClose={() => setIsAgentOpen(false)} 
-        context={{ type: 'dashboard' }}
+        onClose={() => { setIsAgentOpen(false); setAiSection(null); }}
+        activeSection={aiSection}
       />
     </SidebarProvider>
   );

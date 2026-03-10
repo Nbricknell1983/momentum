@@ -2677,5 +2677,265 @@ Please analyze these meeting notes and extract actionable insights.`;
     }
   });
 
+  // ============================================
+  // AI Sales Engine Endpoints
+  // ============================================
+
+  app.post("/api/ai/sales-engine/pre-call", async (req, res) => {
+    try {
+      const { businessName, location, website, industry, gbpLink } = req.body;
+
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      const prompt = `I'm a digital marketing sales consultant calling:
+
+Business Name: ${businessName}
+Location: ${location || "Not specified"}
+Website: ${website || "Not specified"}
+Industry: ${industry || "Not specified"}
+Google Business Profile: ${gbpLink || "Not available"}
+
+In 60 seconds give me a JSON response with these exact fields:
+{
+  "whatTheyDo": "2 sentences about what they do and who they serve",
+  "strengths": ["Strength 1 in their online presence", "Strength 2", "Strength 3"],
+  "gaps": ["Gap or missed opportunity 1", "Gap 2", "Gap 3"],
+  "biggestRevenueOpportunity": "The single biggest revenue opportunity for this business",
+  "openingLine": "A strong, natural opening line for my call",
+  "curiosityQuestion": "A curiosity-driven question that gets them talking"
+}
+
+Keep it concise and practical. Base your analysis on the business type, location, and any available online presence information.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 800,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+        if (!result.whatTheyDo || !Array.isArray(result.strengths) || !Array.isArray(result.gaps)) {
+          throw new Error("Invalid response structure");
+        }
+      } catch (e) {
+        result = {
+          whatTheyDo: `${businessName} is a ${industry || "local"} business located in ${location || "the area"}. They serve local customers with their products and services.`,
+          strengths: ["Established local presence", "Serving a defined market", "Existing customer base"],
+          gaps: ["Limited online visibility", "No clear digital strategy", "Missing review generation"],
+          biggestRevenueOpportunity: "Improving online visibility to capture local search traffic",
+          openingLine: `Hi, I was looking at ${businessName} online and noticed a few things that could help you get more customers.`,
+          curiosityQuestion: "What's currently your biggest source of new customers?"
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating pre-call intelligence:", error);
+      res.status(500).json({ error: "Failed to generate pre-call intelligence" });
+    }
+  });
+
+  app.post("/api/ai/sales-engine/objection", async (req, res) => {
+    try {
+      const { objections, leadContext } = req.body;
+
+      if (!objections || !Array.isArray(objections) || objections.length === 0) {
+        return res.status(400).json({ error: "At least one objection is required" });
+      }
+
+      const contextInfo = leadContext
+        ? `\nContext about the prospect:\n- Business: ${leadContext.businessName || "Unknown"}\n- Industry: ${leadContext.industry || "Unknown"}\n- Stage: ${leadContext.stage || "Unknown"}`
+        : "";
+
+      const objectionList = objections.map((o: string, i: number) => `${i + 1}. "${o}"`).join("\n");
+
+      const prompt = `I sell digital marketing services to Australian small businesses.
+${contextInfo}
+
+For each of these objections:
+${objectionList}
+
+Respond in JSON format with a "responses" array. Each item must have:
+{
+  "objection": "the original objection text",
+  "realConcern": "What is the real concern behind it (1-2 sentences)",
+  "response": "A confident, conversational 2-3 sentence response",
+  "regainControlQuestion": "A question to regain control of the conversation"
+}
+
+Be natural, not scripted. Sound like a confident peer, not a pushy salesperson.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+        if (!result.responses || !Array.isArray(result.responses)) {
+          throw new Error("Invalid response structure");
+        }
+      } catch (e) {
+        result = {
+          responses: objections.map((o: string) => ({
+            objection: o,
+            realConcern: "They may have had a bad experience or are unsure about the ROI.",
+            response: "I completely understand that concern. Many businesses feel the same way initially. What we focus on is measurable outcomes tied directly to revenue growth.",
+            regainControlQuestion: "If I could show you exactly how we'd approach it differently, would that be worth a quick look?"
+          }))
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating objection responses:", error);
+      res.status(500).json({ error: "Failed to generate objection responses" });
+    }
+  });
+
+  app.post("/api/ai/sales-engine/follow-up", async (req, res) => {
+    try {
+      const { business, industry, location, meetingNotes, servicesDiscussed, nextStep } = req.body;
+
+      if (!business) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      const prompt = `I just had a sales call with:
+
+Business: ${business}
+Industry: ${industry || "Not specified"}
+Location: ${location || "Not specified"}
+
+On the call they told me:
+${meetingNotes || "General interest in digital marketing services"}
+
+Services discussed: ${servicesDiscussed || "Digital marketing services"}
+Agreed next step: ${nextStep || "Follow up with more information"}
+
+Generate follow-up content in JSON format with these exact fields:
+{
+  "email": {
+    "subject": "Email subject line",
+    "body": "Full personalised follow-up email that thanks them naturally, references what they told me, suggests 2-3 relevant improvements, and ends with a clear next step"
+  },
+  "sms": {
+    "message": "A short, professional SMS follow-up (max 160 chars) that references the call and confirms the next step"
+  },
+  "proposalIntro": {
+    "opening": "A 2-3 paragraph proposal introduction that positions the solution around their specific needs and pain points discussed on the call"
+  }
+}
+
+Write in a professional but warm tone. Be specific to what was discussed, not generic.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1200,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+        if (!result.email || !result.sms || !result.proposalIntro) {
+          throw new Error("Invalid response structure");
+        }
+      } catch (e) {
+        result = {
+          email: {
+            subject: `Great chatting today - next steps for ${business}`,
+            body: `Hi,\n\nThanks for taking the time to chat today. I really enjoyed learning about ${business} and the work you're doing in ${location || "your area"}.\n\nBased on what you shared, I think there are a couple of quick wins we could help with:\n\n1. Improving your local search visibility\n2. Setting up a review generation system\n3. Optimising your Google Business Profile\n\nAs discussed, I'll put together a brief overview of how we'd approach this. Would ${nextStep || "a follow-up call later this week"} work?\n\nLooking forward to it.\n\nBest regards`
+          },
+          sms: {
+            message: `Hey, great chat today about ${business}. I'll send through that info we discussed. Talk soon!`
+          },
+          proposalIntro: {
+            opening: `Thank you for the opportunity to discuss how we can help ${business} grow. Based on our conversation, it's clear you have a strong foundation and a real opportunity to capture more of your local market.\n\nWe've identified several areas where targeted digital marketing can drive measurable results for your business, particularly around ${servicesDiscussed || "local search and online visibility"}.`
+          }
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating follow-up content:", error);
+      res.status(500).json({ error: "Failed to generate follow-up content" });
+    }
+  });
+
+  app.post("/api/ai/sales-engine/prospect", async (req, res) => {
+    try {
+      const { businessType, suburb, nearbySuburbs } = req.body;
+
+      if (!businessType || !suburb) {
+        return res.status(400).json({ error: "Business type and suburb are required" });
+      }
+
+      const prompt = `I just spoke to a ${businessType} in ${suburb}.
+
+List 10 similar businesses in ${nearbySuburbs ? `these surrounding suburbs: ${nearbySuburbs}` : `surrounding suburbs near ${suburb}`} that are likely to need digital marketing help.
+
+Return the results in JSON format with this exact structure:
+{
+  "prospects": [
+    {
+      "businessName": "Suggested business name based on common naming patterns for this type",
+      "suburb": "The suburb this business would be in",
+      "painPoint": "The most likely digital marketing pain point for this type of business",
+      "whyStrongProspect": "Why this would be a strong prospect (1 sentence)",
+      "openingLine": "A natural opening line to use when calling this prospect"
+    }
+  ]
+}
+
+Generate realistic prospect suggestions based on common business patterns in the Australian market. Each prospect should have a unique angle and pain point.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+        if (!result.prospects || !Array.isArray(result.prospects)) {
+          throw new Error("Invalid response structure");
+        }
+      } catch (e) {
+        result = {
+          prospects: [
+            {
+              businessName: `${businessType} - ${suburb} Area`,
+              suburb: suburb,
+              painPoint: "Limited online visibility in local search results",
+              whyStrongProspect: "Similar business model with likely similar digital marketing needs",
+              openingLine: `Hi, I work with several ${businessType.toLowerCase()} businesses in the area and noticed an opportunity to help you get more visible online.`
+            }
+          ]
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating prospect suggestions:", error);
+      res.status(500).json({ error: "Failed to generate prospect suggestions" });
+    }
+  });
+
   return httpServer;
 }
