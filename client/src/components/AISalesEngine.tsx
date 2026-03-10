@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, updateLead } from '@/store';
-import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp } from 'lucide-react';
+import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp, Mic, MicOff, Upload, AlertTriangle } from 'lucide-react';
 import GrowthPlanSection from '@/components/GrowthPlanSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +55,17 @@ interface ObjectionResult {
   realConcern: string;
   response: string;
   regainControlQuestion: string;
+}
+
+interface ConversationInsights {
+  summary: string;
+  painPoints: string[];
+  servicesDiscussed: string[];
+  opportunities: string[];
+  objections: string[];
+  nextSteps: string[];
+  sentiment: string;
+  keyQuotes: string[];
 }
 
 interface FollowUpResult {
@@ -152,6 +163,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
   const [followUpResult, setFollowUpResult] = useState<FollowUpResult | null>(null);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [followUpInputs, setFollowUpInputs] = useState({ business: '', industry: '', location: '', meetingNotes: '', servicesDiscussed: '', nextStep: '' });
+  const [conversationInsights, setConversationInsights] = useState<ConversationInsights | null>(null);
 
   const [prospectLoading, setProspectLoading] = useState(false);
   const [prospectResults, setProspectResults] = useState<ProspectResult[]>([]);
@@ -160,14 +172,15 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
 
   useEffect(() => {
     if (selectedLead) {
+      const sd = selectedLead.sourceData;
       setPreCallInputs({
         businessName: selectedLead.companyName || '',
         location: selectedLead.territory || selectedLead.areaName || '',
         website: selectedLead.website || '',
-        industry: selectedLead.sourceData?.category || '',
-        gbpLink: selectedLead.sourceData?.googleMapsUrl || '',
-        reviewCount: selectedLead.sourceData?.googleReviewCount ?? null,
-        rating: selectedLead.sourceData?.googleRating ?? null,
+        industry: (sd as any)?.category || '',
+        gbpLink: (sd as any)?.googleMapsUrl || '',
+        reviewCount: sd?.googleReviewCount ?? null,
+        rating: sd?.googleRating ?? null,
         facebookUrl: selectedLead.facebookUrl || '',
         instagramUrl: selectedLead.instagramUrl || '',
         gbpPhotoCount: null,
@@ -176,13 +189,14 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       setFollowUpInputs(prev => ({
         ...prev,
         business: selectedLead.companyName || '',
-        industry: selectedLead.sourceData?.category || '',
+        industry: (sd as any)?.category || '',
         location: selectedLead.territory || selectedLead.areaName || '',
         meetingNotes: selectedLead.notes || '',
       }));
+      setConversationInsights(null);
       setProspectInputs(prev => ({
         ...prev,
-        businessType: selectedLead.sourceData?.category || '',
+        businessType: (sd as any)?.category || '',
         suburb: selectedLead.areaName || selectedLead.territory || '',
       }));
     }
@@ -280,7 +294,11 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       const res = await fetch('/api/ai/sales-engine/follow-up', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(followUpInputs),
+        body: JSON.stringify({
+          ...followUpInputs,
+          conversationInsights: conversationInsights || undefined,
+          hasGrowthPlan: false,
+        }),
       });
       if (!res.ok) throw new Error('Failed to generate follow-up');
       const data = await res.json();
@@ -402,6 +420,8 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                     onGenerate={handleFollowUp}
                     onSaveToNotes={saveToNotes}
                     hasLead={!!selectedLead}
+                    conversationInsights={conversationInsights}
+                    onInsightsChange={setConversationInsights}
                   />
                 )}
                 {sectionKey === 'growth_plan' && (
@@ -674,7 +694,68 @@ function ObjectionSection({ selectedObjections, setSelectedObjections, customObj
   );
 }
 
-function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate, onSaveToNotes, hasLead }: {
+function InsightsPanel({ insights, onSaveToNotes, hasLead }: { insights: ConversationInsights; onSaveToNotes: (text: string) => void; hasLead: boolean }) {
+  const sentimentColors: Record<string, string> = {
+    positive: 'text-green-600 dark:text-green-400',
+    negative: 'text-red-600 dark:text-red-400',
+    neutral: 'text-muted-foreground',
+  };
+  const sections = [
+    { key: 'painPoints', label: 'Pain Points', icon: '🔴', items: insights.painPoints },
+    { key: 'servicesDiscussed', label: 'Services Discussed', icon: '🔧', items: insights.servicesDiscussed },
+    { key: 'opportunities', label: 'Opportunities', icon: '💡', items: insights.opportunities },
+    { key: 'objections', label: 'Objections', icon: '⚠️', items: insights.objections },
+    { key: 'nextSteps', label: 'Next Steps', icon: '➡️', items: insights.nextSteps },
+  ];
+
+  const fullText = `Conversation Summary: ${insights.summary}\n\n${sections.filter(s => s.items.length > 0).map(s => `${s.label}:\n${s.items.map(i => `- ${i}`).join('\n')}`).join('\n\n')}`;
+
+  return (
+    <div className="space-y-2 border rounded-lg p-3 bg-muted/20" data-testid="insights-panel">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium text-muted-foreground">Conversation Intelligence</p>
+        <span className={`text-[10px] font-medium ${sentimentColors[insights.sentiment] || sentimentColors.neutral}`}>
+          {insights.sentiment}
+        </span>
+      </div>
+      <p className="text-sm">{insights.summary}</p>
+
+      {sections.map(section => section.items.length > 0 && (
+        <div key={section.key}>
+          <p className="text-[10px] font-medium text-muted-foreground mt-1">{section.icon} {section.label}</p>
+          <ul className="space-y-0.5 mt-0.5">
+            {section.items.map((item, i) => (
+              <li key={i} className="text-xs flex items-start gap-1.5">
+                <span className="text-muted-foreground mt-0.5">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      {insights.keyQuotes.length > 0 && (
+        <div>
+          <p className="text-[10px] font-medium text-muted-foreground mt-1">💬 Key Quotes</p>
+          {insights.keyQuotes.map((q, i) => (
+            <p key={i} className="text-xs italic text-muted-foreground pl-2 border-l-2 border-muted mt-1">"{q}"</p>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-1 pt-1">
+        <CopyButton text={fullText} label="insights" />
+        {hasLead && (
+          <Button variant="ghost" size="sm" onClick={() => onSaveToNotes(fullText)} className="h-7 text-xs gap-1" data-testid="button-save-insights">
+            <Pin className="h-3 w-3" /> Save
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate, onSaveToNotes, hasLead, conversationInsights, onInsightsChange }: {
   inputs: { business: string; industry: string; location: string; meetingNotes: string; servicesDiscussed: string; nextStep: string };
   setInputs: (fn: (prev: typeof inputs) => typeof inputs) => void;
   loading: boolean;
@@ -683,7 +764,116 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
   onGenerate: () => void;
   onSaveToNotes: (text: string) => void;
   hasLead: boolean;
+  conversationInsights: ConversationInsights | null;
+  onInsightsChange: (insights: ConversationInsights | null) => void;
 }) {
+  const { toast } = useToast();
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRecording) {
+      interval = setInterval(() => setRecordingDuration(d => d + 1), 1000);
+    } else {
+      setRecordingDuration(0);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  const processAudio = async (blob: Blob) => {
+    setTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append('audio', blob, 'recording.webm');
+      const res = await fetch('/api/ai/sales-engine/transcribe-meeting', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Transcription failed');
+      }
+      const data = await res.json();
+
+      if (data.transcript) {
+        setInputs(p => ({
+          ...p,
+          meetingNotes: p.meetingNotes ? `${p.meetingNotes}\n\n[Transcript]\n${data.transcript}` : data.transcript,
+        }));
+      }
+      if (data.insights) {
+        onInsightsChange(data.insights);
+        if (data.insights.servicesDiscussed?.length > 0) {
+          setInputs(p => ({
+            ...p,
+            servicesDiscussed: p.servicesDiscussed || data.insights.servicesDiscussed.join(', '),
+          }));
+        }
+        if (data.insights.nextSteps?.length > 0) {
+          setInputs(p => ({
+            ...p,
+            nextStep: p.nextStep || data.insights.nextSteps[0],
+          }));
+        }
+      }
+      toast({ title: 'Recording processed' });
+    } catch (err: any) {
+      toast({ title: 'Processing failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const startRecording = async () => {
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      toast({ title: 'Recording not supported', description: 'Your browser does not support audio recording. Please use Chrome, Firefox, or Edge, or upload a recording instead.', variant: 'destructive' });
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+        MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        processAudio(blob);
+      };
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (err) {
+      toast({ title: 'Microphone access denied', description: 'Please allow microphone access to record.', variant: 'destructive' });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    setIsRecording(false);
+    setMediaRecorder(null);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const maxSize = 25 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({ title: 'File too large', description: 'Maximum file size is 25MB', variant: 'destructive' });
+      return;
+    }
+    await processAudio(file);
+    e.target.value = '';
+  };
+
   return (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -705,6 +895,67 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
           <Label className="text-xs">Meeting Notes</Label>
           <Textarea value={inputs.meetingNotes} onChange={e => setInputs(p => ({ ...p, meetingNotes: e.target.value }))} placeholder="What was discussed on the call..." className="text-sm min-h-[60px]" data-testid="input-followup-notes" />
         </div>
+
+        <div className="flex gap-2">
+          {!isRecording ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={startRecording}
+              disabled={transcribing}
+              className="flex-1 h-8 text-xs gap-1.5"
+              data-testid="button-start-recording"
+            >
+              <Mic className="h-3.5 w-3.5" />
+              Start Recording
+            </Button>
+          ) : (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={stopRecording}
+              className="flex-1 h-8 text-xs gap-1.5 animate-pulse"
+              data-testid="button-stop-recording"
+            >
+              <MicOff className="h-3.5 w-3.5" />
+              Stop ({formatDuration(recordingDuration)})
+            </Button>
+          )}
+          <label className="flex-1">
+            <input
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={handleFileUpload}
+              disabled={transcribing || isRecording}
+              data-testid="input-upload-audio"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="w-full h-8 text-xs gap-1.5 cursor-pointer"
+              disabled={transcribing || isRecording}
+            >
+              <span>
+                <Upload className="h-3.5 w-3.5" />
+                Upload Recording
+              </span>
+            </Button>
+          </label>
+        </div>
+
+        {transcribing && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 border rounded-lg bg-muted/20">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Transcribing and analysing conversation...
+          </div>
+        )}
+
+        {conversationInsights && (
+          <InsightsPanel insights={conversationInsights} onSaveToNotes={onSaveToNotes} hasLead={hasLead} />
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label className="text-xs">Services Discussed</Label>

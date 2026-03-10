@@ -44,7 +44,7 @@ Preferred communication style: Simple, everyday language.
 - **Activity Tracking**: One-click logging for sales activities.
 - **Traffic Light Status**: Visual indicators for lead follow-up urgency.
 - **Momentum Scoring**: Tracks daily/weekly metrics against targets.
-- **AI Sales Engine**: A 4-prompt AI layer (Win Before You Dial, Control the Call, Win the Follow-Up, Multiply Your Pipeline) integrated into the right-side panel, powered by GPT-4o-mini. It offers stage-aware defaults and actions like copy, save, and regenerate.
+- **AI Sales Engine**: A 5-section AI layer (Win Before You Dial, Control the Call, Win the Follow-Up, Growth Plan, Multiply Your Pipeline) integrated into the right-side panel, powered by GPT-4o-mini. It offers stage-aware defaults and actions like copy, save, and regenerate. Win the Follow-Up includes conversation intelligence: browser-based audio recording and file upload with Whisper transcription, AI-extracted insights (pain points, services, opportunities, objections, next steps), and personalised follow-up email generation using the extracted conversation context.
 - **Deal Momentum Score**: Health scoring for each lead (Strong/Active/At Risk/Stalled) based on activity patterns, with detailed breakdown and suggested next steps.
 - **Strategy Engine**: AI-powered decision engine generating strategic pillars and actionable tasks, utilizing GPT-4o-mini.
 - **Leads Research**: Integrates with ABR and Google Business Profiles to discover new businesses, including AI-generated outreach scripts that are contextual and stage-aware.

@@ -5,6 +5,9 @@ import { insertLeadSchema, insertActivitySchema } from "@shared/schema";
 import OpenAI from "openai";
 import { firestore, isFirebaseAdminReady } from "./firebase";
 import { crawlWebsite } from "./strategyEngine";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -2842,13 +2845,125 @@ Be natural, not scripted. Sound like a confident peer, not a pushy salesperson.`
     }
   });
 
+  const audioFileFilter = (_req: any, file: any, cb: any) => {
+    const allowed = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/x-m4a', 'audio/mp3', 'audio/aac', 'audio/flac', 'video/webm'];
+    if (allowed.includes(file.mimetype) || file.mimetype.startsWith('audio/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only audio files are allowed'));
+    }
+  };
+  const upload = multer({ dest: '/tmp/uploads/', limits: { fileSize: 25 * 1024 * 1024 }, fileFilter: audioFileFilter });
+
+  app.post("/api/ai/sales-engine/transcribe-meeting", (req: any, res: any, next: any) => {
+    upload.single('audio')(req, res, (err: any) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: "File too large. Maximum size is 25MB." });
+        }
+        return res.status(400).json({ error: err.message || "File upload failed" });
+      }
+      next();
+    });
+  }, async (req: any, res: any) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "Audio file is required" });
+      }
+
+      const filePath = file.path;
+
+      let transcript: string;
+      try {
+        const transcription = await openai.audio.transcriptions.create({
+          file: fs.createReadStream(filePath) as any,
+          model: "whisper-1",
+          language: "en",
+        });
+        transcript = transcription.text;
+      } catch (whisperErr: any) {
+        console.error("Whisper transcription error:", whisperErr);
+        fs.unlink(filePath, () => {});
+        return res.status(500).json({ error: "Failed to transcribe audio. Please try again." });
+      }
+
+      fs.unlink(filePath, () => {});
+
+      const analysisPrompt = `You are a sales conversation analyst. Analyse this meeting transcript from a digital marketing sales call.
+
+TRANSCRIPT:
+${transcript}
+
+Extract structured conversation intelligence. Respond with JSON:
+{
+  "summary": "2-3 sentence summary of the conversation",
+  "painPoints": ["Pain point mentioned by the prospect"],
+  "servicesDiscussed": ["Service mentioned or discussed"],
+  "opportunities": ["Opportunity identified from the conversation"],
+  "objections": ["Objection or concern raised by the prospect"],
+  "nextSteps": ["Agreed or suggested next step"],
+  "sentiment": "positive|neutral|negative",
+  "keyQuotes": ["Important quote from the prospect (max 3)"]
+}
+
+Rules:
+- Only extract what was actually said in the transcript
+- Keep each item concise (1-2 sentences max)
+- If a category has no items, return an empty array
+- Focus on actionable sales intelligence`;
+
+      const analysisResponse = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: analysisPrompt }],
+        max_completion_tokens: 1000,
+        response_format: { type: "json_object" },
+      });
+
+      const analysisContent = analysisResponse.choices[0]?.message?.content || "{}";
+      let insights;
+      try {
+        insights = JSON.parse(analysisContent);
+        if (!insights.summary) throw new Error("Invalid");
+      } catch {
+        insights = {
+          summary: "Transcript processed but analysis could not be completed.",
+          painPoints: [],
+          servicesDiscussed: [],
+          opportunities: [],
+          objections: [],
+          nextSteps: [],
+          sentiment: "neutral",
+          keyQuotes: [],
+        };
+      }
+
+      res.json({ transcript, insights });
+    } catch (error) {
+      console.error("Error transcribing meeting:", error);
+      res.status(500).json({ error: "Failed to process audio recording" });
+    }
+  });
+
   app.post("/api/ai/sales-engine/follow-up", async (req, res) => {
     try {
-      const { business, industry, location, meetingNotes, servicesDiscussed, nextStep } = req.body;
+      const { business, industry, location, meetingNotes, servicesDiscussed, nextStep, conversationInsights, hasGrowthPlan } = req.body;
 
       if (!business) {
         return res.status(400).json({ error: "Business name is required" });
       }
+
+      const insightsContext = conversationInsights ? `
+Conversation Intelligence:
+- Pain Points: ${conversationInsights.painPoints?.join(', ') || 'None identified'}
+- Services They're Interested In: ${conversationInsights.servicesDiscussed?.join(', ') || 'Not specified'}
+- Opportunities: ${conversationInsights.opportunities?.join(', ') || 'None identified'}
+- Their Concerns: ${conversationInsights.objections?.join(', ') || 'None raised'}
+- Key Quotes: ${conversationInsights.keyQuotes?.join(' | ') || 'None captured'}
+` : '';
+
+      const growthPlanNote = hasGrowthPlan ? `
+IMPORTANT: I have prepared a comprehensive Growth Strategy document for this business. Reference it naturally in the email as "the growth strategy I've put together" and suggest reviewing it together.` : '';
 
       const prompt = `I just had a sales call with:
 
@@ -2861,12 +2976,13 @@ ${meetingNotes || "General interest in digital marketing services"}
 
 Services discussed: ${servicesDiscussed || "Digital marketing services"}
 Agreed next step: ${nextStep || "Follow up with more information"}
+${insightsContext}${growthPlanNote}
 
 Generate follow-up content in JSON format with these exact fields:
 {
   "email": {
     "subject": "Email subject line",
-    "body": "Full personalised follow-up email that thanks them naturally, references what they told me, suggests 2-3 relevant improvements, and ends with a clear next step"
+    "body": "Full personalised follow-up email that thanks them naturally, references specific things they said in the conversation, suggests 2-3 relevant improvements based on their actual pain points, and ends with a clear next step"
   },
   "sms": {
     "message": "A short, professional SMS follow-up (max 160 chars) that references the call and confirms the next step"
@@ -2876,7 +2992,7 @@ Generate follow-up content in JSON format with these exact fields:
   }
 }
 
-Write in a professional but warm tone. Be specific to what was discussed, not generic.`;
+Write in a professional but warm tone. Be conversational and concise. Reference what they actually said — not generic marketing speak.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
