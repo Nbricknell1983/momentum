@@ -141,7 +141,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
 
   const selectedLead = selectedLeadOverride || leads.find(l => l.id === selectedLeadId) || null;
 
-  const [openSection, setOpenSection] = useState<EngineSection>('pre_call');
+  const [openSection, setOpenSection] = useState<EngineSection | null>('pre_call');
 
   const [preCallLoading, setPreCallLoading] = useState(false);
   const [preCallResult, setPreCallResult] = useState<PreCallResult | null>(null);
@@ -369,7 +369,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         return (
           <div key={sectionKey} className="border rounded-lg overflow-hidden" data-testid={`section-${sectionKey}`}>
             <button
-              onClick={() => setOpenSection(sectionKey)}
+              onClick={() => setOpenSection(prev => prev === sectionKey ? null : sectionKey)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 ${isSectionOpen ? 'bg-muted/30' : ''}`}
               data-testid={`button-toggle-${sectionKey}`}
             >
