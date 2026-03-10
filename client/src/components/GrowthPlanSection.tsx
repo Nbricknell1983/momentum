@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, ChevronDown, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -384,9 +384,10 @@ function TrafficForecastView({ result }: { result: ForecastResult }) {
 
 type ActiveTool = null | 'xray' | 'serp' | 'competitor' | 'forecast';
 
-export default function GrowthPlanSection({ lead, onSaveToNotes }: {
+export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPlan }: {
   lead: Lead | null;
   onSaveToNotes: (text: string) => void;
+  onSaveGrowthPlan?: (data: { xray?: any; serp?: any; competitor?: any; forecast?: any }) => void;
 }) {
   const { toast } = useToast();
 
@@ -399,6 +400,21 @@ export default function GrowthPlanSection({ lead, onSaveToNotes }: {
   const [competitorResult, setCompetitorResult] = useState<CompetitorGapResult | null>(null);
   const [forecastResult, setForecastResult] = useState<ForecastResult | null>(null);
   const [serpKeyword, setSerpKeyword] = useState('');
+
+  useEffect(() => {
+    if (lead?.aiGrowthPlan) {
+      const gp = lead.aiGrowthPlan;
+      if (gp.xray) setXrayResult(gp.xray);
+      if (gp.serp) setSerpResult(gp.serp);
+      if (gp.competitor) setCompetitorResult(gp.competitor);
+      if (gp.forecast) setForecastResult(gp.forecast);
+    } else {
+      setXrayResult(null);
+      setSerpResult(null);
+      setCompetitorResult(null);
+      setForecastResult(null);
+    }
+  }, [lead?.id]);
 
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -429,6 +445,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes }: {
       if (!res.ok) throw new Error('Failed to run website x-ray');
       const data = await res.json();
       setXrayResult(data);
+      onSaveGrowthPlan?.({ xray: data, serp: serpResult, competitor: competitorResult, forecast: forecastResult });
     } catch (err: any) {
       setToolError('xray', err.message);
     } finally {
@@ -453,6 +470,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes }: {
       if (!res.ok) throw new Error('Failed to analyse search results');
       const data = await res.json();
       setSerpResult(data);
+      onSaveGrowthPlan?.({ xray: xrayResult, serp: data, competitor: competitorResult, forecast: forecastResult });
     } catch (err: any) {
       setToolError('serp', err.message);
     } finally {
@@ -480,6 +498,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes }: {
       if (!res.ok) throw new Error('Failed to analyse competitor gap');
       const data = await res.json();
       setCompetitorResult(data);
+      onSaveGrowthPlan?.({ xray: xrayResult, serp: serpResult, competitor: data, forecast: forecastResult });
     } catch (err: any) {
       setToolError('competitor', err.message);
     } finally {
@@ -508,6 +527,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes }: {
       if (!res.ok) throw new Error('Failed to generate forecast');
       const data = await res.json();
       setForecastResult(data);
+      onSaveGrowthPlan?.({ xray: xrayResult, serp: serpResult, competitor: competitorResult, forecast: data });
     } catch (err: any) {
       setToolError('forecast', err.message);
     } finally {

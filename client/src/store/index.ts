@@ -68,6 +68,12 @@ const appSlice = createSlice({
         state.leads[index] = action.payload;
       }
     },
+    patchLead(state, action: PayloadAction<{ id: string; updates: Partial<Lead> }>) {
+      const lead = state.leads.find(l => l.id === action.payload.id);
+      if (lead) {
+        Object.assign(lead, action.payload.updates, { updatedAt: new Date() });
+      }
+    },
     updateLeadStage(state, action: PayloadAction<{ leadId: string; stage: Stage }>) {
       const lead = state.leads.find(l => l.id === action.payload.leadId);
       if (lead) {
@@ -602,6 +608,7 @@ export const {
   setUser,
   setLeads,
   updateLead,
+  patchLead,
   updateLeadStage,
   addLead,
   deleteLead,

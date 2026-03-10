@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, updateLead } from '@/store';
+import { RootState, patchLead } from '@/store';
 import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp, Mic, MicOff, Upload, AlertTriangle } from 'lucide-react';
 import GrowthPlanSection from '@/components/GrowthPlanSection';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateLeadInFirestore } from '@/lib/firestoreService';
-import { Lead, Stage } from '@/lib/types';
+import { Lead, Stage, AiCallPrepOutput, AiObjectionOutput, AiFollowUpOutput, AiConversationInsightsOutput, AiProspectOutput } from '@/lib/types';
 
 type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'growth_plan' | 'prospect';
 
@@ -193,14 +193,42 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         location: selectedLead.territory || selectedLead.areaName || '',
         meetingNotes: selectedLead.notes || '',
       }));
-      setConversationInsights(null);
       setProspectInputs(prev => ({
         ...prev,
         businessType: (sd as any)?.category || '',
         suburb: selectedLead.areaName || selectedLead.territory || '',
       }));
+      if (selectedLead.aiCallPrep) {
+        setPreCallResult(selectedLead.aiCallPrep);
+      } else {
+        setPreCallResult(null);
+      }
+      if (selectedLead.aiObjectionResponses?.length) {
+        setObjectionResults(selectedLead.aiObjectionResponses);
+      } else {
+        setObjectionResults([]);
+      }
+      if (selectedLead.aiFollowUp) {
+        setFollowUpResult({ email: selectedLead.aiFollowUp.email, sms: selectedLead.aiFollowUp.sms, proposalIntro: selectedLead.aiFollowUp.proposalIntro });
+      } else {
+        setFollowUpResult(null);
+      }
+      if (selectedLead.aiConversationInsights) {
+        setConversationInsights(selectedLead.aiConversationInsights);
+      } else {
+        setConversationInsights(null);
+      }
+      if (selectedLead.aiProspects?.length) {
+        setProspectResults(selectedLead.aiProspects);
+      } else {
+        setProspectResults([]);
+      }
+      setPreCallError(null);
+      setObjectionError(null);
+      setFollowUpError(null);
+      setProspectError(null);
     }
-  }, [selectedLead]);
+  }, [selectedLead?.id]);
 
   useEffect(() => {
     if (externalSection) {
@@ -242,6 +270,11 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       if (!res.ok) throw new Error('Failed to generate call prep');
       const data = await res.json();
       setPreCallResult(data);
+      if (selectedLead && orgId && authReady) {
+        const aiCallPrep: AiCallPrepOutput = { ...data, generatedAt: new Date() };
+        updateLeadInFirestore(orgId, selectedLead.id, { aiCallPrep } as Partial<Lead>, authReady).catch(console.error);
+        dispatch(patchLead({ id: selectedLead.id, updates: { aiCallPrep } }));
+      }
     } catch (err) {
       setPreCallError('Failed to generate call prep. Please try again.');
     } finally {
@@ -274,7 +307,13 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       });
       if (!res.ok) throw new Error('Failed to generate objection responses');
       const data = await res.json();
-      setObjectionResults(data.responses || []);
+      const responses = data.responses || [];
+      setObjectionResults(responses);
+      if (selectedLead && orgId && authReady && responses.length > 0) {
+        const aiObjectionResponses: AiObjectionOutput[] = responses;
+        updateLeadInFirestore(orgId, selectedLead.id, { aiObjectionResponses } as Partial<Lead>, authReady).catch(console.error);
+        dispatch(patchLead({ id: selectedLead.id, updates: { aiObjectionResponses } }));
+      }
     } catch (err) {
       setObjectionError('Failed to generate responses. Please try again.');
     } finally {
@@ -302,11 +341,17 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       });
       if (!res.ok) throw new Error('Failed to generate follow-up');
       const data = await res.json();
-      setFollowUpResult({
+      const result = {
         email: data.email ? `Subject: ${data.email.subject}\n\n${data.email.body}` : 'Unable to generate email',
         sms: data.sms?.message || 'Unable to generate SMS',
         proposalIntro: data.proposalIntro?.opening || 'Unable to generate proposal intro',
-      });
+      };
+      setFollowUpResult(result);
+      if (selectedLead && orgId && authReady) {
+        const aiFollowUp: AiFollowUpOutput = { ...result, generatedAt: new Date() };
+        updateLeadInFirestore(orgId, selectedLead.id, { aiFollowUp } as Partial<Lead>, authReady).catch(console.error);
+        dispatch(patchLead({ id: selectedLead.id, updates: { aiFollowUp } }));
+      }
     } catch (err) {
       setFollowUpError('Failed to generate follow-up. Please try again.');
     } finally {
@@ -330,7 +375,12 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       });
       if (!res.ok) throw new Error('Failed to find prospects');
       const data = await res.json();
-      setProspectResults(data.prospects || []);
+      const prospects: AiProspectOutput[] = data.prospects || [];
+      setProspectResults(prospects);
+      if (selectedLead && orgId && authReady && prospects.length > 0) {
+        updateLeadInFirestore(orgId, selectedLead.id, { aiProspects: prospects } as Partial<Lead>, authReady).catch(console.error);
+        dispatch(patchLead({ id: selectedLead.id, updates: { aiProspects: prospects } }));
+      }
     } catch (err) {
       setProspectError('Failed to find prospects. Please try again.');
     } finally {
@@ -347,7 +397,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
     const separator = existingNotes ? '\n\n---\n\n' : '';
     const timestamp = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const updatedNotes = existingNotes + separator + `[AI Sales Engine - ${timestamp}]\n${text}`;
-    dispatch(updateLead({ ...selectedLead, notes: updatedNotes, updatedAt: new Date() }));
+    dispatch(patchLead({ id: selectedLead.id, updates: { notes: updatedNotes } }));
     if (orgId && authReady) {
       updateLeadInFirestore(orgId, selectedLead.id, { notes: updatedNotes, updatedAt: new Date() }, authReady)
         .catch(err => console.error('[AISalesEngine] Failed to save notes:', err));
@@ -421,13 +471,27 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                     onSaveToNotes={saveToNotes}
                     hasLead={!!selectedLead}
                     conversationInsights={conversationInsights}
-                    onInsightsChange={setConversationInsights}
+                    onInsightsChange={(insights) => {
+                      setConversationInsights(insights);
+                      if (insights && selectedLead && orgId && authReady) {
+                        const aiConversationInsights: AiConversationInsightsOutput = { ...insights, generatedAt: new Date() };
+                        updateLeadInFirestore(orgId, selectedLead.id, { aiConversationInsights } as Partial<Lead>, authReady).catch(console.error);
+                        dispatch(patchLead({ id: selectedLead.id, updates: { aiConversationInsights } }));
+                      }
+                    }}
                   />
                 )}
                 {sectionKey === 'growth_plan' && (
                   <GrowthPlanSection
                     lead={selectedLead}
                     onSaveToNotes={saveToNotes}
+                    onSaveGrowthPlan={(growthPlanData) => {
+                      if (selectedLead && orgId && authReady) {
+                        const aiGrowthPlan = { ...growthPlanData, generatedAt: new Date() };
+                        updateLeadInFirestore(orgId, selectedLead.id, { aiGrowthPlan } as Partial<Lead>, authReady).catch(console.error);
+                        dispatch(patchLead({ id: selectedLead.id, updates: { aiGrowthPlan } }));
+                      }
+                    }}
                   />
                 )}
                 {sectionKey === 'prospect' && (

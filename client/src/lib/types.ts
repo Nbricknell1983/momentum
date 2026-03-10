@@ -288,6 +288,63 @@ export interface Lead {
   conversationCount?: number;
   attemptCount?: number;
   nextConversationStep?: string;
+  aiCallPrep?: AiCallPrepOutput;
+  aiObjectionResponses?: AiObjectionOutput[];
+  aiFollowUp?: AiFollowUpOutput;
+  aiConversationInsights?: AiConversationInsightsOutput;
+  aiGrowthPlan?: AiGrowthPlanOutput;
+  aiProspects?: AiProspectOutput[];
+}
+
+export interface AiCallPrepOutput {
+  whatTheyDo: string;
+  strengths: string[];
+  facts: Record<string, any>;
+  gaps: { area: string; issue: string; evidence: string; impact: string; severity: 'high' | 'medium' | 'low' }[];
+  salesHook: string;
+  generatedAt: Date;
+}
+
+export interface AiObjectionOutput {
+  objection: string;
+  realConcern: string;
+  response: string;
+  regainControlQuestion: string;
+}
+
+export interface AiConversationInsightsOutput {
+  summary: string;
+  painPoints: string[];
+  servicesDiscussed: string[];
+  opportunities: string[];
+  objections: string[];
+  nextSteps: string[];
+  sentiment: string;
+  keyQuotes: string[];
+  generatedAt: Date;
+}
+
+export interface AiFollowUpOutput {
+  email: string;
+  sms: string;
+  proposalIntro: string;
+  generatedAt: Date;
+}
+
+export interface AiGrowthPlanOutput {
+  xray?: any;
+  serp?: any;
+  competitor?: any;
+  forecast?: any;
+  generatedAt: Date;
+}
+
+export interface AiProspectOutput {
+  businessName: string;
+  suburb: string;
+  painPoint: string;
+  whyStrongProspect: string;
+  openingLine: string;
 }
 
 export type ConversationStage =
