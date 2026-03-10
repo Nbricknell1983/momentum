@@ -2683,67 +2683,96 @@ Please analyze these meeting notes and extract actionable insights.`;
 
   app.post("/api/ai/sales-engine/pre-call", async (req, res) => {
     try {
-      const { businessName, location, website, industry, gbpLink } = req.body;
+      const {
+        businessName, location, websiteUrl, hasWebsite, googleMapsUrl, hasGBP,
+        reviewCount, rating, gbpPhotoCount, gbpPostsLast30Days,
+        facebookUrl, instagramUrl, industry,
+      } = req.body;
 
       if (!businessName) {
         return res.status(400).json({ error: "Business name is required" });
       }
 
-      const hasGbp = gbpLink && gbpLink.trim().length > 0;
-      const hasWebsite = website && website.trim().length > 0;
+      const facts = {
+        website: hasWebsite ? "yes" : "no",
+        gbp: hasGBP ? "yes" : "no",
+        reviews: reviewCount != null ? String(reviewCount) : "unknown",
+        rating: rating != null ? String(rating) : "unknown",
+        gbpPhotos: gbpPhotoCount != null ? String(gbpPhotoCount) : "unknown",
+        gbpPosts30Days: gbpPostsLast30Days != null ? String(gbpPostsLast30Days) : "unknown",
+        socialProfiles: (facebookUrl || instagramUrl) ? "detected" : "not detected",
+      };
 
-      const prompt = `I'm a digital marketing sales consultant about to call this business:
+      const prompt = `You are assisting a digital marketing sales consultant preparing for a call.
 
-Business Name: ${businessName}
-Location: ${location || "Not specified"}
-Website: ${hasWebsite ? website : "No website found"}
-Industry: ${industry || "Not specified"}
-Google Business Profile: ${hasGbp ? `YES — they have a GBP (${gbpLink})` : "No GBP found"}
+STRUCTURED BUSINESS DATA:
+businessName: ${businessName}
+location: ${location || "Not specified"}
+websiteUrl: ${websiteUrl || "None"}
+hasWebsite: ${hasWebsite}
+googleMapsUrl: ${googleMapsUrl || "None"}
+hasGBP: ${hasGBP}
+reviewCount: ${reviewCount != null ? reviewCount : "unknown"}
+rating: ${rating != null ? rating : "unknown"}
+gbpPhotoCount: ${gbpPhotoCount != null ? gbpPhotoCount : "unknown"}
+gbpPostsLast30Days: ${gbpPostsLast30Days != null ? gbpPostsLast30Days : "unknown"}
+facebookUrl: ${facebookUrl || "None"}
+instagramUrl: ${instagramUrl || "None"}
+industry: ${industry || "Not specified"}
 
-IMPORTANT RULES:
-- ${hasGbp ? "This business HAS a Google Business Profile. Do NOT say they are missing one." : "This business does NOT appear to have a GBP — that is a valid gap."}
-- ${hasWebsite ? "This business HAS a website. Do NOT say they are missing one." : "This business does NOT appear to have a website — that is a valid gap."}
-- Only flag things as gaps if they are genuinely missing based on the data above. Do not guess or assume things are missing.
-- Focus gaps on things like: review count/quality, SEO optimisation, social media presence, content marketing, paid ads, local citations, mobile optimisation, conversion funnels, etc.
+RULES — follow these exactly:
+1. Only flag gaps that are SUPPORTED by the data above. Never invent missing assets.
+2. If hasGBP = true → do NOT say the business lacks a Google Business Profile.
+3. If hasWebsite = true → do NOT say the business lacks a website.
+4. If reviewCount < 15 → gap = low review volume. If reviewCount is "unknown", do NOT flag reviews.
+5. If gbpPhotoCount < 10 → gap = weak photo content. If gbpPhotoCount is "unknown", do NOT flag photos.
+6. If gbpPostsLast30Days = 0 → gap = no recent Google Posts activity. If "unknown", do NOT flag posts.
+7. If facebookUrl AND instagramUrl are both "None" → gap = limited social presence.
+8. If hasWebsite = false → gap = missing website.
+9. If hasGBP = false → gap = missing Google Business Profile.
+10. For each gap, provide the evidence from the data and why it matters for leads or rankings.
 
-Give me a JSON response with these exact fields:
+Respond with JSON in this exact format:
 {
-  "whatTheyDo": "2 sentences about what they do and who they serve",
-  "strengths": ["Strength 1 in their online presence", "Strength 2", "Strength 3"],
-  "gaps": ["Gap or missed opportunity 1", "Gap 2", "Gap 3"],
-  "biggestRevenueOpportunity": "The single biggest revenue opportunity for this business",
-  "openingLine": "A strong, natural opening line for my call",
-  "curiosityQuestion": "A curiosity-driven question that gets them talking"
+  "whatTheyDo": "2 sentences about what this business does and who they serve",
+  "strengths": ["Strength 1 based on their actual data", "Strength 2", "Strength 3"],
+  "gaps": [
+    { "title": "Gap title", "evidence": "The data point supporting this gap", "impact": "Why this matters for leads or rankings" }
+  ],
+  "salesHook": "A short conversational opening line for my call based on the strongest gap"
 }
 
-Keep it concise and practical.`;
+Keep it concise and practical. Only include gaps genuinely supported by the data.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 800,
+        max_completion_tokens: 1000,
         response_format: { type: "json_object" },
       });
 
       const content = response.choices[0]?.message?.content || "{}";
-      let result;
+      let aiResult;
       try {
-        result = JSON.parse(content);
-        if (!result.whatTheyDo || !Array.isArray(result.strengths) || !Array.isArray(result.gaps)) {
+        aiResult = JSON.parse(content);
+        if (!aiResult.whatTheyDo || !Array.isArray(aiResult.strengths) || !Array.isArray(aiResult.gaps)) {
           throw new Error("Invalid response structure");
         }
+        const normalizedGaps = aiResult.gaps.map((g: any) => {
+          if (typeof g === 'string') return { title: g, evidence: '', impact: '' };
+          return { title: g.title || '', evidence: g.evidence || '', impact: g.impact || '' };
+        });
+        aiResult.gaps = normalizedGaps;
       } catch (e) {
-        result = {
+        aiResult = {
           whatTheyDo: `${businessName} is a ${industry || "local"} business located in ${location || "the area"}. They serve local customers with their products and services.`,
           strengths: ["Established local presence", "Serving a defined market", "Existing customer base"],
-          gaps: ["Limited online visibility", "No clear digital strategy", "Missing review generation"],
-          biggestRevenueOpportunity: "Improving online visibility to capture local search traffic",
-          openingLine: `Hi, I was looking at ${businessName} online and noticed a few things that could help you get more customers.`,
-          curiosityQuestion: "What's currently your biggest source of new customers?"
+          gaps: [{ title: "Limited online visibility", evidence: "Could not fully assess digital presence", impact: "May be losing potential customers to competitors with better visibility" }],
+          salesHook: `Hi, I was looking at ${businessName} online and noticed a few things that could help you get more customers.`,
         };
       }
 
-      res.json(result);
+      res.json({ ...aiResult, facts });
     } catch (error) {
       console.error("Error generating pre-call intelligence:", error);
       res.status(500).json({ error: "Failed to generate pre-call intelligence" });

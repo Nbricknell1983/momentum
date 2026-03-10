@@ -25,13 +25,28 @@ interface AISalesEngineProps {
   embedded?: boolean;
 }
 
+interface PreCallFacts {
+  website: string;
+  gbp: string;
+  reviews: string;
+  rating: string;
+  gbpPhotos: string;
+  gbpPosts30Days: string;
+  socialProfiles: string;
+}
+
+interface PreCallGap {
+  title: string;
+  evidence: string;
+  impact: string;
+}
+
 interface PreCallResult {
   whatTheyDo: string;
   strengths: string[];
-  gaps: string[];
-  biggestRevenueOpportunity: string;
-  openingLine: string;
-  curiosityQuestion: string;
+  facts: PreCallFacts;
+  gaps: PreCallGap[];
+  salesHook: string;
 }
 
 interface ObjectionResult {
@@ -118,7 +133,12 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
   const [preCallLoading, setPreCallLoading] = useState(false);
   const [preCallResult, setPreCallResult] = useState<PreCallResult | null>(null);
   const [preCallError, setPreCallError] = useState<string | null>(null);
-  const [preCallInputs, setPreCallInputs] = useState({ businessName: '', location: '', website: '', industry: '', gbpLink: '' });
+  const [preCallInputs, setPreCallInputs] = useState({
+    businessName: '', location: '', website: '', industry: '', gbpLink: '',
+    reviewCount: null as number | null, rating: null as number | null,
+    facebookUrl: '', instagramUrl: '',
+    gbpPhotoCount: null as number | null, gbpPostsLast30Days: null as number | null,
+  });
 
   const [objectionLoading, setObjectionLoading] = useState(false);
   const [objectionResults, setObjectionResults] = useState<ObjectionResult[]>([]);
@@ -144,6 +164,12 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         website: selectedLead.website || '',
         industry: selectedLead.sourceData?.category || '',
         gbpLink: selectedLead.sourceData?.googleMapsUrl || '',
+        reviewCount: selectedLead.sourceData?.googleReviewCount ?? null,
+        rating: selectedLead.sourceData?.googleRating ?? null,
+        facebookUrl: selectedLead.facebookUrl || '',
+        instagramUrl: selectedLead.instagramUrl || '',
+        gbpPhotoCount: null,
+        gbpPostsLast30Days: null,
       });
       setFollowUpInputs(prev => ({
         ...prev,
@@ -177,10 +203,25 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
     setPreCallResult(null);
     setPreCallError(null);
     try {
+      const payload = {
+        businessName: preCallInputs.businessName,
+        location: preCallInputs.location,
+        websiteUrl: preCallInputs.website,
+        hasWebsite: !!preCallInputs.website.trim(),
+        googleMapsUrl: preCallInputs.gbpLink,
+        hasGBP: !!preCallInputs.gbpLink.trim(),
+        reviewCount: preCallInputs.reviewCount,
+        rating: preCallInputs.rating,
+        gbpPhotoCount: preCallInputs.gbpPhotoCount,
+        gbpPostsLast30Days: preCallInputs.gbpPostsLast30Days,
+        facebookUrl: preCallInputs.facebookUrl || null,
+        instagramUrl: preCallInputs.instagramUrl || null,
+        industry: preCallInputs.industry,
+      };
       const res = await fetch('/api/ai/sales-engine/pre-call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(preCallInputs),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Failed to generate call prep');
       const data = await res.json();
@@ -439,9 +480,50 @@ function InlineError({ error, onRetry }: { error: string | null; onRetry: () => 
   );
 }
 
+function FactsPanel({ facts }: { facts: PreCallFacts }) {
+  const rows = [
+    { label: 'Website', value: facts.website },
+    { label: 'Google Business Profile', value: facts.gbp },
+    { label: 'Reviews', value: facts.reviews },
+    { label: 'Rating', value: facts.rating },
+    { label: 'GBP Photos', value: facts.gbpPhotos },
+    { label: 'GBP Posts (30 days)', value: facts.gbpPosts30Days },
+    { label: 'Social Profiles', value: facts.socialProfiles },
+  ];
+  return (
+    <div className="border rounded-lg p-3 bg-muted/20 space-y-1" data-testid="facts-panel">
+      <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Facts</p>
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground text-xs">{r.label}</span>
+          <span className="text-xs font-medium">{r.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GapCard({ gap, index, onSave }: { gap: PreCallGap; index: number; onSave?: (text: string) => void }) {
+  return (
+    <div className="border rounded-lg p-2.5 space-y-1 bg-muted/20" data-testid={`gap-card-${index}`}>
+      <p className="text-sm font-medium">{index + 1}. {gap.title}</p>
+      <p className="text-xs text-muted-foreground">{gap.evidence}</p>
+      <p className="text-xs text-amber-700 dark:text-amber-400">{gap.impact}</p>
+      <div className="flex gap-1 pt-0.5">
+        <CopyButton text={`${gap.title}\n${gap.evidence}\n${gap.impact}`} label={`gap-${index}`} />
+        {onSave && (
+          <Button variant="ghost" size="sm" onClick={() => onSave(`Gap: ${gap.title}\nEvidence: ${gap.evidence}\nImpact: ${gap.impact}`)} className="h-7 text-xs gap-1">
+            <Pin className="h-3 w-3" /> Save
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate, onSaveToNotes, hasLead }: {
   inputs: { businessName: string; location: string; website: string; industry: string; gbpLink: string };
-  setInputs: (fn: (prev: typeof inputs) => typeof inputs) => void;
+  setInputs: (fn: (prev: any) => any) => void;
   loading: boolean;
   result: PreCallResult | null;
   error: string | null;
@@ -480,12 +562,16 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
 
       {result && (
         <div className="space-y-3 pt-1">
+          <FactsPanel facts={result.facts} />
           <ResultCard title="What they do and who they serve" content={result.whatTheyDo} onSave={hasLead ? onSaveToNotes : undefined} />
           <ResultCard title="3 strengths in their online presence" content={result.strengths.map((s, i) => `${i + 1}. ${s}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
-          <ResultCard title="3 gaps or missed opportunities" content={result.gaps.map((g, i) => `${i + 1}. ${g}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
-          <ResultCard title="The biggest revenue opportunity" content={result.biggestRevenueOpportunity} onSave={hasLead ? onSaveToNotes : undefined} highlight />
-          <ResultCard title="A strong opening line for my call" content={result.openingLine} onSave={hasLead ? onSaveToNotes : undefined} />
-          <ResultCard title="Curiosity Question" content={result.curiosityQuestion} onSave={hasLead ? onSaveToNotes : undefined} />
+          <div className="space-y-2">
+            <p className="text-[11px] font-medium text-muted-foreground">AI Insights — Gaps</p>
+            {result.gaps.map((gap, i) => (
+              <GapCard key={i} gap={gap} index={i} onSave={hasLead ? onSaveToNotes : undefined} />
+            ))}
+          </div>
+          <ResultCard title="Sales Hook" content={result.salesHook} onSave={hasLead ? onSaveToNotes : undefined} highlight />
           <Button variant="outline" size="sm" onClick={onGenerate} className="w-full gap-1 text-xs" data-testid="button-regenerate-precall">
             <RotateCcw className="h-3 w-3" /> Regenerate
           </Button>
