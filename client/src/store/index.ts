@@ -75,7 +75,7 @@ const appSlice = createSlice({
         lead.updatedAt = new Date();
         
         // Auto-enroll in passive nurture when stage is set to "nurture"
-        if (action.payload.stage === 'nurture' && lead.nurtureMode === 'none') {
+        if (action.payload.stage === 'nurture' && (!lead.nurtureMode || lead.nurtureMode === 'none')) {
           const cadence = state.cadences.find(c => c.mode === 'passive');
           if (cadence) {
             const now = new Date();

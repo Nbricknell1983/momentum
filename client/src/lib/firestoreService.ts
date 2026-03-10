@@ -285,6 +285,12 @@ export async function fetchLeads(orgId: string, authReady: boolean = false, filt
         conversationStage: rest.conversationStage || 'not_started',
         conversationCount: rest.conversationCount || 0,
         attemptCount: rest.attemptCount || 0,
+        nurtureMode: rest.nurtureMode || 'none',
+        nurtureStatus: rest.nurtureStatus || null,
+        nurtureCadenceId: rest.nurtureCadenceId || null,
+        nurtureStepIndex: rest.nurtureStepIndex ?? 0,
+        touchesNoResponse: rest.touchesNoResponse ?? 0,
+        nurturePriorityScore: rest.nurturePriorityScore ?? 0,
       } as Lead;
     });
     
