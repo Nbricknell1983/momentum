@@ -1,0 +1,437 @@
+Build a new middle-column panel on the Momentum deal page to fill the current empty white space between the existing left-side deal controls and the existing right-side AI Sales Engine.
+
+Objective
+
+Add a new panel called Deal Intelligence that gives the rep instant context about the current deal before they use the AI Sales Engine.
+
+This is a UI enhancement only for the middle column. Do not redesign the overall page structure. Do not move or replace the existing left column or the existing AI Sales Engine on the right.
+
+Problem being solved
+
+The current deal page has a large empty middle area, which makes the interface feel unfinished and wastes valuable space. The middle column should become the “what this means” layer of the page.
+
+Desired UX model:
+
+Left column = what happened
+
+Middle column = what it means
+
+Right column = what to do next
+
+Scope
+
+Add a new Deal Intelligence card/panel in the middle column containing the following sections:
+
+Deal Health
+
+AI Deal Summary
+
+Online Presence Snapshot
+
+Competitor Snapshot
+
+Next Best Action
+
+Use the current deal data where available. If some data is missing, show a graceful fallback state.
+
+Out of scope
+
+Do not redesign the page header
+
+Do not modify the existing left-side conversation/activity controls
+
+Do not modify the existing AI Sales Engine section structure on the right
+
+Do not change routing
+
+Do not change tenant resolution
+
+Do not change Firestore schema unless absolutely required
+
+Do not create duplicate analysis modules elsewhere
+
+Do not introduce cross-tenant data leakage risk
+
+Do not remove any current working functionality
+
+Architecture guardrails
+
+This is a multi-tenant SaaS app, so tenant isolation must be preserved.
+
+Requirements:
+
+Only use the currently loaded deal/lead/org context already available on the page
+
+If fetching additional data, scope all reads to the active tenant/org
+
+Do not query across tenants
+
+Do not hardcode business-type logic in a way that breaks other tenant categories
+
+Prefer extending existing patterns and existing page layout rather than creating a parallel system
+
+Implementation approach
+
+Keep the current 3-column page layout, but render a new middle-column component.
+
+Suggested component name:
+
+DealIntelligencePanel
+
+Suggested subcomponents if needed:
+
+DealHealthCard
+
+DealSummaryCard
+
+OnlinePresenceCard
+
+CompetitorSnapshotCard
+
+NextBestActionCard
+
+If the project already has a card/panel component pattern, reuse it.
+
+Layout requirements
+
+The middle column should visually match the rest of the UI:
+
+same card language
+
+same border radius
+
+same spacing rhythm
+
+same typography hierarchy
+
+same neutral background treatment
+
+no flashy redesign
+
+The panel should feel like a natural part of Momentum, not a separate app.
+
+Panel content requirements
+1. Deal Health
+
+Show a simple score or status block near the top.
+
+Preferred output:
+
+score out of 100, or
+
+low / medium / high risk status
+
+Use available signals such as:
+
+stage
+
+next contact date
+
+activity count
+
+whether a meeting is booked
+
+whether contact attempts exist
+
+If a true score engine does not yet exist, implement a lightweight placeholder scoring model in the UI layer only, clearly structured so it can be replaced later.
+
+Example logic:
+
+no contact attempts lowers score
+
+overdue next contact lowers score
+
+meeting booked increases score
+
+multiple activities increase score
+
+Do not over-engineer the scoring model.
+
+2. AI Deal Summary
+
+Render a short summary paragraph based on available lead/deal fields.
+
+Target output style:
+
+2 to 4 short sentences
+
+plain English
+
+useful for a sales rep scanning the page quickly
+
+Example structure:
+
+who the business is
+
+where they are located
+
+what appears to be happening
+
+biggest likely opportunity
+
+Fallback:
+If insufficient data exists, show a neutral placeholder like:
+“Not enough information yet. Log a conversation or generate call prep to build a richer summary.”
+
+3. Online Presence Snapshot
+
+Show a compact structured summary block with rows such as:
+
+Website
+
+Google presence / Maps presence
+
+Reviews
+
+Visibility opportunity
+
+If real external analysis is not yet wired in, use a staged fallback:
+
+if website exists, show “Website detected”
+
+if no website, show “No website recorded”
+
+if GBP link exists, show “Google Business Profile detected”
+
+otherwise show “Google presence not yet analysed”
+
+This section must not fabricate precise ranking claims unless real data exists.
+
+4. Competitor Snapshot
+
+Show a compact section for nearby or likely competitors.
+
+Important:
+
+If competitor data already exists in the app, use it
+
+If competitor data does not yet exist, show a placeholder empty state such as:
+“Competitor insights will appear here once call prep or growth analysis has been generated.”
+
+Do not invent fake competitor business names in production output.
+
+5. Next Best Action
+
+Show one clear recommended action based on deal state.
+
+Examples:
+
+“Log first contact attempt”
+
+“Call today before next contact becomes overdue”
+
+“Send follow-up email”
+
+“Book discovery meeting”
+
+“Generate call prep before outreach”
+
+This should be deterministic and based on available deal state, not random AI text.
+
+Behavior requirements
+
+The middle panel must load safely even when data is incomplete
+
+No broken layout if website, industry, location, or contact data is missing
+
+No console errors for null/undefined fields
+
+Use loading skeletons if the page already uses them
+
+Use empty states where necessary
+
+Keep the page performant
+
+Visual structure
+
+Create the middle panel in this order:
+
+Deal Intelligence header
+
+Deal Health card
+
+AI Deal Summary card
+
+Online Presence Snapshot card
+
+Competitor Snapshot card
+
+Next Best Action card
+
+Cards should stack vertically with clean spacing.
+
+Suggested copy
+
+Panel title:
+
+Deal Intelligence
+
+Section titles:
+
+Deal Health
+
+AI Deal Summary
+
+Online Presence Snapshot
+
+Competitor Snapshot
+
+Next Best Action
+
+Empty-state copy
+
+Use polished fallback copy like:
+
+Not enough activity yet to assess deal health.
+
+Log a conversation or generate call prep to enrich this summary.
+
+Website and Google visibility insights will appear here when more data is available.
+
+Competitor insights are not available yet for this deal.
+
+No immediate recommendation available yet.
+
+Data handling
+
+Prefer this order of data sources:
+
+currently loaded deal data
+
+currently loaded lead/business/org data already available on the page
+
+existing generated AI outputs already saved for this deal, if available
+
+Only add new persistence if necessary. If you must persist generated middle-panel data, do it in a way that is:
+
+tenant-scoped
+
+deal-scoped
+
+backward compatible
+
+non-breaking for existing records
+
+Acceptance criteria
+
+The change is complete when:
+
+The current empty white space in the middle of the deal page is replaced by a populated Deal Intelligence panel
+
+The left column remains unchanged in function
+
+The right AI Sales Engine remains unchanged in function
+
+The new middle panel renders safely for deals with full data and partial data
+
+No tenant isolation risk is introduced
+
+No existing activity logging, stage, next contact, or MRR workflows are broken
+
+The page feels visually balanced and intentional
+
+No fake competitor or ranking data is shown unless sourced from real stored data
+
+The implementation is modular and easy to enhance later
+
+QA checklist
+
+Test the following before marking complete:
+
+Core rendering
+
+Deal page loads with the new middle panel
+
+No large empty white gap remains
+
+The panel looks aligned with existing card styles
+
+The panel behaves correctly on desktop width used by reps
+
+Null / partial data cases
+
+Deal with website, no industry
+
+Deal with industry, no website
+
+Deal with no next contact
+
+Deal with no activities logged
+
+Deal with no AI outputs yet
+
+Deal with minimal lead/business data
+
+Workflow regression
+
+Log Call still works
+
+Log Email still works
+
+Log SMS still works
+
+Log Meeting still works
+
+Meeting Booked still works
+
+Log Drop-in still works
+
+Stage changes still work
+
+Next Contact changes still work
+
+Save MRR still works
+
+Playbooks still work
+
+Generate Call Prep still works
+
+Multi-tenant safety
+
+Confirm data shown belongs only to the current tenant/org/deal
+
+Confirm no unrelated client/deal data appears in the panel
+
+Confirm no shared cache or stale state leaks data between tenants
+
+UI / responsiveness
+
+No overflow issues
+
+No cut-off text
+
+Long business names do not break layout
+
+Missing fields do not collapse the card awkwardly
+
+Scroll behavior remains usable
+
+Do not change
+
+Do not remove the current AI Sales Engine sections
+
+Do not rename current workflows
+
+Do not rewrite the entire deal page
+
+Do not refactor unrelated modules
+
+Do not introduce fake data as if it were real
+
+Do not break existing tenant categories or future category expansion
+
+Deliverable
+
+Implement the new middle-column Deal Intelligence panel and wire it into the existing deal page using the smallest safe change.
+
+Also provide a short summary of:
+
+files created
+
+files modified
+
+any assumptions made
+
+any fallback logic used
+
+any future enhancement points

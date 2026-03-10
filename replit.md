@@ -36,7 +36,7 @@ Preferred communication style: Simple, everyday language.
 - `shared/`: Code shared between client and server.
 
 ### Key Features
-- **Pipeline Management**: Kanban board with drag-and-drop lead management, featuring a Lead Focus View (full-screen overlay with lead details and AI Sales Engine).
+- **Pipeline Management**: Kanban board with drag-and-drop lead management, featuring a Lead Focus View (full-screen 3-column overlay: left = deal controls/activity, middle = Deal Intelligence panel, right = AI Sales Engine).
 - **Conversation Intelligence**: Tracks behavioral progression (Attempted → Connected → Discovery → Qualified → Objection → Proposal → Booked) independently from pipeline stage, with a two-layer architecture for Pipeline Stage and Conversation Stage.
 - **Lead & Client Management**: Expandable lead cards, quick actions, activity logging, and client lifecycle management with AI Movement Tips.
 - **Territory System**: Hierarchical region/area filtering for leads.

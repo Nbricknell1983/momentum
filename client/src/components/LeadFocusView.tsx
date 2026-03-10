@@ -11,6 +11,7 @@ import TrafficLight from './TrafficLight';
 import LeadCardExpanded from './LeadCardExpanded';
 import AISalesEngine from './AISalesEngine';
 import ConversationIntelligence from './ConversationIntelligence';
+import DealIntelligencePanel from './DealIntelligencePanel';
 
 type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'prospect';
 
@@ -111,9 +112,9 @@ export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasN
       </div>
 
       <div className="flex flex-1 min-h-0">
-        <ScrollArea className="flex-1">
-          <div className="p-6 max-w-2xl">
-            <div className="mb-6">
+        <ScrollArea className="w-[380px] shrink-0">
+          <div className="p-4">
+            <div className="mb-4">
               <ConversationIntelligence lead={lead} />
             </div>
             <LeadCardExpanded
@@ -126,7 +127,11 @@ export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasN
           </div>
         </ScrollArea>
 
-        <div className="w-[420px] shrink-0 border-l bg-muted/5">
+        <ScrollArea className="flex-1 border-l">
+          <DealIntelligencePanel lead={lead} />
+        </ScrollArea>
+
+        <div className="w-[380px] shrink-0 border-l bg-muted/5">
           <AISalesEngine
             isOpen={true}
             onClose={() => {}}
