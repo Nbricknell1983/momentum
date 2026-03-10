@@ -1,0 +1,271 @@
+REPLIT BUILD PROMPT
+Momentum AI Sales Engine – Growth Plan Module
+
+Add a new module inside AI Sales Engine called “Growth Plan”.
+
+The Growth Plan module must appear between “Win the Follow-Up” and “Multiply Your Pipeline”.
+
+Do NOT change the order of existing sections.
+
+Final AI Sales Engine order must remain:
+
+1 — Win Before You Dial
+2 — Control the Call
+3 — Win the Follow-Up
+4 — Growth Plan
+5 — Multiply Your Pipeline
+
+
+UI LAYOUT
+
+The Growth Plan panel must render as:
+
+Growth Plan
+Turn insight into a 12-month strategy
+
+[ Run Website X-Ray ]
+
+[ Visualise Search Results ]
+
+[ Analyse Competitor Gap ]
+
+[ Forecast Traffic & Revenue ]
+
+────────────────────────
+
+Generate a professional strategy document
+you can send after your call.
+
+[ Generate 12-Month Strategy PDF ]
+
+
+Each button must trigger a specific analysis engine but share the same underlying intelligence data.
+
+
+SYSTEM ARCHITECTURE
+
+Create a shared service called:
+
+Strategy Intelligence Engine
+
+All Growth Plan tools must use this shared service to avoid duplicate crawling and reduce compute cost.
+
+Modules inside the engine:
+
+Website Crawl Engine
+SERP Capture Engine
+Competitor Analysis Engine
+Keyword Opportunity Engine
+Traffic Forecast Engine
+Strategy Report Generator
+
+All modules must cache results for the current lead so multiple tools reuse the same analysis.
+
+
+FEATURE 1 — WEBSITE X-RAY
+
+Triggered by:
+
+[ Run Website X-Ray ]
+
+Purpose:
+Visually audit the prospect website.
+
+Steps:
+1. Load the prospect website URL.
+2. Capture a full homepage screenshot.
+3. Capture a mobile viewport screenshot.
+4. Attempt to load /sitemap.xml.
+5. Extract key SEO signals including:
+   - title tag
+   - meta description
+   - H1 headings
+   - heading hierarchy
+   - internal links
+   - word count
+   - navigation labels
+6. Detect service keywords and location keywords appearing on the homepage.
+
+Output UI:
+Display the homepage screenshot with numbered callouts highlighting issues such as:
+- weak service clarity
+- missing location signals
+- weak call to action
+- thin content
+- unclear page structure
+
+Include a side panel explaining each issue and the recommended fix.
+
+
+FEATURE 2 — LIVE SERP VISUALISATION
+
+Triggered by:
+
+[ Visualise Search Results ]
+
+Purpose:
+Show where the prospect appears in Google search results.
+
+Steps:
+1. Allow keyword input or AI suggested keywords.
+2. Capture search results for the keyword.
+3. Detect:
+   - map pack presence
+   - organic ranking presence
+   - competitor domains
+4. Identify whether the prospect domain appears.
+
+Output UI tabs:
+
+SERP View
+Prospect Position
+Competitors
+Opportunities
+
+SERP View must render a clean search results snapshot suitable for presentations.
+
+Prospect Position must show:
+- Maps presence: detected / not detected
+- Organic presence: detected / not detected
+- Best matching prospect page
+- Keyword-page relevance score
+
+Competitors tab must list top ranking businesses.
+
+
+FEATURE 3 — COMPETITOR GAP ANALYSIS
+
+Triggered by:
+
+[ Analyse Competitor Gap ]
+
+Purpose:
+Explain why competitors rank higher.
+
+Steps:
+1. Identify top 3 competitors from SERP results.
+2. Crawl competitor websites using the same crawl engine.
+3. Extract structural signals including:
+   - service page count
+   - location page count
+   - average content depth
+   - heading structure
+   - internal linking signals
+   - review signals if visible
+
+Output UI:
+
+Comparison table:
+
+Signal | Prospect | Competitor Average
+
+Service Pages
+Location Pages
+Content Depth
+Internal Linking
+Review Signals
+
+Also generate visual comparison charts using Chart.js.
+
+
+FEATURE 4 — TRAFFIC & REVENUE FORECAST
+
+Triggered by:
+
+[ Forecast Traffic & Revenue ]
+
+Purpose:
+Convert SEO opportunity into business impact.
+
+Steps:
+1. Use detected keywords and search demand.
+2. Estimate current visibility capture.
+3. Estimate improved capture after optimisation.
+4. Apply conversion rate estimates.
+5. Apply job value estimates (or industry averages).
+
+Output metrics:
+
+Estimated Traffic Opportunity
+Estimated Lead Opportunity
+Estimated Revenue Opportunity
+
+Display charts for:
+- traffic growth forecast
+- visibility improvement
+- revenue opportunity
+
+All forecasts must be labelled as estimates.
+
+
+FEATURE 5 — STRATEGY GENERATOR
+
+Triggered by:
+
+[ Generate 12-Month Strategy PDF ]
+
+Purpose:
+Generate a consultant-grade marketing strategy document.
+
+PDF must include:
+
+Cover Page
+Executive Summary
+How Google Ranks Local Businesses
+Website X-Ray Analysis
+Search Visibility Analysis
+Competitor Gap Analysis
+Keyword Opportunity Map
+Traffic & Revenue Forecast
+Google Maps Optimisation Plan
+12-Month Growth Roadmap
+Expected Business Impact
+
+Important messaging inside the report:
+
+Google ranks businesses based on two signals:
+1. What you do
+2. Where you do it
+
+If a website does not clearly communicate both, Google has less confidence ranking it.
+
+
+EXPORT OPTIONS
+
+User must be able to:
+- Download the PDF
+- Email the PDF to the lead
+- Attach the PDF to the lead record
+
+
+ARCHITECTURE GUARDRAILS
+
+Do NOT modify existing CRM schemas destructively.
+
+All generated files must be stored using tenant-scoped storage paths.
+
+All analysis must run asynchronously so the Lead View loads instantly.
+
+Reuse existing analysis data whenever possible to avoid duplicate crawling.
+
+Cache results for the lead session.
+
+
+ACCEPTANCE CRITERIA
+
+Growth Plan appears between:
+Win the Follow-Up
+Multiply Your Pipeline
+
+Buttons function correctly:
+Run Website X-Ray
+Visualise Search Results
+Analyse Competitor Gap
+Forecast Traffic & Revenue
+Generate 12-Month Strategy PDF
+
+All outputs can feed into the strategy PDF.
+
+Existing AI Sales Engine functionality remains unchanged.
+
+Tenant data isolation is preserved.

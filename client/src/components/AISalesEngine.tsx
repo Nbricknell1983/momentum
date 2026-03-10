@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, updateLead } from '@/store';
-import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText } from 'lucide-react';
+import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp } from 'lucide-react';
+import GrowthPlanSection from '@/components/GrowthPlanSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { updateLeadInFirestore } from '@/lib/firestoreService';
 import { Lead, Stage } from '@/lib/types';
 
-type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'prospect';
+type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'growth_plan' | 'prospect';
 
 interface AISalesEngineProps {
   isOpen: boolean;
@@ -90,6 +91,7 @@ const SECTION_CONFIG: Record<EngineSection, { title: string; subtitle: string; i
   pre_call: { title: 'Win Before You Dial', subtitle: '60 seconds of prep changes everything', icon: Phone },
   objection: { title: 'Control the Call', subtitle: 'Prepared reps don\'t freeze', icon: Shield },
   follow_up: { title: 'Win the Follow-Up', subtitle: 'Speed wins deals', icon: Mail },
+  growth_plan: { title: 'Growth Plan', subtitle: 'Turn insight into a 12-month strategy', icon: TrendingUp },
   prospect: { title: 'Multiply Your Pipeline', subtitle: 'Turn one call into ten prospects', icon: Users },
 };
 
@@ -337,7 +339,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
 
   if (!isOpen) return null;
 
-  const sections: EngineSection[] = ['pre_call', 'objection', 'follow_up', 'prospect'];
+  const sections: EngineSection[] = ['pre_call', 'objection', 'follow_up', 'growth_plan', 'prospect'];
 
   const sectionContent = (
     <div className={embedded ? "space-y-1" : "p-3 space-y-1"}>
@@ -400,6 +402,12 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                     onGenerate={handleFollowUp}
                     onSaveToNotes={saveToNotes}
                     hasLead={!!selectedLead}
+                  />
+                )}
+                {sectionKey === 'growth_plan' && (
+                  <GrowthPlanSection
+                    lead={selectedLead}
+                    onSaveToNotes={saveToNotes}
                   />
                 )}
                 {sectionKey === 'prospect' && (

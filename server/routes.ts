@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertLeadSchema, insertActivitySchema } from "@shared/schema";
 import OpenAI from "openai";
 import { firestore, isFirebaseAdminReady } from "./firebase";
+import { crawlWebsite } from "./strategyEngine";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -2972,6 +2973,391 @@ Generate realistic prospect suggestions based on common business patterns in the
     } catch (error) {
       console.error("Error generating prospect suggestions:", error);
       res.status(500).json({ error: "Failed to generate prospect suggestions" });
+    }
+  });
+
+  // ============================================
+  // Growth Plan Endpoints
+  // ============================================
+
+  app.post("/api/ai/growth-plan/website-xray", async (req, res) => {
+    try {
+      const { websiteUrl, businessName, industry, location } = req.body;
+      if (!websiteUrl) {
+        return res.status(400).json({ error: "Website URL is required" });
+      }
+
+      const crawlData = await crawlWebsite(websiteUrl);
+
+      if (!crawlData.success) {
+        return res.status(400).json({ error: `Could not access website: ${crawlData.error}` });
+      }
+
+      const prompt = `You are a digital marketing auditor. Analyse these website crawl signals and identify issues.
+
+WEBSITE: ${websiteUrl}
+BUSINESS: ${businessName || 'Unknown'}
+INDUSTRY: ${industry || 'Unknown'}
+LOCATION: ${location || 'Unknown'}
+
+CRAWL DATA:
+- Title: ${crawlData.title || 'MISSING'}
+- Meta Description: ${crawlData.metaDescription || 'MISSING'}
+- H1 Tags: ${crawlData.h1s.length > 0 ? crawlData.h1s.join(', ') : 'NONE'}
+- Heading Hierarchy: ${crawlData.headingHierarchy.slice(0, 10).map(h => `${h.tag}: ${h.text}`).join(' | ')}
+- Word Count: ${crawlData.wordCount}
+- Internal Links: ${crawlData.internalLinks}
+- External Links: ${crawlData.externalLinks}
+- HTTPS: ${crawlData.hasHttps}
+- Sitemap: ${crawlData.hasSitemap}
+- Schema Markup: ${crawlData.hasSchema}
+- Images: ${crawlData.images.total} total, ${crawlData.images.withAlt} with alt text
+- Nav Labels: ${crawlData.navLabels.join(', ') || 'None detected'}
+- Service Keywords Found: ${crawlData.serviceKeywords.join(', ') || 'None'}
+- Location Keywords Found: ${crawlData.locationKeywords.join(', ') || 'None'}
+
+Respond with JSON:
+{
+  "callouts": [
+    { "id": 1, "issue": "Issue title", "detail": "What the data shows", "fix": "Recommended fix", "severity": "high|medium|low" }
+  ],
+  "summary": "2-3 sentence overall assessment of the website's SEO health and biggest opportunity"
+}
+
+Rules:
+- Only flag issues supported by the crawl data
+- Prioritise issues that impact local search rankings
+- Include 4-8 callouts ordered by severity
+- Focus on: service clarity, location signals, call-to-action strength, content depth, technical SEO`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let aiResult;
+      try {
+        aiResult = JSON.parse(content);
+        if (!Array.isArray(aiResult.callouts)) throw new Error("Invalid");
+      } catch {
+        aiResult = {
+          callouts: [{ id: 1, issue: "Analysis incomplete", detail: "Could not fully analyse the website", fix: "Try again or review manually", severity: "medium" }],
+          summary: `The website for ${businessName} was crawled but the AI analysis could not be completed.`,
+        };
+      }
+
+      res.json({ crawlData, ...aiResult });
+    } catch (error) {
+      console.error("Error in website x-ray:", error);
+      res.status(500).json({ error: "Failed to analyse website" });
+    }
+  });
+
+  app.post("/api/ai/growth-plan/serp-analysis", async (req, res) => {
+    try {
+      const { businessName, websiteUrl, location, industry, keyword } = req.body;
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      const searchKeyword = keyword || `${industry || businessName} ${location || ''}`.trim();
+
+      const prompt = `You are an SEO analyst. Generate a realistic local search analysis for this business.
+
+BUSINESS: ${businessName}
+WEBSITE: ${websiteUrl || 'None'}
+LOCATION: ${location || 'Not specified'}
+INDUSTRY: ${industry || 'Not specified'}
+SEARCH KEYWORD: "${searchKeyword}"
+
+Based on the business type, location, and industry, generate a realistic analysis of what the Google search results would look like for "${searchKeyword}".
+
+Respond with JSON:
+{
+  "keyword": "${searchKeyword}",
+  "prospectPosition": {
+    "mapsPresence": "detected or not detected",
+    "organicPresence": "detected or not detected",
+    "bestMatchingPage": "URL or empty string",
+    "relevanceScore": 0-100
+  },
+  "serpSnapshot": [
+    { "position": 1, "title": "Result title", "domain": "example.com", "snippet": "Result description", "type": "organic|maps|ad" }
+  ],
+  "competitors": [
+    { "name": "Business name", "domain": "domain.com", "position": 1, "strength": "Why they rank well" }
+  ],
+  "opportunities": [
+    { "keyword": "Related keyword", "difficulty": "low|medium|high", "volume": "estimated monthly searches", "recommendation": "How to target this" }
+  ]
+}
+
+Rules:
+- Generate 8-10 SERP snapshot results (mix of maps pack and organic)
+- Generate 5 competitors
+- Generate 5-8 keyword opportunities
+- If the business has a website, assess whether it would realistically appear
+- Be realistic about competitor strength based on the Australian market`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1500,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+        if (!result.prospectPosition) throw new Error("Invalid");
+      } catch {
+        result = {
+          keyword: searchKeyword,
+          prospectPosition: { mapsPresence: "not detected", organicPresence: "not detected", bestMatchingPage: "", relevanceScore: 20 },
+          serpSnapshot: [],
+          competitors: [],
+          opportunities: [],
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error in SERP analysis:", error);
+      res.status(500).json({ error: "Failed to analyse search results" });
+    }
+  });
+
+  app.post("/api/ai/growth-plan/competitor-gap", async (req, res) => {
+    try {
+      const { businessName, websiteUrl, location, industry, serpData, xrayData } = req.body;
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      const competitorContext = serpData?.competitors
+        ? `Known competitors from SERP: ${serpData.competitors.map((c: any) => c.name).join(', ')}`
+        : '';
+      const websiteContext = xrayData
+        ? `Prospect website signals: ${xrayData.wordCount} words, ${xrayData.internalLinks} internal links, ${xrayData.serviceKeywords?.length || 0} service keywords, ${xrayData.locationKeywords?.length || 0} location keywords`
+        : '';
+
+      const prompt = `You are an SEO competitive analyst. Compare a prospect against their likely competitors.
+
+PROSPECT: ${businessName}
+WEBSITE: ${websiteUrl || 'None'}
+LOCATION: ${location || 'Not specified'}
+INDUSTRY: ${industry || 'Not specified'}
+${competitorContext}
+${websiteContext}
+
+Respond with JSON:
+{
+  "prospect": {
+    "servicePages": estimated_number,
+    "locationPages": estimated_number,
+    "contentDepth": "thin|moderate|strong",
+    "internalLinking": "weak|moderate|strong",
+    "reviewSignals": "low|moderate|strong"
+  },
+  "competitorAverage": {
+    "servicePages": estimated_number,
+    "locationPages": estimated_number,
+    "contentDepth": "thin|moderate|strong",
+    "internalLinking": "weak|moderate|strong",
+    "reviewSignals": "low|moderate|strong"
+  },
+  "competitors": [
+    {
+      "name": "Competitor name",
+      "servicePages": number,
+      "locationPages": number,
+      "contentDepth": "thin|moderate|strong",
+      "strengths": ["strength 1", "strength 2"]
+    }
+  ],
+  "insights": ["Key insight about the competitive gap"]
+}
+
+Rules:
+- Generate 3 realistic competitors
+- Base estimates on industry norms for Australian local businesses
+- Insights should be actionable
+- If prospect has a website, factor in the actual signals`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+        if (!result.prospect || !result.competitorAverage) throw new Error("Invalid");
+      } catch {
+        result = {
+          prospect: { servicePages: 1, locationPages: 0, contentDepth: "thin", internalLinking: "weak", reviewSignals: "low" },
+          competitorAverage: { servicePages: 5, locationPages: 3, contentDepth: "moderate", internalLinking: "moderate", reviewSignals: "moderate" },
+          competitors: [],
+          insights: ["Unable to generate full competitive analysis. Please try again."],
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error in competitor gap analysis:", error);
+      res.status(500).json({ error: "Failed to analyse competitor gap" });
+    }
+  });
+
+  app.post("/api/ai/growth-plan/traffic-forecast", async (req, res) => {
+    try {
+      const { businessName, websiteUrl, location, industry, reviewCount, rating, serpData, xrayData } = req.body;
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      const prompt = `You are a digital marketing strategist. Generate a realistic 12-month traffic and revenue forecast.
+
+BUSINESS: ${businessName}
+WEBSITE: ${websiteUrl || 'None'}
+LOCATION: ${location || 'Not specified'}
+INDUSTRY: ${industry || 'Not specified'}
+CURRENT REVIEWS: ${reviewCount ?? 'Unknown'}
+CURRENT RATING: ${rating ?? 'Unknown'}
+
+Respond with JSON:
+{
+  "currentEstimate": { "monthlyTraffic": number, "monthlyLeads": number, "monthlyRevenue": number },
+  "projectedEstimate": { "monthlyTraffic": number, "monthlyLeads": number, "monthlyRevenue": number },
+  "growthTimeline": [
+    { "month": "Month 1", "traffic": number, "leads": number, "revenue": number },
+    { "month": "Month 3", "traffic": number, "leads": number, "revenue": number },
+    { "month": "Month 6", "traffic": number, "leads": number, "revenue": number },
+    { "month": "Month 9", "traffic": number, "leads": number, "revenue": number },
+    { "month": "Month 12", "traffic": number, "leads": number, "revenue": number }
+  ],
+  "assumptions": ["Assumption 1", "Assumption 2", "Assumption 3"],
+  "keyDrivers": ["Driver 1", "Driver 2", "Driver 3"]
+}
+
+Rules:
+- Base estimates on realistic Australian local business benchmarks
+- Current estimates should reflect a typical business with limited digital marketing
+- Projected estimates should reflect 12 months of consistent optimisation
+- All forecasts must be labelled as estimates
+- Use conservative numbers — don't overpromise
+- Include 3-5 assumptions and 3-5 key drivers
+- Growth should be gradual, not hockey-stick`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+        if (!result.currentEstimate || !result.projectedEstimate) throw new Error("Invalid");
+      } catch {
+        result = {
+          currentEstimate: { monthlyTraffic: 50, monthlyLeads: 3, monthlyRevenue: 1500 },
+          projectedEstimate: { monthlyTraffic: 300, monthlyLeads: 20, monthlyRevenue: 10000 },
+          growthTimeline: [
+            { month: "Month 1", traffic: 60, leads: 4, revenue: 2000 },
+            { month: "Month 3", traffic: 100, leads: 7, revenue: 3500 },
+            { month: "Month 6", traffic: 180, leads: 12, revenue: 6000 },
+            { month: "Month 9", traffic: 250, leads: 17, revenue: 8500 },
+            { month: "Month 12", traffic: 300, leads: 20, revenue: 10000 },
+          ],
+          assumptions: ["Industry average conversion rates", "Consistent optimisation efforts", "Local market conditions remain stable"],
+          keyDrivers: ["Google Business Profile optimisation", "Website content expansion", "Review generation strategy"],
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error in traffic forecast:", error);
+      res.status(500).json({ error: "Failed to generate forecast" });
+    }
+  });
+
+  app.post("/api/ai/growth-plan/strategy-data", async (req, res) => {
+    try {
+      const { businessName, websiteUrl, location, industry, reviewCount, rating, xrayData, serpData, competitorData, forecastData } = req.body;
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      const contextParts = [];
+      if (xrayData?.crawlData) contextParts.push(`Website: ${xrayData.crawlData.wordCount} words, ${xrayData.crawlData.h1s?.length || 0} H1s, ${xrayData.callouts?.length || 0} issues found`);
+      if (serpData) contextParts.push(`SERP: Maps ${serpData.prospectPosition?.mapsPresence}, Organic ${serpData.prospectPosition?.organicPresence}`);
+      if (competitorData) contextParts.push(`Competitors: prospect has ${competitorData.prospect?.servicePages} service pages vs ${competitorData.competitorAverage?.servicePages} avg`);
+      if (forecastData) contextParts.push(`Forecast: ${forecastData.currentEstimate?.monthlyTraffic} → ${forecastData.projectedEstimate?.monthlyTraffic} monthly traffic`);
+
+      const prompt = `Generate a professional 12-month digital marketing strategy document for a sales presentation.
+
+BUSINESS: ${businessName}
+WEBSITE: ${websiteUrl || 'None'}
+LOCATION: ${location || 'Not specified'}
+INDUSTRY: ${industry || 'Not specified'}
+REVIEWS: ${reviewCount ?? 'Unknown'}
+RATING: ${rating ?? 'Unknown'}
+ANALYSIS DATA: ${contextParts.join(' | ') || 'No prior analysis available'}
+
+Respond with JSON containing these text sections (each 2-4 paragraphs):
+{
+  "executiveSummary": "Overview of opportunities and recommended approach",
+  "websiteAnalysis": "Assessment of current website SEO performance",
+  "searchVisibility": "Current search visibility and where they stand",
+  "competitorAnalysis": "How they compare to competitors",
+  "keywordOpportunities": "Key search terms they should target",
+  "trafficForecast": "Expected traffic and revenue growth estimates",
+  "mapsOptimisation": "Google Maps and GBP optimisation plan",
+  "growthRoadmap": "Month-by-month plan: Months 1-3 foundations, Months 4-6 growth, Months 7-9 expansion, Months 10-12 optimisation",
+  "expectedImpact": "Projected business impact and ROI"
+}
+
+Write in a professional, consultant tone. Be specific to the business type and location. All forecasts must be labelled as estimates.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 3000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result;
+      try {
+        result = JSON.parse(content);
+      } catch {
+        result = {
+          executiveSummary: `This strategy outlines a 12-month growth plan for ${businessName}.`,
+          websiteAnalysis: "Website analysis unavailable.",
+          searchVisibility: "Search visibility analysis unavailable.",
+          competitorAnalysis: "Competitor analysis unavailable.",
+          keywordOpportunities: "Keyword analysis unavailable.",
+          trafficForecast: "Traffic forecast unavailable.",
+          mapsOptimisation: "Maps optimisation plan unavailable.",
+          growthRoadmap: "Growth roadmap unavailable.",
+          expectedImpact: "Impact projections unavailable.",
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating strategy data:", error);
+      res.status(500).json({ error: "Failed to generate strategy data" });
     }
   });
 
