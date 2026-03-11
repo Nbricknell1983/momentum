@@ -2442,7 +2442,40 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
     }
   }
 
-  // Create a new team member with Firebase Auth account
+  app.post("/api/auth/resolve-org", async (req, res) => {
+    try {
+      const { uid } = req.body;
+      if (!uid) {
+        return res.status(400).json({ error: "uid is required" });
+      }
+
+      if (!firestore) {
+        return res.status(503).json({ error: "Firestore not available" });
+      }
+
+      const orgsSnapshot = await firestore.collectionGroup('members')
+        .where('active', '==', true)
+        .get();
+
+      for (const memberDoc of orgsSnapshot.docs) {
+        if (memberDoc.id === uid) {
+          const pathParts = memberDoc.ref.path.split('/');
+          const orgId = pathParts[1];
+          const memberData = memberDoc.data();
+          return res.json({
+            orgId,
+            role: memberData.role || 'member',
+          });
+        }
+      }
+
+      return res.json({ orgId: null });
+    } catch (error: any) {
+      console.error("Error resolving org for user:", error);
+      res.status(500).json({ error: "Failed to resolve organisation" });
+    }
+  });
+
   app.post("/api/admin/create-team-member", async (req, res) => {
     try {
       const { email, password, orgId, role = 'member' } = req.body;
@@ -2489,7 +2522,6 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
         });
       }
 
-      // Always ensure the Firestore member document exists
       if (firestore) {
         const memberRef = firestore.collection('orgs').doc(orgId).collection('members').doc(userRecord.uid);
         const memberDoc = await memberRef.get();
@@ -2501,6 +2533,20 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
             status: 'active',
             active: true,
             joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdByAdmin: true,
+          });
+        }
+
+        const userDocRef = firestore.collection('users').doc(userRecord.uid);
+        const userDoc = await userDocRef.get();
+        
+        if (!userDoc.exists) {
+          await userDocRef.set({
+            orgId,
+            role: validatedRole,
+            email,
+            displayName: userRecord.displayName || null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
             createdByAdmin: true,
           });
         }

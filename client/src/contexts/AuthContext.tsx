@@ -174,7 +174,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      console.log('[Auth] User profile not found, bootstrapping first-time user');
+      console.log('[Auth] User profile not found, checking if user was added as team member via API');
+      const resolvedOrgId = await resolveTeamMemberOrg(firebaseUser);
+      if (resolvedOrgId) {
+        return resolvedOrgId;
+      }
+
+      console.log('[Auth] Not a team member, bootstrapping first-time user with new org');
       return await bootstrapNewUser(firebaseUser);
     } catch (error: any) {
       if (error?.code === 'permission-denied') {
@@ -182,6 +188,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await bootstrapNewUser(firebaseUser);
       }
       throw error;
+    }
+  }
+
+  async function resolveTeamMemberOrg(firebaseUser: User): Promise<string | null> {
+    try {
+      const response = await fetch('/api/auth/resolve-org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: firebaseUser.uid }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.orgId) {
+          console.log('[Auth] Resolved team member org via API:', data.orgId);
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          await setDoc(userDocRef, {
+            orgId: data.orgId,
+            role: data.role || 'member',
+            createdAt: new Date(),
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+          });
+          return data.orgId;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('[Auth] Error resolving team member org:', error);
+      return null;
     }
   }
 
