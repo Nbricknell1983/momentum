@@ -184,7 +184,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await bootstrapNewUser(firebaseUser);
     } catch (error: any) {
       if (error?.code === 'permission-denied') {
-        console.log('[Auth] Permission denied reading user profile, attempting bootstrap');
+        console.log('[Auth] Permission denied reading user profile, checking team membership first');
+        const resolvedOrgId = await resolveTeamMemberOrg(firebaseUser);
+        if (resolvedOrgId) {
+          return resolvedOrgId;
+        }
+        console.log('[Auth] Not a team member either, attempting bootstrap');
         return await bootstrapNewUser(firebaseUser);
       }
       throw error;

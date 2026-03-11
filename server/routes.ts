@@ -2453,19 +2453,20 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
         return res.status(503).json({ error: "Firestore not available" });
       }
 
-      const orgsSnapshot = await firestore.collectionGroup('members')
-        .where('active', '==', true)
-        .get();
+      const orgsSnapshot = await firestore.collection('orgs').get();
 
-      for (const memberDoc of orgsSnapshot.docs) {
-        if (memberDoc.id === uid) {
-          const pathParts = memberDoc.ref.path.split('/');
-          const orgId = pathParts[1];
-          const memberData = memberDoc.data();
-          return res.json({
-            orgId,
-            role: memberData.role || 'member',
-          });
+      for (const orgDoc of orgsSnapshot.docs) {
+        const memberRef = firestore.collection('orgs').doc(orgDoc.id).collection('members').doc(uid);
+        const memberSnap = await memberRef.get();
+        
+        if (memberSnap.exists) {
+          const memberData = memberSnap.data();
+          if (memberData?.active === true) {
+            return res.json({
+              orgId: orgDoc.id,
+              role: memberData.role || 'member',
+            });
+          }
         }
       }
 
