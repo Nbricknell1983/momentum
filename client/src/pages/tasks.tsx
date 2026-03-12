@@ -105,12 +105,15 @@ export default function TasksPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="task-lead">Link to Lead (Optional)</Label>
-                <Select value={newTaskLeadId} onValueChange={setNewTaskLeadId}>
+                <Select
+                  value={newTaskLeadId || 'none'}
+                  onValueChange={(v) => setNewTaskLeadId(v === 'none' ? '' : v)}
+                >
                   <SelectTrigger data-testid="select-task-lead">
                     <SelectValue placeholder="Select a lead..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No lead</SelectItem>
+                    <SelectItem value="none">No lead</SelectItem>
                     {leads.filter(l => !l.archived).map(lead => (
                       <SelectItem key={lead.id} value={lead.id}>{lead.companyName}</SelectItem>
                     ))}
