@@ -419,6 +419,103 @@ export default function SettingsPage() {
 
   const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
 
+  // 2FA state
+  const [twoFAEnabled, setTwoFAEnabled] = useState<boolean | null>(null);
+  const [twoFASetupOpen, setTwoFASetupOpen] = useState(false);
+  const [twoFADisableOpen, setTwoFADisableOpen] = useState(false);
+  const [twoFAQR, setTwoFAQR] = useState('');
+  const [twoFASecret, setTwoFASecret] = useState('');
+  const [twoFACode, setTwoFACode] = useState('');
+  const [isTogglingTwoFA, setIsTogglingTwoFA] = useState(false);
+
+  useEffect(() => {
+    if (!user?.uid || !orgId) return;
+    fetch('/api/2fa/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: user.uid, orgId }),
+    })
+      .then(r => r.json())
+      .then(d => setTwoFAEnabled(d.enabled ?? false))
+      .catch(() => setTwoFAEnabled(false));
+  }, [user?.uid, orgId]);
+
+  const handleOpen2FASetup = async () => {
+    if (!user?.uid || !orgId) return;
+    setIsTogglingTwoFA(true);
+    try {
+      const res = await fetch('/api/2fa/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, orgId, email: user.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setTwoFAQR(data.qrDataURL);
+      setTwoFASecret(data.secret);
+      setTwoFACode('');
+      setTwoFASetupOpen(true);
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Could not start 2FA setup', variant: 'destructive' });
+    } finally {
+      setIsTogglingTwoFA(false);
+    }
+  };
+
+  const handleEnable2FA = async () => {
+    if (!user?.uid || !orgId) return;
+    const code = twoFACode.replace(/\s/g, '');
+    if (code.length !== 6) {
+      toast({ title: 'Enter the 6-digit code', description: 'Open your authenticator app', variant: 'destructive' });
+      return;
+    }
+    setIsTogglingTwoFA(true);
+    try {
+      const res = await fetch('/api/2fa/enable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, orgId, secret: twoFASecret, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setTwoFAEnabled(true);
+      setTwoFASetupOpen(false);
+      setTwoFACode('');
+      toast({ title: '2FA enabled', description: 'Your account is now protected by two-factor authentication.' });
+    } catch (error: any) {
+      toast({ title: 'Invalid code', description: error.message || 'Please try again', variant: 'destructive' });
+    } finally {
+      setIsTogglingTwoFA(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!user?.uid || !orgId) return;
+    const code = twoFACode.replace(/\s/g, '');
+    if (code.length !== 6) {
+      toast({ title: 'Enter the 6-digit code', description: 'Open your authenticator app to confirm', variant: 'destructive' });
+      return;
+    }
+    setIsTogglingTwoFA(true);
+    try {
+      const res = await fetch('/api/2fa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, orgId, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setTwoFAEnabled(false);
+      setTwoFADisableOpen(false);
+      setTwoFACode('');
+      toast({ title: '2FA disabled', description: 'Two-factor authentication has been turned off.' });
+    } catch (error: any) {
+      toast({ title: 'Invalid code', description: error.message || 'Please try again', variant: 'destructive' });
+    } finally {
+      setIsTogglingTwoFA(false);
+    }
+  };
+
   const handleRemovePhoto = async () => {
     // If there's only a pending preview (not saved yet), just cancel the selection
     if (photoPreview) {
@@ -836,6 +933,128 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Two-Factor Authentication Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-lg bg-violet-50 dark:bg-violet-400/10 flex items-center justify-center">
+              <KeyRound className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div className="flex-1">
+              <CardTitle>Two-Factor Authentication</CardTitle>
+              <CardDescription>Add a second layer of security to your account</CardDescription>
+            </div>
+            {twoFAEnabled !== null && (
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${twoFAEnabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}>
+                {twoFAEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {twoFAEnabled === null ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking status…
+            </div>
+          ) : twoFAEnabled ? (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Your account is protected. You'll need your authenticator app each time you sign in.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => { setTwoFACode(''); setTwoFADisableOpen(true); }}
+                data-testid="button-disable-2fa" className="ml-4 shrink-0 text-destructive border-destructive/40 hover:bg-destructive/5">
+                Disable 2FA
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Use Google Authenticator, Authy, or any TOTP app to generate sign-in codes.
+              </p>
+              <Button size="sm" onClick={handleOpen2FASetup} disabled={isTogglingTwoFA}
+                data-testid="button-enable-2fa" className="ml-4 shrink-0">
+                {isTogglingTwoFA ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <KeyRound className="h-4 w-4 mr-1" />}
+                Set up 2FA
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 2FA Setup Dialog */}
+      <Dialog open={twoFASetupOpen} onOpenChange={setTwoFASetupOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-violet-600" /> Set up Two-Factor Authentication
+            </DialogTitle>
+            <DialogDescription>
+              Scan the QR code below with your authenticator app, then enter the 6-digit code to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            {twoFAQR && (
+              <div className="flex justify-center">
+                <img src={twoFAQR} alt="2FA QR Code" className="h-48 w-48 rounded-lg border" />
+              </div>
+            )}
+            <div className="rounded-lg bg-muted p-3">
+              <p className="text-xs text-muted-foreground mb-1">Can't scan? Enter this key manually:</p>
+              <p className="text-xs font-mono break-all select-all text-foreground">{twoFASecret}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Verification code</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="000000"
+                maxLength={6}
+                value={twoFACode}
+                onChange={(e) => setTwoFACode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                onKeyDown={(e) => e.key === 'Enter' && handleEnable2FA()}
+                data-testid="input-2fa-setup-code"
+                className="text-center text-xl tracking-widest font-mono"
+              />
+            </div>
+            <Button className="w-full gap-2" onClick={handleEnable2FA}
+              disabled={isTogglingTwoFA || twoFACode.length !== 6} data-testid="button-confirm-2fa">
+              {isTogglingTwoFA ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              Activate 2FA
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2FA Disable Dialog */}
+      <Dialog open={twoFADisableOpen} onOpenChange={setTwoFADisableOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Disable Two-Factor Authentication</DialogTitle>
+            <DialogDescription>
+              Enter your current authenticator code to confirm you want to disable 2FA.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="000000"
+              maxLength={6}
+              value={twoFACode}
+              onChange={(e) => setTwoFACode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              onKeyDown={(e) => e.key === 'Enter' && handleDisable2FA()}
+              data-testid="input-2fa-disable-code"
+              className="text-center text-xl tracking-widest font-mono"
+            />
+            <Button variant="destructive" className="w-full gap-2" onClick={handleDisable2FA}
+              disabled={isTogglingTwoFA || twoFACode.length !== 6} data-testid="button-confirm-disable-2fa">
+              {isTogglingTwoFA ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Disable 2FA
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </TabsContent>
   );
 

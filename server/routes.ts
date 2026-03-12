@@ -2706,6 +2706,201 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
   });
 
   // ===============================
+  // TWO-FACTOR AUTHENTICATION (TOTP)
+  // ===============================
+
+  // Generate a new TOTP secret + QR code (unauthenticated setup step)
+  app.post("/api/2fa/setup", async (req, res) => {
+    try {
+      const { uid, orgId, email } = req.body;
+      if (!uid || !orgId || !email) {
+        return res.status(400).json({ error: "uid, orgId and email are required" });
+      }
+
+      const speakeasy = (await import('speakeasy')).default;
+      const qrcode = await import('qrcode');
+
+      const secret = speakeasy.generateSecret({
+        name: `Momentum (${email})`,
+        issuer: 'Momentum CRM',
+        length: 20,
+      });
+
+      const qrDataURL = await qrcode.toDataURL(secret.otpauth_url!);
+
+      res.json({ secret: secret.base32, qrDataURL });
+    } catch (error: any) {
+      console.error('[2FA] Setup error:', error);
+      res.status(500).json({ error: 'Failed to generate 2FA secret' });
+    }
+  });
+
+  // Enable 2FA: verify the code then save the secret to Firestore
+  app.post("/api/2fa/enable", async (req, res) => {
+    try {
+      const { uid, orgId, secret, code } = req.body;
+      if (!uid || !orgId || !secret || !code) {
+        return res.status(400).json({ error: "uid, orgId, secret and code are required" });
+      }
+
+      if (!isFirebaseAdminReady() || !firestore) {
+        return res.status(503).json({ error: 'Firebase not available' });
+      }
+
+      const speakeasy = (await import('speakeasy')).default;
+      const valid = speakeasy.totp.verify({
+        secret,
+        encoding: 'base32',
+        token: code,
+        window: 1,
+      });
+
+      if (!valid) {
+        return res.status(400).json({ error: 'Invalid code — please try again' });
+      }
+
+      await firestore
+        .collection('orgs').doc(orgId)
+        .collection('members').doc(uid)
+        .update({ totpSecret: secret, totpEnabled: true });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[2FA] Enable error:', error);
+      res.status(500).json({ error: 'Failed to enable 2FA' });
+    }
+  });
+
+  // Disable 2FA: verify the current code then clear the secret
+  app.post("/api/2fa/disable", async (req, res) => {
+    try {
+      const { uid, orgId, code } = req.body;
+      if (!uid || !orgId || !code) {
+        return res.status(400).json({ error: "uid, orgId and code are required" });
+      }
+
+      if (!isFirebaseAdminReady() || !firestore) {
+        return res.status(503).json({ error: 'Firebase not available' });
+      }
+
+      const memberDoc = await firestore
+        .collection('orgs').doc(orgId)
+        .collection('members').doc(uid)
+        .get();
+
+      if (!memberDoc.exists) {
+        return res.status(404).json({ error: 'Member not found' });
+      }
+
+      const { totpSecret, totpEnabled } = memberDoc.data() || {};
+      if (!totpEnabled || !totpSecret) {
+        return res.status(400).json({ error: '2FA is not enabled' });
+      }
+
+      const speakeasy = (await import('speakeasy')).default;
+      const valid = speakeasy.totp.verify({
+        secret: totpSecret,
+        encoding: 'base32',
+        token: code,
+        window: 1,
+      });
+
+      if (!valid) {
+        return res.status(400).json({ error: 'Invalid code — please try again' });
+      }
+
+      const { FieldValue } = (await import('firebase-admin/firestore'));
+      await firestore
+        .collection('orgs').doc(orgId)
+        .collection('members').doc(uid)
+        .update({
+          totpSecret: FieldValue.delete(),
+          totpEnabled: false,
+        });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[2FA] Disable error:', error);
+      res.status(500).json({ error: 'Failed to disable 2FA' });
+    }
+  });
+
+  // Verify a TOTP code during login (user is already Firebase-authed)
+  app.post("/api/2fa/verify", async (req, res) => {
+    try {
+      const { uid, orgId, code } = req.body;
+      if (!uid || !orgId || !code) {
+        return res.status(400).json({ error: "uid, orgId and code are required" });
+      }
+
+      if (!isFirebaseAdminReady() || !firestore) {
+        return res.status(503).json({ error: 'Firebase not available' });
+      }
+
+      const memberDoc = await firestore
+        .collection('orgs').doc(orgId)
+        .collection('members').doc(uid)
+        .get();
+
+      if (!memberDoc.exists) {
+        return res.status(404).json({ error: 'Member not found' });
+      }
+
+      const { totpSecret, totpEnabled } = memberDoc.data() || {};
+      if (!totpEnabled || !totpSecret) {
+        // 2FA not configured — pass through
+        return res.json({ success: true, required: false });
+      }
+
+      const speakeasy = (await import('speakeasy')).default;
+      const valid = speakeasy.totp.verify({
+        secret: totpSecret,
+        encoding: 'base32',
+        token: code,
+        window: 1,
+      });
+
+      if (!valid) {
+        return res.status(400).json({ error: 'Invalid code — please try again' });
+      }
+
+      res.json({ success: true, required: true });
+    } catch (error: any) {
+      console.error('[2FA] Verify error:', error);
+      res.status(500).json({ error: 'Failed to verify 2FA code' });
+    }
+  });
+
+  // Check whether 2FA is required for a given uid/orgId
+  app.post("/api/2fa/status", async (req, res) => {
+    try {
+      const { uid, orgId } = req.body;
+      if (!uid || !orgId) {
+        return res.status(400).json({ error: "uid and orgId are required" });
+      }
+
+      if (!isFirebaseAdminReady() || !firestore) {
+        return res.status(503).json({ error: 'Firebase not available' });
+      }
+
+      const memberDoc = await firestore
+        .collection('orgs').doc(orgId)
+        .collection('members').doc(uid)
+        .get();
+
+      if (!memberDoc.exists) {
+        return res.json({ enabled: false });
+      }
+
+      const data = memberDoc.data() || {};
+      res.json({ enabled: data.totpEnabled === true });
+    } catch (error: any) {
+      console.error('[2FA] Status error:', error);
+      res.status(500).json({ error: 'Failed to check 2FA status' });
+    }
+  });
+
+  // ===============================
   // AI MEETING NOTES PROCESSING
   // ===============================
 
