@@ -1,0 +1,194 @@
+Build me a premium React dashboard/page that looks and feels like a modern SaaS strategy dashboard with smooth motion and polished animations.
+
+STACK
+- React
+- Tailwind CSS
+- Framer Motion
+- Recharts for graphs
+- Lucide React icons
+
+DESIGN DIRECTION
+I want the UI to feel like a high-end strategy dashboard / client presentation page.
+The style should be:
+- premium
+- modern
+- clean
+- confident
+- smooth
+- slightly futuristic
+- spacious
+- highly polished
+
+VISUAL STYLE
+Create a page with these visual characteristics:
+- Dark purple/navy gradient hero section at the top
+- Soft radial glow effects in the background
+- Clean white content sections underneath
+- Rounded cards with subtle borders and soft shadows
+- Strong typography hierarchy
+- Plenty of whitespace
+- Sticky top navigation
+- Smooth transitions between sections
+- Elegant charts and KPI cards
+- Minimal but premium use of color
+- Purple accent color throughout for buttons, highlights, pills, and graph accents
+
+LAYOUT STRUCTURE
+Create a single-page dashboard/presentation-style layout with the following sections:
+
+1. HERO / HEADER SECTION
+- Large headline
+- Short supporting text
+- 3 to 5 tag/pill items beneath the heading
+- A highlighted KPI strip or mini stat row
+- Dark gradient background with subtle animated glow or particles
+- A premium CTA button area
+
+2. PERFORMANCE SNAPSHOT SECTION
+- 3 KPI cards in a row
+- Example metrics: clicks, impressions, conversions, leads, ROAS, call volume
+- Add a soft count-up animation when the cards enter the viewport
+- Each card should have a subtle hover lift and glow
+
+3. CHARTS SECTION
+- Two clean chart cards side by side
+- One line chart
+- One area or bar chart
+- Animate the charts in smoothly when scrolled into view
+- Add subtle tooltip polish
+- Cards should feel like executive dashboard modules
+
+4. “WHAT HAS BEEN DONE SO FAR” SECTION
+- Grid of action cards
+- Each card should include:
+  - icon
+  - short heading
+  - short description
+- Cards should animate upward into place with staggered timing
+- Hover should slightly raise the card and deepen shadow
+
+5. INSIGHTS / RECOMMENDATIONS SECTION
+- A 2-column or 3-column layout of insight cards
+- These should look like strategic recommendation cards
+- Add smooth fade + slide-in animation on scroll
+- Highlight one primary insight visually
+
+6. OPTIONAL TIMELINE / ROADMAP SECTION
+- A horizontal or vertical roadmap showing milestones
+- Steps connect visually with a clean line
+- Each milestone animates in progressively
+
+7. FINAL CTA / SUMMARY SECTION
+- Strong closing card or banner
+- Summary text
+- CTA button
+- Clean premium finish
+
+ANIMATION REQUIREMENTS
+This is very important:
+I want the components to move and animate in a premium way like a polished product demo or modern SaaS website.
+
+Use Framer Motion and implement:
+- fade-up on scroll
+- staggered children animations
+- hover lift on cards
+- smooth spring transitions
+- animated count-up numbers for KPI stats
+- subtle glow movement in the hero background
+- section reveal animations as the user scrolls
+- navbar shrink or blur effect on scroll
+- chart entrance animations
+- button hover animation
+- pill/tag hover animation
+- slight parallax feel in the hero if appropriate
+
+The motion should feel:
+- smooth
+- premium
+- restrained
+- not tacky
+- not overly bouncy
+- not distracting
+
+Think:
+“high-end SaaS dashboard meets polished keynote presentation”
+
+INTERACTION DETAILS
+- Sticky top nav with blur backdrop
+- Smooth scrolling to sections
+- Buttons should have subtle scale and shadow interaction
+- Cards should feel alive on hover
+- Important content should reveal progressively as the user scrolls
+- Use viewport-based animations so sections animate when entering screen
+- Make sure animations are fast enough to feel responsive but slow enough to feel premium
+
+COMPONENTS TO BUILD
+Please create reusable components for:
+- PageContainer
+- SectionHeader
+- HeroBanner
+- MetricCard
+- ChartCard
+- InsightCard
+- ActionCard
+- RoadmapSection
+- StickyNavbar
+- AnimatedCounter
+- GlowBackground
+
+TECHNICAL REQUIREMENTS
+- Mobile responsive
+- Desktop-first polish
+- Clean reusable component architecture
+- Use Tailwind utility classes cleanly
+- Use Framer Motion variants for consistency
+- Use a central animation system with reusable motion presets
+- Use realistic placeholder content
+- Keep code clean and production-quality
+
+COLOR / STYLE GUIDE
+Use a palette close to:
+- deep navy
+- rich purple
+- soft violet
+- white
+- light gray
+- muted slate text
+Accent color should feel premium, not neon
+
+IMPORTANT
+Do not make this look like a generic admin template.
+Do not make it look cluttered.
+Do not make the animations excessive.
+This should feel like a polished client-facing dashboard or premium proposal experience.
+
+DELIVERABLE
+Generate:
+1. the full page component
+2. reusable supporting components
+3. sample mock data
+4. Framer Motion animation variants
+5. a polished layout that is visually close to a premium animated strategy dashboard
+
+If helpful, structure it like a landing page crossed with an executive reporting dashboard.
+
+If you want it even closer to that exact feel, use this add-on under the main prompt:
+
+Extra direction:
+The reference style has a dark opening section with glowing gradient depth, then transitions into bright white sections with spacious cards, charts, and strategic insight modules. The page should feel like a premium report, not a back-end admin panel. Use elegant spacing, soft motion, and smooth section transitions to create a “scrolling presentation” experience.
+
+And if you want Replit to build it with more precision, add this implementation note too:
+
+Implementation notes:
+- Use Framer Motion `whileInView` for scroll-triggered animations
+- Use `viewport={{ once: true, amount: 0.2 }}`
+- Use staggered variants for card grids
+- Use spring transitions with low bounce
+- Use subtle background gradient blobs with slow floating animation
+- Add a sticky blurred navbar with active section highlighting
+- Animate KPI numbers from 0 to target on first reveal
+- Use Recharts with clean, minimal styling
+- Keep section max-width constrained and centered
+
+If you want, I can turn this into a much sharper prompt for your specific dashboard, like:
+“make my Momentum dashboard look like this exact style” and map it to your actual sections such as AI Insights, Growth Intelligence, KPI cards, charts, client snapshot, and recommendations.
