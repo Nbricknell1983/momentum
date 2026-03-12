@@ -848,7 +848,7 @@ export default function SettingsPage() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="container max-w-4xl py-6 space-y-6">
+      <div className="max-w-4xl mx-auto px-8 py-8 space-y-6">
         {/* Page header */}
         <div>
           <h1 className="text-2xl font-semibold" data-testid="text-page-title">Settings</h1>
