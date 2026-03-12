@@ -51,12 +51,12 @@ export default function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="h-16 flex items-center px-4 border-b border-sidebar-border">
+      <SidebarHeader className="flex items-center justify-center px-4 py-4 border-b border-sidebar-border">
         <Link href="/dashboard" className="flex items-center" data-testid="link-logo-home">
           <img
             src="/momentum-logo.png"
             alt="Momentum"
-            className="h-8 w-auto object-contain"
+            className="h-40 w-auto object-contain"
             data-testid="img-app-logo"
           />
         </Link>
