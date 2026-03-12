@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, ChevronDown, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink } from 'lucide-react';
+import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, ChevronDown, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { auth } from '@/lib/firebase';
 import { Lead } from '@/lib/types';
 
 interface CrawlData {
@@ -390,6 +392,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   onSaveGrowthPlan?: (data: { xray?: any; serp?: any; competitor?: any; forecast?: any }) => void;
 }) {
   const { toast } = useToast();
+  const { orgId } = useAuth();
 
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -417,6 +420,121 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   }, [lead?.id]);
 
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const [urlCopied, setUrlCopied] = useState(false);
+
+  const generateReportUrl = async () => {
+    if (!lead || !orgId) {
+      toast({ title: 'Cannot generate report — missing lead or org data', variant: 'destructive' });
+      return;
+    }
+    const user = auth.currentUser;
+    if (!user) {
+      toast({ title: 'Not authenticated', variant: 'destructive' });
+      return;
+    }
+    setUrlLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const now = new Date();
+      const monthYear = now.toLocaleString('en-AU', { month: 'long', year: 'numeric' });
+
+      // Build monthly chart data from forecast if available
+      const monthlyData = forecastResult?.growthTimeline?.slice(0, 6).map((m: any) => ({
+        month: m.month,
+        clicks: m.traffic,
+        impressions: Math.round(m.traffic * 8),
+        rankingKeywords: Math.round(m.traffic * 0.4),
+      })) || [];
+
+      // Build next steps from forecast key drivers or xray callouts
+      const nextSteps = forecastResult?.keyDrivers?.slice(0, 3).map((d: string) => ({
+        title: d,
+        description: '',
+        whyItMatters: 'Directly impacts your traffic and lead generation.',
+      })) || xrayResult?.callouts?.filter((c: any) => c.severity === 'high').slice(0, 3).map((c: any) => ({
+        title: c.issue,
+        description: c.fix,
+        whyItMatters: c.detail,
+      })) || [];
+
+      // Build opportunities from SERP or competitor analysis
+      const opportunities = serpResult?.opportunities?.slice(0, 3).map((o: any) => ({
+        title: o.keyword,
+        description: `${o.difficulty} difficulty, ${o.volume} volume — ${o.recommendation}`,
+      })) || competitorResult?.insights?.slice(0, 3).map((i: string) => ({
+        title: 'Growth Opportunity',
+        description: i,
+      })) || [];
+
+      // Build performance metrics from forecast
+      const performanceMetrics = forecastResult ? {
+        totalClicks: { value: forecastResult.currentEstimate.monthlyTraffic, change: 0, trend: 'up' as const },
+        totalImpressions: { value: forecastResult.currentEstimate.monthlyTraffic * 8, change: 0, trend: 'up' as const },
+        avgPosition: { value: 0, change: 0, trend: 'neutral' as const },
+        avgCtr: { value: 0, change: 0, trend: 'neutral' as const },
+      } : undefined;
+
+      const reportData = {
+        orgId,
+        clientId: lead.id,
+        clientName: lead.companyName || 'Unknown',
+        location: lead.territory || lead.areaName || '',
+        period: monthYear,
+        statusPills: [lead.stage || 'Prospect', 'Strategy Report'],
+        performanceMetrics,
+        monthlyData,
+        featuredKeyword: serpResult?.keyword ? {
+          keyword: serpResult.keyword,
+          notRankingPosition: null,
+          currentPosition: serpResult?.prospectPosition?.relevanceScore ? Math.round(20 - serpResult.prospectPosition.relevanceScore / 5) : null,
+          page1Goal: 3,
+        } : undefined,
+        completedWork: xrayResult ? [{
+          title: 'Website X-Ray Analysis',
+          description: xrayResult.summary,
+          date: now.toLocaleDateString('en-AU'),
+        }] : [],
+        nextSteps,
+        opportunities,
+        summary: forecastResult
+          ? `Based on our growth analysis, ${lead.companyName} has strong potential to increase monthly traffic from ${forecastResult.currentEstimate.monthlyTraffic} to ${forecastResult.projectedEstimate.monthlyTraffic} visitors within 6 months.`
+          : `Our analysis of ${lead.companyName} identifies clear opportunities for digital growth in ${lead.territory || 'your area'}.`,
+      };
+
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(reportData),
+      });
+
+      if (!res.ok) throw new Error('Failed to create report');
+      const { id } = await res.json();
+      const fullUrl = `${window.location.origin}/report/${id}`;
+      setGeneratedUrl(fullUrl);
+      toast({ title: 'Report URL generated!', description: 'Ready to share with your prospect.' });
+    } catch (err) {
+      console.error(err);
+      toast({ title: 'Failed to generate report URL', variant: 'destructive' });
+    } finally {
+      setUrlLoading(false);
+    }
+  };
+
+  const copyReportUrl = () => {
+    if (!generatedUrl) return;
+    navigator.clipboard.writeText(generatedUrl).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = generatedUrl;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+    setUrlCopied(true);
+    setTimeout(() => setUrlCopied(false), 2000);
+  };
 
   const businessName = lead?.companyName || '';
   const websiteUrl = lead?.website || '';
@@ -739,6 +857,42 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           {pdfLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
           {pdfLoading ? 'Generating...' : 'Generate 12-Month Strategy PDF'}
         </Button>
+        <Button
+          onClick={generateReportUrl}
+          disabled={urlLoading}
+          variant="outline"
+          className="w-full h-9 text-sm gap-2"
+          data-testid="button-generate-report-url"
+        >
+          {urlLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
+          {urlLoading ? 'Generating...' : 'Generate Public Report URL'}
+        </Button>
+        {generatedUrl && (
+          <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/40 text-left">
+            <p className="text-xs text-muted-foreground truncate flex-1">{generatedUrl}</p>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={copyReportUrl}
+              className="h-7 shrink-0 gap-1 text-xs"
+              data-testid="button-copy-report-url"
+            >
+              {urlCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {urlCopied ? 'Copied!' : 'Copy'}
+            </Button>
+            <a
+              href={generatedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0"
+            >
+              <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" data-testid="button-open-report-url">
+                <ExternalLink className="h-3 w-3" />
+                Open
+              </Button>
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
