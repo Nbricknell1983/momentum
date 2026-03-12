@@ -32,7 +32,6 @@ const navItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Pipeline', url: '/pipeline', icon: Kanban },
   { title: 'Nurture', url: '/nurture', icon: Heart },
-  { title: 'Client Pipeline', url: '/client-pipeline', icon: Kanban },
   { title: 'Clients', url: '/clients', icon: Users },
   { title: 'Research', url: '/research', icon: Search },
   { title: 'Daily Plan', url: '/daily-plan', icon: Calendar },
