@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLeadSchema, insertActivitySchema } from "@shared/schema";
 import OpenAI from "openai";
-import { firestore, isFirebaseAdminReady } from "./firebase";
+import { firestore, bucket, isFirebaseAdminReady } from "./firebase";
 import { crawlWebsite } from "./strategyEngine";
 import multer from "multer";
 import fs from "fs";
@@ -2653,6 +2653,50 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
         return res.status(404).json({ error: "User not found with that email" });
       }
       res.status(500).json({ error: "Failed to generate password reset link" });
+    }
+  });
+
+  // ===============================
+  // PROFILE PHOTO UPLOAD
+  // ===============================
+
+  app.post("/api/profile/upload-photo", async (req, res) => {
+    try {
+      const { uid, imageData, mimeType } = req.body;
+
+      if (!uid || !imageData || !mimeType) {
+        return res.status(400).json({ error: "uid, imageData, and mimeType are required" });
+      }
+
+      if (!isFirebaseAdminReady() || !bucket) {
+        return res.status(503).json({ error: "Firebase Storage not available" });
+      }
+
+      // Decode base64 image data
+      const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
+      const imageBuffer = Buffer.from(base64Data, 'base64');
+
+      // Upload to Firebase Storage using Admin SDK (bypasses security rules)
+      const fileName = `users/${uid}/profile-photo`;
+      const file = bucket.file(fileName);
+
+      await file.save(imageBuffer, {
+        metadata: {
+          contentType: mimeType,
+          cacheControl: 'public, max-age=3600',
+        },
+      });
+
+      // Make the file publicly accessible
+      await file.makePublic();
+
+      // Return the public URL
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+
+      res.json({ success: true, photoURL: publicUrl });
+    } catch (error: any) {
+      console.error("Error uploading profile photo:", error);
+      res.status(500).json({ error: "Failed to upload profile photo" });
     }
   });
 

@@ -354,7 +354,6 @@ export default function SettingsPage() {
     setIsSavingProfile(true);
     try {
       const { getAuth, updateProfile } = await import('firebase/auth');
-      const { getStorage, ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const auth = getAuth();
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error('Not authenticated');
@@ -362,10 +361,31 @@ export default function SettingsPage() {
       let newPhotoURL = currentUser.photoURL || '';
 
       if (photoFile) {
-        const storage = getStorage();
-        const fileRef = storageRef(storage, `users/${currentUser.uid}/profile-photo`);
-        await uploadBytes(fileRef, photoFile);
-        newPhotoURL = await getDownloadURL(fileRef);
+        // Convert file to base64 and upload via server (bypasses Storage security rules)
+        const reader = new FileReader();
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(photoFile);
+        });
+
+        const response = await fetch('/api/profile/upload-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: currentUser.uid,
+            imageData: base64Data,
+            mimeType: photoFile.type,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Photo upload failed');
+        }
+
+        const result = await response.json();
+        newPhotoURL = result.photoURL;
       }
 
       await updateProfile(currentUser, {

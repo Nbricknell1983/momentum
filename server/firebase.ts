@@ -10,6 +10,7 @@ if (!admin.apps.length && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREB
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       }),
+      storageBucket: `${process.env.VITE_FIREBASE_PROJECT_ID}.firebasestorage.app`,
     });
     firebaseInitialized = true;
     console.log('[Firebase Admin] Initialized successfully');
@@ -21,5 +22,6 @@ if (!admin.apps.length && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREB
 }
 
 export const firestore = firebaseInitialized ? admin.firestore() : null;
+export const bucket = firebaseInitialized ? admin.storage().bucket() : null;
 export const isFirebaseAdminReady = () => firebaseInitialized && firestore !== null;
 export default admin;
