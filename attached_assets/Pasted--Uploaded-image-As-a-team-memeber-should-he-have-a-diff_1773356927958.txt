@@ -1,0 +1,1493 @@
+
+Uploaded image
+As a team memeber should he have a different things
+
+Yes — a team member should see different things here.
+Right now your UI looks like it’s showing Owner/Admin level settings, which is why it says:
+
+Only admins and owners can edit settings
+
+If someone is a Team Member (sales rep, SDR, account manager, etc.), they should not have access to business-level configuration.
+
+For a system like your Momentum / AI Sales Engine, the permissions should normally work like this:
+
+1. Owner / Admin (Full Access)
+This is you or the business owner.
+
+They can see and edit everything in Settings → Business.
+
+Typical access:
+
+Business Profile
+
+Business name
+
+Email
+
+Phone
+
+Timezone
+
+Service areas
+
+Operational Controls
+
+Emergency booking rules
+
+Automation settings
+
+API integrations
+
+Billing
+
+Cadences
+
+AI configuration
+
+Team Management
+
+Invite users
+
+Set permissions
+
+Remove users
+
+2. Manager / Sales Manager
+These users manage the team but should not control company infrastructure.
+
+They should see:
+
+Settings Tabs
+
+Team
+
+Cadences
+
+Notifications
+
+They should NOT edit:
+
+Business name
+
+Service areas
+
+billing
+
+integrations
+
+Instead the UI should show read only.
+
+Example:
+
+Business Profile
+Business Name: Momentum
+
+Phone: (02) 1234 5678
+
+Service Areas:
+Brisbane
+Gold Coast
+Sunshine Coast
+
+🔒 Only admins can edit business settings
+3. Team Member (Sales Rep / SDR)
+These users should not even see this page.
+
+Instead their settings should only include personal preferences.
+
+Their Settings page should look like:
+
+Personal Settings
+Profile
+
+Name
+
+Email
+
+Profile photo
+
+Notifications
+
+Call reminders
+
+Follow up reminders
+
+AI Preferences
+
+AI meeting summary
+
+AI follow-up emails
+
+Calendar
+
+Google / Outlook sync
+
+Signature
+
+Email signature
+
+SMS signature
+
+4. Why this matters for your system
+For Momentum, if reps can edit business settings:
+
+They could accidentally:
+
+change service areas
+
+break automations
+
+change cadences
+
+alter timezone
+
+disrupt pipelines
+
+So the rule should be:
+
+Owner/Admin → Full Settings
+Manager → Limited Settings
+Team Member → Personal Settings only
+5. UX improvement I strongly recommend
+Right now your screen confuses roles.
+
+Instead show this for non-admins:
+
+Business Settings
+
+These settings are managed by your organisation admin.
+
+If you need changes contact:
+Nathan Bricknell
+That removes confusion.
+
+6. Small UI tweak that would improve your design
+At the top of Settings show:
+
+Organisation Settings
+Only admins can modify these settings
+Then grey out the inputs.
+
+This is much clearer than the small text at the bottom.
+
+If you want, I can also show you how the best SaaS products structure this (HubSpot, Salesforce, Slack style) so your Momentum platform feels enterprise grade.
+
+
+yes
+
+To make Momentum feel like a serious SaaS platform (HubSpot / Salesforce / Stripe level), the Settings area should be split into two clear layers:
+
+Organisation Settings (Admin Only)
+
+User Settings (Everyone)
+
+Right now your screen mixes those together, which is why it feels slightly off.
+
+Below is a recommended enterprise structure for your system.
+
+1. Top Level Settings Layout
+In the sidebar:
+
+Settings
+   ├── My Profile
+   ├── Notifications
+   ├── Integrations
+   ───────────────
+   Organisation
+   ├── Business Profile
+   ├── Team
+   ├── Cadences
+   ├── AI Configuration
+   ├── Billing
+   ├── API & Integrations
+The divider separates:
+
+User Settings
+vs
+Organisation Settings
+
+2. What a Team Member Should See
+A sales rep should only see:
+
+My Profile
+Name
+
+Profile picture
+
+Email
+
+Notifications
+Task reminders
+
+Follow-up reminders
+
+Meeting reminders
+
+Calendar
+Google Calendar
+
+Outlook
+
+AI Preferences
+Auto follow-up emails
+
+AI meeting notes
+
+AI suggestions
+
+They should not see:
+
+Business profile
+
+Team permissions
+
+Billing
+
+Cadences
+
+Integrations
+
+3. What Admins See
+Admins get an extra section.
+
+Organisation
+Business Profile
+
+Business name
+
+phone
+
+timezone
+
+service areas
+
+Team
+
+Invite members
+
+assign roles
+
+remove members
+
+Cadences
+
+outbound call sequences
+
+follow-up automation
+
+AI Configuration
+
+AI prompts
+
+AI strategy engine
+
+AI insights rules
+
+Integrations
+
+Google Ads
+
+Google Business Profile
+
+Twilio
+
+Stripe
+
+Firestore
+
+Billing
+
+plan
+
+payment method
+
+invoices
+
+4. Role System (Critical for SaaS)
+Your system should support roles like this:
+
+Role	Access
+Owner	Everything
+Admin	Everything except billing
+Manager	Pipeline + Team
+Sales Rep	Leads + Tasks
+Viewer	Read only
+5. What Happens When a Team Member Opens Settings
+Instead of showing the Business Settings form, show:
+
+My Profile
+Name
+Nathan Bricknell
+
+Email
+nathan@email.com
+
+Role
+Sales Manager
+Preferences
+Timezone
+Sydney (AEST)
+
+Notification preferences
+☑ Follow up reminders
+☑ Meeting reminders
+☑ AI suggestions
+6. UX Trick Used by HubSpot / Stripe
+If a rep tries to access admin settings, show this card:
+
+🔒 Organisation Settings
+
+These settings are managed by your organisation administrator.
+
+Contact your admin if changes are required.
+7. Your Current UI (What I'd Change)
+Looking at your screenshot, I would:
+
+Move this
+Business
+Team
+Cadences
+under a section called:
+
+Organisation
+And above it add:
+
+Personal
+   My Profile
+   Notifications
+8. Bonus Improvement for Momentum
+Since your platform is AI-driven, add:
+
+AI Settings (User)
+AI Assistant behaviour
+
+☑ Suggest follow-up emails
+☑ Summarise calls
+☑ Suggest next actions
+☑ Generate meeting prep
+This makes the AI feel personalised per user.
+
+9. Advanced SaaS Feature (Highly Recommended)
+Add Organisation Roles & Permissions
+
+Example:
+
+Admin
+Sales Manager
+Sales Rep
+Account Manager
+Each role controls access to:
+
+Leads
+Clients
+AI Sales Engine
+Cadences
+Settings
+This is enterprise SaaS standard.
+
+10. If you want Momentum to feel truly world-class
+The Settings page should become a full system control centre, including:
+
+Organisation
+Team
+Billing
+Security
+API Keys
+Integrations
+AI Engine
+Automation
+This positions Momentum as a real operating system for sales, not just a CRM.
+
+If you'd like, I can also show you the exact UI layout (wireframe) I would use for Momentum's Settings page so it looks like a $50M SaaS product instead of an MVP.
+
+
+yes
+
+Nathan, if you want Momentum to look like a serious SaaS platform (HubSpot / Stripe / Linear level) the Settings page should be structured like a control centre, not just a form.
+
+Below is a clean enterprise SaaS wireframe you can implement directly.
+
+Momentum — Settings Architecture
+Sidebar Layout
+Settings
+   My Profile
+   Notifications
+   Calendar
+   AI Preferences
+
+------------------------
+
+Organisation
+   Business Profile
+   Team
+   Roles & Permissions
+   Cadences
+   AI Engine
+   Integrations
+   Security
+   Billing
+This structure instantly tells users:
+
+Top = personal
+
+Bottom = company level
+
+Settings Page Layout
+When a user clicks Settings → Business Profile
+
+Use a 2-column SaaS layout.
+
+---------------------------------------------------
+Settings
+
+Personal      Organisation
+---------------------------------------------------
+
+               Business Profile
+               Manage organisation information
+
+---------------------------------------------------
+
+Business Details
+---------------------------------------------------
+
+Business Name        Nathan Bricknell's Organisation
+Email                contact@yourbusiness.com
+Phone                (02) 1234 5678
+Timezone             Sydney (AEST)
+
+---------------------------------------------------
+
+Service Areas
+---------------------------------------------------
+
+Brisbane
+Gold Coast
+Sunshine Coast
+
+---------------------------------------------------
+
+Booking Controls
+---------------------------------------------------
+
+Emergency bookings        ON / OFF
+
+---------------------------------------------------
+
+                [ Save Changes ]
+What a Team Member Sees
+If a sales rep opens this page:
+
+Inputs become read only.
+
+Business Name
+Nathan Bricknell's Organisation
+
+Phone
+(02) 1234 5678
+
+Timezone
+Sydney (AEST)
+And show this message:
+
+Organisation settings are managed by your admin.
+Contact your administrator to request changes.
+My Profile (Personal Settings)
+This becomes the default Settings page for most users.
+
+My Profile
+------------------------------------------------
+
+Name
+Nathan Bricknell
+
+Email
+nathan@email.com
+
+Profile Photo
+Upload Image
+
+Role
+Sales Manager
+Notifications
+Notifications
+------------------------------------------------
+
+Follow-up reminders       ON
+Task reminders            ON
+Meeting reminders         ON
+AI insights               ON
+AI Preferences (Momentum Feature)
+Since Momentum is an AI sales system, this page becomes powerful.
+
+AI Preferences
+------------------------------------------------
+
+Auto generate follow-up emails      ON
+Summarise meetings                  ON
+Suggest next actions                ON
+Generate call preparation           ON
+Team Management (Admin Only)
+Team Members
+------------------------------------------------
+
+Nathan Bricknell        Owner
+Jimmy Williams          Sales Rep
+Sarah Lee               Account Manager
+
+[ Invite Member ]
+Roles & Permissions
+Roles
+
+Owner
+Admin
+Manager
+Sales Rep
+Viewer
+Permissions example:
+
+Permission	Owner	Admin	Manager	Sales Rep
+Edit Settings	✓	✓	✗	✗
+Manage Team	✓	✓	✓	✗
+Manage Leads	✓	✓	✓	✓
+Manage Clients	✓	✓	✓	✓
+Integrations (Very important for your system)
+Integrations
+------------------------------------------------
+
+Google Ads            Connected
+Google Business       Connected
+Stripe                Connected
+Twilio SMS            Connected
+Google Calendar       Connected
+Security (Enterprise Feature)
+Security
+------------------------------------------------
+
+Two Factor Authentication
+
+Login Activity
+
+API Keys
+
+Connected Applications
+Billing
+Plan
+Momentum Pro
+
+Users
+5 / 10
+
+Next Invoice
+15 April 2026
+
+[ Manage Billing ]
+UI Improvements You Should Implement
+1. Sticky Page Header
+Settings > Organisation > Business Profile
+2. Save Button Floating
+Instead of bottom only.
+
+[ Save Changes ]
+should float on scroll.
+
+3. Section Cards
+Each block becomes a card.
+
+Example:
+
+Business Details
+Service Areas
+Booking Controls
+This improves readability.
+
+What This Does for Momentum
+This transforms your system from:
+
+CRM tool
+
+into
+
+Sales Operating System
+
+Which aligns with what you're building:
+
+AI Sales Engine
+
+Client Growth Engine
+
+Cadence Automation
+
+AI Strategy Engine
+
+If you want, I can also show you something extremely powerful for Momentum:
+A Settings → AI Engine control panel where admins can configure:
+
+AI sales prompts
+
+AI research rules
+
+AI follow-up style
+
+AI growth strategy templates
+
+This would make Momentum feel like an AI-powered revenue operating system, not just a CRM.
+
+
+can each user have the ability in settings to generate a digital business card
+
+Yes — and this is actually a very strong feature for Momentum, especially since your users are salespeople visiting businesses every day. A Digital Business Card generator inside Settings would be simple to build but very high value.
+
+More importantly, it fits perfectly with your AI Sales Engine + Prospecting workflow.
+
+Below is the best way to implement it.
+
+Where It Should Live
+Add it under Personal Settings.
+
+Sidebar:
+
+Settings
+   My Profile
+   Notifications
+   Calendar
+   Digital Business Card
+   AI Preferences
+Each user generates their own card, not the organisation.
+
+What the Digital Business Card Should Include
+Pull automatically from the user's profile.
+
+Name
+Nathan Bricknell
+
+Title
+Marketing Manager
+
+Company
+Momentum
+
+Phone
+0412 345 678
+
+Email
+nathan@momentum.ai
+
+Website
+momentum.ai
+Optional fields:
+
+LinkedIn
+Instagram
+Booking link
+Calendly
+The Card Output
+It should generate a modern mobile-first card.
+
+Example layout:
+
+--------------------------------
+Nathan Bricknell
+Marketing Manager
+
+Momentum
+
+0412 345 678
+nathan@momentum.ai
+
+momentum.ai
+
+[ Save Contact ]
+--------------------------------
+Key Feature: QR Code
+Every card should automatically generate a QR code.
+
+Sales reps can show it when meeting prospects.
+
+Prospect scans → instantly saves contact.
+
+This is extremely useful for door knocking and networking.
+
+vCard Download
+Add a Save Contact button.
+
+It downloads a .vcf file.
+
+This allows phones to instantly save:
+
+Name
+Phone
+Email
+Company
+Website
+Share Link
+Each user gets a public share page.
+
+Example:
+
+momentum.ai/card/nathan-bricknell
+or
+
+momentum.ai/nathan
+This page displays the digital card.
+
+Advanced Feature (Very Powerful)
+Add a Lead Capture Mode.
+
+When someone opens the card page:
+
+Nice to meet you 👋
+
+Leave your details and I'll follow up.
+Form:
+
+Name
+Phone
+Email
+Message
+Submit → automatically creates a Lead in Momentum.
+
+This ties perfectly into your pipeline system.
+
+UI for the Settings Page
+Digital Business Card
+--------------------------------
+
+Preview
+
+[Nathan Bricknell Card Preview]
+
+--------------------------------
+
+Contact Information
+
+Name
+Title
+Phone
+Email
+Website
+
+--------------------------------
+
+Card Options
+
+☑ Show QR Code
+☑ Enable Lead Capture
+
+--------------------------------
+
+[ Download vCard ]
+[ Copy Card Link ]
+[ Download QR Code ]
+Why This Feature is Powerful for Your System
+Momentum is about:
+
+prospecting
+
+networking
+
+follow-ups
+
+pipeline building
+
+A digital business card turns every meeting into a lead opportunity.
+
+Example real scenario:
+
+Nathan meets a business owner.
+
+They scan QR code.
+
+They land on:
+
+Nathan Bricknell
+Marketing Manager
+
+Momentum
+
+Helping businesses grow online.
+They leave their details.
+
+Momentum instantly creates:
+
+Lead → Source: Business Card Scan
+Your AI Sales Engine can then suggest next actions.
+
+Technical Implementation (Simple)
+You only need:
+
+Database fields
+
+users
+  name
+  title
+  phone
+  email
+  website
+  linkedin
+  cardSlug
+Route:
+
+/card/:slug
+Generate:
+
+QR code → link to /card/:slug
+vCard → downloadable contact file
+Bonus Feature (Very Clever)
+Track Card Analytics.
+
+Card Views
+QR Scans
+Contacts Saved
+Leads Generated
+This turns it into a sales performance tool.
+
+If you'd like, I can also show you something very clever that almost no CRM does:
+A "Smart AI Business Card" that automatically changes the message depending on:
+
+industry
+
+location
+
+service
+
+So the page a plumber sees is different to what a dentist sees.
+
+It becomes a micro landing page instead of just a contact card, which massively increases conversions.
+
+
+yes
+
+Yes — that is the smarter version.
+
+A normal digital business card is useful.
+A Smart AI Business Card turns each rep’s card into a personal mini landing page that helps convert interest into a lead.
+
+For Momentum, this is a far better fit than a plain contact card.
+
+What it should be
+Each user has:
+
+a base digital business card
+
+a public card link
+
+a QR code
+
+a smart message layer that changes based on context
+
+So instead of only showing:
+
+“Here are my contact details”
+
+it can show:
+
+“Here is who I help, what I help with, and the best next step for you.”
+
+Why this is powerful for your use case
+Your reps are not just networking. They are:
+
+walking into businesses
+
+speaking to different industries
+
+trying to generate appointments
+
+trying to create momentum after a first interaction
+
+So the business card should adapt to the prospect.
+
+Example:
+
+If you meet a dentist, the card page could say:
+
+Helping dental clinics improve visibility, enquiries and patient flow through better websites, Google Ads and local search.
+
+If you meet a plumber, it could say:
+
+Helping plumbers generate more local jobs through Google visibility, conversion-focused websites and lead follow-up systems.
+
+Same rep. Same card. Better relevance.
+
+Recommended product structure
+1. Personal Settings area
+In Settings, add:
+
+Settings
+  My Profile
+  Notifications
+  Calendar
+  Digital Business Card
+  AI Preferences
+Inside Digital Business Card, give each user 4 tabs:
+
+Profile
+Appearance
+Smart Messaging
+Lead Capture
+2. Base profile fields
+These are the standard fields every card uses:
+
+full name
+
+job title
+
+company name
+
+mobile number
+
+email
+
+website
+
+profile photo
+
+booking link
+
+LinkedIn
+
+short bio
+
+territory / service area
+
+Optional:
+
+specialties
+
+industries served
+
+preferred CTA
+
+custom intro line
+
+3. Public card URL structure
+Each user gets a public URL like:
+
+/people/nathan-bricknell
+Then allow smart variants with query params:
+
+/people/nathan-bricknell?industry=dentist
+/people/nathan-bricknell?industry=plumber
+/people/nathan-bricknell?campaign=networking
+/people/nathan-bricknell?source=door-knock
+This gives you flexibility without creating a separate page each time.
+
+What the smart card should change
+The smart layer should dynamically adjust 5 things:
+
+1. Headline
+Changes based on prospect type.
+
+Examples:
+
+General
+
+Helping local businesses grow online
+
+Automotive
+
+Helping workshops generate more service bookings
+
+Trades
+
+Helping trade businesses win more local jobs
+
+Medical
+
+Helping clinics improve visibility and patient enquiries
+
+2. Supporting copy
+One short paragraph tailored to the industry.
+
+Example for pressure cleaning:
+
+I work with service businesses to improve local visibility, increase enquiry flow and turn more website traffic into booked jobs.
+
+3. CTA
+The call to action should change depending on how the rep wants to use the card.
+
+Examples:
+
+Save my contact
+
+Book a quick chat
+
+Request a website review
+
+Get a visibility audit
+
+Ask for a proposal
+
+4. Proof points
+Show relevant trust signals.
+
+Examples:
+
+Websites
+
+Google Ads
+
+SEO
+
+Google Business Profile
+
+Local lead generation
+
+AI follow-up systems
+
+Optional social proof:
+
+number of businesses helped
+
+industries worked with
+
+local regions covered
+
+5. Lead capture form
+The form can adapt.
+
+For a casual networking context:
+
+Name
+
+Email
+
+Phone
+
+Message
+
+For a sales context:
+
+Business name
+
+Best contact number
+
+What do you need help with?
+
+Website / Google presence / ads / SEO / other
+
+Best UX for the page
+Above the fold
+Top section should include:
+
+profile photo
+
+name
+
+role
+
+company
+
+one-line promise
+
+primary CTA
+
+QR code or “save contact” button
+
+Suggested layout:
+
+[Nathan photo]
+
+Nathan Bricknell
+Marketing Manager
+
+Helping local service businesses generate more leads online.
+
+[ Save Contact ]  [ Book a Chat ]
+Middle section
+This is where the smart content lives.
+
+Example:
+
+How I help
+
+• Websites that convert
+• Google Ads strategy
+• Local SEO and Google visibility
+• Follow-up systems that reduce missed leads
+Then:
+
+Best next step
+
+If you'd like, I can review your current online presence and show you a few fast improvement opportunities.
+Bottom section
+Actions:
+
+Download vCard
+
+Copy contact link
+
+Book meeting
+
+Leave details
+
+View company website
+
+Smart modes to build
+Here are the modes I would add.
+
+1. Standard mode
+A clean contact card.
+
+Use when:
+
+someone just wants contact details
+
+2. Industry mode
+Adjusts copy for verticals like:
+
+plumber
+
+electrician
+
+dentist
+
+mechanic
+
+skip bin company
+
+builder
+
+landscaper
+
+3. Prospecting mode
+Used after door knocking or face-to-face visit.
+
+Shows:
+
+short introduction
+
+quick credibility statement
+
+simple lead capture
+
+4. Client mode
+Used for existing clients.
+
+Shows:
+
+direct contact details
+
+support request button
+
+book review meeting
+
+5. Campaign mode
+Used at events or specific outreach campaigns.
+
+Example:
+
+Fraser Coast networking breakfast
+
+Brisbane trade expo
+
+dental growth campaign
+
+Very clever feature for Momentum
+AI-generated intro by industry
+Instead of manually writing every version, let Momentum generate it.
+
+In settings:
+
+Smart Messaging
+[ Generate industry-specific intros ]
+The AI uses the user’s role, company services and target audience to write:
+
+headline
+
+short intro
+
+CTA
+
+lead form prompt
+
+Example generated copy for an automotive prospect:
+
+I help workshops improve online visibility and turn search traffic into more bookings through better websites, Google Ads and local search presence.
+
+That makes the card feel alive.
+
+Even better: card-aware QR codes
+Let users generate multiple QR codes for different situations.
+
+Examples:
+
+General QR
+
+Door knocking QR
+
+Dentist QR
+
+Trades QR
+
+Event QR
+
+Each QR points to a slightly different version of the card.
+
+That means the same rep can use different cards depending on the room.
+
+Lead capture flow
+This is where it becomes a real Momentum feature.
+
+When someone visits the card and submits details:
+
+Create lead in CRM
+
+Assign source as:
+
+Digital Business Card
+
+QR Scan
+
+Event
+
+Door Knock
+
+Tag by industry or campaign
+
+Notify rep
+
+Trigger AI suggestion:
+
+follow-up text
+
+follow-up email
+
+next best action
+
+This links beautifully into your AI Sales Engine.
+
+Analytics you should track
+This makes it more than a gimmick.
+
+Track:
+
+card views
+
+unique visitors
+
+QR scans
+
+vCard downloads
+
+contact saves
+
+form submissions
+
+bookings made
+
+leads created by source
+
+conversion by card type
+
+Then show the rep:
+
+Digital Business Card Performance
+
+Views: 84
+QR Scans: 31
+Leads Captured: 9
+Bookings: 3
+Best Performing Card: Trades QR
+That would be very strong.
+
+Permissions
+This should be a personal user feature, but admins can control guardrails.
+
+User can edit:
+photo
+
+title
+
+phone
+
+bio
+
+booking link
+
+preferred CTA
+
+smart modes
+
+Admin can control:
+brand colours
+
+logo
+
+legal footer
+
+approved messaging rules
+
+domain
+
+whether public cards are enabled
+
+whether lead capture is enabled
+
+That keeps it enterprise-safe.
+
+Suggested settings screen
+Inside Settings → Digital Business Card:
+
+Card Profile
+Name
+
+Title
+
+Mobile
+
+Email
+
+Booking URL
+
+Bio
+
+Headshot
+
+Card Appearance
+Theme
+
+Logo
+
+Accent colour
+
+Button style
+
+Show QR code on page
+
+Smart Messaging
+Default audience
+
+Industry presets
+
+AI-generated intros
+
+CTA options
+
+Prospecting mode toggle
+
+Lead Capture
+Enable form
+
+Form fields
+
+Auto-create lead
+
+Assign pipeline stage
+
+Notify by email / SMS
+
+Analytics
+Views
+
+scans
+
+leads
+
+bookings
+
+Database structure idea
+For your setup, something like:
+
+users/{userId}
+  profile
+  digitalCard
+    slug
+    theme
+    headline
+    bio
+    phone
+    email
+    website
+    bookingUrl
+    qrEnabled
+    leadCaptureEnabled
+    defaultMode
+
+  smartMessaging
+    enabled
+    presets[]
+    defaultIndustry
+    aiGeneratedVariants[]
+
+  cardAnalytics
+    views
+    scans
+    downloads
+    submissions
+And then:
+
+cardLeads/{leadId}
+  source: "digital_business_card"
+  userId
+  slug
+  industry
+  campaign
+  capturedAt
+Best positioning for Momentum
+Call it something better than “Digital Business Card.”
+
+Better names:
+
+Smart Contact Card
+
+Sales Card
+
+AI Business Card
+
+Prospecting Card
+
+Lead Capture Card
+
+My pick for your platform:
+
+Smart Business Card
+
+It sounds premium but still clear.
+
+The real value proposition
+This feature helps users:
+
+look professional
+
+share details instantly
+
+tailor their pitch
+
+capture warm leads
+
+feed activity back into Momentum
+
+improve conversion after face-to-face meetings
+
+That is exactly on-brand for what you’re building.
+
+My recommendation
+Build it in 3 phases.
+
+Phase 1
+personal card
+
+public URL
+
+QR code
+
+vCard download
+
+Phase 2
+smart messaging by industry
+
+booking CTA
+
+lead capture form
+
+Phase 3
+AI-generated variants
+
+analytics
+
+multiple QR campaigns
+
+pipeline automation
+
+That gives you something useful quickly, but still leaves room for the premium version.

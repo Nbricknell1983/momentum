@@ -18,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CHANNEL_ICONS: Record<TouchChannel, typeof Phone> = {
@@ -292,7 +292,7 @@ const ROLE_LABELS = {
 
 export default function SettingsPage() {
   const dispatch = useDispatch();
-  const { orgId, user, authReady, isManager } = useAuth();
+  const { orgId, user, authReady, isManager, userRole } = useAuth();
   const { toast } = useToast();
   const cadences = useSelector((state: RootState) => state.app.cadences);
   
@@ -327,6 +327,20 @@ export default function SettingsPage() {
   const [passwordResetMember, setPasswordResetMember] = useState<TeamMember | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  // Personal preferences state (stored locally)
+  const [notifPrefs, setNotifPrefs] = useState({
+    followUpReminders: true,
+    meetingReminders: true,
+    taskReminders: true,
+    aiSuggestions: true,
+  });
+  const [aiPrefs, setAiPrefs] = useState({
+    autoFollowUpEmails: true,
+    meetingNotes: true,
+    callPrep: true,
+    nextActionSuggestions: true,
+  });
   
   // Compute current user's role for RBAC
   const currentUserRole = teamMembers.find(m => m.email === user?.email)?.role || 
@@ -588,306 +602,438 @@ export default function SettingsPage() {
   const activeCadences = cadences.filter(c => c.mode === 'active');
   const passiveCadences = cadences.filter(c => c.mode === 'passive');
 
+  // Shared sub-components
+  const roleLabel = userRole === 'owner' ? 'Owner' : userRole === 'admin' ? 'Admin' : 'Sales Rep';
+  const RoleBadgeIcon = userRole === 'owner' ? Crown : userRole === 'admin' ? Shield : User;
+
+  const MyProfileTab = (
+    <TabsContent value="profile" className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-lg bg-violet-50 dark:bg-violet-400/10 flex items-center justify-center">
+              <User className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <CardTitle>My Profile</CardTitle>
+              <CardDescription>Your personal account information</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center gap-5">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={user?.photoURL || ''} />
+              <AvatarFallback className="text-xl bg-violet-100 dark:bg-violet-400/10 text-violet-700 dark:text-violet-300">
+                {user?.displayName?.[0] || user?.email?.[0]?.toUpperCase() || '?'}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-lg font-semibold">{user?.displayName || user?.email?.split('@')[0] || 'User'}</p>
+              <p className="text-sm text-muted-foreground">{user?.email}</p>
+              <Badge variant="outline" className="mt-1.5 gap-1">
+                <RoleBadgeIcon className="h-3 w-3" />
+                {roleLabel}
+              </Badge>
+            </div>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Full Name</Label>
+              <p className="font-medium">{user?.displayName || '—'}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Email Address</Label>
+              <p className="font-medium">{user?.email || '—'}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Role</Label>
+              <p className="font-medium capitalize">{roleLabel}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Organisation</Label>
+              <p className="font-medium">{organization?.name || '—'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </TabsContent>
+  );
+
+  const BusinessProfileTab = (
+    <TabsContent value="business" className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Building2 className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <CardTitle>Business Profile</CardTitle>
+              <CardDescription>Your company details for bookings and invoices</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {isLoadingOrg ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="businessName">Business Name</Label>
+                  <Input id="businessName" value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} placeholder="Your Business Name" data-testid="input-business-name" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="businessEmail">Email</Label>
+                  <Input id="businessEmail" type="email" value={orgForm.email} onChange={(e) => setOrgForm({ ...orgForm, email: e.target.value })} placeholder="contact@yourbusiness.com" data-testid="input-business-email" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="businessPhone">Phone</Label>
+                  <Input id="businessPhone" type="tel" value={orgForm.phone} onChange={(e) => setOrgForm({ ...orgForm, phone: e.target.value })} placeholder="(02) 1234 5678" data-testid="input-business-phone" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="timezone">Timezone</Label>
+                  <Select value={orgForm.timezone} onValueChange={(value) => setOrgForm({ ...orgForm, timezone: value })}>
+                    <SelectTrigger data-testid="select-timezone"><SelectValue placeholder="Select timezone" /></SelectTrigger>
+                    <SelectContent>
+                      {AUSTRALIAN_TIMEZONES.map((tz) => (
+                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="serviceAreas">Service Areas</Label>
+                <Textarea id="serviceAreas" value={orgForm.serviceAreas} onChange={(e) => setOrgForm({ ...orgForm, serviceAreas: e.target.value })} placeholder="Brisbane CBD, Gold Coast, Sunshine Coast..." className="min-h-[80px]" data-testid="input-service-areas" />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="emergencyRules" className="text-base">Emergency Rules</Label>
+                  <p className="text-sm text-muted-foreground">Enable emergency booking options</p>
+                </div>
+                <Switch id="emergencyRules" checked={orgForm.enableEmergencyRules} onCheckedChange={(checked) => setOrgForm({ ...orgForm, enableEmergencyRules: checked })} data-testid="switch-emergency-rules" />
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveOrganization} disabled={isSavingOrg} data-testid="button-save-business">
+                  {isSavingOrg ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Save Changes
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </TabsContent>
+  );
+
+  const TeamTab = (
+    <TabsContent value="team" className="space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-medium">Team Members</h2>
+          <p className="text-sm text-muted-foreground">Manage who has access to your organisation</p>
+        </div>
+        {canManageTeam && (
+          <Button onClick={() => setIsInviteDialogOpen(true)} data-testid="button-invite-member">
+            <UserPlus className="h-4 w-4 mr-1" />
+            Add Member
+          </Button>
+        )}
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          {isLoadingTeam ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : teamMembers.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No team members yet</p>
+              <p className="text-sm">Add people to collaborate with you</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {teamMembers.map((member) => {
+                const RoleIcon = ROLE_ICONS[member.role];
+                return (
+                  <div key={member.id} className="flex items-center justify-between p-4 gap-4" data-testid={`member-row-${member.id}`}>
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarImage src={member.photoURL} />
+                        <AvatarFallback>{member.displayName?.[0] || member.email[0].toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{member.displayName || member.email}</p>
+                        <p className="text-sm text-muted-foreground">{member.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={member.status === 'pending' ? 'secondary' : 'outline'} className="gap-1">
+                        <RoleIcon className="h-3 w-3" />
+                        {ROLE_LABELS[member.role]}
+                      </Badge>
+                      {member.status === 'pending' && <Badge variant="outline" className="text-amber-600 border-amber-200">Pending</Badge>}
+                      {canManageTeam && member.role !== 'owner' && (
+                        <>
+                          <Button size="icon" variant="ghost" onClick={() => openPasswordResetDialog(member)} title="Reset Password" data-testid={`button-reset-password-${member.id}`}>
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" data-testid={`button-remove-member-${member.id}`}><Trash2 className="h-4 w-4" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
+                                <AlertDialogDescription>Are you sure you want to remove {member.email} from your team? They will lose access to this organisation.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleRemoveMember(member)}>Remove</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </TabsContent>
+  );
+
+  const CadencesTab = (
+    <TabsContent value="cadences" className="space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-medium">Nurture Cadences</h2>
+          <p className="text-sm text-muted-foreground">Define touch sequences for nurturing leads</p>
+        </div>
+        <Button onClick={handleCreateCadence} data-testid="button-create-cadence">
+          <Plus className="h-4 w-4 mr-1" />
+          Create Cadence
+        </Button>
+      </div>
+      <div className="space-y-6">
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Active Cadences ({activeCadences.length})</h3>
+          <div className="space-y-3">
+            {activeCadences.map(cadence => (
+              <CadenceCard key={cadence.id} cadence={cadence} onEdit={() => handleEditCadence(cadence)} onDelete={() => handleDeleteCadence(cadence.id)} />
+            ))}
+            {activeCadences.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">No active cadences</p>}
+          </div>
+        </div>
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Passive Cadences ({passiveCadences.length})</h3>
+          <div className="space-y-3">
+            {passiveCadences.map(cadence => (
+              <CadenceCard key={cadence.id} cadence={cadence} onEdit={() => handleEditCadence(cadence)} onDelete={() => handleDeleteCadence(cadence.id)} />
+            ))}
+            {passiveCadences.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">No passive cadences</p>}
+          </div>
+        </div>
+      </div>
+    </TabsContent>
+  );
+
   return (
     <div className="h-full overflow-auto">
       <div className="container max-w-4xl py-6 space-y-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-semibold" data-testid="text-page-title">Settings</h1>
-            <p className="text-muted-foreground">Manage your business configuration and preferences</p>
-          </div>
+        {/* Page header */}
+        <div>
+          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Settings</h1>
+          <p className="text-muted-foreground">
+            {isManager ? 'Manage your organisation, team, and personal preferences' : 'Manage your personal preferences and view organisation info'}
+          </p>
         </div>
 
-        <Tabs defaultValue="business" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="business" data-testid="tab-business">
-              <Building2 className="h-4 w-4 mr-1" />
-              Business
-            </TabsTrigger>
-            <TabsTrigger value="team" data-testid="tab-team">
-              <Users className="h-4 w-4 mr-1" />
-              Team
-            </TabsTrigger>
-            <TabsTrigger value="cadences" data-testid="tab-cadences">
-              <Zap className="h-4 w-4 mr-1" />
-              Cadences
-            </TabsTrigger>
-          </TabsList>
+        {isManager ? (
+          /* ── OWNER / ADMIN VIEW ── */
+          <div className="space-y-1">
+            <p className="text-xs font-semibold tracking-widest uppercase text-muted-foreground pb-1">Personal</p>
+            <Tabs defaultValue="profile" className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="profile" data-testid="tab-profile">
+                  <User className="h-4 w-4 mr-1" />
+                  My Profile
+                </TabsTrigger>
+                <TabsTrigger value="business" data-testid="tab-business">
+                  <Building2 className="h-4 w-4 mr-1" />
+                  Business
+                </TabsTrigger>
+                <TabsTrigger value="team" data-testid="tab-team">
+                  <Users className="h-4 w-4 mr-1" />
+                  Team
+                </TabsTrigger>
+                <TabsTrigger value="cadences" data-testid="tab-cadences">
+                  <Zap className="h-4 w-4 mr-1" />
+                  Cadences
+                </TabsTrigger>
+              </TabsList>
+              {MyProfileTab}
+              {BusinessProfileTab}
+              {TeamTab}
+              {CadencesTab}
+            </Tabs>
+          </div>
+        ) : (
+          /* ── MEMBER (SALES REP) VIEW ── */
+          <div className="space-y-8">
+            {/* Personal tabs */}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold tracking-widest uppercase text-muted-foreground pb-1">Personal</p>
+              <Tabs defaultValue="profile" className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="profile" data-testid="tab-profile">
+                    <User className="h-4 w-4 mr-1" />
+                    My Profile
+                  </TabsTrigger>
+                  <TabsTrigger value="notifications" data-testid="tab-notifications">
+                    <Bell className="h-4 w-4 mr-1" />
+                    Notifications
+                  </TabsTrigger>
+                  <TabsTrigger value="ai" data-testid="tab-ai">
+                    <Sparkles className="h-4 w-4 mr-1" />
+                    AI Preferences
+                  </TabsTrigger>
+                </TabsList>
 
-          {/* Business Profile Tab */}
-          <TabsContent value="business" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Building2 className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle>Business Profile</CardTitle>
-                    <CardDescription>Your company details for bookings and invoices</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {isLoadingOrg ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="businessName">Business Name</Label>
-                        <Input
-                          id="businessName"
-                          value={orgForm.name}
-                          onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })}
-                          placeholder="Your Business Name"
-                          data-testid="input-business-name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="businessEmail">Email</Label>
-                        <Input
-                          id="businessEmail"
-                          type="email"
-                          value={orgForm.email}
-                          onChange={(e) => setOrgForm({ ...orgForm, email: e.target.value })}
-                          placeholder="contact@yourbusiness.com"
-                          data-testid="input-business-email"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="businessPhone">Phone</Label>
-                        <Input
-                          id="businessPhone"
-                          type="tel"
-                          value={orgForm.phone}
-                          onChange={(e) => setOrgForm({ ...orgForm, phone: e.target.value })}
-                          placeholder="(02) 1234 5678"
-                          data-testid="input-business-phone"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="timezone">Timezone</Label>
-                        <Select
-                          value={orgForm.timezone}
-                          onValueChange={(value) => setOrgForm({ ...orgForm, timezone: value })}
-                        >
-                          <SelectTrigger data-testid="select-timezone">
-                            <SelectValue placeholder="Select timezone" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {AUSTRALIAN_TIMEZONES.map((tz) => (
-                              <SelectItem key={tz.value} value={tz.value}>
-                                {tz.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="serviceAreas">Service Areas</Label>
-                      <Textarea
-                        id="serviceAreas"
-                        value={orgForm.serviceAreas}
-                        onChange={(e) => setOrgForm({ ...orgForm, serviceAreas: e.target.value })}
-                        placeholder="Brisbane CBD, Gold Coast, Sunshine Coast..."
-                        className="min-h-[80px]"
-                        data-testid="input-service-areas"
-                      />
-                    </div>
-                    
-                    <Separator />
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="emergencyRules" className="text-base">Emergency Rules</Label>
-                        <p className="text-sm text-muted-foreground">Enable emergency booking options</p>
-                      </div>
-                      <Switch
-                        id="emergencyRules"
-                        checked={orgForm.enableEmergencyRules}
-                        onCheckedChange={(checked) => setOrgForm({ ...orgForm, enableEmergencyRules: checked })}
-                        data-testid="switch-emergency-rules"
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      {!canEditOrgSettings && (
-                        <p className="text-sm text-muted-foreground">
-                          Only admins and owners can edit settings
-                        </p>
-                      )}
-                      <div className="flex-1" />
-                      <Button onClick={handleSaveOrganization} disabled={isSavingOrg || !canEditOrgSettings} data-testid="button-save-business">
-                        {isSavingOrg ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Save className="h-4 w-4 mr-2" />
-                        )}
-                        Save Changes
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                {MyProfileTab}
 
-          {/* Team Tab */}
-          <TabsContent value="team" className="space-y-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div>
-                <h2 className="text-lg font-medium">Team Members</h2>
-                <p className="text-sm text-muted-foreground">
-                  {canManageTeam 
-                    ? 'Manage who has access to your organization' 
-                    : 'Your account details within the organization'}
-                </p>
-              </div>
-              {canManageTeam && (
-                <Button onClick={() => setIsInviteDialogOpen(true)} data-testid="button-invite-member">
-                  <UserPlus className="h-4 w-4 mr-1" />
-                  Invite Member
-                </Button>
-              )}
-            </div>
-            
-            <Card>
-              <CardContent className="p-0">
-                {isLoadingTeam ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : teamMembers.length === 0 ? (
-                  <div className="py-8 text-center text-muted-foreground">
-                    <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No team members yet</p>
-                    <p className="text-sm">Invite people to collaborate with you</p>
-                  </div>
-                ) : (
-                  <div className="divide-y">
-                    {(isManager ? teamMembers : teamMembers.filter(m => m.id === user?.uid || m.email === user?.email)).map((member) => {
-                      const RoleIcon = ROLE_ICONS[member.role];
-                      return (
-                        <div key={member.id} className="flex items-center justify-between p-4 gap-4" data-testid={`member-row-${member.id}`}>
+                {/* Notifications Tab */}
+                <TabsContent value="notifications" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-lg bg-blue-50 dark:bg-blue-400/10 flex items-center justify-center">
+                          <Bell className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div>
+                          <CardTitle>Notifications</CardTitle>
+                          <CardDescription>Choose what reminders and alerts you receive</CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                      {[
+                        { key: 'followUpReminders', icon: CheckSquare, label: 'Follow-up reminders', desc: 'Get reminded when a lead follow-up is due' },
+                        { key: 'meetingReminders', icon: CalendarDays, label: 'Meeting reminders', desc: 'Alerts before scheduled meetings' },
+                        { key: 'taskReminders', icon: CheckSquare, label: 'Task reminders', desc: 'Reminders for upcoming and overdue tasks' },
+                        { key: 'aiSuggestions', icon: BrainCircuit, label: 'AI suggestions', desc: 'Get notified when AI has new coaching insights' },
+                      ].map(({ key, icon: Icon, label, desc }) => (
+                        <div key={key} className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarImage src={member.photoURL} />
-                              <AvatarFallback>
-                                {member.displayName?.[0] || member.email[0].toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
+                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                              <Icon className="h-4 w-4 text-muted-foreground" />
+                            </div>
                             <div>
-                              <p className="font-medium">{member.displayName || member.email}</p>
-                              <p className="text-sm text-muted-foreground">{member.email}</p>
+                              <p className="text-sm font-medium">{label}</p>
+                              <p className="text-xs text-muted-foreground">{desc}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={member.status === 'pending' ? 'secondary' : 'outline'} className="gap-1">
-                              <RoleIcon className="h-3 w-3" />
-                              {ROLE_LABELS[member.role]}
-                            </Badge>
-                            {member.status === 'pending' && (
-                              <Badge variant="outline" className="text-amber-600 border-amber-200">
-                                Pending
-                              </Badge>
-                            )}
-                            {canManageTeam && member.role !== 'owner' && (
-                              <>
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  onClick={() => openPasswordResetDialog(member)}
-                                  title="Reset Password"
-                                  data-testid={`button-reset-password-${member.id}`}
-                                >
-                                  <KeyRound className="h-4 w-4" />
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button size="icon" variant="ghost" data-testid={`button-remove-member-${member.id}`}>
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to remove {member.email} from your team? They will lose access to this organization.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleRemoveMember(member)}>Remove</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </>
-                            )}
-                          </div>
+                          <Switch
+                            checked={notifPrefs[key as keyof typeof notifPrefs]}
+                            onCheckedChange={(v) => setNotifPrefs(p => ({ ...p, [key]: v }))}
+                            data-testid={`switch-notif-${key}`}
+                          />
                         </div>
-                      );
-                    })}
+                      ))}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* AI Preferences Tab */}
+                <TabsContent value="ai" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-lg bg-violet-50 dark:bg-violet-400/10 flex items-center justify-center">
+                          <BrainCircuit className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+                        </div>
+                        <div>
+                          <CardTitle>AI Preferences</CardTitle>
+                          <CardDescription>Control how the AI Sales Engine assists you</CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                      {[
+                        { key: 'autoFollowUpEmails', icon: Mail, label: 'AI follow-up emails', desc: 'Auto-generate personalised follow-up emails after calls' },
+                        { key: 'meetingNotes', icon: MessageSquare, label: 'AI meeting notes', desc: 'Summarise and extract insights from meeting recordings' },
+                        { key: 'callPrep', icon: Phone, label: 'Call prep briefs', desc: 'Generate a pre-call strategy brief before each dial' },
+                        { key: 'nextActionSuggestions', icon: Sparkles, label: 'Next action suggestions', desc: 'AI recommends the best next step for each lead' },
+                      ].map(({ key, icon: Icon, label, desc }) => (
+                        <div key={key} className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-400/10 flex items-center justify-center shrink-0">
+                              <Icon className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{label}</p>
+                              <p className="text-xs text-muted-foreground">{desc}</p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={aiPrefs[key as keyof typeof aiPrefs]}
+                            onCheckedChange={(v) => setAiPrefs(p => ({ ...p, [key]: v }))}
+                            data-testid={`switch-ai-${key}`}
+                          />
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* Locked Organisation section */}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold tracking-widest uppercase text-muted-foreground pb-1">Organisation</p>
+              <div className="rounded-xl border bg-muted/30 dark:bg-muted/10 overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-5 py-4 border-b bg-muted/50 dark:bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                    <p className="font-medium text-sm">Organisation Settings</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Cadences Tab */}
-          <TabsContent value="cadences" className="space-y-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div>
-                <h2 className="text-lg font-medium">Nurture Cadences</h2>
-                <p className="text-sm text-muted-foreground">Define touch sequences for nurturing leads</p>
-              </div>
-              <Button onClick={handleCreateCadence} data-testid="button-create-cadence">
-                <Plus className="h-4 w-4 mr-1" />
-                Create Cadence
-              </Button>
-            </div>
-
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">Active Cadences ({activeCadences.length})</h3>
-                <div className="space-y-3">
-                  {activeCadences.map(cadence => (
-                    <CadenceCard
-                      key={cadence.id}
-                      cadence={cadence}
-                      onEdit={() => handleEditCadence(cadence)}
-                      onDelete={() => handleDeleteCadence(cadence.id)}
-                    />
-                  ))}
-                  {activeCadences.length === 0 && (
-                    <p className="text-sm text-muted-foreground py-4 text-center">No active cadences</p>
-                  )}
+                  <Badge variant="secondary" className="text-xs">Admin only</Badge>
                 </div>
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">Passive Cadences ({passiveCadences.length})</h3>
-                <div className="space-y-3">
-                  {passiveCadences.map(cadence => (
-                    <CadenceCard
-                      key={cadence.id}
-                      cadence={cadence}
-                      onEdit={() => handleEditCadence(cadence)}
-                      onDelete={() => handleDeleteCadence(cadence.id)}
-                    />
-                  ))}
-                  {passiveCadences.length === 0 && (
-                    <p className="text-sm text-muted-foreground py-4 text-center">No passive cadences</p>
+                <div className="px-5 py-4">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    These settings are managed by your organisation administrator. Contact your admin if changes are required.
+                  </p>
+                  {isLoadingOrg ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                      {[
+                        { label: 'Business Name', value: organization?.name },
+                        { label: 'Email', value: organization?.email },
+                        { label: 'Phone', value: organization?.phone },
+                        { label: 'Timezone', value: organization?.timezone?.replace('Australia/', '') },
+                        { label: 'Service Areas', value: organization?.serviceAreas },
+                      ].map(({ label, value }) => value ? (
+                        <div key={label}>
+                          <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+                          <p className="text-sm font-medium text-foreground/70">{value}</p>
+                        </div>
+                      ) : null)}
+                    </div>
                   )}
                 </div>
               </div>
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
 
       {/* Cadence Dialog */}
