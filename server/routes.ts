@@ -3528,6 +3528,232 @@ Write in a professional, consultant tone. Be specific to the business type and l
   // Client Report Endpoints (shareable public URL)
   // ============================================
 
+  // ─── AI Client Growth Engine ──────────────────────────────────────────────
+
+  app.post("/api/ai/client-growth/account-intelligence", async (req, res) => {
+    try {
+      const { businessName, location, products, channelStatus, healthStatus, churnRiskScore, lastContactDate, website, totalMRR, healthReasons } = req.body;
+      if (!businessName) return res.status(400).json({ error: "businessName required" });
+
+      const servicesList = Array.isArray(products) ? products.map((p: any) => `${p.productType} ($${p.monthlyValue}/mo)`).join(', ') : 'Not specified';
+      const channelStr = channelStatus ? Object.entries(channelStatus).map(([k, v]) => `${k}: ${v}`).join(', ') : 'Not specified';
+      const daysSinceContact = lastContactDate ? Math.floor((Date.now() - new Date(lastContactDate).getTime()) / 86400000) : null;
+
+      const prompt = `You are an AI account manager helping a digital marketing agency understand and grow a client account.
+
+CLIENT DATA:
+Business: ${businessName}
+Location: ${location || 'Not specified'}
+Website: ${website || 'Not specified'}
+MRR: $${totalMRR || 0}/mo
+Services: ${servicesList}
+Channels: ${channelStr}
+Health: ${healthStatus} (churn risk score: ${churnRiskScore || 0}/100)
+Health Reasons: ${Array.isArray(healthReasons) ? healthReasons.join(', ') : 'None'}
+Days Since Contact: ${daysSinceContact !== null ? daysSinceContact : 'Unknown'}
+
+Respond with JSON in this format:
+{
+  "accountSummary": "2-3 sentences describing this client's business and current digital marketing situation",
+  "strengths": ["strength 1", "strength 2", "strength 3"],
+  "growthGaps": [
+    { "title": "Gap title", "description": "Why this matters", "opportunity": "What to do about it" }
+  ],
+  "retentionRisks": ["risk 1", "risk 2"],
+  "conversationStarter": "A natural, value-focused opening for your next client call"
+}
+
+Keep it practical and specific to their actual situation.`;
+
+      const resp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 900,
+        response_format: { type: "json_object" },
+      });
+      const content = resp.choices[0]?.message?.content || "{}";
+      let result;
+      try { result = JSON.parse(content); } catch { result = { accountSummary: `${businessName} is a valued client.`, strengths: [], growthGaps: [], retentionRisks: [], conversationStarter: `Hi, I wanted to check in on how things are going for ${businessName}.` }; }
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating account intelligence:", error);
+      res.status(500).json({ error: "Failed to generate account intelligence" });
+    }
+  });
+
+  app.post("/api/ai/client-growth/conversation-builder", async (req, res) => {
+    try {
+      const { businessName, location, products, healthStatus, healthReasons, totalMRR, website } = req.body;
+      if (!businessName) return res.status(400).json({ error: "businessName required" });
+
+      const servicesList = Array.isArray(products) ? products.map((p: any) => p.productType).join(', ') : 'Not specified';
+      const prompt = `You are helping a digital marketing account manager prepare for a growth conversation with an existing client.
+
+CLIENT:
+Business: ${businessName}
+Location: ${location || 'Not specified'}
+Current Services: ${servicesList}
+MRR: $${totalMRR || 0}/mo
+Health Status: ${healthStatus}
+Health Reasons: ${Array.isArray(healthReasons) ? healthReasons.join(', ') : 'None'}
+
+Generate a growth expansion conversation guide. Respond with JSON:
+{
+  "clientGoalHypothesis": "What you believe this client's main business goal is right now",
+  "smartQuestions": ["Question 1 to uncover growth needs", "Question 2", "Question 3", "Question 4"],
+  "upsellAngle": "The most natural upsell or expansion pitch for this client right now",
+  "expansionOpportunities": [
+    { "service": "Service name", "rationale": "Why this makes sense for them", "estimatedValue": "$X/mo" }
+  ]
+}`;
+
+      const resp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 800,
+        response_format: { type: "json_object" },
+      });
+      const content = resp.choices[0]?.message?.content || "{}";
+      let result;
+      try { result = JSON.parse(content); } catch { result = { clientGoalHypothesis: "Generate more leads from digital channels", smartQuestions: ["What results have you seen so far?", "What services are you looking to grow?"], upsellAngle: "Based on your current services, expanding into additional channels could increase leads.", expansionOpportunities: [] }; }
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating conversation builder:", error);
+      res.status(500).json({ error: "Failed to generate conversation builder" });
+    }
+  });
+
+  app.post("/api/ai/client-growth/follow-up", async (req, res) => {
+    try {
+      const { businessName, contactName, notes, products } = req.body;
+      if (!businessName) return res.status(400).json({ error: "businessName required" });
+
+      const servicesList = Array.isArray(products) ? products.map((p: any) => p.productType).join(', ') : 'Not specified';
+      const prompt = `You are helping a digital marketing account manager write a client follow-up communication.
+
+CLIENT: ${businessName}
+CONTACT: ${contactName || 'the business owner'}
+SERVICES: ${servicesList}
+CALL/MEETING NOTES: ${notes || 'Check in on account performance and discuss growth opportunities.'}
+
+Write a professional follow-up. Respond with JSON:
+{
+  "email": {
+    "subject": "Subject line",
+    "body": "Full email body - warm, professional, value-focused. Use paragraphs. Sign off as [Your Name]."
+  },
+  "sms": "Short follow-up SMS (max 160 chars)",
+  "keyTakeaway": "One-line summary of the main value point from this follow-up"
+}`;
+
+      const resp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 700,
+        response_format: { type: "json_object" },
+      });
+      const content = resp.choices[0]?.message?.content || "{}";
+      let result;
+      try { result = JSON.parse(content); } catch { result = { email: { subject: `Following up — ${businessName}`, body: `Hi ${contactName || 'there'},\n\nI wanted to follow up on our recent conversation.\n\n[Your Name]` }, sms: `Hi, following up from our chat about ${businessName}. Happy to connect. - [Your Name]`, keyTakeaway: "Continue building the relationship" }; }
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating client follow-up:", error);
+      res.status(500).json({ error: "Failed to generate follow-up" });
+    }
+  });
+
+  app.post("/api/ai/client-growth/growth-plan", async (req, res) => {
+    try {
+      const { businessName, location, products, totalMRR, healthStatus, website, healthReasons } = req.body;
+      if (!businessName) return res.status(400).json({ error: "businessName required" });
+
+      const servicesList = Array.isArray(products) ? products.map((p: any) => `${p.productType} ($${p.monthlyValue}/mo)`).join(', ') : 'Not specified';
+      const prompt = `You are a senior digital marketing strategist creating a growth plan for an existing client.
+
+CLIENT:
+Business: ${businessName}
+Location: ${location || 'Not specified'}
+Website: ${website || 'Not specified'}
+Current Services: ${servicesList}
+MRR: $${totalMRR || 0}/mo
+Account Health: ${healthStatus}
+Notes: ${Array.isArray(healthReasons) ? healthReasons.join(', ') : 'None'}
+
+Create a structured growth plan. Respond with JSON:
+{
+  "thirtyDay": [
+    { "action": "Action title", "why": "Why this is the priority", "impact": "Expected impact" }
+  ],
+  "ninetyDay": [
+    { "action": "Action title", "why": "Why this", "impact": "Expected impact" }
+  ],
+  "twelveMonth": [
+    { "quarter": "Q1", "focus": "Focus area", "goal": "Target outcome" },
+    { "quarter": "Q2", "focus": "Focus area", "goal": "Target outcome" },
+    { "quarter": "Q3", "focus": "Focus area", "goal": "Target outcome" },
+    { "quarter": "Q4", "focus": "Focus area", "goal": "Target outcome" }
+  ],
+  "accountGrowthTarget": "Estimated MRR growth opportunity"
+}
+
+Keep actions specific and achievable for a marketing agency managing this account.`;
+
+      const resp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1000,
+        response_format: { type: "json_object" },
+      });
+      const content = resp.choices[0]?.message?.content || "{}";
+      let result;
+      try { result = JSON.parse(content); } catch { result = { thirtyDay: [], ninetyDay: [], twelveMonth: [], accountGrowthTarget: "Review services and identify expansion areas" }; }
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating client growth plan:", error);
+      res.status(500).json({ error: "Failed to generate growth plan" });
+    }
+  });
+
+  app.post("/api/ai/client-growth/referral-engine", async (req, res) => {
+    try {
+      const { businessName, location, products } = req.body;
+      if (!businessName) return res.status(400).json({ error: "businessName required" });
+
+      const servicesList = Array.isArray(products) ? products.map((p: any) => p.productType).join(', ') : 'Not specified';
+      const prompt = `You are helping a digital marketing account manager identify referral opportunities from an existing satisfied client.
+
+CLIENT:
+Business: ${businessName}
+Location: ${location || 'Not specified'}
+Services: ${servicesList}
+
+Identify referral partners and opportunities. Respond with JSON:
+{
+  "referralPartners": [
+    { "partnerType": "Type of business", "why": "Why they'd be a good referral source", "introScript": "How to ask this client for the referral" }
+  ],
+  "referralAsk": "A natural, non-pushy way to ask this client for referrals on your next call",
+  "incentiveIdea": "A simple incentive or offer to encourage referrals"
+}
+
+Make it specific to their industry and location.`;
+
+      const resp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 700,
+        response_format: { type: "json_object" },
+      });
+      const content = resp.choices[0]?.message?.content || "{}";
+      let result;
+      try { result = JSON.parse(content); } catch { result = { referralPartners: [], referralAsk: `Would you know of any other businesses that might benefit from what we do for you?`, incentiveIdea: "Offer a month's service credit for any successful referral" }; }
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating referral engine:", error);
+      res.status(500).json({ error: "Failed to generate referral engine" });
+    }
+  });
+
   // Create a report (authenticated)
   app.post("/api/reports", async (req, res) => {
     try {

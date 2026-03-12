@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
-import { DndContext, DragEndEvent, DragOverEvent, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Filter, Loader2 } from 'lucide-react';
+import { Filter, Loader2, Maximize2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { RootState, updateClient, setRegionFilter, setAreaFilter } from '@/store';
 import { Client, ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, CLIENT_BOARD_STAGE_LABELS, CLIENT_BOARD_STAGE_COLORS, getDefaultClientBoardStage } from '@/lib/types';
 import { TERRITORY_CONFIG, getAreasForRegion } from '@/lib/territoryConfig';
 import ClientPipelineCard from '@/components/ClientPipelineCard';
+import ClientFocusView from '@/components/ClientFocusView';
 import { updateClientInFirestore, createClientHistoryEntry } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,11 +20,10 @@ import { Badge } from '@/components/ui/badge';
 interface ClientPipelineColumnProps {
   stage: ClientBoardStage;
   clients: Client[];
-  expandedClientId: string | null;
-  onClientToggle: (clientId: string | null) => void;
+  onOpenWorkspace: (client: Client) => void;
 }
 
-function ClientPipelineColumn({ stage, clients, expandedClientId, onClientToggle }: ClientPipelineColumnProps) {
+function ClientPipelineColumn({ stage, clients, onOpenWorkspace }: ClientPipelineColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const stageColor = CLIENT_BOARD_STAGE_COLORS[stage];
   const totalMRR = clients.reduce((sum, c) => sum + (c.totalMRR || 0), 0);
@@ -55,12 +56,23 @@ function ClientPipelineColumn({ stage, clients, expandedClientId, onClientToggle
         <SortableContext items={clients.map(c => c.id)} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-3">
             {clients.map((client) => (
-              <ClientPipelineCard
-                key={client.id}
-                client={client}
-                isExpanded={expandedClientId === client.id}
-                onToggle={() => onClientToggle(expandedClientId === client.id ? null : client.id)}
-              />
+              <div key={client.id} className="group relative">
+                <ClientPipelineCard
+                  client={client}
+                  isExpanded={false}
+                  onToggle={() => {}}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="absolute top-2 right-2 h-7 gap-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  onClick={() => onOpenWorkspace(client)}
+                  data-testid={`button-open-workspace-${client.id}`}
+                >
+                  <Maximize2 className="h-3 w-3" />
+                  Open
+                </Button>
+              </div>
             ))}
             {clients.length === 0 && (
               <div className="py-8 text-center text-sm text-muted-foreground">
@@ -82,33 +94,27 @@ export default function ClientPipelinePage() {
   const areaFilter = useSelector((state: RootState) => state.app.areaFilter);
   const { toast } = useToast();
   const { user: authUser, orgId, authReady } = useAuth();
-  
-  const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+
+  const [focusedClientId, setFocusedClientId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const searchString = useSearch();
 
   useEffect(() => {
     if (clients.length === 0) return;
-    
     const params = new URLSearchParams(searchString);
     const openId = params.get('openId');
-    
     if (openId) {
       const matchingClient = clients.find(c => c.id === openId);
       if (matchingClient) {
-        setExpandedClientId(openId);
+        setFocusedClientId(openId);
         window.history.replaceState(null, '', '/client-pipeline');
       }
     }
   }, [searchString, clients]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
   const availableFilterAreas = regionFilter !== 'all' ? getAreasForRegion(regionFilter) : [];
@@ -116,12 +122,10 @@ export default function ClientPipelinePage() {
   const filteredClients = clients.filter(client => {
     if (client.archived) return false;
     if (searchQuery && !client.businessName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    
     if (regionFilter !== 'all') {
       if (client.regionId !== regionFilter) return false;
       if (areaFilter !== 'all' && client.areaId !== areaFilter) return false;
     }
-    
     return true;
   });
 
@@ -136,72 +140,62 @@ export default function ClientPipelinePage() {
 
   const findColumnForClient = (clientId: string): ClientBoardStage | null => {
     for (const stage of CLIENT_BOARD_STAGE_ORDER) {
-      if (clientsByStage[stage].some(c => c.id === clientId)) {
-        return stage;
-      }
+      if (clientsByStage[stage].some(c => c.id === clientId)) return stage;
     }
     return null;
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    
     if (!over) return;
-
     const activeId = active.id as string;
     const overId = over.id as string;
-    
     let newStage: ClientBoardStage | null = null;
-
     if (CLIENT_BOARD_STAGE_ORDER.includes(overId as ClientBoardStage)) {
       newStage = overId as ClientBoardStage;
     } else {
       newStage = findColumnForClient(overId);
     }
-
     if (newStage) {
-      const clientId = activeId;
-      const client = clients.find(c => c.id === clientId);
+      const client = clients.find(c => c.id === activeId);
       const currentStage = client ? getClientBoardStage(client) : null;
-      
       if (currentStage === newStage) return;
-      
       if (client && orgId && authReady) {
         setIsLoading(true);
         try {
           const oldStage = getClientBoardStage(client);
-          const updates = { 
-            boardStage: newStage, 
-            updatedAt: new Date() 
-          };
-          
+          const updates = { boardStage: newStage, updatedAt: new Date() };
           dispatch(updateClient({ ...client, ...updates }));
-          await updateClientInFirestore(orgId, clientId, updates, authReady);
-          
-          await createClientHistoryEntry(orgId, clientId, {
-            clientId,
-            type: 'activity',
+          await updateClientInFirestore(orgId, activeId, updates, authReady);
+          await createClientHistoryEntry(orgId, activeId, {
+            clientId: activeId, type: 'activity',
             summary: `Moved from ${CLIENT_BOARD_STAGE_LABELS[oldStage]} to ${CLIENT_BOARD_STAGE_LABELS[newStage]}`,
             userId: authUser?.uid,
             metadata: { fromStage: oldStage, toStage: newStage },
             createdAt: new Date(),
           }, authReady);
-          
-          toast({
-            title: 'Client moved',
-            description: `${client.businessName} moved to ${CLIENT_BOARD_STAGE_LABELS[newStage]}`,
-          });
+          toast({ title: 'Client moved', description: `${client.businessName} moved to ${CLIENT_BOARD_STAGE_LABELS[newStage]}` });
         } catch (error) {
           console.error('Error moving client:', error);
-          toast({
-            title: 'Error',
-            description: 'Failed to move client. Please try again.',
-            variant: 'destructive',
-          });
+          toast({ title: 'Error', description: 'Failed to move client. Please try again.', variant: 'destructive' });
         } finally {
           setIsLoading(false);
         }
       }
+    }
+  };
+
+  // Navigation within the focused client's stage
+  const focusedClient = focusedClientId ? clients.find(c => c.id === focusedClientId) || null : null;
+  const focusedStage = focusedClient ? getClientBoardStage(focusedClient) : null;
+  const stageClients = focusedStage ? clientsByStage[focusedStage] : filteredClients;
+  const focusedIndex = focusedClientId ? stageClients.findIndex(c => c.id === focusedClientId) : -1;
+
+  const handleNavigate = (direction: 'prev' | 'next') => {
+    if (focusedIndex === -1) return;
+    const newIndex = direction === 'prev' ? focusedIndex - 1 : focusedIndex + 1;
+    if (newIndex >= 0 && newIndex < stageClients.length) {
+      setFocusedClientId(stageClients[newIndex].id);
     }
   };
 
@@ -212,7 +206,7 @@ export default function ClientPipelinePage() {
           <h1 className="text-xl font-bold" data-testid="text-page-title">Client Pipeline</h1>
           {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={regionFilter} onValueChange={(val) => {
@@ -225,13 +219,11 @@ export default function ClientPipelinePage() {
             <SelectContent>
               <SelectItem value="all">All Regions</SelectItem>
               {TERRITORY_CONFIG.map((region) => (
-                <SelectItem key={region.id} value={region.id}>
-                  {region.name}
-                </SelectItem>
+                <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          
+
           {availableFilterAreas.length > 0 && (
             <Select value={areaFilter} onValueChange={(val) => dispatch(setAreaFilter(val))}>
               <SelectTrigger className="w-40" data-testid="select-area-filter">
@@ -240,9 +232,7 @@ export default function ClientPipelinePage() {
               <SelectContent>
                 <SelectItem value="all">All Areas</SelectItem>
                 {availableFilterAreas.map((area) => (
-                  <SelectItem key={area.id} value={area.id}>
-                    {area.name}
-                  </SelectItem>
+                  <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -251,24 +241,30 @@ export default function ClientPipelinePage() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-x-auto">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <div className="flex gap-4 p-4 h-full min-w-max">
             {CLIENT_BOARD_STAGE_ORDER.map((stage) => (
               <ClientPipelineColumn
                 key={stage}
                 stage={stage}
                 clients={clientsByStage[stage]}
-                expandedClientId={expandedClientId}
-                onClientToggle={setExpandedClientId}
+                onOpenWorkspace={(client) => setFocusedClientId(client.id)}
               />
             ))}
           </div>
         </DndContext>
       </div>
+
+      {/* Full-screen workspace overlay */}
+      {focusedClient && (
+        <ClientFocusView
+          client={focusedClient}
+          onClose={() => setFocusedClientId(null)}
+          onNavigate={handleNavigate}
+          hasPrev={focusedIndex > 0}
+          hasNext={focusedIndex < stageClients.length - 1}
+        />
+      )}
     </div>
   );
 }
