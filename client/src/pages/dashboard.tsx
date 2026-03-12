@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import { Phone, Users, FileText, DollarSign, Target, AlertTriangle, CheckCircle, Clock, Mail, MessageSquare, CalendarCheck, MapPin, Send } from 'lucide-react';
+import { Phone, Users, FileText, DollarSign, Target, AlertTriangle, CheckCircle, Clock, Mail, MessageSquare, CalendarCheck, MapPin, Send, TrendingUp, Zap, BarChart2, Activity } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import StatCard from '@/components/StatCard';
@@ -236,232 +236,256 @@ export default function DashboardPage() {
     };
   }, [activities]);
 
+  const todayLabel = format(new Date(), 'MMMM yyyy');
+  const userName = authUser?.displayName || authUser?.email?.split('@')[0] || 'Rep';
+
+  const statusBadges = [
+    {
+      label: momentum.score >= 80 ? 'Momentum Strong' : momentum.score >= 65 ? 'Building Momentum' : 'Momentum At Risk',
+      icon: Zap,
+      color: momentum.score >= 80 ? 'border-emerald-400/40 text-emerald-300' : momentum.score >= 65 ? 'border-blue-400/40 text-blue-300' : 'border-amber-400/40 text-amber-300',
+    },
+    {
+      label: `${leads.filter(l => !l.archived).length} Active Leads`,
+      icon: Users,
+      color: 'border-violet-400/40 text-violet-300',
+    },
+    {
+      label: `$${wonMrr.toLocaleString()} Won MRR`,
+      icon: DollarSign,
+      color: 'border-sky-400/40 text-sky-300',
+    },
+  ];
+
   return (
-    <div className="p-6 space-y-6 overflow-auto h-full">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="overflow-auto h-full" data-testid="text-dashboard-title">
+      {/* Hero Section */}
+      <div className="relative px-8 pt-10 pb-12 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e0a4e 0%, #2d1b69 45%, #1a1040 100%)' }}>
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 70% 50%, #7c3aed 0%, transparent 60%)' }} />
+        <div className="relative max-w-4xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/20 bg-white/5 text-white/70 text-sm mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+            {userName} — {todayLabel}
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-3 leading-tight">
+            Daily Sales Performance
+          </h1>
+          <p className="text-white/60 text-lg max-w-xl mb-8">
+            A live view of today's activity, pipeline momentum, and where to focus next.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {statusBadges.map((badge) => (
+              <div key={badge.label} className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border bg-white/5 text-sm font-medium ${badge.color}`}>
+                <badge.icon className="h-3.5 w-3.5" />
+                {badge.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-8 py-8 space-y-8">
+        {/* Performance Snapshot — dark card */}
+        <div className="rounded-2xl border border-white/10 overflow-hidden" style={{ background: 'linear-gradient(135deg, #0f0a1e 0%, #1a1040 100%)' }}>
+          <div className="px-6 pt-5 pb-2">
+            <p className="text-xs font-semibold tracking-widest text-white/40 uppercase">Today's Performance Snapshot</p>
+          </div>
+          {[
+            { icon: Phone, value: todayActivityCounts.calls, label: 'Calls Made', target: targets.calls, color: 'text-violet-400 bg-violet-400/10' },
+            { icon: Mail, value: todayActivityCounts.emails, label: 'Emails Sent', target: null, color: 'text-blue-400 bg-blue-400/10' },
+            { icon: MessageSquare, value: todayActivityCounts.sms, label: 'SMS Sent', target: null, color: 'text-sky-400 bg-sky-400/10' },
+            { icon: CalendarCheck, value: todayActivityCounts.meetingsBooked, label: 'Meetings Booked', target: null, color: 'text-emerald-400 bg-emerald-400/10' },
+            { icon: Users, value: todayActivityCounts.meetings, label: 'Meetings Held', target: targets.meetings, color: 'text-teal-400 bg-teal-400/10' },
+            { icon: MapPin, value: todayActivityCounts.dropins, label: 'Drop-ins', target: targets.doors, color: 'text-amber-400 bg-amber-400/10' },
+          ].map((item, i, arr) => (
+            <div key={item.label} className={`flex items-center gap-4 px-6 py-4 ${i < arr.length - 1 ? 'border-b border-white/5' : ''}`}>
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}>
+                <item.icon className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white/50 text-sm">{item.label}</p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-2xl font-bold text-white">{item.value}</span>
+                {item.target !== null && (
+                  <span className="text-white/30 text-sm">/ {item.target}</span>
+                )}
+              </div>
+            </div>
+          ))}
+          <div className="px-6 py-3 border-t border-white/5">
+            <p className="text-white/25 text-xs">Activity reflects logged entries for today only.</p>
+          </div>
+        </div>
+
+        {/* All-time totals */}
         <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-dashboard-title">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back, {authUser?.displayName || authUser?.email || 'User'}</p>
+          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">All-Time Pipeline Totals</p>
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { icon: Send, label: 'Proposals Sent', value: totalActivityCounts.proposalsSent, color: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-400/10' },
+              { icon: FileText, label: 'Proposals Won', value: totalActivityCounts.proposalsWon, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10' },
+              { icon: DollarSign, label: 'Won MRR', value: `$${wonMrr.toLocaleString()}`, color: 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-400/10' },
+            ].map((item) => (
+              <Card key={item.label} className="p-5 flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}>
+                  <item.icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">{item.label}</p>
+                  <p className="text-2xl font-bold">{item.value}</p>
+                </div>
+              </Card>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="gap-2 text-base py-1 px-3">
-            <Target className="h-4 w-4" />
-            <span className="font-mono font-bold" style={{ color: momentum.statusColor }}>{momentum.score}</span>
-            <span className="text-muted-foreground">Momentum</span>
-          </Badge>
+
+        {/* Momentum + Coach */}
+        <div>
+          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">Momentum Score</p>
+          <div className="grid lg:grid-cols-2 gap-6">
+            <MomentumScoreCard momentum={momentum} showBreakdown={true} />
+            <MomentumCoach momentum={momentum} />
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-        <StatCard
-          title="Calls"
-          value={todayActivityCounts.calls}
-          target={targets.calls}
-          change={todayActivityCounts.calls > 0 ? Math.round((todayActivityCounts.calls / targets.calls) * 100) - 100 : 0}
-          icon={<Phone className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Emails Sent"
-          value={todayActivityCounts.emails}
-          icon={<Mail className="h-5 w-5" />}
-        />
-        <StatCard
-          title="SMS Sent"
-          value={todayActivityCounts.sms}
-          icon={<MessageSquare className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Meetings Booked"
-          value={todayActivityCounts.meetingsBooked}
-          icon={<CalendarCheck className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Meetings Held"
-          value={todayActivityCounts.meetings}
-          target={targets.meetings}
-          icon={<Users className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Drop-ins"
-          value={todayActivityCounts.dropins}
-          target={targets.doors}
-          icon={<MapPin className="h-5 w-5" />}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Proposals Sent"
-          value={totalActivityCounts.proposalsSent}
-          icon={<Send className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Total Proposals Won"
-          value={totalActivityCounts.proposalsWon}
-          icon={<FileText className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Total Won MRR"
-          value={`$${wonMrr.toLocaleString()}`}
-          icon={<DollarSign className="h-5 w-5" />}
-        />
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        <MomentumScoreCard momentum={momentum} showBreakdown={true} />
-        <MomentumCoach momentum={momentum} />
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="font-semibold">Momentum Trend</h2>
-            <div className="flex items-center gap-2">
-              {trendAlert.alert && (
-                <Badge variant="destructive" className="gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  {trendAlert.type === 'downtrend' ? 'Downtrend' : 'Flatline'}
-                </Badge>
-              )}
-              <Badge variant="secondary">Last 7 Days</Badge>
-            </div>
-          </div>
-          <div className="h-64" data-testid="momentum-trend-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" className="text-xs" />
-                <YAxis domain={[0, 100]} className="text-xs" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                  formatter={(value: number, name: string) => [
-                    value,
-                    name === 'avg' ? '3-Day Avg' : 'Score'
-                  ]}
-                />
-                <ReferenceLine y={80} stroke="hsl(142, 76%, 36%)" strokeDasharray="5 5" label={{ value: 'Healthy', position: 'right', fontSize: 10 }} />
-                <ReferenceLine y={65} stroke="hsl(48, 96%, 53%)" strokeDasharray="5 5" label={{ value: 'Stable', position: 'right', fontSize: 10 }} />
-                <ReferenceLine y={50} stroke="hsl(25, 95%, 53%)" strokeDasharray="5 5" label={{ value: 'At Risk', position: 'right', fontSize: 10 }} />
-                <Line
-                  type="monotone"
-                  dataKey="avg"
-                  stroke="hsl(var(--muted-foreground))"
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="score"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={(props: any) => {
-                    const { cx, cy, payload } = props;
-                    const color = getMomentumStatusColor(
-                      payload.score >= 80 ? 'healthy' : 
-                      payload.score >= 65 ? 'stable' : 
-                      payload.score >= 50 ? 'at_risk' : 'critical'
-                    );
-                    return (
-                      <circle
-                        key={payload.date}
-                        cx={cx}
-                        cy={cy}
-                        r={5}
-                        fill={color}
-                        stroke="white"
-                        strokeWidth={2}
-                      />
-                    );
-                  }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="font-semibold">Pipeline Funnel</h2>
-            <Badge variant="secondary">{funnelData.reduce((sum, d) => sum + d.count, 0)} Leads</Badge>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={funnelData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis type="number" className="text-xs" />
-                <YAxis dataKey="stage" type="category" className="text-xs" width={80} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="font-semibold">Completed Today</h2>
-            <Badge variant="default">{todayCompletedActions.length}</Badge>
-          </div>
-          <div className="space-y-3">
-            {todayCompletedActions.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No completed actions today</p>
-            ) : (
-              todayCompletedActions.slice(0, 5).map(activity => (
-                <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`completed-action-${activity.id}`}>
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{activity.notes || 'Action completed'}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'h:mm a')}
-                    </p>
-                  </div>
-                  {activity.metadata?.points && (
-                    <Badge variant="outline" className="text-xs">+{activity.metadata.points}</Badge>
+        {/* Charts */}
+        <div>
+          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">Trend & Pipeline</p>
+          <div className="grid lg:grid-cols-2 gap-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-violet-500" />
+                  <h2 className="font-semibold">Momentum Trend</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {trendAlert.alert && (
+                    <Badge variant="destructive" className="gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {trendAlert.type === 'downtrend' ? 'Downtrend' : 'Flatline'}
+                    </Badge>
                   )}
+                  <Badge variant="secondary">Last 7 Days</Badge>
                 </div>
-              ))
-            )}
-          </div>
-        </Card>
+              </div>
+              <div className="h-56" data-testid="momentum-trend-chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="date" className="text-xs" />
+                    <YAxis domain={[0, 100]} className="text-xs" />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                      formatter={(value: number, name: string) => [value, name === 'avg' ? '3-Day Avg' : 'Score']}
+                    />
+                    <ReferenceLine y={80} stroke="hsl(142, 76%, 36%)" strokeDasharray="5 5" label={{ value: 'Healthy', position: 'right', fontSize: 10 }} />
+                    <ReferenceLine y={65} stroke="hsl(48, 96%, 53%)" strokeDasharray="5 5" label={{ value: 'Stable', position: 'right', fontSize: 10 }} />
+                    <ReferenceLine y={50} stroke="hsl(25, 95%, 53%)" strokeDasharray="5 5" label={{ value: 'At Risk', position: 'right', fontSize: 10 }} />
+                    <Line type="monotone" dataKey="avg" stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeDasharray="3 3" dot={false} />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      dot={(props: any) => {
+                        const { cx, cy, payload } = props;
+                        const color = getMomentumStatusColor(payload.score >= 80 ? 'healthy' : payload.score >= 65 ? 'stable' : payload.score >= 50 ? 'at_risk' : 'critical');
+                        return <circle key={payload.date} cx={cx} cy={cy} r={5} fill={color} stroke="white" strokeWidth={2} />;
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <h2 className="font-semibold">Recent Activity</h2>
-            </div>
-            <Badge variant="secondary">{recentActivities.length}</Badge>
-          </div>
-          <div className="space-y-3">
-            {recentActivities.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No recent activity</p>
-            ) : (
-              recentActivities.map(activity => (
-                <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`recent-activity-${activity.id}`}>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate capitalize">{activity.type.replace('_', ' ')}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'MMM d, h:mm a')}
-                    </p>
-                  </div>
+            <Card className="p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <BarChart2 className="h-4 w-4 text-violet-500" />
+                  <h2 className="font-semibold">Pipeline Funnel</h2>
                 </div>
-              ))
-            )}
+                <Badge variant="secondary">{funnelData.reduce((sum, d) => sum + d.count, 0)} Leads</Badge>
+              </div>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={funnelData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis type="number" className="text-xs" />
+                    <YAxis dataKey="stage" type="category" className="text-xs" width={80} />
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                    <Bar dataKey="count" fill="#7c3aed" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
           </div>
-        </Card>
+        </div>
+
+        {/* Activity log */}
+        <div>
+          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">Activity Log</p>
+          <div className="grid lg:grid-cols-2 gap-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                  <h2 className="font-semibold">Completed Today</h2>
+                </div>
+                <Badge variant="default">{todayCompletedActions.length}</Badge>
+              </div>
+              <div className="space-y-3">
+                {todayCompletedActions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">No completed actions today</p>
+                ) : (
+                  todayCompletedActions.slice(0, 5).map(activity => (
+                    <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`completed-action-${activity.id}`}>
+                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{activity.notes || 'Action completed'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'h:mm a')}
+                        </p>
+                      </div>
+                      {activity.metadata?.points && (
+                        <Badge variant="outline" className="text-xs">+{activity.metadata.points}</Badge>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="font-semibold">Recent Activity</h2>
+                </div>
+                <Badge variant="secondary">{recentActivities.length}</Badge>
+              </div>
+              <div className="space-y-3">
+                {recentActivities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">No recent activity</p>
+                ) : (
+                  recentActivities.map(activity => (
+                    <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`recent-activity-${activity.id}`}>
+                      <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-400/10 flex items-center justify-center shrink-0">
+                        <TrendingUp className="h-3.5 w-3.5 text-violet-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate capitalize">{activity.type.replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'MMM d, h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
