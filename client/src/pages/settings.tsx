@@ -292,7 +292,7 @@ const ROLE_LABELS = {
 
 export default function SettingsPage() {
   const dispatch = useDispatch();
-  const { orgId, user, authReady, isManager, userRole } = useAuth();
+  const { orgId, user, authReady, isManager, userRole, refreshUserProfile } = useAuth();
   const { toast } = useToast();
   const cadences = useSelector((state: RootState) => state.app.cadences);
   
@@ -361,39 +361,37 @@ export default function SettingsPage() {
       let newPhotoURL = currentUser.photoURL || '';
 
       if (photoFile) {
-        // Convert file to base64 and upload via server (bypasses Storage security rules)
-        const reader = new FileReader();
-        const base64Data = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(photoFile);
+        // Resize the image client-side to 200x200 and store as compressed base64 in Firestore
+        // (avoids Firebase Storage permission issues entirely)
+        const resizedDataURL = await new Promise<string>((resolve, reject) => {
+          const img = new Image();
+          const objectUrl = URL.createObjectURL(photoFile);
+          img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            const size = 200;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d')!;
+            // Crop to square from centre
+            const minDim = Math.min(img.width, img.height);
+            const sx = (img.width - minDim) / 2;
+            const sy = (img.height - minDim) / 2;
+            ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+            resolve(canvas.toDataURL('image/jpeg', 0.75));
+          };
+          img.onerror = reject;
+          img.src = objectUrl;
         });
-
-        const response = await fetch('/api/profile/upload-photo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            uid: currentUser.uid,
-            imageData: base64Data,
-            mimeType: photoFile.type,
-          }),
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Photo upload failed');
-        }
-
-        const result = await response.json();
-        newPhotoURL = result.photoURL;
+        newPhotoURL = resizedDataURL;
       }
 
+      // Update Firebase Auth displayName only (don't store data URL in Auth)
       await updateProfile(currentUser, {
         displayName: editName.trim() || currentUser.displayName,
-        photoURL: newPhotoURL || currentUser.photoURL,
       });
 
-      // Also update Firestore user doc if it exists
+      // Store displayName + photoURL in Firestore member doc
       if (orgId) {
         const { doc, updateDoc } = await import('firebase/firestore');
         const { db } = await import('@/lib/firebase');
@@ -404,6 +402,9 @@ export default function SettingsPage() {
           });
         } catch { /* member doc may not exist, ignore */ }
       }
+
+      // Refresh the AuthContext user so TopBar avatar updates immediately
+      await refreshUserProfile();
 
       setPhotoFile(null);
       setPhotoPreview(null);

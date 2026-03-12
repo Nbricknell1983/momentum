@@ -38,6 +38,7 @@ interface AuthContextType {
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -142,6 +143,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const role = (memberData.role as TeamMemberRole) || 'member';
         setUserRole(role);
         console.log('[Auth] User role:', role, '| isManager:', role === 'owner' || role === 'admin');
+        // Prefer Firestore photoURL / displayName over Firebase Auth (allows custom uploads)
+        setUser(prev => prev ? {
+          ...prev,
+          displayName: memberData.displayName || prev.displayName,
+          photoURL: memberData.photoURL || prev.photoURL,
+        } : prev);
         return memberData.active === true;
       }
       
@@ -296,6 +303,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshUserProfile() {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !orgId) return;
+    try {
+      const memberDocRef = doc(db, 'orgs', orgId, 'members', currentUser.uid);
+      const memberSnap = await getDoc(memberDocRef);
+      if (memberSnap.exists()) {
+        const memberData = memberSnap.data();
+        setUser(prev => prev ? {
+          ...prev,
+          displayName: memberData.displayName || prev.displayName,
+          photoURL: memberData.photoURL || prev.photoURL,
+        } : prev);
+      }
+    } catch { /* ignore */ }
+  }
+
   async function signOut() {
     try {
       console.log('[Auth] Starting sign-out');
@@ -333,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpWithEmail,
       signOut,
       resetPassword,
+      refreshUserProfile,
     }}>
       {children}
     </AuthContext.Provider>

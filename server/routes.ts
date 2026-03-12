@@ -2676,6 +2676,10 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
       const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
       const imageBuffer = Buffer.from(base64Data, 'base64');
 
+      // Generate a download token so the URL is accessible without makePublic()
+      const { v4: uuidv4 } = await import('uuid');
+      const downloadToken = uuidv4();
+
       // Upload to Firebase Storage using Admin SDK (bypasses security rules)
       const fileName = `users/${uid}/profile-photo`;
       const file = bucket.file(fileName);
@@ -2684,19 +2688,20 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
         metadata: {
           contentType: mimeType,
           cacheControl: 'public, max-age=3600',
+          metadata: {
+            firebaseStorageDownloadTokens: downloadToken,
+          },
         },
       });
 
-      // Make the file publicly accessible
-      await file.makePublic();
+      // Build a Firebase Storage download URL using the token
+      const encodedPath = encodeURIComponent(fileName);
+      const photoURL = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
 
-      // Return the public URL
-      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-
-      res.json({ success: true, photoURL: publicUrl });
+      res.json({ success: true, photoURL });
     } catch (error: any) {
       console.error("Error uploading profile photo:", error);
-      res.status(500).json({ error: "Failed to upload profile photo" });
+      res.status(500).json({ error: error.message || "Failed to upload profile photo" });
     }
   });
 
