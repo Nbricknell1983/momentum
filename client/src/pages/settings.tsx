@@ -292,7 +292,7 @@ const ROLE_LABELS = {
 
 export default function SettingsPage() {
   const dispatch = useDispatch();
-  const { orgId, user, authReady } = useAuth();
+  const { orgId, user, authReady, isManager } = useAuth();
   const { toast } = useToast();
   const cadences = useSelector((state: RootState) => state.app.cadences);
   
@@ -745,7 +745,7 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   {canManageTeam 
                     ? 'Manage who has access to your organization' 
-                    : 'View team members in your organization'}
+                    : 'Your account details within the organization'}
                 </p>
               </div>
               {canManageTeam && (
@@ -770,7 +770,7 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <div className="divide-y">
-                    {teamMembers.map((member) => {
+                    {(isManager ? teamMembers : teamMembers.filter(m => m.id === user?.uid || m.email === user?.email)).map((member) => {
                       const RoleIcon = ROLE_ICONS[member.role];
                       return (
                         <div key={member.id} className="flex items-center justify-between p-4 gap-4" data-testid={`member-row-${member.id}`}>
