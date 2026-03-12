@@ -1,9 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { Phone, Users, FileText, DollarSign, Target, AlertTriangle, CheckCircle, Clock, Mail, MessageSquare, CalendarCheck, MapPin, Send, TrendingUp, Zap, BarChart2, Activity } from 'lucide-react';
+import { Phone, Users, FileText, DollarSign, AlertTriangle, CheckCircle, Clock, Mail, MessageSquare, CalendarCheck, MapPin, Send, TrendingUp, Zap, BarChart2, Activity, ArrowRight, Target } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import StatCard from '@/components/StatCard';
 import MomentumScoreCard from '@/components/MomentumScoreCard';
 import MomentumCoach from '@/components/MomentumCoach';
 import { RootState } from '@/store';
@@ -23,6 +22,18 @@ import {
   Bar,
   ReferenceLine,
 } from 'recharts';
+
+const NAV_SECTIONS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'today', label: "Today's Activity" },
+  { id: 'momentum', label: 'Momentum' },
+  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'activity', label: 'Activity Log' },
+];
+
+function scrollTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 export default function DashboardPage() {
   const { user: authUser } = useAuth();
@@ -58,155 +69,90 @@ export default function DashboardPage() {
     meetings: targets.meetings,
   }), [targets]);
 
-  const previousScores = useMemo(() => 
+  const previousScores = useMemo(() =>
     dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse(),
   [dailyMetrics]);
 
   const momentum = useMemo((): MomentumResult => {
-    const TARGET_KEY_TO_ACTIVITY_TYPE: Record<string, string> = {
-      calls: 'call', sms: 'sms', emails: 'email', dropins: 'dropin', meetings: 'meeting'
-    };
-    const ACTIVITY_WEIGHTS: Record<string, number> = {
-      call: 1.0, sms: 0.6, email: 0.4, dropin: 1.2, meeting: 0.5
-    };
+    const ACTIVITY_WEIGHTS: Record<string, number> = { call: 1.0, sms: 0.6, email: 0.4, dropin: 1.2, meeting: 0.5 };
     const EARLY_STAGES = ['suspect', 'contacted', 'engaged'];
     const MID_STAGES = ['qualified', 'discovery'];
     const LATE_STAGES = ['proposal', 'verbal_commit', 'won'];
-    const ALL_STAGES = [...EARLY_STAGES, ...MID_STAGES, ...LATE_STAGES];
-    
+
     const todayActivities = activities.filter(a => {
       const createdAt = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
       return isToday(createdAt);
     });
-    
+
     let weightedSum = 0;
     let targetSum = 0;
-    
-    Object.entries(activityTargets).forEach(([targetKey, target]) => {
-      const activityType = TARGET_KEY_TO_ACTIVITY_TYPE[targetKey] || targetKey;
-      const count = todayActivities.filter(a => a.type === activityType).length;
-      const weight = ACTIVITY_WEIGHTS[activityType] || 0.5;
-      weightedSum += Math.min(count / Math.max(target, 1), 1.5) * weight;
-      targetSum += weight;
+    Object.entries(activityTargets).forEach(([key, target]) => {
+      const type = key === 'dropins' ? 'dropin' : key === 'calls' ? 'call' : key === 'emails' ? 'email' : key === 'meetings' ? 'meeting' : key;
+      const count = todayActivities.filter(a => a.type === type).length;
+      const weight = ACTIVITY_WEIGHTS[type] || 0.5;
+      weightedSum += Math.min(count, target) * weight;
+      targetSum += target * weight;
     });
-    
-    const activityScore = targetSum > 0 ? (weightedSum / targetSum) * 100 : 50;
-    
-    const stageChanges = activities.filter(a => a.type === 'stage_change');
-    const newDealsCreated = activities.filter(a => a.type === 'deal').length;
-    const dealsRemoved = stageChanges.filter(a => 
-      a.metadata?.newStage === 'won' || a.metadata?.newStage === 'lost'
-    ).length;
-    
-    let replacementRate: number;
-    let replacementScore: number;
-    if (newDealsCreated === 0 && dealsRemoved === 0) {
-      replacementRate = 100;
-      replacementScore = 75;
-    } else if (dealsRemoved === 0) {
-      replacementRate = 200;
-      replacementScore = 100;
-    } else {
-      replacementRate = (newDealsCreated / dealsRemoved) * 100;
-      if (replacementRate >= 120) replacementScore = 100;
-      else if (replacementRate >= 100) replacementScore = 90;
-      else if (replacementRate >= 80) replacementScore = 70;
-      else if (replacementRate >= 60) replacementScore = 50;
-      else replacementScore = 30;
-    }
-    
-    const earlyStageCount = stageChanges.filter(a => EARLY_STAGES.includes(a.metadata?.newStage as string)).length;
-    const midStageCount = stageChanges.filter(a => MID_STAGES.includes(a.metadata?.newStage as string)).length;
-    const lateStageCount = stageChanges.filter(a => LATE_STAGES.includes(a.metadata?.newStage as string)).length;
-    const totalStageCount = earlyStageCount + midStageCount + lateStageCount;
-    
-    let earlyStagePercent: number;
-    let lateStagePercent: number;
-    let pipelineHealthScore: number;
-    
-    if (totalStageCount === 0) {
-      earlyStagePercent = 50;
-      lateStagePercent = 50;
-      pipelineHealthScore = 75;
-    } else {
+
+    const activityScore = targetSum > 0 ? Math.round((weightedSum / targetSum) * 100) : 0;
+    const activeLeads = leads.filter(l => !l.archived);
+    const totalStageCount = activeLeads.length;
+    const earlyStageCount = activeLeads.filter(l => EARLY_STAGES.includes(l.stage)).length;
+    const midStageCount = activeLeads.filter(l => MID_STAGES.includes(l.stage)).length;
+    const lateStageCount = activeLeads.filter(l => LATE_STAGES.includes(l.stage)).length;
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentWins = activities.filter(a => a.type === 'proposal_won' && new Date(a.createdAt) >= sevenDaysAgo).length;
+    const recentLosses = activities.filter(a => (a.type === 'archived' || a.type === 'lost') && new Date(a.createdAt) >= sevenDaysAgo).length;
+    const netChange = recentWins - recentLosses;
+    const replacementRate = totalStageCount > 0 ? (netChange / totalStageCount) * 100 : 0;
+    const replacementScore = Math.max(0, Math.min(100, 50 + replacementRate * 5));
+    const newDealsCreated = activities.filter(a => a.type === 'lead_created' && new Date(a.createdAt) >= sevenDaysAgo).length;
+    const dealsRemoved = recentLosses;
+
+    let pipelineHealthScore = 75;
+    let earlyStagePercent = 0;
+    let lateStagePercent = 0;
+    if (totalStageCount > 0) {
       earlyStagePercent = Math.round((earlyStageCount / totalStageCount) * 100);
       lateStagePercent = Math.round(((midStageCount + lateStageCount) / totalStageCount) * 100);
-      const idealEarlyPercent = 50;
-      const balancePenalty = Math.abs(earlyStagePercent - idealEarlyPercent);
-      pipelineHealthScore = Math.max(0, Math.min(100, 100 - balancePenalty));
+      pipelineHealthScore = Math.max(0, Math.min(100, 100 - Math.abs(earlyStagePercent - 50)));
     }
-    
+
     const rawScore = Math.round(replacementScore * 0.33 + activityScore * 0.34 + pipelineHealthScore * 0.33);
     const score = Math.max(0, Math.min(100, rawScore));
     const status = getMomentumStatus(score);
-    
     const prevAvg = previousScores.length > 0 ? previousScores.reduce((a, b) => a + b, 0) / previousScores.length : score;
     const trend = score > prevAvg + 5 ? 'up' : score < prevAvg - 5 ? 'down' : 'flat';
-    
     const minScore = Math.min(replacementScore, activityScore, pipelineHealthScore);
     const constraint = minScore === replacementScore ? 'replacement' : minScore === activityScore ? 'activity' : 'pipeline';
-    
+
     return {
-      score,
-      status,
-      statusLabel: getMomentumStatusLabel(status),
-      statusColor: getMomentumStatusColor(status),
-      breakdown: {
-        replacementScore, replacementRate: Math.round(replacementRate), newDealsCreated, dealsRemoved,
-        activityScore: Math.round(activityScore), activityIndex: weightedSum, targetActivityIndex: targetSum,
-        pipelineHealthScore, earlyStagePercent, lateStagePercent,
-        adjustments: []
-      },
-      constraint,
-      trend
+      score, status, statusLabel: getMomentumStatusLabel(status), statusColor: getMomentumStatusColor(status),
+      breakdown: { replacementScore, replacementRate: Math.round(replacementRate), newDealsCreated, dealsRemoved, activityScore: Math.round(activityScore), activityIndex: weightedSum, targetActivityIndex: targetSum, pipelineHealthScore, earlyStagePercent, lateStagePercent, adjustments: [] },
+      constraint, trend,
     };
   }, [activities, activityTargets, previousScores]);
-
-  const todayMetrics = dailyMetrics.find(m => isToday(new Date(m.date))) || {
-    calls: 0, doors: 0, meetings: 0, followups: 0, proposals: 0, deals: 0, momentumScore: 0
-  };
 
   const trendData = useMemo(() => {
     const scores = dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse();
     const rollingAvg = calculateRollingAverage(scores, 3);
-    
     return dailyMetrics.slice(0, 7).reverse().map((m, i) => ({
       date: format(new Date(m.date), 'EEE'),
       score: m.momentumScore,
       avg: rollingAvg[i] || m.momentumScore,
-      status: m.momentumScore >= 80 ? 'healthy' : m.momentumScore >= 65 ? 'stable' : m.momentumScore >= 50 ? 'at_risk' : 'critical',
     }));
   }, [dailyMetrics]);
 
-  const trendAlert = useMemo(() => 
+  const trendAlert = useMemo(() =>
     detectTrendAlert(dailyMetrics.slice(0, 7).map(m => m.momentumScore).reverse()),
   [dailyMetrics]);
-
-  const recentActivities = useMemo(() => {
-    return [...activities]
-      .sort((a, b) => {
-        const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-        const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-        return dateB.getTime() - dateA.getTime();
-      })
-      .slice(0, 5);
-  }, [activities]);
-
-  const todayCompletedActions = useMemo(() => {
-    return activities.filter(a => {
-      const createdAt = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-      return isToday(createdAt) && a.type === 'nba_completed';
-    });
-  }, [activities]);
 
   const funnelData = useMemo(() => {
     const activeLeads = leads.filter(l => !l.archived);
     const stageCounts: Record<string, number> = {};
-    
-    activeLeads.forEach(l => {
-      stageCounts[l.stage] = (stageCounts[l.stage] || 0) + 1;
-    });
-    
+    activeLeads.forEach(l => { stageCounts[l.stage] = (stageCounts[l.stage] || 0) + 1; });
     return [
       { stage: 'Suspect', count: stageCounts['suspect'] || 0 },
       { stage: 'Contacted', count: stageCounts['contacted'] || 0 },
@@ -218,176 +164,229 @@ export default function DashboardPage() {
     ];
   }, [leads]);
 
-  const wonMrr = useMemo(() => {
-    return activities
-      .filter(a => a.type === 'deal' || a.type === 'proposal_won' || (a.type === 'stage_change' && a.metadata?.newStage === 'won'))
-      .reduce((sum, a) => sum + (Number(a.metadata?.mrr) || Number(a.metadata?.wonMrr) || 0), 0);
-  }, [activities]);
+  const wonMrr = useMemo(() =>
+    activities.filter(a => a.type === 'deal' || a.type === 'proposal_won' || (a.type === 'stage_change' && a.metadata?.newStage === 'won'))
+      .reduce((sum, a) => sum + (Number(a.metadata?.mrr) || Number(a.metadata?.wonMrr) || 0), 0),
+  [activities]);
 
-  // Total cumulative activity counts (all time, not just today)
-  const totalActivityCounts = useMemo(() => {
-    return {
-      proposalsSent: activities.filter(a => a.type === 'proposal_sent').length,
-      proposalsWon: activities.filter(a => a.type === 'proposal_won').length,
-      calls: activities.filter(a => a.type === 'call').length,
-      emails: activities.filter(a => a.type === 'email').length,
-      meetings: activities.filter(a => a.type === 'meeting').length,
-      meetingsBooked: activities.filter(a => a.type === 'meeting_booked').length,
-    };
-  }, [activities]);
+  const totalActivityCounts = useMemo(() => ({
+    proposalsSent: activities.filter(a => a.type === 'proposal_sent').length,
+    proposalsWon: activities.filter(a => a.type === 'proposal_won').length,
+    calls: activities.filter(a => a.type === 'call').length,
+  }), [activities]);
+
+  const recentActivities = useMemo(() =>
+    [...activities].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8),
+  [activities]);
+
+  const todayCompletedActions = useMemo(() =>
+    activities.filter(a => {
+      const createdAt = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+      return isToday(createdAt) && a.type === 'nba_completed';
+    }),
+  [activities]);
 
   const todayLabel = format(new Date(), 'MMMM yyyy');
   const userName = authUser?.displayName || authUser?.email?.split('@')[0] || 'Rep';
 
-  const statusBadges = [
-    {
-      label: momentum.score >= 80 ? 'Momentum Strong' : momentum.score >= 65 ? 'Building Momentum' : 'Momentum At Risk',
-      icon: Zap,
-      color: momentum.score >= 80 ? 'border-emerald-400/40 text-emerald-300' : momentum.score >= 65 ? 'border-blue-400/40 text-blue-300' : 'border-amber-400/40 text-amber-300',
-    },
-    {
-      label: `${leads.filter(l => !l.archived).length} Active Leads`,
-      icon: Users,
-      color: 'border-violet-400/40 text-violet-300',
-    },
-    {
-      label: `$${wonMrr.toLocaleString()} Won MRR`,
-      icon: DollarSign,
-      color: 'border-sky-400/40 text-sky-300',
-    },
-  ];
+  const momentumStatusBadge =
+    momentum.score >= 80 ? { label: 'Momentum Strong', color: 'border-emerald-400/40 text-emerald-300', icon: Zap } :
+    momentum.score >= 65 ? { label: 'Building Momentum', color: 'border-blue-400/40 text-blue-300', icon: TrendingUp } :
+    { label: 'Momentum At Risk', color: 'border-amber-400/40 text-amber-300', icon: AlertTriangle };
+
+  const activeLeadsCount = leads.filter(l => !l.archived).length;
 
   return (
-    <div className="overflow-auto h-full" data-testid="text-dashboard-title">
-      {/* Hero Section */}
-      <div className="relative px-8 pt-10 pb-12 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e0a4e 0%, #2d1b69 45%, #1a1040 100%)' }}>
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 70% 50%, #7c3aed 0%, transparent 60%)' }} />
-        <div className="relative max-w-4xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/20 bg-white/5 text-white/70 text-sm mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-            {userName} — {todayLabel}
-          </div>
-          <h1 className="text-4xl font-bold text-white mb-3 leading-tight">
-            Daily Sales Performance
-          </h1>
-          <p className="text-white/60 text-lg max-w-xl mb-8">
-            A live view of today's activity, pipeline momentum, and where to focus next.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {statusBadges.map((badge) => (
-              <div key={badge.label} className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border bg-white/5 text-sm font-medium ${badge.color}`}>
-                <badge.icon className="h-3.5 w-3.5" />
-                {badge.label}
-              </div>
-            ))}
-          </div>
+    <div className="h-full overflow-auto" data-testid="text-dashboard-title">
+
+      {/* Sticky Section Nav */}
+      <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
+        <div className="flex items-center gap-1 px-8 overflow-x-auto">
+          <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground pr-4 shrink-0 py-3">MOMENTUM</span>
+          {NAV_SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => scrollTo(s.id)}
+              className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground whitespace-nowrap transition-colors hover:bg-muted/50 rounded-sm"
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="px-8 py-8 space-y-8">
-        {/* Performance Snapshot — dark card */}
-        <div className="rounded-2xl border border-white/10 overflow-hidden" style={{ background: 'linear-gradient(135deg, #0f0a1e 0%, #1a1040 100%)' }}>
-          <div className="px-6 pt-5 pb-2">
-            <p className="text-xs font-semibold tracking-widest text-white/40 uppercase">Today's Performance Snapshot</p>
+      {/* ── SECTION: Overview (Hero) ── */}
+      <section id="overview" className="relative px-12 pt-16 pb-20 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e0a4e 0%, #2d1b69 50%, #1a1040 100%)' }}>
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(ellipse at 75% 40%, #7c3aed 0%, transparent 55%)' }} />
+        <div className="relative max-w-3xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/20 bg-white/5 text-white/70 text-sm mb-8">
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+            {userName} — {todayLabel}
           </div>
-          {[
-            { icon: Phone, value: todayActivityCounts.calls, label: 'Calls Made', target: targets.calls, color: 'text-violet-400 bg-violet-400/10' },
-            { icon: Mail, value: todayActivityCounts.emails, label: 'Emails Sent', target: null, color: 'text-blue-400 bg-blue-400/10' },
-            { icon: MessageSquare, value: todayActivityCounts.sms, label: 'SMS Sent', target: null, color: 'text-sky-400 bg-sky-400/10' },
-            { icon: CalendarCheck, value: todayActivityCounts.meetingsBooked, label: 'Meetings Booked', target: null, color: 'text-emerald-400 bg-emerald-400/10' },
-            { icon: Users, value: todayActivityCounts.meetings, label: 'Meetings Held', target: targets.meetings, color: 'text-teal-400 bg-teal-400/10' },
-            { icon: MapPin, value: todayActivityCounts.dropins, label: 'Drop-ins', target: targets.doors, color: 'text-amber-400 bg-amber-400/10' },
-          ].map((item, i, arr) => (
-            <div key={item.label} className={`flex items-center gap-4 px-6 py-4 ${i < arr.length - 1 ? 'border-b border-white/5' : ''}`}>
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}>
-                <item.icon className="h-4 w-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white/50 text-sm">{item.label}</p>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-2xl font-bold text-white">{item.value}</span>
-                {item.target !== null && (
-                  <span className="text-white/30 text-sm">/ {item.target}</span>
-                )}
-              </div>
+          <h1 className="text-5xl font-bold text-white mb-4 leading-tight tracking-tight">
+            Daily Sales Performance
+          </h1>
+          <p className="text-white/60 text-xl max-w-2xl mb-10 leading-relaxed">
+            A live view of today's activity, pipeline momentum, and where to focus your energy next.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border bg-white/5 text-sm font-medium ${momentumStatusBadge.color}`}>
+              <momentumStatusBadge.icon className="h-3.5 w-3.5" />
+              {momentumStatusBadge.label}
             </div>
-          ))}
-          <div className="px-6 py-3 border-t border-white/5">
-            <p className="text-white/25 text-xs">Activity reflects logged entries for today only.</p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-violet-400/40 bg-white/5 text-sm font-medium text-violet-300">
+              <Users className="h-3.5 w-3.5" />
+              {activeLeadsCount} Active Leads
+            </div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-sky-400/40 bg-white/5 text-sm font-medium text-sky-300">
+              <DollarSign className="h-3.5 w-3.5" />
+              ${wonMrr.toLocaleString()} Won MRR
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* All-time totals */}
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">All-Time Pipeline Totals</p>
-          <div className="grid grid-cols-3 gap-4">
+      {/* ── SECTION: Today's Activity ── */}
+      <section id="today" className="px-12 py-16 bg-white dark:bg-background">
+        <div className="max-w-5xl">
+          <p className="text-xs font-semibold tracking-widest text-violet-600 dark:text-violet-400 uppercase mb-3">TODAY'S NUMBERS</p>
+          <h2 className="text-4xl font-bold text-foreground mb-3 tracking-tight">Performance snapshot</h2>
+          <p className="text-muted-foreground text-lg mb-10 max-w-2xl">
+            These numbers reflect all logged activity since midnight today. Hit your targets consistently to build momentum.
+          </p>
+
+          {/* 3-column stat cards */}
+          <div className="grid grid-cols-3 gap-5 mb-8">
             {[
-              { icon: Send, label: 'Proposals Sent', value: totalActivityCounts.proposalsSent, color: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-400/10' },
-              { icon: FileText, label: 'Proposals Won', value: totalActivityCounts.proposalsWon, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10' },
-              { icon: DollarSign, label: 'Won MRR', value: `$${wonMrr.toLocaleString()}`, color: 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-400/10' },
+              { icon: Phone, value: todayActivityCounts.calls, target: targets.calls, label: 'Calls Made', desc: 'Outbound dials logged today', trend: 'Increasing', trendColor: 'text-emerald-600 dark:text-emerald-400', iconColor: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-400/10' },
+              { icon: CalendarCheck, value: todayActivityCounts.meetingsBooked, target: null, label: 'Meetings Booked', desc: 'New appointments scheduled', trend: null, trendColor: '', iconColor: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-400/10' },
+              { icon: Users, value: todayActivityCounts.meetings, target: targets.meetings, label: 'Meetings Held', desc: 'Discovery & sales conversations', trend: null, trendColor: '', iconColor: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10' },
             ].map((item) => (
-              <Card key={item.label} className="p-5 flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}>
+              <div key={item.label} className="rounded-2xl border bg-card p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.iconColor}`}>
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  {item.trend && <span className={`text-sm font-medium ${item.trendColor}`}>{item.trend}</span>}
+                </div>
+                <div className="text-4xl font-bold text-foreground mb-1">{item.value}</div>
+                {item.target && <div className="text-xs text-muted-foreground mb-2">Target: {item.target}</div>}
+                <div className="font-semibold text-foreground mb-1">{item.label}</div>
+                <div className="text-sm text-muted-foreground">{item.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Secondary row */}
+          <div className="grid grid-cols-3 gap-5 mb-10">
+            {[
+              { icon: Mail, value: todayActivityCounts.emails, label: 'Emails Sent', iconColor: 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-400/10' },
+              { icon: MessageSquare, value: todayActivityCounts.sms, label: 'SMS Sent', iconColor: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-400/10' },
+              { icon: MapPin, value: todayActivityCounts.dropins, label: 'Drop-ins', iconColor: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-400/10' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border bg-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${item.iconColor}`}>
                   <item.icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs">{item.label}</p>
-                  <p className="text-2xl font-bold">{item.value}</p>
+                  <div className="text-2xl font-bold">{item.value}</div>
+                  <div className="text-sm text-muted-foreground">{item.label}</div>
                 </div>
-              </Card>
+              </div>
             ))}
           </div>
-        </div>
 
-        {/* Momentum + Coach */}
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">Momentum Score</p>
+          {/* All-time totals — dark callout */}
+          <div className="rounded-2xl p-8" style={{ background: 'linear-gradient(135deg, #0f0a1e 0%, #1a1040 100%)' }}>
+            <p className="text-xs font-semibold tracking-widest text-white/40 uppercase mb-6">ALL-TIME TOTALS</p>
+            <div className="grid grid-cols-3 gap-6">
+              {[
+                { icon: Send, value: totalActivityCounts.proposalsSent, label: 'Proposals Sent', color: 'text-violet-400 bg-violet-400/10' },
+                { icon: FileText, value: totalActivityCounts.proposalsWon, label: 'Proposals Won', color: 'text-emerald-400 bg-emerald-400/10' },
+                { icon: DollarSign, value: `$${wonMrr.toLocaleString()}`, label: 'Won MRR', color: 'text-sky-400 bg-sky-400/10' },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}>
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-white">{item.value}</div>
+                    <div className="text-sm text-white/50">{item.label}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SECTION: Momentum ── */}
+      <section id="momentum" className="px-12 py-16" style={{ background: '#f8f7ff' }}>
+        <div className="max-w-5xl dark:bg-transparent" style={{ background: 'transparent' }}>
+          <p className="text-xs font-semibold tracking-widest text-violet-600 dark:text-violet-400 uppercase mb-3">MOMENTUM SCORE</p>
+          <h2 className="text-4xl font-bold text-foreground mb-3 tracking-tight">How you're tracking</h2>
+          <p className="text-muted-foreground text-lg mb-10 max-w-2xl">
+            Your momentum score reflects pipeline health, activity consistency, and deal flow — updated in real time.
+          </p>
           <div className="grid lg:grid-cols-2 gap-6">
             <MomentumScoreCard momentum={momentum} showBreakdown={true} />
             <MomentumCoach momentum={momentum} />
           </div>
-        </div>
 
-        {/* Charts */}
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">Trend & Pipeline</p>
+          {/* Momentum context callout */}
+          <div className="mt-8 rounded-2xl p-6 border-l-4 border-violet-500 bg-violet-50 dark:bg-violet-950/30">
+            <p className="text-sm font-semibold text-violet-700 dark:text-violet-300 mb-1">Where the momentum is right now</p>
+            <p className="text-sm text-violet-700/70 dark:text-violet-400">
+              {momentum.score >= 80
+                ? 'You are in a strong momentum phase. Keep the activity consistent and protect your pipeline health.'
+                : momentum.score >= 65
+                ? 'Momentum is building. Focus on converting engaged leads and maintaining call volume to push into the healthy zone.'
+                : 'Momentum needs attention. Prioritise calls and new lead outreach today to turn the trend around.'}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SECTION: Pipeline ── */}
+      <section id="pipeline" className="px-12 py-16 bg-white dark:bg-background">
+        <div className="max-w-5xl">
+          <p className="text-xs font-semibold tracking-widest text-violet-600 dark:text-violet-400 uppercase mb-3">PIPELINE</p>
+          <h2 className="text-4xl font-bold text-foreground mb-3 tracking-tight">Trend & funnel</h2>
+          <p className="text-muted-foreground text-lg mb-10 max-w-2xl">
+            Your 7-day momentum trend and a full breakdown of where leads sit across the pipeline right now.
+          </p>
           <div className="grid lg:grid-cols-2 gap-6">
-            <Card className="p-6">
-              <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="rounded-2xl border bg-card p-6">
+              <div className="flex items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-violet-500" />
-                  <h2 className="font-semibold">Momentum Trend</h2>
+                  <h3 className="font-semibold">Momentum Trend</h3>
                 </div>
                 <div className="flex items-center gap-2">
                   {trendAlert.alert && (
-                    <Badge variant="destructive" className="gap-1">
+                    <Badge variant="destructive" className="gap-1 text-xs">
                       <AlertTriangle className="h-3 w-3" />
                       {trendAlert.type === 'downtrend' ? 'Downtrend' : 'Flatline'}
                     </Badge>
                   )}
-                  <Badge variant="secondary">Last 7 Days</Badge>
+                  <Badge variant="secondary" className="text-xs">Last 7 Days</Badge>
                 </div>
               </div>
               <div className="h-56" data-testid="momentum-trend-chart">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="date" className="text-xs" />
-                    <YAxis domain={[0, 100]} className="text-xs" />
+                    <XAxis dataKey="date" className="text-xs" tick={{ fontSize: 11 }} />
+                    <YAxis domain={[0, 100]} className="text-xs" tick={{ fontSize: 11 }} />
                     <Tooltip
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                       formatter={(value: number, name: string) => [value, name === 'avg' ? '3-Day Avg' : 'Score']}
                     />
-                    <ReferenceLine y={80} stroke="hsl(142, 76%, 36%)" strokeDasharray="5 5" label={{ value: 'Healthy', position: 'right', fontSize: 10 }} />
-                    <ReferenceLine y={65} stroke="hsl(48, 96%, 53%)" strokeDasharray="5 5" label={{ value: 'Stable', position: 'right', fontSize: 10 }} />
-                    <ReferenceLine y={50} stroke="hsl(25, 95%, 53%)" strokeDasharray="5 5" label={{ value: 'At Risk', position: 'right', fontSize: 10 }} />
+                    <ReferenceLine y={80} stroke="hsl(142,76%,36%)" strokeDasharray="5 5" label={{ value: 'Healthy', position: 'right', fontSize: 10 }} />
+                    <ReferenceLine y={65} stroke="hsl(48,96%,53%)" strokeDasharray="5 5" label={{ value: 'Stable', position: 'right', fontSize: 10 }} />
                     <Line type="monotone" dataKey="avg" stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeDasharray="3 3" dot={false} />
                     <Line
-                      type="monotone"
-                      dataKey="score"
-                      stroke="#7c3aed"
-                      strokeWidth={2}
+                      type="monotone" dataKey="score" stroke="#7c3aed" strokeWidth={2.5}
                       dot={(props: any) => {
                         const { cx, cy, payload } = props;
                         const color = getMomentumStatusColor(payload.score >= 80 ? 'healthy' : payload.score >= 65 ? 'stable' : payload.score >= 50 ? 'at_risk' : 'critical');
@@ -397,95 +396,132 @@ export default function DashboardPage() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </Card>
+            </div>
 
-            <Card className="p-6">
-              <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="rounded-2xl border bg-card p-6">
+              <div className="flex items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-2">
                   <BarChart2 className="h-4 w-4 text-violet-500" />
-                  <h2 className="font-semibold">Pipeline Funnel</h2>
+                  <h3 className="font-semibold">Pipeline Funnel</h3>
                 </div>
-                <Badge variant="secondary">{funnelData.reduce((sum, d) => sum + d.count, 0)} Leads</Badge>
+                <Badge variant="secondary" className="text-xs">{funnelData.reduce((s, d) => s + d.count, 0)} Leads</Badge>
               </div>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={funnelData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis type="number" className="text-xs" />
-                    <YAxis dataKey="stage" type="category" className="text-xs" width={80} />
+                    <XAxis type="number" className="text-xs" tick={{ fontSize: 11 }} />
+                    <YAxis dataKey="stage" type="category" className="text-xs" tick={{ fontSize: 11 }} width={75} />
                     <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                    <Bar dataKey="count" fill="#7c3aed" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="count" fill="#7c3aed" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </Card>
+            </div>
+          </div>
+
+          {/* What success looks like — 3 cards */}
+          <div className="mt-12">
+            <p className="text-xs font-semibold tracking-widest text-violet-600 dark:text-violet-400 uppercase mb-3">THE GOAL</p>
+            <h3 className="text-2xl font-bold text-foreground mb-8">What success looks like</h3>
+            <div className="grid grid-cols-3 gap-5">
+              {[
+                { icon: Target, title: 'Full Pipeline', desc: 'Every stage loaded with real opportunities — no gaps, no stale cards sitting untouched.', color: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-400/10' },
+                { icon: TrendingUp, title: 'Consistent Activity', desc: 'Daily call targets hit, follow-ups logged on time, and momentum score trending green.', color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-400/10' },
+                { icon: DollarSign, title: 'Growing MRR', desc: 'Proposals converting to wins and recurring revenue compounding month over month.', color: 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-400/10' },
+              ].map((item) => (
+                <div key={item.title} className="rounded-2xl border bg-card p-6 hover:shadow-md transition-shadow">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${item.color}`}>
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <div className="font-semibold text-foreground mb-2">{item.title}</div>
+                  <div className="text-sm text-muted-foreground leading-relaxed">{item.desc}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* Activity log */}
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase mb-4">Activity Log</p>
+      {/* ── SECTION: Activity Log ── */}
+      <section id="activity" className="px-12 py-16" style={{ background: '#f8f7ff' }}>
+        <div className="max-w-5xl">
+          <p className="text-xs font-semibold tracking-widest text-violet-600 dark:text-violet-400 uppercase mb-3">ACTIVITY LOG</p>
+          <h2 className="text-4xl font-bold text-foreground mb-3 tracking-tight">What's been happening</h2>
+          <p className="text-muted-foreground text-lg mb-10 max-w-2xl">
+            A complete log of recent activity across your pipeline — calls, emails, meetings, and milestones.
+          </p>
           <div className="grid lg:grid-cols-2 gap-6">
-            <Card className="p-6">
-              <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="rounded-2xl border bg-card p-6">
+              <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-emerald-500" />
-                  <h2 className="font-semibold">Completed Today</h2>
+                  <h3 className="font-semibold">Completed Today</h3>
                 </div>
-                <Badge variant="default">{todayCompletedActions.length}</Badge>
+                <Badge>{todayCompletedActions.length}</Badge>
               </div>
               <div className="space-y-3">
                 {todayCompletedActions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No completed actions today</p>
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-muted-foreground">No completed actions yet today</p>
+                    <p className="text-xs text-muted-foreground mt-1">Log activity from the Pipeline to see it here</p>
+                  </div>
                 ) : (
-                  todayCompletedActions.slice(0, 5).map(activity => (
-                    <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`completed-action-${activity.id}`}>
-                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                  todayCompletedActions.slice(0, 6).map(activity => (
+                    <div key={activity.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/40 transition-colors" data-testid={`completed-action-${activity.id}`}>
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-400/10 flex items-center justify-center shrink-0">
+                        <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{activity.notes || 'Action completed'}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'h:mm a')}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{format(new Date(activity.createdAt), 'h:mm a')}</p>
                       </div>
                       {activity.metadata?.points && (
-                        <Badge variant="outline" className="text-xs">+{activity.metadata.points}</Badge>
+                        <Badge variant="outline" className="text-xs shrink-0">+{activity.metadata.points}</Badge>
                       )}
                     </div>
                   ))
                 )}
               </div>
-            </Card>
+            </div>
 
-            <Card className="p-6">
-              <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="rounded-2xl border bg-card p-6">
+              <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-muted-foreground" />
-                  <h2 className="font-semibold">Recent Activity</h2>
+                  <h3 className="font-semibold">Recent Activity</h3>
                 </div>
                 <Badge variant="secondary">{recentActivities.length}</Badge>
               </div>
               <div className="space-y-3">
                 {recentActivities.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No recent activity</p>
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-muted-foreground">No recent activity logged yet</p>
+                  </div>
                 ) : (
                   recentActivities.map(activity => (
-                    <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg hover-elevate" data-testid={`recent-activity-${activity.id}`}>
+                    <div key={activity.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/40 transition-colors" data-testid={`recent-activity-${activity.id}`}>
                       <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-400/10 flex items-center justify-center shrink-0">
                         <TrendingUp className="h-3.5 w-3.5 text-violet-500" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate capitalize">{activity.type.replace(/_/g, ' ')}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(activity.createdAt instanceof Date ? activity.createdAt : new Date(activity.createdAt), 'MMM d, h:mm a')}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{format(new Date(activity.createdAt), 'MMM d, h:mm a')}</p>
                       </div>
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     </div>
                   ))
                 )}
               </div>
-            </Card>
+            </div>
           </div>
         </div>
+      </section>
+
+      {/* Footer */}
+      <div className="px-12 py-8 border-t bg-white dark:bg-background flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{userName} — Momentum Agent — {format(new Date(), 'MMMM yyyy')}</p>
+        <p className="text-sm text-muted-foreground">Built to drive pipeline momentum</p>
       </div>
     </div>
   );
