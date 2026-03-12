@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Filter, Loader2, Maximize2 } from 'lucide-react';
+import { Filter, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { RootState, updateClient, setRegionFilter, setAreaFilter } from '@/store';
@@ -56,22 +56,17 @@ function ClientPipelineColumn({ stage, clients, onOpenWorkspace }: ClientPipelin
         <SortableContext items={clients.map(c => c.id)} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-3">
             {clients.map((client) => (
-              <div key={client.id} className="group relative">
+              <div
+                key={client.id}
+                className="cursor-pointer"
+                onClick={() => onOpenWorkspace(client)}
+                data-testid={`card-client-${client.id}`}
+              >
                 <ClientPipelineCard
                   client={client}
                   isExpanded={false}
-                  onToggle={() => {}}
+                  onToggle={() => onOpenWorkspace(client)}
                 />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="absolute top-2 right-2 h-7 gap-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                  onClick={() => onOpenWorkspace(client)}
-                  data-testid={`button-open-workspace-${client.id}`}
-                >
-                  <Maximize2 className="h-3 w-3" />
-                  Open
-                </Button>
               </div>
             ))}
             {clients.length === 0 && (
