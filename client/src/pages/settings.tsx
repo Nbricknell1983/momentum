@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, addCadence, updateCadence, deleteCadence } from '@/store';
 import { Cadence, CadenceStep, TouchChannel, Organization, TeamMember, AUSTRALIAN_TIMEZONES } from '@/lib/types';
@@ -18,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CHANNEL_ICONS: Record<TouchChannel, typeof Phone> = {
@@ -328,6 +328,74 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
+  // Profile editing state
+  const [editName, setEditName] = useState('');
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync editName from auth user when loaded
+  useEffect(() => {
+    if (user?.displayName) setEditName(user.displayName);
+  }, [user?.displayName]);
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setIsSavingProfile(true);
+    try {
+      const { getAuth, updateProfile } = await import('firebase/auth');
+      const { getStorage, ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Not authenticated');
+
+      let newPhotoURL = currentUser.photoURL || '';
+
+      if (photoFile) {
+        const storage = getStorage();
+        const fileRef = storageRef(storage, `users/${currentUser.uid}/profile-photo`);
+        await uploadBytes(fileRef, photoFile);
+        newPhotoURL = await getDownloadURL(fileRef);
+      }
+
+      await updateProfile(currentUser, {
+        displayName: editName.trim() || currentUser.displayName,
+        photoURL: newPhotoURL || currentUser.photoURL,
+      });
+
+      // Also update Firestore user doc if it exists
+      if (orgId) {
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase');
+        try {
+          await updateDoc(doc(db, 'orgs', orgId, 'members', currentUser.uid), {
+            displayName: editName.trim() || currentUser.displayName,
+            ...(newPhotoURL ? { photoURL: newPhotoURL } : {}),
+          });
+        } catch { /* member doc may not exist, ignore */ }
+      }
+
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      toast({ title: 'Profile updated', description: 'Your profile has been saved.' });
+    } catch (error: any) {
+      console.error('[Settings] Error saving profile:', error);
+      toast({ title: 'Error', description: error.message || 'Failed to save profile', variant: 'destructive' });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   // Personal preferences state (stored locally)
   const [notifPrefs, setNotifPrefs] = useState({
     followUpReminders: true,
@@ -606,6 +674,9 @@ export default function SettingsPage() {
   const roleLabel = userRole === 'owner' ? 'Owner' : userRole === 'admin' ? 'Admin' : 'Sales Rep';
   const RoleBadgeIcon = userRole === 'owner' ? Crown : userRole === 'admin' ? Shield : User;
 
+  const avatarSrc = photoPreview || user?.photoURL || '';
+  const avatarFallback = (editName?.[0] || user?.email?.[0] || '?').toUpperCase();
+
   const MyProfileTab = (
     <TabsContent value="profile" className="space-y-6">
       <Card>
@@ -616,45 +687,84 @@ export default function SettingsPage() {
             </div>
             <div>
               <CardTitle>My Profile</CardTitle>
-              <CardDescription>Your personal account information</CardDescription>
+              <CardDescription>Update your name and profile photo</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Avatar + photo upload */}
           <div className="flex items-center gap-5">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={user?.photoURL || ''} />
-              <AvatarFallback className="text-xl bg-violet-100 dark:bg-violet-400/10 text-violet-700 dark:text-violet-300">
-                {user?.displayName?.[0] || user?.email?.[0]?.toUpperCase() || '?'}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="text-lg font-semibold">{user?.displayName || user?.email?.split('@')[0] || 'User'}</p>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
+            <div className="relative group shrink-0">
+              <Avatar className="h-20 w-20">
+                {avatarSrc && <AvatarImage src={avatarSrc} alt={editName} />}
+                <AvatarFallback className="text-2xl bg-violet-100 dark:bg-violet-400/10 text-violet-700 dark:text-violet-300">
+                  {avatarFallback}
+                </AvatarFallback>
+              </Avatar>
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                data-testid="button-upload-photo"
+              >
+                <Camera className="h-5 w-5 text-white" />
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="hidden"
+                onChange={handlePhotoSelect}
+                data-testid="input-photo-upload"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-base font-semibold truncate">{editName || user?.email?.split('@')[0] || 'User'}</p>
+              <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
               <Badge variant="outline" className="mt-1.5 gap-1">
                 <RoleBadgeIcon className="h-3 w-3" />
                 {roleLabel}
               </Badge>
+              <p className="text-xs text-muted-foreground mt-2">
+                Click the photo to upload a new one (JPG, PNG or WebP)
+              </p>
             </div>
           </div>
+
           <Separator />
+
+          {/* Editable fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Full Name</Label>
-              <p className="font-medium">{user?.displayName || '—'}</p>
+            <div className="space-y-2">
+              <Label htmlFor="profile-name">Full Name</Label>
+              <Input
+                id="profile-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Your full name"
+                data-testid="input-profile-name"
+              />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Email Address</Label>
-              <p className="font-medium">{user?.email || '—'}</p>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Email Address</Label>
+              <Input value={user?.email || ''} disabled className="opacity-60" />
+              <p className="text-xs text-muted-foreground">Email cannot be changed here</p>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Role</Label>
-              <p className="font-medium capitalize">{roleLabel}</p>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Role</Label>
+              <Input value={roleLabel} disabled className="opacity-60" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Organisation</Label>
-              <p className="font-medium">{organization?.name || '—'}</p>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Organisation</Label>
+              <Input value={organization?.name || '—'} disabled className="opacity-60" />
             </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={handleSaveProfile} disabled={isSavingProfile} data-testid="button-save-profile">
+              {isSavingProfile ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Profile
+            </Button>
           </div>
         </CardContent>
       </Card>
