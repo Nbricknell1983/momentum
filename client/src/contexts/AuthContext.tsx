@@ -143,11 +143,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const role = (memberData.role as TeamMemberRole) || 'member';
         setUserRole(role);
         console.log('[Auth] User role:', role, '| isManager:', role === 'owner' || role === 'admin');
-        // Prefer Firestore photoURL / displayName over Firebase Auth (allows custom uploads)
+        // Prefer Firestore displayName / photoURL over Firebase Auth (allows custom uploads)
         setUser(prev => prev ? {
           ...prev,
           displayName: memberData.displayName || prev.displayName,
-          photoURL: memberData.photoURL || prev.photoURL,
+          photoURL: 'photoURL' in memberData ? (memberData.photoURL || null) : prev.photoURL,
         } : prev);
         return memberData.active === true;
       }
@@ -314,7 +314,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(prev => prev ? {
           ...prev,
           displayName: memberData.displayName || prev.displayName,
-          photoURL: memberData.photoURL || prev.photoURL,
+          // Use Firestore photoURL if field exists (even empty string means cleared)
+          // If field was deleted (undefined), fall back to Firebase Auth photoURL
+          photoURL: 'photoURL' in memberData ? (memberData.photoURL || null) : prev.photoURL,
         } : prev);
       }
     } catch { /* ignore */ }

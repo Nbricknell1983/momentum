@@ -18,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays, Camera } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays, Camera, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CHANNEL_ICONS: Record<TouchChannel, typeof Phone> = {
@@ -417,6 +417,40 @@ export default function SettingsPage() {
     }
   };
 
+  const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
+
+  const handleRemovePhoto = async () => {
+    // If there's only a pending preview (not saved yet), just cancel the selection
+    if (photoPreview) {
+      setPhotoPreview(null);
+      setPhotoFile(null);
+      return;
+    }
+    // Otherwise remove the saved photo from Firestore
+    if (!user || !orgId) return;
+    setIsRemovingPhoto(true);
+    try {
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Not authenticated');
+
+      const { doc, updateDoc, deleteField } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      await updateDoc(doc(db, 'orgs', orgId, 'members', currentUser.uid), {
+        photoURL: deleteField(),
+      });
+
+      await refreshUserProfile();
+      toast({ title: 'Photo removed', description: 'Your profile photo has been cleared.' });
+    } catch (error: any) {
+      console.error('[Settings] Error removing photo:', error);
+      toast({ title: 'Error', description: error.message || 'Failed to remove photo', variant: 'destructive' });
+    } finally {
+      setIsRemovingPhoto(false);
+    }
+  };
+
   // Personal preferences state (stored locally)
   const [notifPrefs, setNotifPrefs] = useState({
     followUpReminders: true,
@@ -730,6 +764,19 @@ export default function SettingsPage() {
               >
                 <Camera className="h-5 w-5 text-white" />
               </button>
+              {/* Remove badge — shown when a photo or preview exists */}
+              {avatarSrc && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  disabled={isRemovingPhoto}
+                  className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive/80 transition-colors"
+                  data-testid="button-remove-photo"
+                  title={photoPreview ? 'Cancel selection' : 'Remove photo'}
+                >
+                  {isRemovingPhoto ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                </button>
+              )}
               <input
                 ref={photoInputRef}
                 type="file"
