@@ -23,6 +23,7 @@ import ClientPipelinePage from '@/pages/client-pipeline';
 import ResearchPage from '@/pages/research';
 import ManagementPage from '@/pages/management';
 import LoginPage from '@/pages/login';
+import ReportPage from '@/pages/report';
 import NotFound from '@/pages/not-found';
 import MarketingHome from '@/pages/marketing/index';
 import MarketingServices from '@/pages/marketing/services';
@@ -175,6 +176,7 @@ function AppRoutes() {
       <Route path="/contact" component={MarketingContact} />
       <Route path="/login" component={LoginPage} />
       <Route path="/signin" component={LoginPage} />
+      <Route path="/report/:reportId" component={ReportPage} />
       <Route component={AppLayout} />
     </Switch>
   );

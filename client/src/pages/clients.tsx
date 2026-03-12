@@ -3,7 +3,8 @@ import { format } from 'date-fns';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearch } from 'wouter';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, CalendarCheck, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List, FileSignature, DollarSign } from 'lucide-react';
+import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Package, Clock, CircleDot, Check, X, Loader2, Target, Calendar, CalendarPlus, CalendarCheck, FileText, Trash2, Sparkles, Copy, LayoutDashboard, TrendingUp, Lightbulb, PenTool, Play, ArrowUp, ArrowDown, ArrowUpDown, Share2, ExternalLink, MessageSquare, ClipboardList, Navigation, Send, CheckSquare, Zap, Circle, Link2, Unlink, RefreshCw, Globe, LayoutGrid, List, FileSignature, DollarSign, BarChart2 } from 'lucide-react';
+import GenerateReportDialog from '@/components/GenerateReportDialog';
 import { DndContext, DragEndEvent, rectIntersection, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import ClientKanbanColumn from '@/components/ClientKanbanColumn';
 import { ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, getDefaultClientBoardStage } from '@/lib/types';
@@ -332,6 +333,7 @@ export default function ClientsPage() {
   const [wizardData, setWizardData] = useState<BusinessProfile>({ ...DEFAULT_BUSINESS_PROFILE });
   const [savingWizard, setSavingWizard] = useState(false);
   const [generatingStrategy, setGeneratingStrategy] = useState<string | null>(null);
+  const [reportDialogClient, setReportDialogClient] = useState<Client | null>(null);
 
   const [clientContentDrafts, setClientContentDrafts] = useState<Record<string, ContentDraft[]>>({});
   const [loadingContentDrafts, setLoadingContentDrafts] = useState<string | null>(null);
@@ -4239,6 +4241,28 @@ export default function ClientsPage() {
                                 </div>
                               )}
 
+                              {/* Generate Report URL */}
+                              <div className="flex items-center justify-between gap-4 p-4 border rounded-md bg-violet-50/50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800">
+                                <div className="space-y-1">
+                                  <span className="font-medium flex items-center gap-2">
+                                    <BarChart2 className="h-4 w-4 text-violet-600" />
+                                    Client Growth Report
+                                  </span>
+                                  <p className="text-sm text-muted-foreground">
+                                    Generate a shareable URL with a beautiful SEO & strategy report for your client
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setReportDialogClient(client)}
+                                  className="border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 shrink-0"
+                                  data-testid={`button-generate-report-${client.id}`}
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  Generate Report URL
+                                </Button>
+                              </div>
+
                               {/* Generate Strategy Button */}
                               {client.businessProfile && (
                                 <div className="flex items-center justify-between gap-4 p-4 border rounded-md">
@@ -7201,6 +7225,16 @@ export default function ClientsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Generate Report Dialog */}
+      {reportDialogClient && orgId && (
+        <GenerateReportDialog
+          client={reportDialogClient}
+          orgId={orgId}
+          open={!!reportDialogClient}
+          onClose={() => setReportDialogClient(null)}
+        />
+      )}
     </div>
   );
 }

@@ -2505,3 +2505,77 @@ export interface KPISnapshot {
     [key: string]: any; // Allow custom metrics
   };
 }
+
+// ============================================
+// Client Report Types (shareable public URL)
+// ============================================
+
+export interface ReportPerformanceMetric {
+  label: string;
+  value: string;
+  trend: 'increasing' | 'decreasing' | 'stable';
+  description: string;
+}
+
+export interface ReportKeyword {
+  keyword: string;
+  startingPosition: string;
+  currentPosition: string;
+  targetPosition: string;
+}
+
+export interface ReportMonthlyData {
+  month: string;
+  clicks: number;
+  impressions: number;
+  position?: number;
+}
+
+export interface ReportCompletedWork {
+  title: string;
+  description: string;
+}
+
+export interface ReportNextStep {
+  step: number;
+  title: string;
+  description: string;
+  whyItMatters: string;
+}
+
+export interface ReportOpportunity {
+  title: string;
+  description: string;
+}
+
+export interface ReportSummaryPoint {
+  text: string;
+}
+
+export interface ReportStatusPill {
+  label: string;
+  status: 'positive' | 'growing' | 'pending';
+}
+
+export interface ClientReport {
+  id: string;
+  orgId: string;
+  clientId: string;
+  clientName: string;
+  location: string;
+  period: string;
+  statusPills: ReportStatusPill[];
+  clientMessage: string;
+  performanceMetrics: ReportPerformanceMetric[];
+  monthlyData: ReportMonthlyData[];
+  completedWork: ReportCompletedWork[];
+  whyCallsAreLow: { title: string; description: string }[];
+  featuredKeyword: ReportKeyword;
+  nextSteps: ReportNextStep[];
+  opportunities: ReportOpportunity[];
+  summaryPoints: ReportSummaryPoint[];
+  closingStatement: string;
+  createdAt: Date;
+  createdBy: string;
+  expiresAt?: Date;
+}

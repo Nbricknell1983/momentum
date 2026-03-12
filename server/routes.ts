@@ -3524,5 +3524,97 @@ Write in a professional, consultant tone. Be specific to the business type and l
     }
   });
 
+  // ============================================
+  // Client Report Endpoints (shareable public URL)
+  // ============================================
+
+  // Create a report (authenticated)
+  app.post("/api/reports", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+
+      const token = authHeader.split(' ')[1];
+      let uid: string;
+      try {
+        const adminModule = (await import('./firebase')).default;
+        const decoded = await adminModule.auth().verifyIdToken(token);
+        uid = decoded.uid;
+      } catch {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+
+      const reportData = req.body;
+      if (!reportData.clientName || !reportData.orgId) {
+        return res.status(400).json({ error: "clientName and orgId are required" });
+      }
+
+      const reportRef = firestore.collection('reports').doc();
+      const now = new Date();
+      const expiresAt = new Date(now);
+      expiresAt.setDate(expiresAt.getDate() + 365);
+
+      await reportRef.set({
+        ...reportData,
+        id: reportRef.id,
+        createdAt: now,
+        createdBy: uid,
+        expiresAt,
+      });
+
+      res.json({ id: reportRef.id, url: `/report/${reportRef.id}` });
+    } catch (error) {
+      console.error("Error creating report:", error);
+      res.status(500).json({ error: "Failed to create report" });
+    }
+  });
+
+  // Get a report by ID (public, no auth required)
+  app.get("/api/reports/:reportId", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+
+      const { reportId } = req.params;
+      const reportDoc = await firestore.collection('reports').doc(reportId).get();
+
+      if (!reportDoc.exists) {
+        return res.status(404).json({ error: "Report not found" });
+      }
+
+      const data = reportDoc.data()!;
+      const now = new Date();
+      if (data.expiresAt && data.expiresAt.toDate() < now) {
+        return res.status(410).json({ error: "Report has expired" });
+      }
+
+      res.json({ ...data, id: reportDoc.id });
+    } catch (error) {
+      console.error("Error fetching report:", error);
+      res.status(500).json({ error: "Failed to fetch report" });
+    }
+  });
+
+  // List reports for a client (authenticated)
+  app.get("/api/reports/client/:clientId", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+
+      const { clientId } = req.params;
+      const snapshot = await firestore.collection('reports')
+        .where('clientId', '==', clientId)
+        .orderBy('createdAt', 'desc')
+        .limit(10)
+        .get();
+
+      const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json(reports);
+    } catch (error) {
+      console.error("Error listing reports:", error);
+      res.status(500).json({ error: "Failed to list reports" });
+    }
+  });
+
   return httpServer;
 }

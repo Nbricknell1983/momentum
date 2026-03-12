@@ -53,6 +53,7 @@ Preferred communication style: Simple, everyday language.
 - **AI Meeting Notes System**: AI-powered meeting notes processing with voice dictation support, extracting summaries, action items, sentiment, and risks.
 - **Growth Plan Module**: A comprehensive strategy engine within the AI Sales Engine, offering Website X-Ray, SERP Visualization, Competitor Gap Analysis, Traffic & Revenue Forecast, and Strategy PDF Generation.
 - **Client Pipeline & Touchpoint System**: A dedicated Kanban board (`/client-pipeline`) for client management with touchpoint scheduling, traffic light status, and "Next Best Action" visibility.
+- **Client Growth Report**: Generates a shareable public URL (`/report/:reportId`) with a beautiful, scrollable SEO & strategy report for clients. Report includes performance metrics, trend charts, keyword progress tracker, completed work, next steps, Page 1 vs Page 2 comparison, and a summary. Generated from the Strategy tab in the Clients page. Stored in Firestore `reports/` collection (no auth required to view).
 - **Multi-Tenant RBAC Architecture**: Role-based data isolation (`owner`, `admin`, `member`) for organizations, ensuring reps only see their data while managers have full organizational oversight.
 
 ## External Dependencies
