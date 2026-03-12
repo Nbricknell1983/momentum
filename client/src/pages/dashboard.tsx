@@ -216,8 +216,9 @@ export default function DashboardPage() {
       </div>
 
       {/* ── SECTION: Overview (Hero) ── */}
-      <section id="overview" className="relative px-12 pt-16 pb-20 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e0a4e 0%, #2d1b69 50%, #1a1040 100%)' }}>
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(ellipse at 75% 40%, #7c3aed 0%, transparent 55%)' }} />
+      <section id="overview" className="relative px-12 pt-16 pb-24 overflow-hidden" style={{ background: 'linear-gradient(120deg, #13082e 0%, #1e0c4a 25%, #3b1585 60%, #5b1fc8 85%, #6d28d9 100%)' }}>
+        {/* layered radial glow — mimics the reference purple bloom */}
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(ellipse 80% 90% at 80% 50%, rgba(109,40,217,0.55) 0%, transparent 65%), radial-gradient(ellipse 50% 70% at 100% 20%, rgba(139,92,246,0.3) 0%, transparent 60%)' }} />
         <div className="relative max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/20 bg-white/5 text-white/70 text-sm mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
@@ -243,6 +244,16 @@ export default function DashboardPage() {
               ${wonMrr.toLocaleString()} Won MRR
             </div>
           </div>
+        </div>
+        {/* Scroll indicator mouse — bottom centre */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 opacity-50">
+          <svg width="22" height="34" viewBox="0 0 22 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="1" y="1" width="20" height="32" rx="10" stroke="white" strokeWidth="1.5"/>
+            <rect x="9.5" y="7" width="3" height="7" rx="1.5" fill="white">
+              <animateTransform attributeName="transform" type="translate" values="0,0;0,5;0,0" dur="1.8s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="1;0.2;1" dur="1.8s" repeatCount="indefinite"/>
+            </rect>
+          </svg>
         </div>
       </section>
 
