@@ -249,6 +249,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [screenshotCacheBust, setScreenshotCacheBust] = useState<number>(Date.now());
   const [screenshotLoaded, setScreenshotLoaded] = useState(false);
   const [screenshotError, setScreenshotError] = useState(false);
+  const [screenshotExpanded, setScreenshotExpanded] = useState(true);
   const prevWebsite = useRef<string | undefined>(undefined);
 
   // Auto-reset screenshot state when website changes
@@ -258,6 +259,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       setScreenshotLoaded(false);
       setScreenshotError(false);
       setScreenshotCacheBust(Date.now());
+      setScreenshotExpanded(true);
     }
   }, [lead.website]);
 
@@ -517,11 +519,16 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         {/* Website screenshot preview */}
         {lead.website && (() => {
           const websiteUrl = lead.website.startsWith('http') ? lead.website : `https://${lead.website}`;
-          const thumbUrl = `https://image.thum.io/get/width/800/crop/500/url/${websiteUrl}?${screenshotCacheBust}`;
+          const thumbUrl = `https://image.thum.io/get/width/1200/url/${websiteUrl}?cb=${screenshotCacheBust}`;
           return (
             <div className="mt-2.5 rounded-md overflow-hidden border" data-testid="card-website-screenshot">
-              <div className="flex items-center justify-between px-2 py-1 bg-muted/40 border-b">
-                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
+              {/* Header bar — always visible, click to toggle */}
+              <button
+                onClick={() => setScreenshotExpanded(e => !e)}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 bg-muted/40 border-b hover:bg-muted/60 transition-colors"
+                data-testid="button-toggle-screenshot"
+              >
+                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
                   <Image className="h-2.5 w-2.5" /> Website Preview
                 </span>
                 <div className="flex items-center gap-2">
@@ -530,13 +537,16 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                       href={websiteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
                       className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
                     >
                       <ExternalLink className="h-2.5 w-2.5" /> Visit
                     </a>
                   )}
-                  <button
-                    onClick={() => {
+                  <span
+                    role="button"
+                    onClick={e => {
+                      e.stopPropagation();
                       setScreenshotLoaded(false);
                       setScreenshotError(false);
                       setScreenshotCacheBust(Date.now());
@@ -546,30 +556,36 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                     data-testid="button-refresh-screenshot"
                   >
                     <RefreshCw className="h-2.5 w-2.5" />
-                  </button>
+                  </span>
+                  {screenshotExpanded
+                    ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
                 </div>
-              </div>
-              {!screenshotError ? (
-                <div className="relative bg-muted/20">
-                  {!screenshotLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center h-28 bg-muted/30">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                  )}
-                  <img
-                    src={thumbUrl}
-                    alt={`Screenshot of ${lead.companyName} website`}
-                    className={`w-full object-cover object-top transition-opacity duration-300 ${screenshotLoaded ? 'opacity-100' : 'opacity-0'}`}
-                    style={{ height: screenshotLoaded ? 'auto' : '7rem', maxHeight: '200px' }}
-                    onLoad={() => setScreenshotLoaded(true)}
-                    onError={() => { setScreenshotError(true); setScreenshotLoaded(true); }}
-                    data-testid="img-website-screenshot"
-                  />
-                </div>
-              ) : (
-                <div className="h-14 flex items-center justify-center bg-muted/20">
-                  <p className="text-[10px] text-muted-foreground">Could not load preview</p>
-                </div>
+              </button>
+
+              {/* Collapsible screenshot body */}
+              {screenshotExpanded && (
+                !screenshotError ? (
+                  <div className="relative bg-muted/10">
+                    {!screenshotLoaded && (
+                      <div className="flex items-center justify-center h-32 bg-muted/20">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
+                    <img
+                      src={thumbUrl}
+                      alt={`Screenshot of ${lead.companyName} website`}
+                      className={`w-full transition-opacity duration-300 ${screenshotLoaded ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}
+                      onLoad={() => setScreenshotLoaded(true)}
+                      onError={() => { setScreenshotError(true); setScreenshotLoaded(true); }}
+                      data-testid="img-website-screenshot"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-14 flex items-center justify-center bg-muted/20">
+                    <p className="text-[10px] text-muted-foreground">Could not load preview — check the URL is correct</p>
+                  </div>
+                )
               )}
             </div>
           );
