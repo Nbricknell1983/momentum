@@ -1170,6 +1170,67 @@ function CompetitorCard({
   const pages = siteData?.sitemapPages || [];
   const crawledPages = siteData?.crawledPages || [];
   const successCrawls = crawledPages.filter(p => !p.error);
+  const gbp = siteData?.gbp;
+
+  // Derive a human-readable search query from the domain
+  const domainQuery = domain.replace(/\.(com\.au|com|net\.au|net|org\.au|org|au)$/, '').replace(/[.-]/g, ' ');
+
+  // Auto-search GBP on first expand
+  useEffect(() => {
+    if (!expanded || gbp || gbpAutoSearched.current || !domainQuery.trim()) return;
+    gbpAutoSearched.current = true;
+    setGbpSuggestLoading(true);
+    fetch(`/api/google-places/find?query=${encodeURIComponent(domainQuery.trim())}`)
+      .then(r => r.json())
+      .then(data => { if (data.results?.length) setGbpSuggestions(data.results.slice(0, 3)); })
+      .catch(() => {})
+      .finally(() => setGbpSuggestLoading(false));
+  }, [expanded, gbp, domainQuery]);
+
+  const openGbpSearch = () => {
+    setGbpQuery(domainQuery);
+    setGbpResults([]);
+    setGbpSearchError(null);
+    setGbpSearching(true);
+    setGbpSuggestions([]);
+    setTimeout(() => gbpInputRef.current?.focus(), 0);
+  };
+
+  const closeGbpSearch = () => {
+    setGbpSearching(false);
+    setGbpResults([]);
+    setGbpQuery('');
+    setGbpSearchError(null);
+  };
+
+  const handleGbpSearch = async () => {
+    if (!gbpQuery.trim()) return;
+    setGbpSearchLoading(true);
+    setGbpSearchError(null);
+    setGbpResults([]);
+    try {
+      const res = await fetch(`/api/google-places/find?query=${encodeURIComponent(gbpQuery.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Search failed');
+      setGbpResults(data.results || []);
+      if (!(data.results || []).length) setGbpSearchError('No results — try adding a suburb or state.');
+    } catch (e: any) {
+      setGbpSearchError(e.message || 'Search failed');
+    } finally {
+      setGbpSearchLoading(false);
+    }
+  };
+
+  const handleGbpSelect = async (placeId: string) => {
+    setGbpSelectLoading(placeId);
+    try {
+      await onGBPLookup(placeId);
+      closeGbpSearch();
+      setGbpSuggestions([]);
+    } finally {
+      setGbpSelectLoading(null);
+    }
+  };
 
   return (
     <div className="rounded border bg-muted/20 overflow-hidden">
@@ -1386,6 +1447,150 @@ function CompetitorCard({
                   </div>
                 )}
               </>
+            )}
+          </div>
+
+          {/* GBP section */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              <MapPin className="h-2.5 w-2.5" /> Google Business Profile
+            </div>
+
+            {gbp ? (
+              /* Linked GBP — show data */
+              <div className="rounded border bg-muted/30 px-2.5 py-2 space-y-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{gbp.name}</p>
+                    {gbp.address && <p className="text-[10px] text-muted-foreground truncate">{gbp.address}</p>}
+                    {gbp.primaryType && <p className="text-[10px] text-muted-foreground/70 truncate">{gbp.primaryType}</p>}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {gbp.rating != null && (
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                        <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />{gbp.rating}
+                      </span>
+                    )}
+                    {gbp.reviewCount != null && gbp.reviewCount > 0 && (
+                      <span className="text-[10px] text-muted-foreground">{gbp.reviewCount} reviews</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={gbp.mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-0.5"
+                  >
+                    <ExternalLink className="h-2.5 w-2.5" /> View on Maps
+                  </a>
+                  <button
+                    onClick={openGbpSearch}
+                    className="text-[10px] text-muted-foreground hover:text-foreground hover:underline flex items-center gap-0.5"
+                  >
+                    <Pencil className="h-2.5 w-2.5" /> Change
+                  </button>
+                </div>
+              </div>
+            ) : gbpSearching ? (
+              /* Search mode */
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    ref={gbpInputRef}
+                    value={gbpQuery}
+                    onChange={e => setGbpQuery(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleGbpSearch(); if (e.key === 'Escape') closeGbpSearch(); }}
+                    placeholder="Business name + suburb…"
+                    className="h-6 text-xs px-1.5 flex-1"
+                    disabled={gbpSearchLoading}
+                  />
+                  <Button
+                    size="sm"
+                    className="h-6 px-2 text-xs shrink-0"
+                    onClick={handleGbpSearch}
+                    disabled={gbpSearchLoading || !gbpQuery.trim()}
+                  >
+                    {gbpSearchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                  </Button>
+                  <button onClick={closeGbpSearch} className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                {gbpSearchError && <p className="text-[10px] text-destructive">{gbpSearchError}</p>}
+                {gbpResults.length > 0 && (
+                  <div className="border rounded bg-background shadow-sm overflow-hidden">
+                    {gbpResults.map(r => (
+                      <button
+                        key={r.placeId}
+                        onClick={() => handleGbpSelect(r.placeId)}
+                        disabled={!!gbpSelectLoading}
+                        className="w-full text-left px-2 py-1.5 hover:bg-muted/60 border-b last:border-b-0 transition-colors disabled:opacity-60"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium truncate">{r.name}</span>
+                          {gbpSelectLoading === r.placeId
+                            ? <Loader2 className="h-3 w-3 animate-spin shrink-0 text-violet-600" />
+                            : r.rating != null && (
+                              <span className="text-[10px] text-muted-foreground shrink-0">{r.rating}★ · {r.reviewCount}</span>
+                            )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground truncate">{r.address}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Not linked yet — show auto-suggest or prompt */
+              <div className="space-y-1">
+                <div
+                  className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
+                  onClick={openGbpSearch}
+                >
+                  <span className={gbpSuggestLoading ? 'text-amber-500' : 'text-muted-foreground'}>
+                    {gbpSuggestLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground italic flex-1">
+                    {gbpSuggestLoading ? 'Searching GBP…' : gbpSuggestions.length > 0 ? 'Select a match below' : 'Search Google Business…'}
+                  </span>
+                  <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+                </div>
+                {!gbpSuggestDismissed && gbpSuggestions.length > 0 && (
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground">Is this the right business?</p>
+                    <div className="border rounded bg-background shadow-sm overflow-hidden">
+                      {gbpSuggestions.map(r => (
+                        <button
+                          key={r.placeId}
+                          onClick={() => handleGbpSelect(r.placeId)}
+                          disabled={!!gbpSelectLoading}
+                          className="w-full text-left px-2 py-1.5 hover:bg-muted/60 border-b last:border-b-0 transition-colors disabled:opacity-60"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium truncate">{r.name}</span>
+                            {gbpSelectLoading === r.placeId
+                              ? <Loader2 className="h-3 w-3 animate-spin shrink-0 text-violet-600" />
+                              : r.rating != null && (
+                                <span className="text-[10px] text-muted-foreground shrink-0">{r.rating}★ · {r.reviewCount}</span>
+                              )}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground truncate">{r.address}</p>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between pt-0.5">
+                      <button onClick={openGbpSearch} className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline">
+                        Not right? Search manually
+                      </button>
+                      <button onClick={() => setGbpSuggestDismissed(true)} className="text-[10px] text-muted-foreground hover:underline">
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
