@@ -260,6 +260,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         address: lead.address || data.address || undefined,
         phone: lead.phone || data.phone || undefined,
         website: lead.website || data.website || undefined,
+        industry: data.primaryType || lead.industry || undefined,
         updatedAt: new Date(),
       };
       dispatch(patchLead({ id: lead.id, updates: leadUpdates }));
