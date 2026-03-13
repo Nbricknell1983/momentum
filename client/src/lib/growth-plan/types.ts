@@ -1,15 +1,20 @@
 export type CalcMode = 'budget' | 'market';
+export type DigitalChannel = 'paid_search' | 'seo' | 'local_gbp';
 
 export interface GrowthPlanInputs {
+  // --- Shared ---
   calculatorMode: CalcMode;
   industry: string | null;
   targetLocation: string | null;
+  averageJobValue: number | null;
+  closeRate: number | null;
+  notes: string | null;
+
+  // --- Paid Search ---
   keywordCluster: string | null;
   monthlyPackagePrice: number | null;
   managementFee: number | null;
   netAdSpend: number | null;
-  averageJobValue: number | null;
-  closeRate: number | null;
   avgCpc: number | null;
   lowCpc: number | null;
   highCpc: number | null;
@@ -24,10 +29,35 @@ export interface GrowthPlanInputs {
   pageRelevanceScore: number | null;
   seoCoverageStatus: 'missing' | 'weak' | 'moderate' | 'strong' | null;
   paidCampaignActive: boolean | null;
-  notes: string | null;
+
+  // --- SEO ---
+  seoKeywordTheme: string | null;
+  seoMonthlySearchVolume: number | null;
+  currentOrganicRanking: number | null;
+  currentOrganicTraffic: number | null;
+  organicCvr: number | null;
+  seoTargetPagesCount: number | null;
+  seoDomainAuthority: number | null;
+  seoTimeToRankMonths: number | null;
+  seoContentGaps: string | null;
+
+  // --- Local & GBP ---
+  gbpRating: number | null;
+  gbpReviewCount: number | null;
+  gbpPhotoCount: number | null;
+  gbpPostsPerMonth: number | null;
+  gbpServicesListed: boolean | null;
+  gbpQaAnswered: boolean | null;
+  socialFacebookActive: boolean | null;
+  socialInstagramActive: boolean | null;
+  socialLinkedinActive: boolean | null;
+  socialPostingFrequency: 'none' | 'low' | 'medium' | 'high' | null;
+  emailMarketingActive: boolean | null;
+  emailListSize: number | null;
 }
 
 export interface GrowthPlanCalculations {
+  // Paid Search
   estimatedClicks: number | null;
   leadsLow: number | null;
   leadsMid: number | null;
@@ -50,6 +80,14 @@ export interface GrowthPlanCalculations {
   reachableDemand: number | null;
   untappedDemand: number | null;
   opportunityScore: number | null;
+  // SEO
+  organicTrafficOpportunity: number | null;
+  organicLeadsMid: number | null;
+  organicRevenueMid: number | null;
+  organicOpportunityScore: number | null;
+  // Local & GBP
+  gbpHealthScore: number | null;
+  localOpportunityScore: number | null;
 }
 
 export interface GrowthPlanInsights {
@@ -106,15 +144,18 @@ export interface PaidSearchGrowthPlan {
 }
 
 export const EMPTY_INPUTS: GrowthPlanInputs = {
+  // Shared
   calculatorMode: 'budget',
   industry: null,
   targetLocation: null,
+  averageJobValue: null,
+  closeRate: null,
+  notes: null,
+  // Paid Search
   keywordCluster: null,
   monthlyPackagePrice: null,
   managementFee: null,
   netAdSpend: null,
-  averageJobValue: null,
-  closeRate: null,
   avgCpc: null,
   lowCpc: null,
   highCpc: null,
@@ -129,7 +170,29 @@ export const EMPTY_INPUTS: GrowthPlanInputs = {
   pageRelevanceScore: null,
   seoCoverageStatus: null,
   paidCampaignActive: null,
-  notes: null,
+  // SEO
+  seoKeywordTheme: null,
+  seoMonthlySearchVolume: null,
+  currentOrganicRanking: null,
+  currentOrganicTraffic: null,
+  organicCvr: null,
+  seoTargetPagesCount: null,
+  seoDomainAuthority: null,
+  seoTimeToRankMonths: null,
+  seoContentGaps: null,
+  // Local & GBP
+  gbpRating: null,
+  gbpReviewCount: null,
+  gbpPhotoCount: null,
+  gbpPostsPerMonth: null,
+  gbpServicesListed: null,
+  gbpQaAnswered: null,
+  socialFacebookActive: null,
+  socialInstagramActive: null,
+  socialLinkedinActive: null,
+  socialPostingFrequency: null,
+  emailMarketingActive: null,
+  emailListSize: null,
 };
 
 export const EMPTY_CALCULATIONS: GrowthPlanCalculations = {
@@ -155,4 +218,10 @@ export const EMPTY_CALCULATIONS: GrowthPlanCalculations = {
   reachableDemand: null,
   untappedDemand: null,
   opportunityScore: null,
+  organicTrafficOpportunity: null,
+  organicLeadsMid: null,
+  organicRevenueMid: null,
+  organicOpportunityScore: null,
+  gbpHealthScore: null,
+  localOpportunityScore: null,
 };
