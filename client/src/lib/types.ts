@@ -321,6 +321,7 @@ export interface AiConversationInsightsOutput {
   nextSteps: string[];
   sentiment: string;
   keyQuotes: string[];
+  rawTranscript?: string;
   generatedAt: Date;
 }
 

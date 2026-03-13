@@ -474,9 +474,13 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                     onInsightsChange={(insights) => {
                       setConversationInsights(insights);
                       if (insights && selectedLead && orgId && authReady) {
-                        const aiConversationInsights: AiConversationInsightsOutput = { ...insights, generatedAt: new Date() };
-                        updateLeadInFirestore(orgId, selectedLead.id, { aiConversationInsights } as Partial<Lead>, authReady).catch(console.error);
-                        dispatch(patchLead({ id: selectedLead.id, updates: { aiConversationInsights } }));
+                        const now = new Date();
+                        const aiConversationInsights: AiConversationInsightsOutput = { ...insights, generatedAt: now };
+                        updateLeadInFirestore(orgId, selectedLead.id, {
+                          aiConversationInsights,
+                          lastConversationAt: now,
+                        } as Partial<Lead>, authReady).catch(console.error);
+                        dispatch(patchLead({ id: selectedLead.id, updates: { aiConversationInsights, lastConversationAt: now } }));
                       }
                     }}
                   />
@@ -836,6 +840,9 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const speechRecognitionRef = useRef<any>(null);
+  const liveTranscriptRef = useRef('');
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -849,11 +856,14 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
 
   const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  const processAudio = async (blob: Blob) => {
+  const processAudio = async (blob: Blob, liveText: string) => {
     setTranscribing(true);
+    setLiveTranscript('');
     try {
+      // Try Whisper first for high-quality transcription
       const formData = new FormData();
-      formData.append('audio', blob, 'recording.webm');
+      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      formData.append('audio', blob, `recording.${ext}`);
       const res = await fetch('/api/ai/sales-engine/transcribe-meeting', {
         method: 'POST',
         body: formData,
@@ -864,14 +874,19 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
       }
       const data = await res.json();
 
-      if (data.transcript) {
+      const finalTranscript = data.transcript || liveText;
+      if (finalTranscript) {
         setInputs(p => ({
           ...p,
-          meetingNotes: p.meetingNotes ? `${p.meetingNotes}\n\n[Transcript]\n${data.transcript}` : data.transcript,
+          meetingNotes: p.meetingNotes ? `${p.meetingNotes}\n\n${finalTranscript}` : finalTranscript,
         }));
       }
       if (data.insights) {
-        onInsightsChange(data.insights);
+        // Merge rawTranscript into insights so it persists to Firestore
+        const insightsWithTranscript = data.transcript
+          ? { ...data.insights, rawTranscript: data.transcript }
+          : data.insights;
+        onInsightsChange(insightsWithTranscript);
         if (data.insights.servicesDiscussed?.length > 0) {
           setInputs(p => ({
             ...p,
@@ -885,34 +900,86 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
           }));
         }
       }
-      toast({ title: 'Recording processed' });
+      toast({ title: 'Transcript ready', description: data.transcript ? 'AI cleaned up your recording.' : 'Recording processed.' });
     } catch (err: any) {
-      toast({ title: 'Processing failed', description: err.message, variant: 'destructive' });
+      // Whisper failed — fall back to Web Speech live transcript if available
+      if (liveText) {
+        setInputs(p => ({
+          ...p,
+          meetingNotes: p.meetingNotes ? `${p.meetingNotes}\n\n${liveText}` : liveText,
+        }));
+        toast({ title: 'Using live transcript', description: 'Whisper unavailable — live text saved instead.' });
+      } else {
+        toast({ title: 'Processing failed', description: err.message, variant: 'destructive' });
+      }
     } finally {
       setTranscribing(false);
     }
   };
 
+  const startLiveSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-AU';
+
+    let finalText = '';
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += transcript + ' ';
+        } else {
+          interim = transcript;
+        }
+      }
+      const combined = finalText + interim;
+      liveTranscriptRef.current = finalText.trim();
+      setLiveTranscript(combined.trim());
+    };
+
+    recognition.onerror = () => {};
+    recognition.start();
+    speechRecognitionRef.current = recognition;
+  };
+
+  const stopLiveSpeechRecognition = () => {
+    if (speechRecognitionRef.current) {
+      try { speechRecognitionRef.current.stop(); } catch {}
+      speechRecognitionRef.current = null;
+    }
+  };
+
   const startRecording = async () => {
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      toast({ title: 'Recording not supported', description: 'Your browser does not support audio recording. Please use Chrome, Firefox, or Edge, or upload a recording instead.', variant: 'destructive' });
+      toast({ title: 'Recording not supported', description: 'Your browser does not support audio recording. Please use Chrome or Edge.', variant: 'destructive' });
       return;
     }
     try {
+      liveTranscriptRef.current = '';
+      setLiveTranscript('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+        MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
         MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        processAudio(blob);
+        stopLiveSpeechRecognition();
+        const blobType = mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type: blobType });
+        processAudio(blob, liveTranscriptRef.current);
       };
-      recorder.start();
+      recorder.start(1000);
       setMediaRecorder(recorder);
       setIsRecording(true);
+      startLiveSpeechRecognition();
     } catch (err) {
       toast({ title: 'Microphone access denied', description: 'Please allow microphone access to record.', variant: 'destructive' });
     }
@@ -934,7 +1001,7 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
       toast({ title: 'File too large', description: 'Maximum file size is 25MB', variant: 'destructive' });
       return;
     }
-    await processAudio(file);
+    await processAudio(file, '');
     e.target.value = '';
   };
 
@@ -1009,10 +1076,20 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
           </label>
         </div>
 
+        {isRecording && liveTranscript && (
+          <div className="border border-violet-500/30 rounded-lg p-2.5 bg-violet-500/5 space-y-1" data-testid="live-transcript-preview">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-violet-500 uppercase tracking-wide">
+              <div className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
+              Listening live
+            </div>
+            <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{liveTranscript}</p>
+          </div>
+        )}
+
         {transcribing && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 border rounded-lg bg-muted/20">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Transcribing and analysing conversation...
+            AI is cleaning up your transcript...
           </div>
         )}
 

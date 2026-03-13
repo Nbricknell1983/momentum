@@ -3172,21 +3172,35 @@ Rules:
 
       const filePath = file.path;
 
+      // Determine extension from MIME type — multer saves without extension, Whisper needs it
+      const mimeToExt: Record<string, string> = {
+        'audio/webm': '.webm', 'video/webm': '.webm',
+        'audio/mp4': '.mp4', 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3',
+        'audio/wav': '.wav', 'audio/ogg': '.ogg', 'audio/flac': '.flac',
+        'audio/x-m4a': '.m4a', 'audio/aac': '.aac',
+      };
+      const baseMime = (file.mimetype || '').split(';')[0].trim();
+      const ext = mimeToExt[baseMime] || path.extname(file.originalname || '') || '.webm';
+      const namedPath = `${filePath}${ext}`;
+      fs.renameSync(filePath, namedPath);
+
       let transcript: string;
       try {
+        console.log(`[Whisper] Transcribing ${namedPath} (${file.mimetype}, ${file.size} bytes)`);
         const transcription = await openai.audio.transcriptions.create({
-          file: fs.createReadStream(filePath) as any,
+          file: fs.createReadStream(namedPath) as any,
           model: "whisper-1",
           language: "en",
         });
         transcript = transcription.text;
+        console.log(`[Whisper] Success: "${transcript.slice(0, 80)}..."`);
       } catch (whisperErr: any) {
-        console.error("Whisper transcription error:", whisperErr);
-        fs.unlink(filePath, () => {});
+        console.error("[Whisper] Transcription error:", whisperErr?.message || whisperErr);
+        fs.unlink(namedPath, () => {});
         return res.status(500).json({ error: "Failed to transcribe audio. Please try again." });
       }
 
-      fs.unlink(filePath, () => {});
+      fs.unlink(namedPath, () => {});
 
       const analysisPrompt = `You are a sales conversation analyst. Analyse this meeting transcript from a digital marketing sales call.
 
