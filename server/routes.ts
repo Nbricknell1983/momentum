@@ -1848,6 +1848,96 @@ Return valid JSON:
   });
 
   // ===============================
+  // Ahrefs SEO Data Proxy
+  // ===============================
+
+  app.get("/api/ahrefs/metrics", async (req, res) => {
+    try {
+      const { target } = req.query;
+      const apiKey = process.env.AHREFS_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "AHREFS_API_KEY not configured" });
+      if (!target || typeof target !== 'string') return res.status(400).json({ error: "target is required" });
+
+      const today = new Date().toISOString().split('T')[0];
+      const params = new URLSearchParams({
+        select: 'domain_rating,ahrefs_rank,backlinks,refdomains,org_keywords,org_traffic,paid_traffic',
+        target: target.trim(),
+        date: today,
+        mode: 'domain',
+      });
+
+      const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/metrics?${params}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        console.error('[Ahrefs metrics]', resp.status, err);
+        return res.status(resp.status).json({ error: (err as any).detail || (err as any).message || 'Ahrefs API error' });
+      }
+
+      const data = await resp.json();
+      const m = data.metrics || {};
+
+      res.json({
+        domainRating: m.domain_rating ?? null,
+        ahrefsRank: m.ahrefs_rank ?? null,
+        backlinks: m.backlinks ?? null,
+        refdomains: m.refdomains ?? null,
+        organicKeywords: m.org_keywords ?? null,
+        organicTraffic: m.org_traffic ?? null,
+        paidTraffic: m.paid_traffic ?? null,
+      });
+    } catch (e: any) {
+      console.error('[Ahrefs metrics] Error:', e.message);
+      res.status(500).json({ error: e.message || 'Failed to fetch Ahrefs metrics' });
+    }
+  });
+
+  app.get("/api/ahrefs/keywords", async (req, res) => {
+    try {
+      const { target } = req.query;
+      const apiKey = process.env.AHREFS_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "AHREFS_API_KEY not configured" });
+      if (!target || typeof target !== 'string') return res.status(400).json({ error: "target is required" });
+
+      const today = new Date().toISOString().split('T')[0];
+      const params = new URLSearchParams({
+        select: 'keyword_merged,volume_merged,sum_traffic,best_position,keyword_difficulty_merged,cpc_merged',
+        target: target.trim(),
+        date: today,
+        mode: 'domain',
+        limit: '20',
+        order_by: 'sum_traffic:desc',
+      });
+
+      const resp = await fetch(`https://api.ahrefs.com/v3/site-explorer/organic-keywords?${params}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        return res.status(resp.status).json({ error: (err as any).detail || (err as any).message || 'Ahrefs API error' });
+      }
+
+      const data = await resp.json();
+      const keywords = (data.keywords || []).map((k: any) => ({
+        keyword: k.keyword_merged || k.keyword || '',
+        volume: k.volume_merged ?? null,
+        traffic: k.sum_traffic ?? null,
+        position: k.best_position ?? null,
+        difficulty: k.keyword_difficulty_merged ?? null,
+        cpc: k.cpc_merged ?? null,
+      }));
+
+      res.json({ keywords });
+    } catch (e: any) {
+      console.error('[Ahrefs keywords] Error:', e.message);
+      res.status(500).json({ error: e.message || 'Failed to fetch Ahrefs keywords' });
+    }
+  });
+
+  // ===============================
   // Sitemap Fetch & Parse
   // ===============================
 

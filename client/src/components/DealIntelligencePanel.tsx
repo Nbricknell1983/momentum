@@ -9,6 +9,8 @@ import {
   CompetitorSiteData,
   CompetitorGBPData,
   MarketingActivity,
+  AhrefsMetrics,
+  AhrefsKeyword,
   STAGE_LABELS,
 } from '@/lib/types';
 import {
@@ -342,6 +344,46 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       setCompetitorDeepCrawling(p => ({ ...p, [domain]: false }));
     }
   }, [lead, orgId, authReady, dispatch, toast]);
+
+  const handleFetchAhrefs = useCallback(async () => {
+    if (!lead.website || !orgId || !authReady) return;
+    const target = lead.website.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const [metricsRes, keywordsRes] = await Promise.all([
+      fetch(`/api/ahrefs/metrics?target=${encodeURIComponent(target)}`),
+      fetch(`/api/ahrefs/keywords?target=${encodeURIComponent(target)}`),
+    ]);
+    if (!metricsRes.ok) {
+      const err = await metricsRes.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Ahrefs fetch failed');
+    }
+    const metrics = await metricsRes.json();
+    const kwData = keywordsRes.ok ? await keywordsRes.json() : { keywords: [] };
+    const ahrefsData: AhrefsMetrics = { ...metrics, topKeywords: kwData.keywords || [], fetchedAt: new Date(), target };
+    const updates: Partial<Lead> = { ahrefsData, updatedAt: new Date() };
+    dispatch(patchLead({ id: lead.id, updates }));
+    await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+  }, [lead, orgId, authReady, dispatch]);
+
+  const handleCompetitorAhrefsFetch = useCallback(async (domain: string) => {
+    if (!orgId || !authReady) return;
+    const target = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const [metricsRes, keywordsRes] = await Promise.all([
+      fetch(`/api/ahrefs/metrics?target=${encodeURIComponent(target)}`),
+      fetch(`/api/ahrefs/keywords?target=${encodeURIComponent(target)}`),
+    ]);
+    if (!metricsRes.ok) {
+      const err = await metricsRes.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Ahrefs fetch failed');
+    }
+    const metrics = await metricsRes.json();
+    const kwData = keywordsRes.ok ? await keywordsRes.json() : { keywords: [] };
+    const ahrefs: AhrefsMetrics = { ...metrics, topKeywords: kwData.keywords || [], fetchedAt: new Date(), target };
+    const existing = lead.competitorData || {};
+    const updated = { ...existing, [domain]: { ...(existing[domain] || {}), ahrefs } };
+    const updates: Partial<Lead> = { competitorData: updated, updatedAt: new Date() };
+    dispatch(patchLead({ id: lead.id, updates }));
+    await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+  }, [lead, orgId, authReady, dispatch]);
 
   const saveMarketingActivity = useCallback(async (updated: MarketingActivity[]) => {
     const updates: Partial<Lead> = { marketingActivity: updated, updatedAt: new Date() };
@@ -710,6 +752,18 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         })()}
       </div>
 
+      <AhrefsSEOSection
+        label={lead.companyName || lead.website || 'Prospect'}
+        website={lead.website}
+        data={lead.ahrefsData}
+        onFetch={handleFetchAhrefs}
+        onSave={async (updated) => {
+          const updates: Partial<Lead> = { ahrefsData: updated, updatedAt: new Date() };
+          dispatch(patchLead({ id: lead.id, updates }));
+          if (orgId && authReady) await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+        }}
+      />
+
       <div className="rounded-lg border bg-card p-3 space-y-3" data-testid="card-competitor-snapshot">
         <div className="flex items-center gap-1.5">
           <Users className="h-3.5 w-3.5 text-amber-600" />
@@ -757,6 +811,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                 onDeepCrawl={() => handleCompetitorDeepCrawl(domain)}
                 onRemove={() => removeCompetitor(domain)}
                 onGBPLookup={(placeId) => handleCompetitorGBPLookup(domain, placeId)}
+                onAhrefsFetch={() => handleCompetitorAhrefsFetch(domain)}
               />
             ))}
             {/* AI analysis insights if available */}
@@ -1146,7 +1201,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
 }
 
 function CompetitorCard({
-  domain, siteData, sitemapLoading, deepCrawling, onScanSitemap, onDeepCrawl, onRemove, onGBPLookup,
+  domain, siteData, sitemapLoading, deepCrawling, onScanSitemap, onDeepCrawl, onRemove, onGBPLookup, onAhrefsFetch,
 }: {
   domain: string;
   siteData?: CompetitorSiteData;
@@ -1156,6 +1211,7 @@ function CompetitorCard({
   onDeepCrawl: () => void;
   onRemove: () => void;
   onGBPLookup: (placeId: string) => Promise<void>;
+  onAhrefsFetch: () => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [screenshotLoaded, setScreenshotLoaded] = useState(false);
@@ -1606,8 +1662,209 @@ function CompetitorCard({
               </div>
             )}
           </div>
+
+          {/* Ahrefs section */}
+          <AhrefsSEOSection
+            label={domain}
+            website={`https://${domain}`}
+            data={siteData?.ahrefs}
+            onFetch={onAhrefsFetch}
+            compact
+          />
         </div>
       )}
+    </div>
+  );
+}
+
+function AhrefsSEOSection({
+  label, website, data, onFetch, onSave, compact = false,
+}: {
+  label: string;
+  website?: string;
+  data?: AhrefsMetrics;
+  onFetch: () => Promise<void>;
+  onSave?: (updated: AhrefsMetrics) => Promise<void>;
+  compact?: boolean;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [keywordsExpanded, setKeywordsExpanded] = useState(false);
+  const { toast } = useToast();
+
+  const handleFetch = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await onFetch();
+      toast({ title: 'Ahrefs data loaded', description: `SEO metrics updated for ${label}` });
+    } catch (e: any) {
+      const msg = e.message || 'Ahrefs fetch failed';
+      setError(msg);
+      toast({ title: 'Ahrefs error', description: msg, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fmt = (n?: number | null) => n == null ? '—' : n.toLocaleString();
+
+  if (compact) {
+    /* Compact variant for inside CompetitorCard */
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+          <BarChart3 className="h-2.5 w-2.5" /> Ahrefs SEO
+          <button
+            onClick={handleFetch}
+            disabled={loading || !website}
+            className="ml-auto text-[10px] text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 flex items-center gap-0.5"
+            data-testid={`button-ahrefs-fetch-${label}`}
+          >
+            {loading ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Fetching…</> : data ? 'Refresh' : 'Fetch data'}
+          </button>
+        </div>
+        {error && <p className="text-[10px] text-destructive">{error}</p>}
+        {data ? (
+          <div className="space-y-1">
+            <div className="grid grid-cols-2 gap-1">
+              {[
+                { label: 'DR', value: data.domainRating ?? '—', color: 'text-blue-600 dark:text-blue-400' },
+                { label: 'Backlinks', value: fmt(data.backlinks) },
+                { label: 'Ref Domains', value: fmt(data.refdomains) },
+                { label: 'Organic KWs', value: fmt(data.organicKeywords) },
+                { label: 'Org Traffic', value: fmt(data.organicTraffic) },
+                { label: 'Paid Traffic', value: fmt(data.paidTraffic) },
+              ].map(m => (
+                <div key={m.label} className="flex items-center justify-between rounded bg-muted/30 px-1.5 py-0.5">
+                  <span className="text-[9px] text-muted-foreground">{m.label}</span>
+                  <span className={`text-[10px] font-semibold ${(m as any).color || 'text-foreground'}`}>{m.value}</span>
+                </div>
+              ))}
+            </div>
+            {(data.topKeywords?.length ?? 0) > 0 && (
+              <>
+                <button onClick={() => setKeywordsExpanded(e => !e)} className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5">
+                  {keywordsExpanded ? 'Hide keywords' : `View top ${data.topKeywords!.length} keywords`}
+                  {data.fetchedAt && <span className="text-muted-foreground ml-1">· {format(new Date(data.fetchedAt), 'dd/MM/yy')}</span>}
+                </button>
+                {keywordsExpanded && (
+                  <div className="rounded border overflow-hidden">
+                    <div className="grid grid-cols-4 gap-0 bg-muted/50 px-1.5 py-0.5">
+                      {['Keyword', 'Vol', 'Traffic', 'Pos'].map(h => (
+                        <span key={h} className="text-[8px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</span>
+                      ))}
+                    </div>
+                    <div className="max-h-32 overflow-y-auto divide-y">
+                      {data.topKeywords!.map((kw, i) => (
+                        <div key={i} className="grid grid-cols-4 gap-0 px-1.5 py-0.5 hover:bg-muted/30 transition-colors">
+                          <span className="text-[9px] text-foreground/90 truncate col-span-1">{kw.keyword}</span>
+                          <span className="text-[9px] text-muted-foreground">{kw.volume != null ? kw.volume.toLocaleString() : '—'}</span>
+                          <span className="text-[9px] text-muted-foreground">{kw.traffic != null ? kw.traffic.toLocaleString() : '—'}</span>
+                          <span className={`text-[9px] font-medium ${(kw.position ?? 99) <= 3 ? 'text-green-600' : (kw.position ?? 99) <= 10 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                            #{kw.position ?? '—'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : (
+          <p className="text-[10px] text-muted-foreground italic">
+            {website ? 'No Ahrefs data yet — click Fetch data above.' : 'No website set for this competitor.'}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  /* Full card variant for the prospect */
+  return (
+    <div className="rounded-lg border bg-card p-3" data-testid="card-ahrefs-seo">
+      <div className="flex items-center gap-1.5 mb-2">
+        <BarChart3 className="h-3.5 w-3.5 text-blue-600" />
+        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Ahrefs SEO</span>
+        {data?.fetchedAt && (
+          <span className="text-[10px] text-muted-foreground ml-1">· {format(new Date(data.fetchedAt), 'dd/MM/yy')}</span>
+        )}
+        <button
+          onClick={handleFetch}
+          disabled={loading || !website}
+          className="ml-auto text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 flex items-center gap-1"
+          data-testid="button-ahrefs-fetch-prospect"
+        >
+          {loading ? <><Loader2 className="h-3 w-3 animate-spin" /> Fetching…</> : data ? 'Refresh' : 'Fetch SEO data'}
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-destructive mb-2">{error}</p>}
+
+      {!website && !data && (
+        <p className="text-xs text-muted-foreground italic">Add a website URL in Online Presence first.</p>
+      )}
+
+      {data ? (
+        <div className="space-y-2">
+          {/* Metrics grid */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { label: 'Domain Rating', value: data.domainRating ?? '—', badge: true },
+              { label: 'Ahrefs Rank', value: data.ahrefsRank != null ? `#${data.ahrefsRank.toLocaleString()}` : '—' },
+              { label: 'Backlinks', value: fmt(data.backlinks) },
+              { label: 'Ref. Domains', value: fmt(data.refdomains) },
+              { label: 'Organic Keywords', value: fmt(data.organicKeywords) },
+              { label: 'Organic Traffic', value: fmt(data.organicTraffic) },
+            ].map(m => (
+              <div key={m.label} className="rounded-md border bg-muted/20 px-2 py-1.5 text-center">
+                <p className={`text-sm font-bold ${m.badge ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}`}>{m.value}</p>
+                <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{m.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Top keywords */}
+          {(data.topKeywords?.length ?? 0) > 0 && (
+            <div>
+              <button
+                onClick={() => setKeywordsExpanded(e => !e)}
+                className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline mb-1"
+              >
+                {keywordsExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {keywordsExpanded ? 'Hide' : `Top ${data.topKeywords!.length} keywords by traffic`}
+              </button>
+              {keywordsExpanded && (
+                <div className="rounded border overflow-hidden text-[10px]">
+                  <div className="grid grid-cols-5 bg-muted/50 px-2 py-1 gap-1">
+                    {['Keyword', 'Vol', 'Traffic', 'Pos', 'KD'].map(h => (
+                      <span key={h} className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</span>
+                    ))}
+                  </div>
+                  <div className="divide-y max-h-48 overflow-y-auto">
+                    {data.topKeywords!.map((kw, i) => (
+                      <div key={i} className="grid grid-cols-5 gap-1 px-2 py-1 hover:bg-muted/30 transition-colors">
+                        <span className="text-foreground/90 truncate">{kw.keyword}</span>
+                        <span className="text-muted-foreground">{kw.volume != null ? kw.volume.toLocaleString() : '—'}</span>
+                        <span className="text-muted-foreground">{kw.traffic != null ? kw.traffic.toLocaleString() : '—'}</span>
+                        <span className={`font-medium ${(kw.position ?? 99) <= 3 ? 'text-green-600' : (kw.position ?? 99) <= 10 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                          #{kw.position ?? '—'}
+                        </span>
+                        <span className={`${(kw.difficulty ?? 0) >= 70 ? 'text-red-500' : (kw.difficulty ?? 0) >= 40 ? 'text-amber-500' : 'text-green-600'}`}>
+                          {kw.difficulty ?? '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : website ? (
+        <p className="text-xs text-muted-foreground italic">Click "Fetch SEO data" to pull Ahrefs metrics for {label}.</p>
+      ) : null}
     </div>
   );
 }

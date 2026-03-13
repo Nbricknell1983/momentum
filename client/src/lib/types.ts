@@ -259,6 +259,7 @@ export interface Lead {
   instagramUrl?: string;
   linkedinUrl?: string;
   marketingActivity?: MarketingActivity[];
+  ahrefsData?: AhrefsMetrics;
   stage: Stage;
   mrr?: number;
   nepqLabel?: string;
@@ -308,6 +309,28 @@ export interface Lead {
   competitorData?: Record<string, CompetitorSiteData>;
 }
 
+export interface AhrefsKeyword {
+  keyword: string;
+  volume?: number;
+  traffic?: number;
+  position?: number;
+  difficulty?: number;
+  cpc?: number;
+}
+
+export interface AhrefsMetrics {
+  domainRating?: number;
+  ahrefsRank?: number;
+  backlinks?: number;
+  refdomains?: number;
+  organicKeywords?: number;
+  organicTraffic?: number;
+  paidTraffic?: number;
+  topKeywords?: AhrefsKeyword[];
+  fetchedAt: Date;
+  target: string;
+}
+
 export interface MarketingActivity {
   id: string;
   channel: string;
@@ -335,6 +358,7 @@ export interface CompetitorSiteData {
   crawledPages?: CrawledPage[];
   crawledAt?: Date;
   gbp?: CompetitorGBPData;
+  ahrefs?: AhrefsMetrics;
 }
 
 export interface SitemapPage {
