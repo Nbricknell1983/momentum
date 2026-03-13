@@ -461,6 +461,93 @@ function AISection() {
   );
 }
 
+function RetentionSection() {
+  const signals = [
+    { label: 'Last Contact', value: '47 days ago', status: 'red', note: 'Overdue for check-in' },
+    { label: 'Health Score', value: 'At Risk', status: 'amber', note: 'Declining engagement signals' },
+    { label: 'Services Active', value: '1 of 4', status: 'red', note: 'Expansion opportunity detected' },
+    { label: 'Next Best Action', value: 'Book strategy call', status: 'green', note: 'AI recommended' },
+  ];
+  const pillars = [
+    { icon: <Bell size={18} />, title: 'Proactive touchpoint cadence', body: 'Momentum tracks how long it\'s been since each client was contacted and flags who needs attention before they go quiet.' },
+    { icon: <BarChart3 size={18} />, title: 'Client health scoring', body: 'Every account gets a live health score — Strong, Active, At Risk, or Stalled — based on real activity patterns, not gut feel.' },
+    { icon: <TrendingUp size={18} />, title: 'Expansion opportunity detection', body: 'AI identifies service gaps and upsell potential inside your existing accounts so revenue growth happens without new leads.' },
+    { icon: <Brain size={18} />, title: 'AI-driven next best action', body: 'Momentum tells your team exactly what to do next for every client — not just who to call, but what to say and why.' },
+  ];
+  const statusColors: Record<string, string> = { red: '#ef4444', amber: '#f59e0b', green: '#10b981' };
+  return (
+    <section style={{ padding: '96px 0', background: 'rgba(124,58,237,0.04)' }} className="px-6 md:px-12">
+      <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+        <Reveal className="text-center" style={{ marginBottom: 64 } as any}>
+          <p style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a78bfa', marginBottom: 16 }}>Client Retention</p>
+          <h2 style={{ fontSize: 'clamp(30px, 3.5vw, 52px)', fontWeight: 900, color: 'white', lineHeight: 1.1, margin: '0 0 20px' }}>
+            Winning the client is just<br />the <span style={{ color: '#a855f7' }}>beginning.</span>
+          </h2>
+          <p style={{ fontSize: 17, lineHeight: 1.7, color: G.muted, maxWidth: 620, margin: '0 auto' }}>
+            Losing a client costs 5–10x more than acquiring a new one. Momentum gives your team the visibility and prompts to stay ahead of churn — and keep growing the accounts you've already won.
+          </p>
+        </Reveal>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 40, alignItems: 'start' }} className="lg:grid-cols-2">
+          {/* Left — Pillars */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {pillars.map((p, i) => (
+              <Reveal key={p.title} delay={i * 0.09}>
+                <GlassCard style={{ padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' } as any}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(124,58,237,0.18)', color: '#a78bfa', flexShrink: 0 }}>{p.icon}</div>
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: 'white', margin: '0 0 6px' }}>{p.title}</h3>
+                    <p style={{ fontSize: 13, lineHeight: 1.65, color: G.muted, margin: 0 }}>{p.body}</p>
+                  </div>
+                </GlassCard>
+              </Reveal>
+            ))}
+          </div>
+
+          {/* Right — Client health mockup */}
+          <Reveal delay={0.15}>
+            <GlassCard glow hover={false} style={{ padding: 24 } as any}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Acme Plumbing Co.</p>
+                  <p style={{ fontSize: 11, color: G.muted, margin: 0 }}>Client since 14/03/2023 · Brisbane Northside</p>
+                </div>
+                <div style={{ padding: '4px 12px', borderRadius: 100, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 11, fontWeight: 700, color: '#ef4444' }}>
+                  At Risk
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                {signals.map(s => (
+                  <div key={s.label} style={{ borderRadius: 12, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(139,92,246,0.12)` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: statusColors[s.status], flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, color: G.muted, fontWeight: 600 }}>{s.label}</span>
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>{s.value}</p>
+                    <p style={{ fontSize: 10, color: G.muted, margin: 0 }}>{s.note}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ borderRadius: 12, padding: '14px 16px', background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.22)' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a78bfa', margin: '0 0 6px' }}>AI Recommended Action</p>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: '0 0 10px', lineHeight: 1.55 }}>
+                  "It's been 47 days since your last contact. Acme haven't been introduced to your SEO retainer or review management service. Book a strategy call and present a 90-day growth plan."
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ padding: '5px 12px', borderRadius: 8, background: `linear-gradient(135deg, ${G.violet}, ${G.violet2})`, fontSize: 11, fontWeight: 700, color: 'white' }}>Book Call</div>
+                  <div style={{ padding: '5px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 11, fontWeight: 600, color: 'white' }}>Generate Email</div>
+                </div>
+              </div>
+            </GlassCard>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AudienceSection() {
   const cards = [
     { icon: <Phone size={20} />, title: 'Sales Reps', body: 'Know exactly who to call, what to say, and what to do next — every day.' },
@@ -617,6 +704,7 @@ export default function MarketingHome() {
         <FeaturesSection />
         <HowItWorksSection />
         <AISection />
+        <RetentionSection />
         <AudienceSection />
         <OutcomeSection />
         <CTASection />
