@@ -63,8 +63,8 @@ function AppLayout() {
 
   useEffect(() => {
     if (authReady && !user) {
-      console.log('[App] authReady and no user, redirecting to home');
-      setLocation('/');
+      console.log('[App] authReady and no user, redirecting to login');
+      setLocation('/login');
     }
   }, [authReady, user, setLocation]);
 
