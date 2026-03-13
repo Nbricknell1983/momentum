@@ -273,10 +273,18 @@ export default function LoginPage() {
       {twoFAStep ? (
         <div className="relative w-full max-w-sm rounded-2xl p-8 shadow-2xl" style={glassCard}>
           <div className="text-center mb-7">
-            <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-violet-600/20 border border-violet-500/30 mb-4">
-              <ShieldCheck className="h-7 w-7 text-violet-400" />
+            <div className="flex justify-center mb-4">
+              <img
+                src="/momentum-logo.png"
+                alt="Momentum"
+                className="h-9 w-auto object-contain"
+                style={{ filter: 'brightness(0) invert(1) drop-shadow(0 0 12px rgba(139,92,246,0.6))' }}
+              />
             </div>
-            <h2 className="text-xl font-bold text-white mb-1">Two-factor authentication</h2>
+            <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-violet-600/20 border border-violet-500/30 mb-3">
+              <ShieldCheck className="h-6 w-6 text-violet-400" />
+            </div>
+            <h2 className="text-lg font-bold text-white mb-1">Two-factor authentication</h2>
             <p className="text-sm text-violet-200/60">Enter the 6-digit code from your authenticator app</p>
           </div>
 
@@ -324,13 +332,13 @@ export default function LoginPage() {
         /* Main login card */
         <div className="relative w-full max-w-md rounded-2xl p-8 shadow-2xl" style={glassCard}>
           <div className="text-center mb-7">
-            <div className="inline-flex items-center justify-center gap-2 mb-3">
-              <div className="h-9 w-9 rounded-lg bg-violet-600 flex items-center justify-center shadow-lg shadow-violet-900/50">
-                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-white" stroke="currentColor" strokeWidth="2.2">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinejoin="round" strokeLinecap="round" />
-                </svg>
-              </div>
-              <span className="text-xl font-bold text-white tracking-tight">Momentum</span>
+            <div className="flex justify-center mb-3">
+              <img
+                src="/momentum-logo.png"
+                alt="Momentum"
+                className="h-11 w-auto object-contain"
+                style={{ filter: 'brightness(0) invert(1) drop-shadow(0 0 12px rgba(139,92,246,0.6))' }}
+              />
             </div>
             <p className="text-sm text-violet-200/60">Sign in to access your CRM dashboard</p>
           </div>
