@@ -591,6 +591,11 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectLoading, setSelectLoading] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Auto-loaded suggestions (shown inline without entering search mode)
+  const [suggestions, setSuggestions] = useState<GBPSearchResult[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestDismissed, setSuggestDismissed] = useState(false);
+  const autoSearched = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const hasGBP = !!lead.sourceData?.googlePlaceId;
@@ -598,11 +603,24 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const rating = lead.sourceData?.googleRating;
   const mapsUrl = lead.sourceData?.googleMapsUrl;
 
+  // Auto-search on mount when no GBP linked and lead has a name
+  useEffect(() => {
+    if (hasGBP || autoSearched.current || !lead.name?.trim()) return;
+    autoSearched.current = true;
+    setSuggestLoading(true);
+    fetch(`/api/google-places/find?query=${encodeURIComponent(lead.name.trim())}`)
+      .then(r => r.json())
+      .then(data => { if (data.results?.length) setSuggestions(data.results.slice(0, 3)); })
+      .catch(() => {})
+      .finally(() => setSuggestLoading(false));
+  }, [hasGBP, lead.name]);
+
   const openSearch = () => {
     setQuery(lead.name || '');
     setResults([]);
     setSearchError(null);
     setSearching(true);
+    setSuggestions([]);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -636,6 +654,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     try {
       await onLookup(placeId);
       closeSearch();
+      setSuggestions([]);
     } finally {
       setSelectLoading(null);
     }
@@ -709,8 +728,8 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
         className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
         onClick={openSearch}
       >
-        <span className={`shrink-0 ${hasGBP ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
-          <MapPin className="h-3.5 w-3.5" />
+        <span className={`shrink-0 ${hasGBP ? 'text-green-600 dark:text-green-400' : suggestLoading ? 'text-amber-500' : 'text-muted-foreground'}`}>
+          {suggestLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MapPin className="h-3.5 w-3.5" />}
         </span>
         <span className="text-muted-foreground text-xs w-[76px] shrink-0">Google Business</span>
         <span className={`truncate text-xs flex-1 ${hasGBP ? 'text-foreground' : 'text-muted-foreground italic'}`}>
@@ -720,10 +739,46 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
                 Profile linked <ExternalLink className="h-2.5 w-2.5" />
               </a>
             ) : 'Profile linked'
-          ) : 'Search business name…'}
+          ) : suggestLoading ? 'Searching…' : suggestions.length > 0 ? 'Select a match below' : 'Search business name…'}
         </span>
         <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
       </div>
+
+      {/* Auto-loaded suggestions panel */}
+      {!hasGBP && !suggestDismissed && suggestions.length > 0 && (
+        <div className="ml-5 space-y-0.5">
+          <p className="text-[10px] text-muted-foreground mb-1">Is this the right business?</p>
+          <div className="border rounded bg-background shadow-sm overflow-hidden">
+            {suggestions.map(r => (
+              <button
+                key={r.placeId}
+                onClick={() => handleSelect(r.placeId)}
+                disabled={!!selectLoading}
+                className="w-full text-left px-2 py-1.5 hover:bg-muted/60 border-b last:border-b-0 transition-colors disabled:opacity-60"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium truncate">{r.name}</span>
+                  {selectLoading === r.placeId
+                    ? <Loader2 className="h-3 w-3 animate-spin shrink-0 text-violet-600" />
+                    : r.rating != null && (
+                      <span className="text-[10px] text-muted-foreground shrink-0">{r.rating}★ · {r.reviewCount}</span>
+                    )}
+                </div>
+                <p className="text-[10px] text-muted-foreground truncate">{r.address}</p>
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between pt-0.5">
+            <button onClick={openSearch} className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline">
+              Not right? Search manually
+            </button>
+            <button onClick={() => setSuggestDismissed(true)} className="text-[10px] text-muted-foreground hover:underline">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {hasGBP && (
         <div
           className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
@@ -739,7 +794,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
           <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
         </div>
       )}
-      {!hasGBP && (
+      {!hasGBP && suggestions.length === 0 && !suggestLoading && (
         <div className="flex items-center gap-2 py-0.5">
           <span className="shrink-0 text-muted-foreground"><Star className="h-3.5 w-3.5" /></span>
           <span className="text-muted-foreground text-xs w-[76px] shrink-0">Reviews</span>
