@@ -4089,6 +4089,184 @@ Respond with JSON only:
     }
   });
 
+  app.post("/api/ai/growth-plan/twelve-month-strategy", async (req, res) => {
+    try {
+      const {
+        businessName, websiteUrl, industry, location,
+        strategyDiagnosis, sitemapPages, reviewCount, rating, gbpLink,
+        facebookUrl, instagramUrl, linkedinUrl, competitors,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: "Business name is required" });
+
+      const pages: Array<{ url: string }> = sitemapPages || [];
+      const SERVICE_RE = /service|what-we-do|solution|offer|repair|install|maintenance|consult|design|build|renovati|construct|plumb|electr|paint|landscap|clean|concrete|cabinet|flooring|render|waterproof|demolish/i;
+      const LOCATION_RE = /area|location|suburb|city|region|local|serve|service-area|near|brisbane|sydney|melbourne|perth|adelaide|gold-coast|sunshine/i;
+      const PORTFOLIO_RE = /portfolio|project|work|case-stud|gallery|showcase|completed|example|before-after|past-work/i;
+      const classified: Record<string, string[]> = { portfolio: [], services: [], locations: [], other: [] };
+      for (const p of pages) {
+        try {
+          const slug = new URL(p.url).pathname.toLowerCase();
+          if (PORTFOLIO_RE.test(slug)) classified.portfolio.push(p.url);
+          else if (SERVICE_RE.test(slug)) classified.services.push(p.url);
+          else if (LOCATION_RE.test(slug)) classified.locations.push(p.url);
+          else classified.other.push(p.url);
+        } catch { classified.other.push(p.url); }
+      }
+
+      const diagContext = strategyDiagnosis ? `
+=== AI STRATEGY DIAGNOSIS (already completed) ===
+Growth Readiness Score: ${strategyDiagnosis.readinessScore}/100
+Key Finding: ${strategyDiagnosis.insightSentence}
+Google Clarity: ${strategyDiagnosis.currentPosition?.googleClarity}
+Current Position Summary: ${strategyDiagnosis.currentPosition?.summary}
+
+Sub-scores:
+- Service Clarity: ${strategyDiagnosis.subscores?.serviceClarityScore}/100
+- Location Signals: ${strategyDiagnosis.subscores?.locationRelevanceScore}/100  
+- Content Coverage: ${strategyDiagnosis.subscores?.contentCoverageScore}/100
+- GBP Alignment: ${strategyDiagnosis.subscores?.gbpAlignmentScore}/100
+- Authority: ${strategyDiagnosis.subscores?.authorityScore}/100
+
+Top Gaps:
+${strategyDiagnosis.gaps?.map((g: any) => `- [${g.severity}] ${g.title}: ${g.evidence}. Impact: ${g.impact}`).join('\n') || 'None'}
+
+Top Priorities:
+${strategyDiagnosis.priorities?.map((p: any) => `${p.rank}. ${p.action}: ${p.description}${p.examples?.length ? ' (e.g. ' + p.examples.slice(0, 2).join(', ') + ')' : ''}`).join('\n') || 'None'}
+
+Growth Potential: ${strategyDiagnosis.growthPotential?.summary}
+Forecast: ${strategyDiagnosis.growthPotential?.forecastBand ? JSON.stringify(strategyDiagnosis.growthPotential.forecastBand) : 'Not calculated'}
+` : '';
+
+      const sitemapContext = pages.length > 0 ? `
+=== WEBSITE STRUCTURE (from sitemap) ===
+Total pages: ${pages.length}
+Service pages: ${classified.services.length} (${classified.services.slice(0, 3).join(', ') || 'none'})
+Location/area pages: ${classified.locations.length} (${classified.locations.slice(0, 3).join(', ') || 'none'})  
+Portfolio/project pages: ${classified.portfolio.length} (${classified.portfolio.slice(0, 3).join(', ') || 'none'})
+Other pages: ${classified.other.length}
+` : '';
+
+      const competitorContext = competitors?.length > 0 ? `
+=== COMPETITORS TO BENCHMARK AGAINST ===
+${competitors.join(', ')}
+These are real competitors ranking in the same market. Factor their typical keyword patterns into the opportunity analysis.
+` : '';
+
+      const socialProfiles = [facebookUrl && 'Facebook', instagramUrl && 'Instagram', linkedinUrl && 'LinkedIn'].filter(Boolean).join(', ');
+
+      const prompt = `You are a senior digital marketing strategist producing a 12-month growth strategy for a sales presentation. This strategy is built on real website data, not assumptions. Use the data provided faithfully — do not invent numbers.
+
+=== BUSINESS PROFILE ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Location: ${location || 'Not specified'}
+Website: ${websiteUrl || 'Not provided'}
+Google Business Profile: ${gbpLink ? 'Yes — ' + gbpLink : 'Not found'}
+Google Reviews: ${reviewCount != null ? reviewCount + ' reviews, ' + rating + '★' : 'Unknown'}
+Social: ${socialProfiles || 'None detected'}
+${diagContext}${sitemapContext}${competitorContext}
+
+=== STRATEGY GENERATION RULES ===
+- Every keyword, gap, and recommendation must relate to the actual industry and location
+- Keyword monthly search estimates must be realistic for the market (local Australian search volumes)
+- Do NOT fabricate competitor data — only reference competitors if names are provided
+- Monthly roadmap must be specific to what this business actually needs
+- Lead projections must be conservative and confidence-band based
+- The 4 growth pillars must be tailored to the specific industry and gaps found
+
+Respond with this EXACT JSON structure (fill every field with specific, real-data-grounded content):
+{
+  "executiveSummary": {
+    "businessName": "${businessName}",
+    "location": "${location || 'Not specified'}",
+    "coreServices": ["3-5 specific services based on industry — inferred from sitemap if available"],
+    "currentChallenge": "1-2 sentences on the core visibility problem — based on the diagnosis data",
+    "primaryGoal": "1 clear goal statement for the 12 months",
+    "growthTarget": "Specific growth target — e.g. increase inbound enquiries by X% in 12 months",
+    "primaryChannels": ["Google Search (SEO)", "Google Maps", "etc — relevant to industry"]
+  },
+  "marketOpportunity": {
+    "totalMonthlySearches": 1200,
+    "currentCapture": "Estimated % they currently capture based on readiness score",
+    "potentialCapture": "If key gaps fixed — realistic % and lead estimate",
+    "keyInsight": "1 punchy sentence the rep can say on the call about the opportunity",
+    "keywords": [
+      { "keyword": "specific keyword for industry + location", "monthlySearches": "200-400", "currentRank": "not ranking|page 2|etc", "opportunity": "high|medium|low", "intent": "commercial|informational" }
+    ]
+  },
+  "digitalAudit": {
+    "website": {
+      "score": 0-100,
+      "strengths": ["based on what the sitemap shows"],
+      "gaps": ["specific gaps found — use the diagnosis data"]
+    },
+    "gbp": {
+      "score": 0-100,
+      "status": "found|not found",
+      "reviews": ${reviewCount ?? 0},
+      "rating": ${rating ?? 0},
+      "strengths": ["what is working"],
+      "gaps": ["what is missing"]
+    },
+    "authority": {
+      "score": 0-100,
+      "socialProfiles": ${JSON.stringify(socialProfiles ? socialProfiles.split(', ') : [])},
+      "gaps": ["citation gaps, backlink gaps, etc"]
+    }
+  },
+  "growthPillars": [
+    {
+      "number": 1,
+      "title": "Pillar name specific to industry",
+      "goal": "What this pillar achieves",
+      "timeframe": "Month X–X",
+      "actions": [
+        { "action": "Specific action", "detail": "How and why", "examples": ["e.g. /service-suburb", "/service-area"] }
+      ]
+    }
+  ],
+  "monthlyRoadmap": [
+    { "period": "Month 1–2", "phase": "Foundation", "focus": ["3-4 specific focus areas"], "milestone": "What success looks like at end of this phase", "estimatedLeads": "5-10" },
+    { "period": "Month 3–4", "phase": "Content Expansion", "focus": ["3-4 actions"], "milestone": "Milestone", "estimatedLeads": "10-18" },
+    { "period": "Month 5–6", "phase": "Authority Building", "focus": ["3-4 actions"], "milestone": "Milestone", "estimatedLeads": "15-25" },
+    { "period": "Month 7–9", "phase": "Scale Visibility", "focus": ["3-4 actions"], "milestone": "Milestone", "estimatedLeads": "20-35" },
+    { "period": "Month 10–12", "phase": "Market Dominance", "focus": ["3-4 actions"], "milestone": "Milestone", "estimatedLeads": "30-50" }
+  ],
+  "projectedOutcomes": [
+    { "month": "Month 3", "estimatedLeads": "8-12", "rankingKeywords": "3-5", "confidence": "low" },
+    { "month": "Month 6", "estimatedLeads": "15-25", "rankingKeywords": "8-12", "confidence": "medium" },
+    { "month": "9", "estimatedLeads": "25-40", "rankingKeywords": "15-20", "confidence": "medium" },
+    { "month": "Month 12", "estimatedLeads": "35-55", "rankingKeywords": "25-35", "confidence": "medium" }
+  ],
+  "kpis": [
+    { "metric": "Inbound Enquiries", "baseline": "current estimate", "target12Month": "target" },
+    { "metric": "Google Ranking Keywords", "baseline": "current", "target12Month": "target" },
+    { "metric": "Maps Pack Appearance", "baseline": "current", "target12Month": "target" },
+    { "metric": "Google Review Count", "baseline": "${reviewCount ?? 0}", "target12Month": "target" },
+    { "metric": "Monthly Organic Traffic", "baseline": "current", "target12Month": "target" }
+  ],
+  "repTalkingPoints": [
+    "3-5 punchy one-liners the rep can use on the call — grounded in the data"
+  ]
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 3000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const result = JSON.parse(content);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[twelve-month-strategy]", err);
+      res.status(500).json({ error: "Failed to generate 12-month strategy" });
+    }
+  });
+
   app.post("/api/ai/growth-plan/strategy-data", async (req, res) => {
     try {
       const { businessName, websiteUrl, location, industry, reviewCount, rating, xrayData, serpData, competitorData, forecastData } = req.body;

@@ -531,6 +531,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   const [urlLoading, setUrlLoading] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [competitorInput, setCompetitorInput] = useState('');
 
   useEffect(() => {
     if (lead?.aiGrowthPlan) {
@@ -649,65 +650,459 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   };
 
   const generatePdf = async () => {
+    if (!businessName) { toast({ title: 'Business name required to generate PDF', variant: 'destructive' }); return; }
     setPdfLoading(true);
     try {
-      const res = await fetch('/api/ai/growth-plan/strategy-data', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessName, websiteUrl, location, industry, reviewCount, rating, xrayData: xrayResult, serpData: serpResult, competitorData: competitorResult, forecastData: forecastResult }),
+      const competitors = competitorInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+      const gbpLink = (lead?.sourceData as any)?.googleMapsUrl || null;
+
+      // Generate structured 12-month strategy from AI
+      const res = await fetch('/api/ai/growth-plan/twelve-month-strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName, websiteUrl, industry, location,
+          strategyDiagnosis: strategyDiagnosis || undefined,
+          sitemapPages: lead?.sitemapPages || [],
+          reviewCount: reviewCount ?? null,
+          rating: rating ?? null,
+          gbpLink,
+          facebookUrl: lead?.facebookUrl || null,
+          instagramUrl: lead?.instagramUrl || null,
+          linkedinUrl: lead?.linkedinUrl || null,
+          competitors,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to generate strategy data');
-      const strategyData = await res.json();
+      if (!res.ok) throw new Error('Strategy generation failed');
+      const s = await res.json();
+
+      // ── PDF GENERATION ─────────────────────────────────────────────────────
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const margin = 20; const contentWidth = pageWidth - margin * 2; let y = 0;
-      const addPage = () => { doc.addPage(); y = margin; };
-      const checkPageBreak = (needed: number) => { if (y + needed > 270) addPage(); };
+      const PW = doc.internal.pageSize.getWidth();
+      const PH = doc.internal.pageSize.getHeight();
+      const M = 18; // margin
+      const CW = PW - M * 2; // content width
+      let y = 0;
 
-      doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageWidth, 297, 'F');
-      doc.setTextColor(255, 255, 255); doc.setFontSize(28);
-      doc.text('12-Month Growth Strategy', pageWidth / 2, 100, { align: 'center' });
-      doc.setFontSize(16); doc.text(businessName || 'Business', pageWidth / 2, 120, { align: 'center' });
-      doc.setFontSize(11); doc.setTextColor(148, 163, 184);
-      doc.text(`Prepared ${new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' })}`, pageWidth / 2, 140, { align: 'center' });
-      doc.text(location || '', pageWidth / 2, 150, { align: 'center' });
-      doc.setFontSize(9); doc.text('Confidential — Prepared by Momentum Agent', pageWidth / 2, 280, { align: 'center' });
+      const DARK = [13, 17, 35] as const;
+      const BLUE = [37, 99, 235] as const;
+      const GREEN = [21, 128, 61] as const;
+      const AMBER = [180, 83, 9] as const;
+      const RED = [185, 28, 28] as const;
+      const BODY = [30, 41, 59] as const;
+      const MUTED = [148, 163, 184] as const;
+      const WHITE = [255, 255, 255] as const;
+      const BG_LIGHT = [248, 250, 252] as const;
 
-      const addSection = (title: string, content: string) => {
-        checkPageBreak(30); doc.setTextColor(15, 23, 42); doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-        doc.text(title, margin, y); y += 3; doc.setDrawColor(59, 130, 246); doc.setLineWidth(0.5);
-        doc.line(margin, y, margin + 40, y); y += 8; doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        const lines = doc.splitTextToSize(content, contentWidth);
-        for (const line of lines) { checkPageBreak(6); doc.text(line, margin, y); y += 5; }
-        y += 8;
+      const newPage = () => { doc.addPage(); y = M; };
+      const checkY = (need: number) => { if (y + need > PH - 15) newPage(); };
+
+      const setFont = (size: number, style: 'normal' | 'bold' | 'italic' = 'normal', color: readonly number[] = BODY) => {
+        doc.setFontSize(size);
+        doc.setFont('helvetica', style);
+        doc.setTextColor(color[0], color[1], color[2]);
       };
 
-      addPage();
+      const sectionHeading = (title: string, subtitle?: string) => {
+        checkY(18);
+        doc.setFillColor(DARK[0], DARK[1], DARK[2]);
+        doc.rect(M, y, CW, 9, 'F');
+        setFont(9.5, 'bold', WHITE);
+        doc.text(title.toUpperCase(), M + 3, y + 6);
+        if (subtitle) {
+          setFont(8, 'normal', MUTED);
+          doc.text(subtitle, PW - M - 3, y + 6, { align: 'right' });
+        }
+        y += 13;
+      };
 
-      // Include strategy diagnosis in PDF if available
+      const bodyText = (text: string, opts?: { indent?: number; color?: readonly number[]; size?: number; style?: 'normal' | 'bold' }) => {
+        checkY(6);
+        setFont(opts?.size || 9, opts?.style || 'normal', opts?.color || BODY);
+        const lines = doc.splitTextToSize(text, CW - (opts?.indent || 0));
+        for (const line of lines) {
+          checkY(5); doc.text(line, M + (opts?.indent || 0), y); y += 4.5;
+        }
+      };
+
+      const bulletPoint = (text: string, color?: readonly number[]) => {
+        checkY(5);
+        setFont(8.5, 'normal', color || BODY);
+        doc.text('•', M + 2, y);
+        const lines = doc.splitTextToSize(text, CW - 8);
+        for (const line of lines) { checkY(5); doc.text(line, M + 7, y); y += 4.5; }
+      };
+
+      const divider = (light = false) => {
+        y += 2;
+        doc.setDrawColor(light ? 226 : 203, light ? 232 : 213, light ? 240 : 224);
+        doc.setLineWidth(0.3);
+        doc.line(M, y, M + CW, y);
+        y += 4;
+      };
+
+      // ── COVER PAGE ──────────────────────────────────────────────────────────
+      doc.setFillColor(DARK[0], DARK[1], DARK[2]);
+      doc.rect(0, 0, PW, PH, 'F');
+
+      // Accent bar
+      doc.setFillColor(BLUE[0], BLUE[1], BLUE[2]);
+      doc.rect(0, 0, 4, PH, 'F');
+
+      // Prepared for chip
+      doc.setFillColor(37, 50, 80);
+      doc.roundedRect(M, 55, 60, 7, 1, 1, 'F');
+      setFont(7.5, 'normal', MUTED);
+      doc.text('PREPARED FOR', M + 30, 59.8, { align: 'center' });
+
+      setFont(26, 'bold', WHITE);
+      doc.text(businessName, PW / 2, 80, { align: 'center', maxWidth: CW });
+
+      setFont(13, 'normal', MUTED);
+      doc.text(`${industry || ''}${industry && location ? '  ·  ' : ''}${location || ''}`, PW / 2, 92, { align: 'center' });
+
+      // Score badge if available
       if (strategyDiagnosis) {
-        addSection('Growth Readiness Score', `Overall Score: ${strategyDiagnosis.readinessScore}/100\n\nService Clarity: ${strategyDiagnosis.subscores.serviceClarityScore}/100\nLocation Signals: ${strategyDiagnosis.subscores.locationRelevanceScore}/100\nContent Coverage: ${strategyDiagnosis.subscores.contentCoverageScore}/100\nGBP Alignment: ${strategyDiagnosis.subscores.gbpAlignmentScore}/100\nAuthority: ${strategyDiagnosis.subscores.authorityScore}/100\n\n${strategyDiagnosis.insightSentence}`);
-        addSection('Current Position', strategyDiagnosis.currentPosition.summary);
-        addSection('Growth Potential', `${strategyDiagnosis.growthPotential.summary}\n\nOpportunities:\n${strategyDiagnosis.growthPotential.opportunities.map(o => `• ${o}`).join('\n')}\n\nForecast:\n• Additional impressions: ${strategyDiagnosis.growthPotential.forecastBand.additionalImpressions}\n• Additional visitors: ${strategyDiagnosis.growthPotential.forecastBand.additionalVisitors}\n• Additional enquiries: ${strategyDiagnosis.growthPotential.forecastBand.additionalEnquiries}`);
-        addSection('Biggest Gaps', strategyDiagnosis.gaps.map(g => `[${g.severity.toUpperCase()}] ${g.title}\nEvidence: ${g.evidence}\nImpact: ${g.impact}`).join('\n\n'));
-        addSection('Recommended Priorities', strategyDiagnosis.priorities.map(p => `${p.rank}. ${p.action}\n${p.description}${p.examples?.length ? '\nExamples: ' + p.examples.join(', ') : ''}`).join('\n\n'));
+        const scoreColor = strategyDiagnosis.readinessScore >= 70 ? GREEN : strategyDiagnosis.readinessScore >= 45 ? AMBER : RED;
+        doc.setFillColor(scoreColor[0], scoreColor[1], scoreColor[2]);
+        doc.roundedRect(PW / 2 - 22, 105, 44, 18, 2, 2, 'F');
+        setFont(16, 'bold', WHITE);
+        doc.text(`${strategyDiagnosis.readinessScore}`, PW / 2, 116, { align: 'center' });
+        setFont(7, 'normal', WHITE);
+        doc.text('Growth Readiness Score', PW / 2, 121, { align: 'center' });
       }
 
-      addSection('How Google Ranks Local Businesses', 'Google ranks local businesses based on two fundamental signals:\n\n1. What you do — Does your website clearly communicate your services?\n2. Where you do it — Does your website clearly communicate your service areas?\n\nIf a website does not clearly communicate both of these signals, Google has less confidence ranking it for relevant local searches.');
-      if (strategyData.websiteAnalysis) addSection('Website X-Ray Analysis', strategyData.websiteAnalysis);
-      if (strategyData.searchVisibility) addSection('Search Visibility Analysis', strategyData.searchVisibility);
-      if (strategyData.competitorAnalysis) addSection('Competitor Gap Analysis', strategyData.competitorAnalysis);
-      if (strategyData.keywordOpportunities) addSection('Keyword Opportunity Map', strategyData.keywordOpportunities);
-      if (strategyData.trafficForecast) addSection('Traffic & Revenue Forecast', strategyData.trafficForecast);
-      if (strategyData.mapsOptimisation) addSection('Google Maps Optimisation Plan', strategyData.mapsOptimisation);
-      if (strategyData.growthRoadmap) addSection('12-Month Growth Roadmap', strategyData.growthRoadmap);
-      if (strategyData.expectedImpact) addSection('Expected Business Impact', strategyData.expectedImpact);
+      setFont(10, 'bold', WHITE);
+      doc.text('12-Month Marketing Growth Strategy', PW / 2, 140, { align: 'center' });
 
-      const fileName = `${businessName.replace(/[^a-zA-Z0-9]/g, '_')}_Growth_Strategy.pdf`;
+      setFont(8.5, 'normal', MUTED);
+      const dateStr = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+      doc.text(`Prepared ${dateStr}`, PW / 2, 152, { align: 'center' });
+
+      // Key numbers row
+      if (strategyDiagnosis?.growthPotential?.forecastBand) {
+        const fb = strategyDiagnosis.growthPotential.forecastBand;
+        const boxes = [
+          { label: 'Additional Impressions', value: fb.additionalImpressions },
+          { label: 'Additional Visitors', value: fb.additionalVisitors },
+          { label: 'Additional Enquiries', value: fb.additionalEnquiries },
+        ];
+        const boxW = (CW - 8) / 3;
+        boxes.forEach((b, i) => {
+          const bx = M + i * (boxW + 4);
+          doc.setFillColor(37, 50, 80);
+          doc.roundedRect(bx, 170, boxW, 18, 1.5, 1.5, 'F');
+          setFont(10, 'bold', WHITE);
+          doc.text(b.value, bx + boxW / 2, 180, { align: 'center' });
+          setFont(6.5, 'normal', MUTED);
+          doc.text(b.label, bx + boxW / 2, 185, { align: 'center' });
+        });
+      }
+
+      if (strategyDiagnosis?.insightSentence) {
+        doc.setFillColor(37, 50, 80);
+        doc.roundedRect(M, 200, CW, 16, 2, 2, 'F');
+        setFont(8.5, 'italic', MUTED);
+        doc.text(`"${strategyDiagnosis.insightSentence}"`, PW / 2, 210, { align: 'center', maxWidth: CW - 8 });
+      }
+
+      setFont(7.5, 'normal', [60, 80, 110] as const);
+      doc.text('Confidential — Prepared by Momentum Agent  ·  battlescore.com.au', PW / 2, PH - 10, { align: 'center' });
+
+      // ── EXECUTIVE SUMMARY ──────────────────────────────────────────────────
+      newPage();
+      sectionHeading('Executive Summary');
+
+      if (s.executiveSummary) {
+        const es = s.executiveSummary;
+        if (es.currentChallenge) {
+          doc.setFillColor(239, 246, 255);
+          doc.roundedRect(M, y, CW, 1, 1, 1, 'F');
+          checkY(12);
+          doc.setFillColor(239, 246, 255);
+          const challengeLines = doc.splitTextToSize(es.currentChallenge, CW - 8);
+          const boxH = challengeLines.length * 4.5 + 8;
+          doc.roundedRect(M, y, CW, boxH, 1.5, 1.5, 'F');
+          doc.setFillColor(BLUE[0], BLUE[1], BLUE[2]);
+          doc.rect(M, y, 2.5, boxH, 'F');
+          setFont(8, 'bold', BODY);
+          doc.text('Current Challenge', M + 5, y + 5);
+          setFont(8.5, 'normal', BODY);
+          let ty = y + 10;
+          for (const line of challengeLines) { doc.text(line, M + 5, ty); ty += 4.5; }
+          y += boxH + 4;
+        }
+
+        if (es.primaryGoal) { y += 2; bodyText(`Goal: ${es.primaryGoal}`, { style: 'bold', size: 9 }); y += 1; }
+        if (es.growthTarget) { bodyText(es.growthTarget, { color: GREEN }); y += 2; }
+
+        if (es.coreServices?.length) {
+          bodyText('Core Services:', { style: 'bold', size: 8.5 }); y += 1;
+          es.coreServices.forEach((s: string) => bulletPoint(s));
+          y += 3;
+        }
+
+        if (es.primaryChannels?.length) {
+          bodyText('Primary Growth Channels:', { style: 'bold', size: 8.5 }); y += 1;
+          es.primaryChannels.forEach((c: string) => bulletPoint(c));
+        }
+      }
+
+      // ── MARKET OPPORTUNITY ─────────────────────────────────────────────────
+      if (s.marketOpportunity) {
+        y += 6; checkY(30);
+        sectionHeading('Market Opportunity Analysis');
+        const mo = s.marketOpportunity;
+
+        // Stats row
+        const stats = [
+          { label: 'Est. Monthly Searches', value: mo.totalMonthlySearches?.toLocaleString?.() || '—' },
+          { label: 'Current Capture', value: mo.currentCapture || '—' },
+          { label: 'Potential Capture', value: mo.potentialCapture || '—' },
+        ];
+        const sw = (CW - 6) / 3;
+        stats.forEach((stat, i) => {
+          const bx = M + i * (sw + 3);
+          doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+          doc.roundedRect(bx, y, sw, 16, 1.5, 1.5, 'F');
+          doc.setDrawColor(203, 213, 225);
+          doc.setLineWidth(0.3);
+          doc.roundedRect(bx, y, sw, 16, 1.5, 1.5, 'S');
+          setFont(11, 'bold', BLUE);
+          doc.text(String(stat.value), bx + sw / 2, y + 8, { align: 'center' });
+          setFont(6.5, 'normal', MUTED);
+          doc.text(stat.label, bx + sw / 2, y + 13, { align: 'center' });
+        });
+        y += 22;
+
+        if (mo.keyInsight) {
+          doc.setFillColor(254, 252, 232);
+          const kiLines = doc.splitTextToSize(mo.keyInsight, CW - 10);
+          const kiH = kiLines.length * 4.5 + 8;
+          doc.roundedRect(M, y, CW, kiH, 1.5, 1.5, 'F');
+          doc.setFillColor(AMBER[0], AMBER[1], AMBER[2]);
+          doc.rect(M, y, 2.5, kiH, 'F');
+          setFont(8.5, 'italic', BODY);
+          let ty = y + 5.5;
+          for (const line of kiLines) { doc.text(line, M + 5, ty); ty += 4.5; }
+          y += kiH + 5;
+        }
+
+        // Keyword table
+        if (mo.keywords?.length) {
+          bodyText('Keyword Opportunity Map', { style: 'bold', size: 8.5 }); y += 2;
+          const cols = [{ w: CW * 0.42, label: 'Keyword' }, { w: CW * 0.18, label: 'Monthly Searches' }, { w: CW * 0.18, label: 'Current Rank' }, { w: CW * 0.22, label: 'Opportunity' }];
+          // Header
+          doc.setFillColor(DARK[0], DARK[1], DARK[2]);
+          doc.rect(M, y, CW, 7, 'F');
+          let cx = M;
+          setFont(7.5, 'bold', WHITE);
+          cols.forEach(col => { doc.text(col.label, cx + col.w / 2, y + 4.8, { align: 'center' }); cx += col.w; });
+          y += 7;
+          mo.keywords.slice(0, 8).forEach((kw: any, i: number) => {
+            checkY(7);
+            doc.setFillColor(i % 2 === 0 ? 248 : 255, i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 252 : 255);
+            doc.rect(M, y, CW, 6.5, 'F');
+            let kx = M;
+            setFont(8, 'normal', BODY);
+            const kwLines = doc.splitTextToSize(kw.keyword || '', cols[0].w - 2);
+            doc.text(kwLines[0] || '', kx + 2, y + 4.5);
+            kx += cols[0].w;
+            setFont(8, 'normal', BLUE);
+            doc.text(String(kw.monthlySearches || '—'), kx + cols[1].w / 2, y + 4.5, { align: 'center' });
+            kx += cols[1].w;
+            setFont(8, 'normal', MUTED);
+            doc.text(String(kw.currentRank || '—'), kx + cols[2].w / 2, y + 4.5, { align: 'center' });
+            kx += cols[2].w;
+            const oppColor = kw.opportunity === 'high' ? GREEN : kw.opportunity === 'medium' ? AMBER : MUTED;
+            setFont(7.5, 'bold', oppColor);
+            doc.text((kw.opportunity || '').toUpperCase(), kx + cols[3].w / 2, y + 4.5, { align: 'center' });
+            y += 6.5;
+          });
+          y += 4;
+        }
+      }
+
+      // ── DIGITAL ASSET AUDIT ────────────────────────────────────────────────
+      if (s.digitalAudit) {
+        y += 4; checkY(30);
+        sectionHeading('Digital Asset Audit');
+        const da = s.digitalAudit;
+
+        const auditBlock = (title: string, score: number, strengths: string[], gaps: string[]) => {
+          checkY(20);
+          const scoreColor = score >= 70 ? GREEN : score >= 45 ? AMBER : RED;
+          doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+          doc.roundedRect(M, y, CW, 7, 1.5, 1.5, 'F');
+          setFont(9, 'bold', BODY);
+          doc.text(title, M + 3, y + 5);
+          doc.setFillColor(scoreColor[0], scoreColor[1], scoreColor[2]);
+          doc.roundedRect(M + CW - 22, y + 1, 19, 5, 1, 1, 'F');
+          setFont(8, 'bold', WHITE);
+          doc.text(`${score}/100`, M + CW - 12.5, y + 5, { align: 'center' });
+          y += 10;
+          if (strengths?.length) {
+            setFont(7.5, 'bold', GREEN); doc.text('Strengths', M + 2, y); y += 4;
+            strengths.slice(0, 3).forEach(s => bulletPoint(s, BODY));
+          }
+          if (gaps?.length) {
+            y += 1; setFont(7.5, 'bold', RED); doc.text('Gaps', M + 2, y); y += 4;
+            gaps.slice(0, 3).forEach(g => bulletPoint(g, BODY));
+          }
+          y += 5;
+        };
+
+        if (da.website) auditBlock('Website', da.website.score || 0, da.website.strengths || [], da.website.gaps || []);
+        if (da.gbp) auditBlock(`Google Business Profile${da.gbp.reviews ? ` — ${da.gbp.reviews} reviews, ${da.gbp.rating}★` : ''}`, da.gbp.score || 0, da.gbp.strengths || [], da.gbp.gaps || []);
+        if (da.authority) auditBlock('Authority & Trust Signals', da.authority.score || 0, da.authority.socialProfiles?.map((p: string) => p + ' profile found') || [], da.authority.gaps || []);
+      }
+
+      // ── GROWTH PILLARS ─────────────────────────────────────────────────────
+      if (s.growthPillars?.length) {
+        y += 4; checkY(30);
+        sectionHeading('Growth Strategy — 4 Pillars');
+        s.growthPillars.forEach((pillar: any) => {
+          checkY(20);
+          doc.setFillColor(DARK[0], DARK[1], DARK[2]);
+          doc.roundedRect(M, y, 10, 10, 1, 1, 'F');
+          setFont(11, 'bold', WHITE);
+          doc.text(String(pillar.number || ''), M + 5, y + 7.5, { align: 'center' });
+          setFont(10, 'bold', BODY);
+          doc.text(pillar.title || '', M + 13, y + 4.5);
+          setFont(8, 'normal', MUTED);
+          doc.text(`${pillar.timeframe || ''}  ·  ${pillar.goal || ''}`, M + 13, y + 9);
+          y += 15;
+          if (pillar.actions?.length) {
+            pillar.actions.slice(0, 3).forEach((act: any) => {
+              checkY(8);
+              bulletPoint(act.action || '', BLUE);
+              if (act.detail) bodyText(act.detail, { indent: 7, color: MUTED, size: 8 });
+              if (act.examples?.length) bodyText('e.g. ' + act.examples.join(', '), { indent: 7, color: MUTED, size: 7.5 });
+              y += 1;
+            });
+          }
+          y += 5; divider(true);
+        });
+      }
+
+      // ── MONTHLY ROADMAP ────────────────────────────────────────────────────
+      if (s.monthlyRoadmap?.length) {
+        y += 4; checkY(40);
+        sectionHeading('12-Month Execution Roadmap');
+        const cols2 = [{ w: CW * 0.16, label: 'Period' }, { w: CW * 0.13, label: 'Phase' }, { w: CW * 0.47, label: 'Focus Areas' }, { w: CW * 0.14, label: 'Est. Leads' }];
+        doc.setFillColor(DARK[0], DARK[1], DARK[2]);
+        doc.rect(M, y, CW, 7, 'F');
+        let cx2 = M;
+        setFont(7.5, 'bold', WHITE);
+        cols2.forEach(col => { doc.text(col.label, cx2 + col.w / 2, y + 4.8, { align: 'center' }); cx2 += col.w; });
+        y += 7;
+
+        s.monthlyRoadmap.forEach((row: any, i: number) => {
+          const focusText = Array.isArray(row.focus) ? row.focus.join(' · ') : (row.focus || '');
+          const focusLines = doc.splitTextToSize(focusText, cols2[2].w - 4);
+          const rowH = Math.max(7, focusLines.length * 4.5 + 3);
+          checkY(rowH);
+          doc.setFillColor(i % 2 === 0 ? 248 : 255, i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 252 : 255);
+          doc.rect(M, y, CW, rowH, 'F');
+          let rx = M;
+          setFont(7.5, 'bold', BODY); doc.text(row.period || '', rx + 2, y + 4.5); rx += cols2[0].w;
+          setFont(7.5, 'normal', MUTED); doc.text(row.phase || '', rx + cols2[1].w / 2, y + 4.5, { align: 'center' }); rx += cols2[1].w;
+          setFont(7.5, 'normal', BODY);
+          for (let fl = 0; fl < focusLines.length; fl++) { doc.text(focusLines[fl], rx + 2, y + 4.5 + fl * 4.5); }
+          rx += cols2[2].w;
+          setFont(7.5, 'bold', GREEN); doc.text(row.estimatedLeads || '—', rx + cols2[3].w / 2, y + 4.5, { align: 'center' });
+          y += rowH;
+        });
+        y += 5;
+
+        // Milestone notes
+        s.monthlyRoadmap.forEach((row: any) => {
+          if (row.milestone) { checkY(7); bulletPoint(`${row.period}: ${row.milestone}`, MUTED); }
+        });
+      }
+
+      // ── PROJECTED OUTCOMES ─────────────────────────────────────────────────
+      if (s.projectedOutcomes?.length) {
+        y += 6; checkY(30);
+        sectionHeading('Projected Outcomes');
+        const ow = (CW - (s.projectedOutcomes.length - 1) * 3) / s.projectedOutcomes.length;
+        s.projectedOutcomes.forEach((outcome: any, i: number) => {
+          const ox = M + i * (ow + 3);
+          const confColor = outcome.confidence === 'high' ? GREEN : outcome.confidence === 'medium' ? AMBER : MUTED;
+          doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+          doc.roundedRect(ox, y, ow, 22, 1.5, 1.5, 'F');
+          doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.3);
+          doc.roundedRect(ox, y, ow, 22, 1.5, 1.5, 'S');
+          setFont(8.5, 'bold', MUTED); doc.text(outcome.month || `Month ${i * 3 + 3}`, ox + ow / 2, y + 6, { align: 'center' });
+          setFont(12, 'bold', BLUE); doc.text(String(outcome.estimatedLeads || '—'), ox + ow / 2, y + 13.5, { align: 'center' });
+          setFont(7, 'normal', MUTED); doc.text('leads/mo', ox + ow / 2, y + 17, { align: 'center' });
+          setFont(6, 'bold', confColor); doc.text((outcome.confidence || '').toUpperCase(), ox + ow / 2, y + 20.5, { align: 'center' });
+        });
+        y += 28;
+      }
+
+      // ── KPIs ───────────────────────────────────────────────────────────────
+      if (s.kpis?.length) {
+        y += 4; checkY(30);
+        sectionHeading('Key Performance Indicators');
+        const kcols = [{ w: CW * 0.45, label: 'Metric' }, { w: CW * 0.25, label: 'Baseline' }, { w: CW * 0.3, label: '12-Month Target' }];
+        doc.setFillColor(DARK[0], DARK[1], DARK[2]);
+        doc.rect(M, y, CW, 7, 'F');
+        let kx = M;
+        setFont(7.5, 'bold', WHITE);
+        kcols.forEach(col => { doc.text(col.label, kx + col.w / 2, y + 4.8, { align: 'center' }); kx += col.w; });
+        y += 7;
+        s.kpis.forEach((kpi: any, i: number) => {
+          checkY(7);
+          doc.setFillColor(i % 2 === 0 ? 248 : 255, i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 252 : 255);
+          doc.rect(M, y, CW, 6.5, 'F');
+          let kx2 = M;
+          setFont(8, 'bold', BODY); doc.text(kpi.metric || '', kx2 + 2, y + 4.5); kx2 += kcols[0].w;
+          setFont(8, 'normal', MUTED); doc.text(String(kpi.baseline || '—'), kx2 + kcols[1].w / 2, y + 4.5, { align: 'center' }); kx2 += kcols[1].w;
+          setFont(8, 'bold', GREEN); doc.text(String(kpi.target12Month || '—'), kx2 + kcols[2].w / 2, y + 4.5, { align: 'center' });
+          y += 6.5;
+        });
+      }
+
+      // ── REP TALKING POINTS ─────────────────────────────────────────────────
+      if (s.repTalkingPoints?.length) {
+        y += 6; checkY(20);
+        sectionHeading('Sales Talking Points', 'Use these on the call');
+        s.repTalkingPoints.forEach((point: string) => {
+          checkY(10);
+          doc.setFillColor(239, 246, 255);
+          const ptLines = doc.splitTextToSize(`"${point}"`, CW - 10);
+          const ptH = ptLines.length * 4.5 + 7;
+          doc.roundedRect(M, y, CW, ptH, 1.5, 1.5, 'F');
+          doc.setFillColor(BLUE[0], BLUE[1], BLUE[2]);
+          doc.rect(M, y, 2.5, ptH, 'F');
+          setFont(8.5, 'italic', BODY);
+          let ty = y + 5;
+          for (const line of ptLines) { doc.text(line, M + 5, ty); ty += 4.5; }
+          y += ptH + 3;
+        });
+      }
+
+      // Footer on all pages
+      const totalPages = (doc as any).internal.getNumberOfPages();
+      for (let pg = 1; pg <= totalPages; pg++) {
+        doc.setPage(pg);
+        if (pg > 1) {
+          doc.setFillColor(DARK[0], DARK[1], DARK[2]);
+          doc.rect(0, PH - 10, PW, 10, 'F');
+          setFont(7, 'normal', MUTED);
+          doc.text(businessName, M, PH - 5);
+          doc.text('12-Month Marketing Growth Strategy', PW / 2, PH - 5, { align: 'center' });
+          doc.text(`Page ${pg} of ${totalPages}`, PW - M, PH - 5, { align: 'right' });
+        }
+      }
+
+      const fileName = `${businessName.replace(/[^a-zA-Z0-9]/g, '_')}_12Month_Growth_Strategy.pdf`;
       doc.save(fileName);
-      toast({ title: 'Strategy PDF downloaded' });
+      toast({ title: 'Strategy PDF downloaded', description: 'Professional 12-month strategy document saved.' });
     } catch (err: any) {
+      console.error('[generatePdf]', err);
       toast({ title: 'Failed to generate PDF', description: err.message, variant: 'destructive' });
     } finally { setPdfLoading(false); }
   };
@@ -860,11 +1255,24 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
       <Separator />
 
       {/* ── PDF + Report URL ───────────────────────────────────── */}
-      <div className="text-center space-y-2">
-        <p className="text-xs text-muted-foreground">Generate a professional strategy document you can send after your call.</p>
-        <Button onClick={generatePdf} disabled={pdfLoading} className="w-full h-9 text-sm gap-2" data-testid="button-generate-pdf">
+      <div className="space-y-2">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground flex items-center gap-1">
+            <BarChart3 className="h-3 w-3" /> Competitor websites (optional)
+          </Label>
+          <Input
+            value={competitorInput}
+            onChange={e => setCompetitorInput(e.target.value)}
+            placeholder="e.g. besa.au, lindonhomes.com.au"
+            className="h-8 text-xs"
+            data-testid="input-competitors"
+          />
+          <p className="text-[10px] text-muted-foreground">Comma-separated. AI will factor these into the keyword gap and growth strategy.</p>
+        </div>
+        <p className="text-xs text-muted-foreground">Generate a professional 12-month strategy document to send after your call.</p>
+        <Button onClick={generatePdf} disabled={pdfLoading || !businessName} className="w-full h-9 text-sm gap-2" data-testid="button-generate-pdf">
           {pdfLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
-          {pdfLoading ? 'Generating...' : 'Generate 12-Month Strategy PDF'}
+          {pdfLoading ? 'Building strategy...' : 'Generate 12-Month Strategy PDF'}
         </Button>
         <Button onClick={generateReportUrl} disabled={urlLoading} variant="outline" className="w-full h-9 text-sm gap-2" data-testid="button-generate-report-url">
           {urlLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
