@@ -304,6 +304,14 @@ export interface Lead {
   crawledPages?: CrawledPage[];
   crawledAt?: Date;
   competitorDomains?: string[];
+  competitorData?: Record<string, CompetitorSiteData>;
+}
+
+export interface CompetitorSiteData {
+  sitemapPages?: SitemapPage[];
+  sitemapFetchedAt?: Date;
+  crawledPages?: CrawledPage[];
+  crawledAt?: Date;
 }
 
 export interface SitemapPage {

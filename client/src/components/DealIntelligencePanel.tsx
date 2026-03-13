@@ -6,6 +6,7 @@ import {
   Activity,
   SitemapPage,
   CrawledPage,
+  CompetitorSiteData,
   STAGE_LABELS,
 } from '@/lib/types';
 import {
@@ -245,8 +246,8 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const { toast } = useToast();
   const debounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [newCompetitor, setNewCompetitor] = useState('');
-  const [competitorCrawling, setCompetitorCrawling] = useState<Record<string, boolean>>({});
-  const [competitorStats, setCompetitorStats] = useState<Record<string, { pages: number; servicePages: number; error?: string }>>({});
+  const [competitorSitemapLoading, setCompetitorSitemapLoading] = useState<Record<string, boolean>>({});
+  const [competitorDeepCrawling, setCompetitorDeepCrawling] = useState<Record<string, boolean>>({});
   const [screenshotCacheBust, setScreenshotCacheBust] = useState<number>(Date.now());
   const [screenshotLoaded, setScreenshotLoaded] = useState(false);
   const [screenshotError, setScreenshotError] = useState(false);
@@ -288,21 +289,57 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     saveCompetitorDomains(updated);
   }, [lead.competitorDomains, saveCompetitorDomains]);
 
-  const crawlCompetitorSitemap = useCallback(async (domain: string) => {
-    setCompetitorCrawling(p => ({ ...p, [domain]: true }));
+  const handleCompetitorSitemapScan = useCallback(async (domain: string) => {
+    if (!orgId || !authReady) return;
+    setCompetitorSitemapLoading(p => ({ ...p, [domain]: true }));
     try {
       const sitemapUrl = `https://${domain}/sitemap.xml`;
       const res = await fetch(`/api/sitemap?url=${encodeURIComponent(sitemapUrl)}`);
+      if (!res.ok) throw new Error('Sitemap fetch failed');
       const data = await res.json();
-      const pages: any[] = data.pages || [];
-      const servicePages = pages.filter((p: any) => /service|solution|what-we-do|offering/i.test(p.url)).length;
-      setCompetitorStats(p => ({ ...p, [domain]: { pages: pages.length, servicePages } }));
+      const existing = lead.competitorData || {};
+      const updated = { ...existing, [domain]: { ...(existing[domain] || {}), sitemapPages: data.pages, sitemapFetchedAt: new Date() } };
+      const updates: Partial<Lead> = { competitorData: updated, updatedAt: new Date() };
+      dispatch(patchLead({ id: lead.id, updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+      toast({ title: 'Sitemap scanned', description: `${data.pages?.length ?? 0} pages found on ${domain}` });
     } catch {
-      setCompetitorStats(p => ({ ...p, [domain]: { pages: 0, servicePages: 0, error: 'Could not fetch' } }));
+      toast({ title: 'Scan failed', description: `Could not fetch sitemap for ${domain}`, variant: 'destructive' });
     } finally {
-      setCompetitorCrawling(p => ({ ...p, [domain]: false }));
+      setCompetitorSitemapLoading(p => ({ ...p, [domain]: false }));
     }
-  }, []);
+  }, [lead, orgId, authReady, dispatch, toast]);
+
+  const handleCompetitorDeepCrawl = useCallback(async (domain: string) => {
+    if (!orgId || !authReady) return;
+    const sitemapPages = lead.competitorData?.[domain]?.sitemapPages;
+    if (!sitemapPages?.length) {
+      toast({ title: 'Scan sitemap first', description: 'Run the sitemap scan before deep crawling', variant: 'destructive' });
+      return;
+    }
+    setCompetitorDeepCrawling(p => ({ ...p, [domain]: true }));
+    try {
+      const urls = sitemapPages.map((p: SitemapPage) => p.url);
+      const res = await fetch('/api/crawl-pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls, domain }),
+      });
+      if (!res.ok) throw new Error('Crawl failed');
+      const data = await res.json();
+      const existing = lead.competitorData || {};
+      const updated = { ...existing, [domain]: { ...(existing[domain] || {}), crawledPages: data.crawledPages, crawledAt: new Date() } };
+      const updates: Partial<Lead> = { competitorData: updated, updatedAt: new Date() };
+      dispatch(patchLead({ id: lead.id, updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+      const success = data.crawledPages.filter((p: any) => !p.error).length;
+      toast({ title: 'Deep crawl complete', description: `SEO signals extracted from ${success} pages on ${domain}` });
+    } catch {
+      toast({ title: 'Crawl failed', description: `Could not crawl ${domain}`, variant: 'destructive' });
+    } finally {
+      setCompetitorDeepCrawling(p => ({ ...p, [domain]: false }));
+    }
+  }, [lead, orgId, authReady, dispatch, toast]);
 
   const health = useMemo(() => computeDealHealth(lead, activities), [lead, activities]);
   const summary = useMemo(() => generateDealSummary(lead, activities), [lead, activities]);
@@ -670,54 +707,19 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
 
         {/* Saved competitor domains */}
         {(lead.competitorDomains?.length ?? 0) > 0 ? (
-          <div className="space-y-1.5">
-            {lead.competitorDomains!.map(domain => {
-              const stats = competitorStats[domain];
-              const crawling = competitorCrawling[domain];
-              return (
-                <div key={domain} className="rounded border bg-muted/30 px-2.5 py-1.5 space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <a
-                      href={`https://${domain}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium truncate flex-1 hover:underline"
-                    >
-                      {domain}
-                    </a>
-                    <button
-                      onClick={() => crawlCompetitorSitemap(domain)}
-                      disabled={crawling}
-                      title="Check sitemap"
-                      className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                      data-testid={`button-crawl-competitor-${domain}`}
-                    >
-                      {crawling
-                        ? <Loader2 className="h-3 w-3 animate-spin" />
-                        : <RefreshCw className="h-3 w-3" />}
-                    </button>
-                    <button
-                      onClick={() => removeCompetitor(domain)}
-                      title="Remove competitor"
-                      className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
-                      data-testid={`button-remove-competitor-${domain}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                  {stats && !stats.error && (
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground pl-4">
-                      <span>{stats.pages} pages</span>
-                      {stats.servicePages > 0 && <span>· {stats.servicePages} service pages</span>}
-                    </div>
-                  )}
-                  {stats?.error && (
-                    <p className="text-[10px] text-destructive pl-4">{stats.error}</p>
-                  )}
-                </div>
-              );
-            })}
+          <div className="space-y-2">
+            {lead.competitorDomains!.map(domain => (
+              <CompetitorCard
+                key={domain}
+                domain={domain}
+                siteData={lead.competitorData?.[domain]}
+                sitemapLoading={!!competitorSitemapLoading[domain]}
+                deepCrawling={!!competitorDeepCrawling[domain]}
+                onScanSitemap={() => handleCompetitorSitemapScan(domain)}
+                onDeepCrawl={() => handleCompetitorDeepCrawl(domain)}
+                onRemove={() => removeCompetitor(domain)}
+              />
+            ))}
             {/* AI analysis insights if available */}
             {(lead.aiGrowthPlan?.competitor as any)?.insights?.length > 0 && (
               <div className="rounded border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 px-2.5 py-1.5">
@@ -730,7 +732,6 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                 ))}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground">Run full analysis in AI Sales Engine → Growth Plan for deep SEO gap comparison.</p>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground italic">Add competitor domains above to track and analyse them against this lead.</p>
@@ -1102,6 +1103,255 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
         </div>
       )}
     </>
+  );
+}
+
+function CompetitorCard({
+  domain, siteData, sitemapLoading, deepCrawling, onScanSitemap, onDeepCrawl, onRemove,
+}: {
+  domain: string;
+  siteData?: CompetitorSiteData;
+  sitemapLoading: boolean;
+  deepCrawling: boolean;
+  onScanSitemap: () => void;
+  onDeepCrawl: () => void;
+  onRemove: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [screenshotLoaded, setScreenshotLoaded] = useState(false);
+  const [screenshotError, setScreenshotError] = useState(false);
+  const [screenshotModalOpen, setScreenshotModalOpen] = useState(false);
+  const [sitemapExpanded, setSitemapExpanded] = useState(false);
+  const [crawlSectionExpanded, setCrawlSectionExpanded] = useState(false);
+  const [crawlPageExpanded, setCrawlPageExpanded] = useState<number | null>(null);
+
+  const websiteUrl = `https://${domain}`;
+  const thumbUrl = `https://image.thum.io/get/width/800/crop/420/url/${websiteUrl}`;
+  const fullUrl = `https://image.thum.io/get/width/1400/url/${websiteUrl}`;
+  const pages = siteData?.sitemapPages || [];
+  const crawledPages = siteData?.crawledPages || [];
+  const successCrawls = crawledPages.filter(p => !p.error);
+
+  return (
+    <div className="rounded border bg-muted/20 overflow-hidden">
+      {/* Header row */}
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted/40">
+        <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+        <a
+          href={websiteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-medium truncate flex-1 hover:underline"
+        >
+          {domain}
+        </a>
+        {pages.length > 0 && (
+          <span className="text-[10px] text-muted-foreground shrink-0">{pages.length} pages</span>
+        )}
+        {crawledPages.length > 0 && (
+          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 shrink-0">· {successCrawls.length} crawled</span>
+        )}
+        <button
+          onClick={() => setExpanded(e => !e)}
+          title={expanded ? 'Collapse' : 'Expand analysis'}
+          className="text-muted-foreground hover:text-foreground transition-colors p-0.5 ml-1"
+          data-testid={`button-expand-competitor-${domain}`}
+        >
+          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
+        <button
+          onClick={onRemove}
+          title="Remove"
+          className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+          data-testid={`button-remove-competitor-${domain}`}
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Expanded analysis body */}
+      {expanded && (
+        <div className="px-2.5 pb-2.5 pt-2 space-y-2.5">
+
+          {/* Screenshot thumbnail */}
+          <div className="rounded overflow-hidden border">
+            <div className="flex items-center justify-between px-2 py-1 bg-muted/30 border-b">
+              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
+                <Image className="h-2.5 w-2.5" /> Website Preview
+              </span>
+              <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
+                className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5">
+                <ExternalLink className="h-2.5 w-2.5" /> Visit
+              </a>
+            </div>
+            {!screenshotError ? (
+              <div className="relative bg-muted/10 cursor-zoom-in group"
+                onClick={() => screenshotLoaded && setScreenshotModalOpen(true)}>
+                {!screenshotLoaded && (
+                  <div className="flex items-center justify-center h-24 bg-muted/20">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                <img
+                  src={thumbUrl}
+                  alt={`Screenshot of ${domain}`}
+                  className={`w-full object-cover object-top transition-opacity duration-300 ${screenshotLoaded ? 'opacity-100' : 'opacity-0 h-24'}`}
+                  style={{ maxHeight: '140px' }}
+                  onLoad={() => setScreenshotLoaded(true)}
+                  onError={() => { setScreenshotError(true); setScreenshotLoaded(true); }}
+                />
+                {screenshotLoaded && (
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
+                      <Eye className="h-3 w-3" /> Click to view full page
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-10 flex items-center justify-center bg-muted/20">
+                <p className="text-[10px] text-muted-foreground">Preview unavailable</p>
+              </div>
+            )}
+          </div>
+
+          {/* Screenshot modal */}
+          <Dialog open={screenshotModalOpen} onOpenChange={setScreenshotModalOpen}>
+            <DialogContent className="max-w-4xl w-full p-0 overflow-hidden">
+              <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b bg-muted/40 space-y-0">
+                <DialogTitle className="text-sm font-medium flex items-center gap-2">
+                  <Image className="h-3.5 w-3.5" /> {domain}
+                </DialogTitle>
+                <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3" /> Visit site
+                </a>
+              </DialogHeader>
+              <div className="overflow-y-auto max-h-[80vh]">
+                <img src={fullUrl} alt={`Full screenshot of ${domain}`} className="w-full" />
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Sitemap section */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <FileText className={`h-3 w-3 shrink-0 ${pages.length > 0 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`} />
+              <span className={`text-[11px] flex-1 ${pages.length > 0 ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+                {pages.length > 0
+                  ? `${pages.length} pages in sitemap`
+                  : 'Sitemap not scanned'}
+              </span>
+              <button
+                onClick={onScanSitemap}
+                disabled={sitemapLoading}
+                className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50 flex items-center gap-0.5"
+                data-testid={`button-scan-sitemap-${domain}`}
+              >
+                {sitemapLoading ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Scanning…</> : pages.length > 0 ? 'Refresh' : 'Scan now'}
+              </button>
+            </div>
+            {pages.length > 0 && (
+              <>
+                <button
+                  onClick={() => setSitemapExpanded(e => !e)}
+                  className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1 ml-4"
+                >
+                  {sitemapExpanded ? 'Hide pages' : `View ${pages.length} pages`}
+                  {siteData?.sitemapFetchedAt && (
+                    <span className="text-muted-foreground">· {format(new Date(siteData.sitemapFetchedAt), 'dd/MM/yy')}</span>
+                  )}
+                </button>
+                {sitemapExpanded && (
+                  <div className="ml-4 bg-muted/40 rounded border p-1.5 space-y-0.5 max-h-32 overflow-y-auto">
+                    {pages.slice(0, 30).map((p, i) => (
+                      <div key={i} className="text-[10px] text-foreground/70 truncate">
+                        {p.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                      </div>
+                    ))}
+                    {pages.length > 30 && <p className="text-[9px] text-muted-foreground">+{pages.length - 30} more</p>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Deep crawl section */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <ScanLine className={`h-3 w-3 shrink-0 ${crawledPages.length > 0 ? 'text-emerald-500' : 'text-muted-foreground'}`} />
+              <span className={`text-[11px] flex-1 ${crawledPages.length > 0 ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+                {crawledPages.length > 0
+                  ? `${successCrawls.length} pages analysed · SEO signals extracted`
+                  : pages.length > 0 ? 'Deep crawl not yet run' : 'Scan sitemap first'}
+              </span>
+              {pages.length > 0 && (
+                <button
+                  onClick={onDeepCrawl}
+                  disabled={deepCrawling || sitemapLoading}
+                  className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline disabled:opacity-50 flex items-center gap-0.5"
+                  data-testid={`button-deep-crawl-${domain}`}
+                >
+                  {deepCrawling ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Crawling…</> : crawledPages.length > 0 ? 'Re-crawl' : 'Crawl pages'}
+                </button>
+              )}
+            </div>
+            {crawledPages.length > 0 && (
+              <>
+                <button
+                  onClick={() => setCrawlSectionExpanded(e => !e)}
+                  className="w-full flex items-center justify-between text-[9px] text-muted-foreground hover:text-foreground transition-colors ml-4"
+                  style={{ width: 'calc(100% - 1rem)' }}
+                >
+                  <span>{siteData?.crawledAt ? `Analysed ${format(new Date(siteData.crawledAt), 'dd/MM/yy HH:mm')}` : 'Analysed'}</span>
+                  <span className="flex items-center gap-0.5">
+                    {crawlSectionExpanded ? <><ChevronUp className="h-2.5 w-2.5" /> Hide</> : <><ChevronDown className="h-2.5 w-2.5" /> Show pages</>}
+                  </span>
+                </button>
+                {crawlSectionExpanded && (
+                  <div className="space-y-1 max-h-72 overflow-y-auto">
+                    {crawledPages.map((cp, idx) => {
+                      const path = (() => { try { return new URL(cp.url).pathname || '/'; } catch { return cp.url; } })();
+                      const isOpen = crawlPageExpanded === idx;
+                      return (
+                        <div key={idx} className="rounded border bg-muted/30 overflow-hidden">
+                          <button
+                            onClick={() => setCrawlPageExpanded(isOpen ? null : idx)}
+                            className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/60 transition-colors"
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cp.error ? 'bg-red-400' : 'bg-emerald-400'}`} />
+                            <span className="text-[10px] text-foreground/80 truncate flex-1">{path}</span>
+                            {isOpen ? <ChevronUp className="h-2.5 w-2.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-2.5 w-2.5 text-muted-foreground shrink-0" />}
+                          </button>
+                          {isOpen && (
+                            <div className="px-2 pb-2 space-y-1.5 text-[10px]">
+                              {cp.error ? <p className="text-red-500">{cp.error}</p> : (
+                                <>
+                                  {cp.title && <div><p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Title</p><p className="text-foreground/90">{cp.title}</p></div>}
+                                  {cp.metaDescription && <div><p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Meta</p><p className="text-foreground/70">{cp.metaDescription}</p></div>}
+                                  {cp.h1 && <div><p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">H1</p><p className="text-foreground/90 font-medium">{cp.h1}</p></div>}
+                                  {cp.h2s && cp.h2s.length > 0 && (
+                                    <div>
+                                      <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">H2 Headings</p>
+                                      <ul className="space-y-0.5">{cp.h2s.map((h, i) => <li key={i} className="text-foreground/70">· {h}</li>)}</ul>
+                                    </div>
+                                  )}
+                                  {cp.bodyText && <div><p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Body Snippet</p><p className="text-foreground/60 line-clamp-3">{cp.bodyText}</p></div>}
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
