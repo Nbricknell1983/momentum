@@ -1067,6 +1067,7 @@ function SitemapRow({ lead, onFetch, onCrawl }: { lead: Lead; onFetch: (url: str
   const [crawling, setCrawling] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [crawlExpanded, setCrawlExpanded] = useState<number | null>(null);
+  const [crawlSectionExpanded, setCrawlSectionExpanded] = useState(false);
 
   const hasSitemap = (lead.sitemapPages?.length ?? 0) > 0;
   const pages = lead.sitemapPages || [];
@@ -1190,10 +1191,17 @@ function SitemapRow({ lead, onFetch, onCrawl }: { lead: Lead; onFetch: (url: str
           {/* Crawled pages results */}
           {hasCrawl && (
             <div className="space-y-1 mt-1">
-              {crawledAt && (
-                <p className="text-[9px] text-muted-foreground">Analysed {format(new Date(crawledAt), 'dd/MM/yy HH:mm')}</p>
-              )}
-              <div className="space-y-1 max-h-80 overflow-y-auto">
+              <button
+                onClick={() => setCrawlSectionExpanded(e => !e)}
+                className="w-full flex items-center justify-between text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="button-toggle-crawl-pages"
+              >
+                <span>{crawledAt ? `Analysed ${format(new Date(crawledAt), 'dd/MM/yy HH:mm')}` : 'Pages analysed'}</span>
+                <span className="flex items-center gap-0.5 text-[9px]">
+                  {crawlSectionExpanded ? <><ChevronUp className="h-2.5 w-2.5" /> Hide</> : <><ChevronDown className="h-2.5 w-2.5" /> Show pages</>}
+                </span>
+              </button>
+              {crawlSectionExpanded && (<div className="space-y-1 max-h-80 overflow-y-auto">
                 {crawledPages.map((cp, idx) => {
                   const path = (() => { try { return new URL(cp.url).pathname || '/'; } catch { return cp.url; } })();
                   const isOpen = crawlExpanded === idx;
@@ -1287,7 +1295,7 @@ function SitemapRow({ lead, onFetch, onCrawl }: { lead: Lead; onFetch: (url: str
                     </div>
                   );
                 })}
-              </div>
+              </div>)}
             </div>
           )}
         </div>
