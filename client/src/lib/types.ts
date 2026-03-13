@@ -251,6 +251,7 @@ export interface Lead {
   phone?: string;
   email?: string;
   website?: string;
+  industry?: string;
   facebookUrl?: string;
   instagramUrl?: string;
   linkedinUrl?: string;
