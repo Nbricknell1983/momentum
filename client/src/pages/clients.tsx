@@ -7,6 +7,7 @@ import { Plus, Filter, Users, Phone, Mail, MapPin, Building2, AlertCircle, Check
 import GenerateReportDialog from '@/components/GenerateReportDialog';
 import { DndContext, DragEndEvent, rectIntersection, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import ClientKanbanColumn from '@/components/ClientKanbanColumn';
+import ClientFocusView from '@/components/ClientFocusView';
 import { ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, getDefaultClientBoardStage } from '@/lib/types';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { QRCodeSVG } from 'qrcode.react';
@@ -257,6 +258,7 @@ export default function ClientsPage() {
   const userId = authUser?.uid;
 
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+  const [focusedClientId, setFocusedClientId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'overdue' | 'health' | 'lastActivity'>('name');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
@@ -2634,7 +2636,7 @@ export default function ClientsPage() {
                   key={stage}
                   stage={stage}
                   clients={clientsByBoardStage[stage]}
-                  onClientClick={(clientId) => setExpandedClientId(clientId)}
+                  onClientClick={(clientId) => setFocusedClientId(clientId)}
                   onQuickAction={handleKanbanQuickAction}
                 />
               ))}
@@ -7235,6 +7237,25 @@ export default function ClientsPage() {
           onClose={() => setReportDialogClient(null)}
         />
       )}
+
+      {/* Full-screen Client Focus View (Kanban board card open) */}
+      {focusedClientId && (() => {
+        const focusedClient = clients.find(c => c.id === focusedClientId);
+        if (!focusedClient) return null;
+        const focusedIndex = clients.findIndex(c => c.id === focusedClientId);
+        return (
+          <ClientFocusView
+            client={focusedClient}
+            onClose={() => setFocusedClientId(null)}
+            onNavigate={(dir) => {
+              const next = dir === 'prev' ? clients[focusedIndex - 1] : clients[focusedIndex + 1];
+              if (next) setFocusedClientId(next.id);
+            }}
+            hasPrev={focusedIndex > 0}
+            hasNext={focusedIndex < clients.length - 1}
+          />
+        );
+      })()}
     </div>
   );
 }
