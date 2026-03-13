@@ -46,6 +46,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format, differenceInDays, isPast, isToday } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateLeadInFirestore } from '@/lib/firestoreService';
@@ -250,6 +251,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [screenshotLoaded, setScreenshotLoaded] = useState(false);
   const [screenshotError, setScreenshotError] = useState(false);
   const [screenshotExpanded, setScreenshotExpanded] = useState(true);
+  const [screenshotModalOpen, setScreenshotModalOpen] = useState(false);
   const prevWebsite = useRef<string | undefined>(undefined);
 
   // Auto-reset screenshot state when website changes
@@ -519,75 +521,116 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         {/* Website screenshot preview */}
         {lead.website && (() => {
           const websiteUrl = lead.website.startsWith('http') ? lead.website : `https://${lead.website}`;
-          const thumbUrl = `https://image.thum.io/get/width/1200/url/${websiteUrl}?cb=${screenshotCacheBust}`;
+          const thumbUrl = `https://image.thum.io/get/width/800/crop/420/url/${websiteUrl}?cb=${screenshotCacheBust}`;
+          const fullUrl = `https://image.thum.io/get/width/1400/url/${websiteUrl}?cb=${screenshotCacheBust}`;
           return (
-            <div className="mt-2.5 rounded-md overflow-hidden border" data-testid="card-website-screenshot">
-              {/* Header bar — always visible, click to toggle */}
-              <button
-                onClick={() => setScreenshotExpanded(e => !e)}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 bg-muted/40 border-b hover:bg-muted/60 transition-colors"
-                data-testid="button-toggle-screenshot"
-              >
-                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
-                  <Image className="h-2.5 w-2.5" /> Website Preview
-                </span>
-                <div className="flex items-center gap-2">
-                  {screenshotLoaded && !screenshotError && (
+            <>
+              <div className="mt-2.5 rounded-md overflow-hidden border" data-testid="card-website-screenshot">
+                {/* Header bar */}
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-muted/40 border-b">
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+                    <Image className="h-2.5 w-2.5" /> Website Preview
+                  </span>
+                  <div className="flex items-center gap-2">
                     <a
                       href={websiteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
                       className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
                     >
                       <ExternalLink className="h-2.5 w-2.5" /> Visit
                     </a>
-                  )}
-                  <span
-                    role="button"
-                    onClick={e => {
-                      e.stopPropagation();
-                      setScreenshotLoaded(false);
-                      setScreenshotError(false);
-                      setScreenshotCacheBust(Date.now());
-                    }}
-                    title="Refresh screenshot"
-                    className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                    data-testid="button-refresh-screenshot"
-                  >
-                    <RefreshCw className="h-2.5 w-2.5" />
-                  </span>
-                  {screenshotExpanded
-                    ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
-                    : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+                    <button
+                      onClick={() => {
+                        setScreenshotLoaded(false);
+                        setScreenshotError(false);
+                        setScreenshotCacheBust(Date.now());
+                      }}
+                      title="Refresh screenshot"
+                      className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                      data-testid="button-refresh-screenshot"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" />
+                    </button>
+                    <button
+                      onClick={() => setScreenshotExpanded(e => !e)}
+                      title={screenshotExpanded ? 'Collapse' : 'Expand'}
+                      className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                      data-testid="button-toggle-screenshot"
+                    >
+                      {screenshotExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    </button>
+                  </div>
                 </div>
-              </button>
 
-              {/* Collapsible screenshot body */}
-              {screenshotExpanded && (
-                !screenshotError ? (
-                  <div className="relative bg-muted/10">
-                    {!screenshotLoaded && (
-                      <div className="flex items-center justify-center h-32 bg-muted/20">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>
-                    )}
+                {/* Collapsible thumbnail — click to open modal */}
+                {screenshotExpanded && (
+                  !screenshotError ? (
+                    <div
+                      className="relative bg-muted/10 cursor-zoom-in group"
+                      onClick={() => screenshotLoaded && setScreenshotModalOpen(true)}
+                      data-testid="button-open-screenshot-modal"
+                    >
+                      {!screenshotLoaded && (
+                        <div className="flex items-center justify-center h-32 bg-muted/20">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                      <img
+                        src={thumbUrl}
+                        alt={`Screenshot of ${lead.companyName} website`}
+                        className={`w-full object-cover object-top transition-opacity duration-300 ${screenshotLoaded ? 'opacity-100' : 'opacity-0 h-32'}`}
+                        style={{ maxHeight: '180px' }}
+                        onLoad={() => setScreenshotLoaded(true)}
+                        onError={() => { setScreenshotError(true); setScreenshotLoaded(true); }}
+                        data-testid="img-website-screenshot"
+                      />
+                      {screenshotLoaded && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
+                            <Eye className="h-3 w-3" /> Click to view full page
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-14 flex items-center justify-center bg-muted/20">
+                      <p className="text-[10px] text-muted-foreground">Could not load preview — check the URL is correct</p>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Full-page modal */}
+              <Dialog open={screenshotModalOpen} onOpenChange={setScreenshotModalOpen}>
+                <DialogContent className="max-w-4xl w-full p-0 overflow-hidden">
+                  <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b bg-muted/40 space-y-0">
+                    <DialogTitle className="text-sm font-medium flex items-center gap-2">
+                      <Image className="h-3.5 w-3.5" />
+                      {lead.companyName} — Website Preview
+                    </DialogTitle>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={websiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Visit site
+                      </a>
+                    </div>
+                  </DialogHeader>
+                  <div className="overflow-y-auto max-h-[80vh]">
                     <img
-                      src={thumbUrl}
-                      alt={`Screenshot of ${lead.companyName} website`}
-                      className={`w-full transition-opacity duration-300 ${screenshotLoaded ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}
-                      onLoad={() => setScreenshotLoaded(true)}
-                      onError={() => { setScreenshotError(true); setScreenshotLoaded(true); }}
-                      data-testid="img-website-screenshot"
+                      src={fullUrl}
+                      alt={`Full screenshot of ${lead.companyName} website`}
+                      className="w-full"
+                      data-testid="img-website-screenshot-modal"
                     />
                   </div>
-                ) : (
-                  <div className="h-14 flex items-center justify-center bg-muted/20">
-                    <p className="text-[10px] text-muted-foreground">Could not load preview — check the URL is correct</p>
-                  </div>
-                )
-              )}
-            </div>
+                </DialogContent>
+              </Dialog>
+            </>
           );
         })()}
       </div>
