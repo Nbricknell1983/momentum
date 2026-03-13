@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, updateLead, patchLead } from '@/store';
 import {
@@ -812,6 +813,13 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                 onRemove={() => removeCompetitor(domain)}
                 onGBPLookup={(placeId) => handleCompetitorGBPLookup(domain, placeId)}
                 onAhrefsFetch={() => handleCompetitorAhrefsFetch(domain)}
+                onAhrefsSave={async (data) => {
+                  const existing = lead.competitorData || {};
+                  const updated = { ...existing, [domain]: { ...(existing[domain] || {}), ahrefs: data } };
+                  const updates: Partial<Lead> = { competitorData: updated, updatedAt: new Date() };
+                  dispatch(patchLead({ id: lead.id, updates }));
+                  if (orgId && authReady) await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+                }}
               />
             ))}
             {/* AI analysis insights if available */}
@@ -1201,7 +1209,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
 }
 
 function CompetitorCard({
-  domain, siteData, sitemapLoading, deepCrawling, onScanSitemap, onDeepCrawl, onRemove, onGBPLookup, onAhrefsFetch,
+  domain, siteData, sitemapLoading, deepCrawling, onScanSitemap, onDeepCrawl, onRemove, onGBPLookup, onAhrefsFetch, onAhrefsSave,
 }: {
   domain: string;
   siteData?: CompetitorSiteData;
@@ -1212,6 +1220,7 @@ function CompetitorCard({
   onRemove: () => void;
   onGBPLookup: (placeId: string) => Promise<void>;
   onAhrefsFetch: () => Promise<void>;
+  onAhrefsSave: (data: AhrefsMetrics) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [screenshotLoaded, setScreenshotLoaded] = useState(false);
@@ -1669,12 +1678,99 @@ function CompetitorCard({
             website={`https://${domain}`}
             data={siteData?.ahrefs}
             onFetch={onAhrefsFetch}
+            onSave={onAhrefsSave}
             compact
           />
         </div>
       )}
     </div>
   );
+}
+
+/* -------------------------------------------------------
+   Parse an Ahrefs Excel/CSV export and map to AhrefsMetrics
+   Supports:
+     - Organic Keywords export (keyword-level rows)
+     - Overview snapshot (single-row domain metrics)
+   ------------------------------------------------------- */
+function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target!.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: null });
+
+        if (!rows.length) { reject(new Error('No data found in file')); return; }
+
+        /* Normalise headers to lowercase for flexible matching */
+        const norm = (s: string) => String(s ?? '').toLowerCase().trim();
+
+        /* Attempt keywords export detection */
+        const firstRow = rows[0];
+        const headers = Object.keys(firstRow).map(norm);
+        const hasKeyword = headers.some(h => h.includes('keyword') && !h.includes('parent'));
+        const hasPosition = headers.some(h => h.includes('position') || h.includes('rank') && !h.includes('domain'));
+
+        /* Helper: find value from row by fuzzy key match */
+        const pick = (row: Record<string, any>, ...terms: string[]): any => {
+          for (const key of Object.keys(row)) {
+            const k = norm(key);
+            if (terms.some(t => k.includes(t))) return row[key];
+          }
+          return null;
+        };
+        const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n; };
+
+        const metrics: AhrefsMetrics = { fetchedAt: new Date() };
+
+        if (hasKeyword && hasPosition) {
+          /* ---------- Organic Keywords export ---------- */
+          const keywords: AhrefsKeyword[] = rows.map(row => ({
+            keyword: String(pick(row, 'keyword') ?? '').trim(),
+            position: num(pick(row, 'current position', 'position', 'rank')),
+            volume: num(pick(row, 'search volume', 'volume')),
+            traffic: num(pick(row, 'traffic')),
+            difficulty: num(pick(row, 'kd', 'keyword difficulty', 'difficulty')),
+            url: String(pick(row, 'url') ?? '').trim() || undefined,
+          })).filter(k => k.keyword);
+
+          /* Sort by traffic descending then position ascending */
+          keywords.sort((a, b) => ((b.traffic ?? 0) - (a.traffic ?? 0)) || ((a.position ?? 999) - (b.position ?? 999)));
+          metrics.topKeywords = keywords.slice(0, 100);
+          metrics.organicKeywords = keywords.length;
+          metrics.organicTraffic = keywords.reduce((s, k) => s + (k.traffic ?? 0), 0);
+        }
+
+        /* ---------- Check for overview/domain metrics columns ---------- */
+        const dr = num(pick(firstRow, 'domain rating', 'dr'));
+        if (dr !== null) metrics.domainRating = dr;
+        const ar = num(pick(firstRow, 'ahrefs rank', 'rank'));
+        if (ar !== null) metrics.ahrefsRank = ar;
+        const bl = num(pick(firstRow, 'backlinks', 'total backlinks'));
+        if (bl !== null) metrics.backlinks = bl;
+        const rd = num(pick(firstRow, 'referring domains', 'ref domains', 'refdomains'));
+        if (rd !== null) metrics.refdomains = rd;
+        const ok = num(pick(firstRow, 'organic keywords'));
+        if (ok !== null) metrics.organicKeywords = ok;
+        const ot = num(pick(firstRow, 'organic traffic'));
+        if (ot !== null) metrics.organicTraffic = ot;
+
+        if (!metrics.topKeywords?.length && !metrics.domainRating && !metrics.backlinks) {
+          reject(new Error('Could not find recognisable Ahrefs columns. Try an Organic Keywords or Overview export.'));
+          return;
+        }
+
+        resolve(metrics);
+      } catch (err: any) {
+        reject(new Error(err.message || 'Failed to parse file'));
+      }
+    };
+    reader.onerror = () => reject(new Error('File read error'));
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 function AhrefsSEOSection({
@@ -1688,8 +1784,10 @@ function AhrefsSEOSection({
   compact?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keywordsExpanded, setKeywordsExpanded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleFetch = async () => {
@@ -1707,22 +1805,51 @@ function AhrefsSEOSection({
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    /* Reset input so same file can be re-uploaded if needed */
+    e.target.value = '';
+    setUploading(true);
+    setError(null);
+    try {
+      const parsed = await parseAhrefsFile(file);
+      /* Merge with any existing data so we don't lose previously stored fields */
+      const merged: AhrefsMetrics = { ...data, ...parsed };
+      if (onSave) await onSave(merged);
+      const kwCount = parsed.topKeywords?.length ?? 0;
+      toast({
+        title: 'Ahrefs data imported',
+        description: `${kwCount ? `${kwCount} keywords` : 'Domain metrics'} loaded for ${label}`,
+      });
+    } catch (e: any) {
+      const msg = e.message || 'Upload failed';
+      setError(msg);
+      toast({ title: 'Import error', description: msg, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const fmt = (n?: number | null) => n == null ? '—' : n.toLocaleString();
 
   if (compact) {
     /* Compact variant for inside CompetitorCard */
     return (
       <div className="space-y-1.5">
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
           <BarChart3 className="h-2.5 w-2.5" /> Ahrefs SEO
-          <button
-            onClick={handleFetch}
-            disabled={loading || !website}
-            className="ml-auto text-[10px] text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 flex items-center gap-0.5"
-            data-testid={`button-ahrefs-fetch-${label}`}
-          >
-            {loading ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Fetching…</> : data ? 'Refresh' : 'Fetch data'}
-          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || !onSave}
+              className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50 flex items-center gap-0.5"
+              data-testid={`button-ahrefs-upload-${label}`}
+            >
+              {uploading ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Importing…</> : 'Upload Excel'}
+            </button>
+          </div>
         </div>
         {error && <p className="text-[10px] text-destructive">{error}</p>}
         {data ? (
@@ -1784,26 +1911,29 @@ function AhrefsSEOSection({
   /* Full card variant for the prospect */
   return (
     <div className="rounded-lg border bg-card p-3" data-testid="card-ahrefs-seo">
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
       <div className="flex items-center gap-1.5 mb-2">
         <BarChart3 className="h-3.5 w-3.5 text-blue-600" />
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Ahrefs SEO</span>
         {data?.fetchedAt && (
           <span className="text-[10px] text-muted-foreground ml-1">· {format(new Date(data.fetchedAt), 'dd/MM/yy')}</span>
         )}
-        <button
-          onClick={handleFetch}
-          disabled={loading || !website}
-          className="ml-auto text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 flex items-center gap-1"
-          data-testid="button-ahrefs-fetch-prospect"
-        >
-          {loading ? <><Loader2 className="h-3 w-3 animate-spin" /> Fetching…</> : data ? 'Refresh' : 'Fetch SEO data'}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || !onSave}
+            className="text-xs text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50 flex items-center gap-1"
+            data-testid="button-ahrefs-upload-prospect"
+          >
+            {uploading ? <><Loader2 className="h-3 w-3 animate-spin" /> Importing…</> : 'Upload Excel'}
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-xs text-destructive mb-2">{error}</p>}
 
-      {!website && !data && (
-        <p className="text-xs text-muted-foreground italic">Add a website URL in Online Presence first.</p>
+      {!data && (
+        <p className="text-xs text-muted-foreground italic">Upload an Ahrefs export (Excel or CSV) to import SEO data.</p>
       )}
 
       {data ? (
