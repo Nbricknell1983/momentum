@@ -1108,38 +1108,62 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   };
 
   const generateReportUrl = async () => {
-    if (!lead || !orgId) { toast({ title: 'Cannot generate report — missing lead or org data', variant: 'destructive' }); return; }
+    if (!lead || !orgId) { toast({ title: 'Missing lead or org data', variant: 'destructive' }); return; }
+    if (!businessName) { toast({ title: 'Business name required', variant: 'destructive' }); return; }
     const user = auth.currentUser;
     if (!user) { toast({ title: 'Not authenticated', variant: 'destructive' }); return; }
     setUrlLoading(true);
     try {
       const token = await user.getIdToken();
-      const now = new Date();
-      const monthYear = now.toLocaleString('en-AU', { month: 'long', year: 'numeric' });
-      const monthlyData = forecastResult?.growthTimeline?.slice(0, 6).map((m: any) => ({ month: m.month, clicks: m.traffic, impressions: Math.round(m.traffic * 8), rankingKeywords: Math.round(m.traffic * 0.4) })) || [];
-      const nextSteps = forecastResult?.keyDrivers?.slice(0, 3).map((d: string) => ({ title: d, description: '', whyItMatters: 'Directly impacts your traffic and lead generation.' })) || xrayResult?.callouts?.filter((c: any) => c.severity === 'high').slice(0, 3).map((c: any) => ({ title: c.issue, description: c.fix, whyItMatters: c.detail })) || strategyDiagnosis?.priorities?.slice(0, 3).map(p => ({ title: p.action, description: p.description, whyItMatters: 'High-priority growth lever identified in strategy analysis.' })) || [];
-      const opportunities = serpResult?.opportunities?.slice(0, 3).map((o: any) => ({ title: o.keyword, description: `${o.difficulty} difficulty, ${o.volume} volume — ${o.recommendation}` })) || strategyDiagnosis?.gaps?.slice(0, 3).map(g => ({ title: g.title, description: g.impact })) || [];
-      const performanceMetrics = forecastResult ? { totalClicks: { value: forecastResult.currentEstimate.monthlyTraffic, change: 0, trend: 'up' as const }, totalImpressions: { value: forecastResult.currentEstimate.monthlyTraffic * 8, change: 0, trend: 'up' as const }, avgPosition: { value: 0, change: 0, trend: 'neutral' as const }, avgCtr: { value: 0, change: 0, trend: 'neutral' as const } } : undefined;
+      const competitors = competitorInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+      const gbpLink = (lead?.sourceData as any)?.googleMapsUrl || null;
+
+      // Generate 12-month strategy
+      const stratRes = await fetch('/api/ai/growth-plan/twelve-month-strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName, websiteUrl, industry, location,
+          strategyDiagnosis: strategyDiagnosis || undefined,
+          sitemapPages: lead?.sitemapPages || [],
+          reviewCount: reviewCount ?? null,
+          rating: rating ?? null,
+          gbpLink,
+          facebookUrl: lead?.facebookUrl || null,
+          instagramUrl: lead?.instagramUrl || null,
+          linkedinUrl: lead?.linkedinUrl || null,
+          competitors,
+        }),
+      });
+      if (!stratRes.ok) throw new Error('Strategy generation failed');
+      const strategy = await stratRes.json();
+
+      // Save as a strategy report (public landing page)
       const reportData = {
-        orgId, clientId: lead.id, clientName: lead.companyName || 'Unknown', location: lead.territory || lead.areaName || '',
-        period: monthYear, statusPills: [lead.stage || 'Prospect', 'Strategy Report'], performanceMetrics, monthlyData,
-        featuredKeyword: serpResult?.keyword ? { keyword: serpResult.keyword, notRankingPosition: null, currentPosition: serpResult?.prospectPosition?.relevanceScore ? Math.round(20 - serpResult.prospectPosition.relevanceScore / 5) : null, page1Goal: 3 } : undefined,
-        completedWork: xrayResult ? [{ title: 'Website X-Ray Analysis', description: xrayResult.summary, date: now.toLocaleDateString('en-AU') }] : [],
-        nextSteps, opportunities,
-        summary: strategyDiagnosis
-          ? `${strategyDiagnosis.insightSentence} Growth Readiness Score: ${strategyDiagnosis.readinessScore}/100. ${strategyDiagnosis.growthPotential.summary}`
-          : forecastResult
-            ? `Based on our growth analysis, ${lead.companyName} has strong potential to increase monthly traffic from ${forecastResult.currentEstimate.monthlyTraffic} to ${forecastResult.projectedEstimate.monthlyTraffic} visitors within 6 months.`
-            : `Our analysis of ${lead.companyName} identifies clear opportunities for digital growth in ${lead.territory || 'your area'}.`,
+        businessName,
+        industry: industry || '',
+        location: location || '',
+        websiteUrl: websiteUrl || '',
+        orgId,
+        leadId: lead.id,
+        preparedBy: user.displayName || 'Momentum Agent',
+        preparedByEmail: user.email || '',
+        strategyDiagnosis: strategyDiagnosis || null,
+        strategy,
       };
-      const res = await fetch('/api/reports', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(reportData) });
-      if (!res.ok) throw new Error('Failed to create report');
-      const { id } = await res.json();
-      const fullUrl = `${window.location.origin}/report/${id}`;
+
+      const saveRes = await fetch('/api/strategy-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(reportData),
+      });
+      if (!saveRes.ok) throw new Error('Failed to save strategy report');
+      const { id } = await saveRes.json();
+      const fullUrl = `${window.location.origin}/strategy/${id}`;
       setGeneratedUrl(fullUrl);
-      toast({ title: 'Report URL generated!', description: 'Ready to share with your prospect.' });
-    } catch (err) {
-      toast({ title: 'Failed to generate report URL', variant: 'destructive' });
+      toast({ title: 'Strategy page generated!', description: 'Ready to send to your prospect.' });
+    } catch (err: any) {
+      toast({ title: 'Failed to generate strategy page', description: err.message, variant: 'destructive' });
     } finally { setUrlLoading(false); }
   };
 
@@ -1274,22 +1298,25 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           {pdfLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
           {pdfLoading ? 'Building strategy...' : 'Generate 12-Month Strategy PDF'}
         </Button>
-        <Button onClick={generateReportUrl} disabled={urlLoading} variant="outline" className="w-full h-9 text-sm gap-2" data-testid="button-generate-report-url">
+        <Button onClick={generateReportUrl} disabled={urlLoading || !businessName} variant="outline" className="w-full h-9 text-sm gap-2" data-testid="button-generate-report-url">
           {urlLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
-          {urlLoading ? 'Generating...' : 'Generate Public Report URL'}
+          {urlLoading ? 'Building strategy page...' : 'Generate Prospect Strategy Page'}
         </Button>
         {generatedUrl && (
-          <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/40 text-left">
-            <p className="text-xs text-muted-foreground truncate flex-1">{generatedUrl}</p>
-            <Button size="sm" variant="ghost" onClick={copyReportUrl} className="h-7 shrink-0 gap-1 text-xs" data-testid="button-copy-report-url">
-              {urlCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {urlCopied ? 'Copied!' : 'Copy'}
-            </Button>
-            <a href={generatedUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
-              <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" data-testid="button-open-report-url">
-                <ExternalLink className="h-3 w-3" /> Open
+          <div className="space-y-1.5">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Prospect strategy page — send this link</p>
+            <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/40 text-left">
+              <p className="text-xs text-muted-foreground truncate flex-1">{generatedUrl}</p>
+              <Button size="sm" variant="ghost" onClick={copyReportUrl} className="h-7 shrink-0 gap-1 text-xs" data-testid="button-copy-report-url">
+                {urlCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {urlCopied ? 'Copied!' : 'Copy'}
               </Button>
-            </a>
+              <a href={generatedUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" data-testid="button-open-report-url">
+                  <ExternalLink className="h-3 w-3" /> Open
+                </Button>
+              </a>
+            </div>
           </div>
         )}
       </div>

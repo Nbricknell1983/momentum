@@ -4655,5 +4655,52 @@ Make it specific to their industry and location.`;
     }
   });
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Strategy Reports — prospect-facing 12-month strategy landing pages
+  // ──────────────────────────────────────────────────────────────────────────
+
+  app.post("/api/strategy-reports", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+      const token = authHeader.split(' ')[1];
+      let uid: string;
+      try {
+        const adminModule = (await import('./firebase')).default;
+        const decoded = await adminModule.auth().verifyIdToken(token);
+        uid = decoded.uid;
+      } catch {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+      const reportData = req.body;
+      if (!reportData.businessName) return res.status(400).json({ error: "businessName required" });
+      const ref = firestore.collection('strategyReports').doc();
+      const now = new Date();
+      const expiresAt = new Date(now);
+      expiresAt.setDate(expiresAt.getDate() + 365);
+      await ref.set({ ...reportData, id: ref.id, type: 'strategy', createdAt: now, createdBy: uid, expiresAt });
+      res.json({ id: ref.id, url: `/strategy/${ref.id}` });
+    } catch (err) {
+      console.error("[strategy-reports POST]", err);
+      res.status(500).json({ error: "Failed to create strategy report" });
+    }
+  });
+
+  app.get("/api/strategy-reports/:reportId", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const { reportId } = req.params;
+      const doc = await firestore.collection('strategyReports').doc(reportId).get();
+      if (!doc.exists) return res.status(404).json({ error: "Report not found" });
+      const data = doc.data()!;
+      if (data.expiresAt && data.expiresAt.toDate() < new Date()) return res.status(410).json({ error: "Report has expired" });
+      res.json({ ...data, id: doc.id });
+    } catch (err) {
+      console.error("[strategy-reports GET]", err);
+      res.status(500).json({ error: "Failed to fetch report" });
+    }
+  });
+
   return httpServer;
 }
