@@ -546,6 +546,23 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     }
   }, [lead?.id]);
 
+  // Auto-trigger strategy diagnosis when sitemap data is available and no cached result
+  useEffect(() => {
+    if (
+      lead?.id &&
+      lead?.sitemapPages?.length &&
+      !lead?.aiGrowthPlan?.strategyDiagnosis &&
+      !diagnosisLoading
+    ) {
+      // Small delay to avoid triggering while section is still animating open
+      const timer = setTimeout(() => {
+        runStrategyDiagnosis();
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
+
   const businessName = lead?.companyName || '';
   const websiteUrl = lead?.website || '';
   const location = lead?.territory || lead?.areaName || '';

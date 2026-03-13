@@ -3441,57 +3441,78 @@ Rules:
 
   app.post("/api/ai/sales-engine/follow-up", async (req, res) => {
     try {
-      const { business, industry, location, meetingNotes, servicesDiscussed, nextStep, conversationInsights, hasGrowthPlan } = req.body;
+      const { business, industry, location, meetingNotes, servicesDiscussed, nextStep, conversationInsights, strategyDiagnosis, hasGrowthPlan } = req.body;
 
       if (!business) {
         return res.status(400).json({ error: "Business name is required" });
       }
 
       const insightsContext = conversationInsights ? `
-Conversation Intelligence:
-- Pain Points: ${conversationInsights.painPoints?.join(', ') || 'None identified'}
-- Services They're Interested In: ${conversationInsights.servicesDiscussed?.join(', ') || 'Not specified'}
-- Opportunities: ${conversationInsights.opportunities?.join(', ') || 'None identified'}
-- Their Concerns: ${conversationInsights.objections?.join(', ') || 'None raised'}
-- Key Quotes: ${conversationInsights.keyQuotes?.join(' | ') || 'None captured'}
+=== CONVERSATION INTELLIGENCE (extracted from recorded call) ===
+Pain Points Identified: ${conversationInsights.painPoints?.join('; ') || 'None identified'}
+Services They Showed Interest In: ${conversationInsights.servicesDiscussed?.join(', ') || 'Not specified'}
+Opportunities Detected: ${conversationInsights.opportunities?.join('; ') || 'None'}
+Objections / Concerns Raised: ${conversationInsights.objections?.join('; ') || 'None'}
+Key Quotes from the Call: ${conversationInsights.keyQuotes?.join(' | ') || 'None captured'}
+Sentiment: ${conversationInsights.sentiment || 'Unknown'}
+Next Steps Agreed: ${conversationInsights.nextSteps?.join(', ') || 'Not specified'}
 ` : '';
 
-      const growthPlanNote = hasGrowthPlan ? `
-IMPORTANT: I have prepared a comprehensive Growth Strategy document for this business. Reference it naturally in the email as "the growth strategy I've put together" and suggest reviewing it together.` : '';
+      const strategyContext = strategyDiagnosis ? `
+=== STRATEGY DIAGNOSIS (from AI website analysis) ===
+Growth Readiness Score: ${strategyDiagnosis.readinessScore}/100
+Key Insight: ${strategyDiagnosis.insightSentence}
+Google Clarity: ${strategyDiagnosis.currentPosition?.googleClarity || 'unknown'}
+Current Position: ${strategyDiagnosis.currentPosition?.summary || ''}
+Top Gaps:
+${strategyDiagnosis.gaps?.slice(0, 3).map((g: any) => `- [${g.severity}] ${g.title}: ${g.evidence}`).join('\n') || 'Not available'}
+Top Priority: ${strategyDiagnosis.priorities?.[0]?.action || 'Not specified'}
+Growth Potential: ${strategyDiagnosis.growthPotential?.summary || ''}
+Forecast: ${strategyDiagnosis.growthPotential?.forecastBand ? `${strategyDiagnosis.growthPotential.forecastBand.additionalVisitors} additional visitors/mo, ${strategyDiagnosis.growthPotential.forecastBand.additionalEnquiries} enquiries/mo` : 'Not calculated'}
+` : '';
 
-      const prompt = `I just had a sales call with:
+      const growthPlanNote = (hasGrowthPlan || strategyDiagnosis) ? `
+IMPORTANT: You have a real AI-generated strategy diagnosis for this business — a Growth Readiness Score and gap analysis. Reference the strategy in the email naturally. Say something like "I've already run an analysis on your website — I'd love to walk you through what I found." Do NOT make up numbers. If you reference the score or forecast, use the actual numbers provided above.` : '';
 
+      const prompt = `You are a senior account executive who has just completed a sales discovery call. You are writing follow-up content to send within the hour.
+
+=== CALL SUMMARY ===
 Business: ${business}
-Industry: ${industry || "Not specified"}
-Location: ${location || "Not specified"}
+Industry: ${industry || 'Not specified'}
+Location: ${location || 'Not specified'}
+What was discussed: ${meetingNotes || 'General interest in digital marketing services'}
+Services discussed: ${servicesDiscussed || 'Digital marketing services'}
+Agreed next step: ${nextStep || 'Follow up with more information'}
+${insightsContext}${strategyContext}${growthPlanNote}
 
-On the call they told me:
-${meetingNotes || "General interest in digital marketing services"}
+=== WRITING RULES ===
+- Use ONLY information from this brief. Do not invent pain points, quotes, or details.
+- Every sentence should be specific to this business, not generic filler.
+- The email should feel like it was written by a human within an hour of the call, not a template.
+- Reference specific things they said or that the analysis found — make them feel heard.
+- Do NOT use corporate buzzwords like "leverage", "synergy", "holistic", "streamline".
+- Keep the email concise — under 200 words in the body.
+- The SMS must be under 160 characters, conversational, reference the call directly.
+- The proposal intro should be 2-3 tight paragraphs positioned around their actual problems.
 
-Services discussed: ${servicesDiscussed || "Digital marketing services"}
-Agreed next step: ${nextStep || "Follow up with more information"}
-${insightsContext}${growthPlanNote}
-
-Generate follow-up content in JSON format with these exact fields:
+Generate follow-up content in this exact JSON format:
 {
   "email": {
-    "subject": "Email subject line",
-    "body": "Full personalised follow-up email that thanks them naturally, references specific things they said in the conversation, suggests 2-3 relevant improvements based on their actual pain points, and ends with a clear next step"
+    "subject": "Short, specific subject line that references something real from the call",
+    "body": "The email body only — no greeting or sign-off needed in this field"
   },
   "sms": {
-    "message": "A short, professional SMS follow-up (max 160 chars) that references the call and confirms the next step"
+    "message": "SMS under 160 characters, conversational, references the call and next step"
   },
   "proposalIntro": {
-    "opening": "A 2-3 paragraph proposal introduction that positions the solution around their specific needs and pain points discussed on the call"
+    "opening": "2-3 paragraph proposal introduction built around their actual pain points and opportunities"
   }
-}
-
-Write in a professional but warm tone. Be conversational and concise. Reference what they actually said — not generic marketing speak.`;
+}`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1200,
+        max_completion_tokens: 1500,
         response_format: { type: "json_object" },
       });
 
@@ -3503,16 +3524,17 @@ Write in a professional but warm tone. Be conversational and concise. Reference 
           throw new Error("Invalid response structure");
         }
       } catch (e) {
+        const diagnosisHint = strategyDiagnosis ? `I've already completed an analysis of your website that I'd like to walk you through.` : '';
         result = {
           email: {
-            subject: `Great chatting today - next steps for ${business}`,
-            body: `Hi,\n\nThanks for taking the time to chat today. I really enjoyed learning about ${business} and the work you're doing in ${location || "your area"}.\n\nBased on what you shared, I think there are a couple of quick wins we could help with:\n\n1. Improving your local search visibility\n2. Setting up a review generation system\n3. Optimising your Google Business Profile\n\nAs discussed, I'll put together a brief overview of how we'd approach this. Would ${nextStep || "a follow-up call later this week"} work?\n\nLooking forward to it.\n\nBest regards`
+            subject: `Great chatting today — next steps for ${business}`,
+            body: `Thanks for taking the time today — really enjoyed learning about what you're building at ${business}.\n\n${diagnosisHint}\n\nAs we discussed, I'll put together a brief on how we'd approach ${servicesDiscussed || 'improving your local search visibility'}. Would ${nextStep || 'a follow-up call later this week'} work?\n\nLooking forward to it.`
           },
           sms: {
-            message: `Hey, great chat today about ${business}. I'll send through that info we discussed. Talk soon!`
+            message: `Hey, great chat about ${business} today. I'll send through what we discussed. Talk soon!`
           },
           proposalIntro: {
-            opening: `Thank you for the opportunity to discuss how we can help ${business} grow. Based on our conversation, it's clear you have a strong foundation and a real opportunity to capture more of your local market.\n\nWe've identified several areas where targeted digital marketing can drive measurable results for your business, particularly around ${servicesDiscussed || "local search and online visibility"}.`
+            opening: `Thank you for the opportunity to discuss how we can help ${business} grow in ${location || 'your area'}. Based on our conversation, it's clear there's a strong opportunity to increase your visibility for ${servicesDiscussed || 'your core services'}.\n\nWe've identified several areas where targeted digital marketing can drive measurable results, and I've already begun analysing your current position.`
           }
         };
       }

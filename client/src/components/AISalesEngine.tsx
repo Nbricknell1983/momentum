@@ -396,13 +396,15 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
     setFollowUpResult(null);
     setFollowUpError(null);
     try {
+      const strategyDiagnosis = selectedLead?.aiGrowthPlan?.strategyDiagnosis;
       const res = await fetch('/api/ai/sales-engine/follow-up', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...followUpInputs,
           conversationInsights: conversationInsights || undefined,
-          hasGrowthPlan: false,
+          strategyDiagnosis: strategyDiagnosis || undefined,
+          hasGrowthPlan: !!(strategyDiagnosis),
         }),
       });
       if (!res.ok) throw new Error('Failed to generate follow-up');
@@ -1095,116 +1097,137 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
     e.target.value = '';
   };
 
+  // Parse email into subject + body for display
+  const parsedEmail = result?.email
+    ? (() => {
+        const raw = result.email;
+        if (raw.startsWith('Subject:')) {
+          const newlineIdx = raw.indexOf('\n\n');
+          if (newlineIdx !== -1) {
+            return { subject: raw.slice('Subject:'.length, newlineIdx).trim(), body: raw.slice(newlineIdx + 2) };
+          }
+        }
+        return { subject: '', body: raw };
+      })()
+    : null;
+
+  // Context sources indicator
+  const contextSources: string[] = [];
+  if (conversationInsights) contextSources.push('Conversation recording');
+  if (inputs.meetingNotes?.trim()) contextSources.push('Meeting notes');
+  if (inputs.servicesDiscussed?.trim()) contextSources.push('Services discussed');
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="followup-section">
+
+      {/* ── Context bar ──────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-1.5 p-2 rounded-lg bg-muted/30 border">
+        {inputs.business && <span className="text-[10px] px-2 py-0.5 rounded-full bg-background border font-medium">{inputs.business}</span>}
+        {inputs.industry && <span className="text-[10px] px-2 py-0.5 rounded-full bg-background border text-muted-foreground">{inputs.industry}</span>}
+        {inputs.location && <span className="text-[10px] px-2 py-0.5 rounded-full bg-background border text-muted-foreground">{inputs.location}</span>}
+        {!inputs.business && <span className="text-[10px] text-muted-foreground italic">Open a lead to auto-populate context</span>}
+      </div>
+
+      {/* ── Step 1: Capture conversation ─────────────────────── */}
       <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label className="text-xs">Business *</Label>
-            <Input value={inputs.business} onChange={e => setInputs(p => ({ ...p, business: e.target.value }))} placeholder="Business name" className="h-8 text-sm" data-testid="input-followup-business" />
-          </div>
-          <div>
-            <Label className="text-xs">Industry</Label>
-            <Input value={inputs.industry} onChange={e => setInputs(p => ({ ...p, industry: e.target.value }))} placeholder="e.g. Plumbing" className="h-8 text-sm" data-testid="input-followup-industry" />
-          </div>
-        </div>
-        <div>
-          <Label className="text-xs">Location</Label>
-          <Input value={inputs.location} onChange={e => setInputs(p => ({ ...p, location: e.target.value }))} placeholder="Suburb / area" className="h-8 text-sm" data-testid="input-followup-location" />
-        </div>
-        <div>
-          <Label className="text-xs">Meeting Notes</Label>
-          <Textarea value={inputs.meetingNotes} onChange={e => setInputs(p => ({ ...p, meetingNotes: e.target.value }))} placeholder="What was discussed on the call..." className="text-sm min-h-[60px]" data-testid="input-followup-notes" />
-        </div>
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Step 1 — Capture the conversation</p>
 
         <div className="flex gap-2">
           {!isRecording ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={startRecording}
-              disabled={transcribing}
-              className="flex-1 h-8 text-xs gap-1.5"
-              data-testid="button-start-recording"
-            >
-              <Mic className="h-3.5 w-3.5" />
-              Start Recording
+            <Button variant="outline" size="sm" onClick={startRecording} disabled={transcribing}
+              className="flex-1 h-9 text-xs gap-1.5 border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30"
+              data-testid="button-start-recording">
+              <Mic className="h-3.5 w-3.5 text-violet-500" />
+              Record Notes
             </Button>
           ) : (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={stopRecording}
-              className="flex-1 h-8 text-xs gap-1.5 animate-pulse"
-              data-testid="button-stop-recording"
-            >
+            <Button variant="destructive" size="sm" onClick={stopRecording}
+              className="flex-1 h-9 text-xs gap-1.5 animate-pulse"
+              data-testid="button-stop-recording">
               <MicOff className="h-3.5 w-3.5" />
               Stop ({formatDuration(recordingDuration)})
             </Button>
           )}
           <label className="flex-1">
-            <input
-              type="file"
-              accept="audio/*"
-              className="hidden"
-              onChange={handleFileUpload}
-              disabled={transcribing || isRecording}
-              data-testid="input-upload-audio"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="w-full h-8 text-xs gap-1.5 cursor-pointer"
-              disabled={transcribing || isRecording}
-            >
-              <span>
-                <Upload className="h-3.5 w-3.5" />
-                Upload Recording
-              </span>
+            <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload}
+              disabled={transcribing || isRecording} data-testid="input-upload-audio" />
+            <Button variant="outline" size="sm" asChild className="w-full h-9 text-xs gap-1.5 cursor-pointer"
+              disabled={transcribing || isRecording}>
+              <span><Upload className="h-3.5 w-3.5" />Upload Audio</span>
             </Button>
           </label>
         </div>
 
-        {isRecording && liveTranscript && (
+        {isRecording && (
           <div className="border border-violet-500/30 rounded-lg p-2.5 bg-violet-500/5 space-y-1" data-testid="live-transcript-preview">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-violet-500 uppercase tracking-wide">
               <div className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
               Listening live
             </div>
-            <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{liveTranscript}</p>
+            {liveTranscript
+              ? <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{liveTranscript}</p>
+              : <p className="text-xs text-muted-foreground italic">Start speaking — transcript will appear here...</p>
+            }
           </div>
         )}
 
         {transcribing && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 border rounded-lg bg-muted/20">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            AI is cleaning up your transcript...
+          <div className="flex items-center gap-2 text-xs text-muted-foreground p-2.5 border rounded-lg bg-muted/20">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+            AI is extracting insights from your recording...
           </div>
         )}
 
         {conversationInsights && (
-          <InsightsPanel insights={conversationInsights} onSaveToNotes={onSaveToNotes} hasLead={hasLead} />
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600 dark:text-green-400">
+              <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Conversation insights extracted
+            </div>
+            <InsightsPanel insights={conversationInsights} onSaveToNotes={onSaveToNotes} hasLead={hasLead} />
+          </div>
         )}
+      </div>
 
+      {/* ── Step 2: Add context ───────────────────────────────── */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Step 2 — Add context (optional)</p>
+        <div>
+          <Label className="text-xs">Meeting Notes</Label>
+          <Textarea value={inputs.meetingNotes} onChange={e => setInputs(p => ({ ...p, meetingNotes: e.target.value }))}
+            placeholder="What was discussed on the call..." className="text-sm min-h-[55px]"
+            data-testid="input-followup-notes" />
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label className="text-xs">Services Discussed</Label>
-            <Input value={inputs.servicesDiscussed} onChange={e => setInputs(p => ({ ...p, servicesDiscussed: e.target.value }))} placeholder="SEO, Ads..." className="h-8 text-sm" data-testid="input-followup-services" />
+            <Input value={inputs.servicesDiscussed} onChange={e => setInputs(p => ({ ...p, servicesDiscussed: e.target.value }))}
+              placeholder="SEO, Local Ads..." className="h-8 text-sm" data-testid="input-followup-services" />
           </div>
           <div>
-            <Label className="text-xs">Next Step</Label>
-            <Input value={inputs.nextStep} onChange={e => setInputs(p => ({ ...p, nextStep: e.target.value }))} placeholder="Send proposal..." className="h-8 text-sm" data-testid="input-followup-nextstep" />
+            <Label className="text-xs">Agreed Next Step</Label>
+            <Input value={inputs.nextStep} onChange={e => setInputs(p => ({ ...p, nextStep: e.target.value }))}
+              placeholder="Send proposal..." className="h-8 text-sm" data-testid="input-followup-nextstep" />
           </div>
         </div>
       </div>
-      <Button onClick={onGenerate} disabled={loading} className="w-full h-8 text-sm gap-2" data-testid="button-generate-followup">
+
+      {/* ── Generate ─────────────────────────────────────────── */}
+      {contextSources.length > 0 && (
+        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mt-0.5" />
+          Using: {contextSources.join(' + ')}
+        </p>
+      )}
+
+      <Button onClick={onGenerate} disabled={loading || !inputs.business.trim()} className="w-full h-9 text-sm gap-2" data-testid="button-generate-followup">
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-        {loading ? 'Generating...' : 'Generate Follow-Up'}
+        {loading ? 'Generating...' : result ? 'Regenerate Follow-Up' : 'Generate Follow-Up'}
       </Button>
 
       <InlineError error={error} onRetry={onGenerate} />
 
+      {/* ── Result ───────────────────────────────────────────── */}
       {result && (
         <div className="space-y-2 pt-1">
           <Tabs defaultValue="email" className="w-full">
@@ -1213,21 +1236,35 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
               <TabsTrigger value="sms" className="text-xs flex-1" data-testid="tab-followup-sms">SMS</TabsTrigger>
               <TabsTrigger value="proposal" className="text-xs flex-1" data-testid="tab-followup-proposal">Proposal Intro</TabsTrigger>
             </TabsList>
+
             <TabsContent value="email">
-              <div className="border rounded-lg p-3 bg-muted/20">
-                <p className="text-sm whitespace-pre-wrap">{result.email}</p>
-                <div className="flex gap-1 pt-2">
-                  <CopyButton text={result.email} label="email" />
-                  {hasLead && (
-                    <Button variant="ghost" size="sm" onClick={() => onSaveToNotes(`Follow-up Email:\n${result.email}`)} className="h-7 text-xs gap-1" data-testid="button-save-email">
-                      <Pin className="h-3 w-3" /> Save
-                    </Button>
-                  )}
+              <div className="border rounded-lg overflow-hidden bg-muted/20">
+                {parsedEmail?.subject && (
+                  <div className="px-3 py-2 bg-muted/40 border-b">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-0.5">Subject</p>
+                    <p className="text-sm font-medium">{parsedEmail.subject}</p>
+                  </div>
+                )}
+                <div className="p-3">
+                  <p className="text-sm whitespace-pre-wrap">{parsedEmail?.body || result.email}</p>
+                  <div className="flex gap-1 pt-2">
+                    <CopyButton text={result.email} label="email" />
+                    {hasLead && (
+                      <Button variant="ghost" size="sm" onClick={() => onSaveToNotes(`Follow-up Email:\n${result.email}`)} className="h-7 text-xs gap-1" data-testid="button-save-email">
+                        <Pin className="h-3 w-3" /> Save
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </TabsContent>
+
             <TabsContent value="sms">
               <div className="border rounded-lg p-3 bg-muted/20">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">SMS Message</p>
+                  <p className={`text-[10px] ${result.sms.length > 140 ? 'text-amber-500' : 'text-muted-foreground'}`}>{result.sms.length}/160 chars</p>
+                </div>
                 <p className="text-sm whitespace-pre-wrap">{result.sms}</p>
                 <div className="flex gap-1 pt-2">
                   <CopyButton text={result.sms} label="sms" />
@@ -1239,6 +1276,7 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
                 </div>
               </div>
             </TabsContent>
+
             <TabsContent value="proposal">
               <div className="border rounded-lg p-3 bg-muted/20">
                 <p className="text-sm whitespace-pre-wrap">{result.proposalIntro}</p>
@@ -1253,9 +1291,6 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
               </div>
             </TabsContent>
           </Tabs>
-          <Button variant="outline" size="sm" onClick={onGenerate} className="w-full gap-1 text-xs" data-testid="button-regenerate-followup">
-            <RotateCcw className="h-3 w-3" /> Regenerate
-          </Button>
         </div>
       )}
     </div>
