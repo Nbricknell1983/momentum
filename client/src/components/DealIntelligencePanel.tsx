@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
+import { useMemo, useState, useRef, useCallback } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, updateLead } from '@/store';
 import {
   Lead,
   Activity,
@@ -23,11 +23,17 @@ import {
   Users,
   ExternalLink,
   Eye,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
-import { SiFacebook, SiInstagram } from 'react-icons/si';
+import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 import { format, differenceInDays, isPast, isToday } from 'date-fns';
+import { useAuth } from '@/contexts/AuthContext';
+import { updateLeadInFirestore } from '@/lib/firestoreService';
 
 interface DealIntelligencePanelProps {
   lead: Lead;
