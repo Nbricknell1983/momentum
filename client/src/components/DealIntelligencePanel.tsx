@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import * as XLSX from 'xlsx';
+import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, updateLead, patchLead } from '@/store';
 import {
@@ -1699,9 +1699,9 @@ function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: 'array' });
+        const wb = xlsxRead(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: null });
+        const rows: Record<string, any>[] = xlsxUtils.sheet_to_json(ws, { defval: null });
 
         if (!rows.length) { reject(new Error('No data found in file')); return; }
 
