@@ -3088,21 +3088,28 @@ Keep it concise and practical. Only include gaps genuinely supported by the data
 
       const objectionList = objections.map((o: string, i: number) => `${i + 1}. "${o}"`).join("\n");
 
-      const prompt = `I sell digital marketing services to Australian small businesses.
+      const prompt = `You are an elite sales coach trained in NEPQ (Neuro-Emotional Persuasion Questioning) by Jeremy Miner. You help digital marketing reps handle objections without defending, pitching, or pushing — only by asking questions that make the prospect feel their own pain and come to their own conclusions.
+
+I sell digital marketing services to Australian small businesses.
 ${contextInfo}
 
 For each of these objections:
 ${objectionList}
 
-Respond in JSON format with a "responses" array. Each item must have:
+Apply the full NEPQ framework to each one. Respond in JSON with a "responses" array. Each item must have:
 {
   "objection": "the original objection text",
-  "realConcern": "What is the real concern behind it (1-2 sentences)",
-  "response": "A confident, conversational 2-3 sentence response",
-  "regainControlQuestion": "A question to regain control of the conversation"
+  "realConcern": "The neuro-emotional state driving this objection — what they are really feeling or fearing underneath the surface. Be specific and empathetic, 1-2 sentences.",
+  "response": "A NEPQ-style response: DO NOT defend, pitch, or explain features. Instead, use a softening opener then ask a Status Quo or Problem Awareness question that makes them reflect on their current situation. Sound calm, curious, and peer-level — not salesy. 2-3 sentences max.",
+  "regainControlQuestion": "A single sharp Consequence Question — something that surfaces the cost or risk of staying where they are. This should create a moment of internal discomfort without being pushy. Start with phrases like 'What happens if...', 'How long have you...', 'What's it costing you...', 'If nothing changes...'"
 }
 
-Be natural, not scripted. Sound like a confident peer, not a pushy salesperson.`;
+Rules:
+- Never say "I understand" or "That's a great point" — it sounds scripted
+- Never mention your product first — always lead with their situation
+- NEPQ Response must contain at least one question
+- Consequence Question must create emotional weight around inaction
+- Sound like a calm, confident peer — not a closer`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",

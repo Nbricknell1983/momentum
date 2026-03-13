@@ -100,7 +100,7 @@ function getDefaultSection(stage?: Stage): EngineSection {
 
 const SECTION_CONFIG: Record<EngineSection, { title: string; subtitle: string; icon: typeof Phone }> = {
   pre_call: { title: 'Win Before You Dial', subtitle: '60 seconds of prep changes everything', icon: Phone },
-  objection: { title: 'Control the Call', subtitle: 'Prepared reps don\'t freeze', icon: Shield },
+  objection: { title: 'Control the Call', subtitle: 'NEPQ objection handling — ask, don\'t defend', icon: Shield },
   follow_up: { title: 'Win the Follow-Up', subtitle: 'Speed wins deals', icon: Mail },
   growth_plan: { title: 'Growth Plan', subtitle: 'Turn insight into a 12-month strategy', icon: TrendingUp },
   prospect: { title: 'Multiply Your Pipeline', subtitle: 'Turn one call into ten prospects', icon: Users },
@@ -729,15 +729,15 @@ function ObjectionSection({ selectedObjections, setSelectedObjections, customObj
               <p className="text-xs font-medium text-amber-600">"{r.objection}"</p>
               <div className="space-y-1.5">
                 <div>
-                  <p className="text-[11px] font-medium text-muted-foreground">Real Concern</p>
+                  <p className="text-[11px] font-semibold text-violet-500 uppercase tracking-wide">What's Really Going On</p>
                   <p className="text-sm">{r.realConcern}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-medium text-muted-foreground">What to Say</p>
+                  <p className="text-[11px] font-semibold text-violet-500 uppercase tracking-wide">NEPQ Response</p>
                   <p className="text-sm">{r.response}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-medium text-muted-foreground">Regain Control</p>
+                  <p className="text-[11px] font-semibold text-violet-500 uppercase tracking-wide">Consequence Question</p>
                   <p className="text-sm italic">{r.regainControlQuestion}</p>
                 </div>
               </div>
