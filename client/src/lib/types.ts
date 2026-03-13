@@ -307,11 +307,25 @@ export interface Lead {
   competitorData?: Record<string, CompetitorSiteData>;
 }
 
+export interface CompetitorGBPData {
+  placeId: string;
+  name: string;
+  address?: string;
+  rating?: number | null;
+  reviewCount?: number;
+  phone?: string | null;
+  website?: string | null;
+  primaryType?: string;
+  mapsUrl: string;
+  fetchedAt: Date;
+}
+
 export interface CompetitorSiteData {
   sitemapPages?: SitemapPage[];
   sitemapFetchedAt?: Date;
   crawledPages?: CrawledPage[];
   crawledAt?: Date;
+  gbp?: CompetitorGBPData;
 }
 
 export interface SitemapPage {

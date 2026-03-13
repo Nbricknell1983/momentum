@@ -7,6 +7,7 @@ import {
   SitemapPage,
   CrawledPage,
   CompetitorSiteData,
+  CompetitorGBPData,
   STAGE_LABELS,
 } from '@/lib/types';
 import {
@@ -340,6 +341,30 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       setCompetitorDeepCrawling(p => ({ ...p, [domain]: false }));
     }
   }, [lead, orgId, authReady, dispatch, toast]);
+
+  const handleCompetitorGBPLookup = useCallback(async (domain: string, placeId: string) => {
+    if (!orgId || !authReady) return;
+    const res = await fetch(`/api/google-places/details/${placeId}`);
+    if (!res.ok) throw new Error('Failed to fetch GBP data');
+    const data = await res.json();
+    const gbp: CompetitorGBPData = {
+      placeId: data.placeId || placeId,
+      name: data.name || domain,
+      address: data.address,
+      rating: data.rating ?? null,
+      reviewCount: data.reviewCount ?? 0,
+      phone: data.phone ?? null,
+      website: data.website ?? null,
+      primaryType: data.primaryType,
+      mapsUrl: `https://www.google.com/maps/place/?q=place_id:${data.placeId || placeId}`,
+      fetchedAt: new Date(),
+    };
+    const existing = lead.competitorData || {};
+    const updated = { ...existing, [domain]: { ...(existing[domain] || {}), gbp } };
+    const updates: Partial<Lead> = { competitorData: updated, updatedAt: new Date() };
+    dispatch(patchLead({ id: lead.id, updates }));
+    await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+  }, [lead, orgId, authReady, dispatch]);
 
   const health = useMemo(() => computeDealHealth(lead, activities), [lead, activities]);
   const summary = useMemo(() => generateDealSummary(lead, activities), [lead, activities]);
@@ -718,6 +743,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                 onScanSitemap={() => handleCompetitorSitemapScan(domain)}
                 onDeepCrawl={() => handleCompetitorDeepCrawl(domain)}
                 onRemove={() => removeCompetitor(domain)}
+                onGBPLookup={(placeId) => handleCompetitorGBPLookup(domain, placeId)}
               />
             ))}
             {/* AI analysis insights if available */}
@@ -1107,7 +1133,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
 }
 
 function CompetitorCard({
-  domain, siteData, sitemapLoading, deepCrawling, onScanSitemap, onDeepCrawl, onRemove,
+  domain, siteData, sitemapLoading, deepCrawling, onScanSitemap, onDeepCrawl, onRemove, onGBPLookup,
 }: {
   domain: string;
   siteData?: CompetitorSiteData;
@@ -1116,6 +1142,7 @@ function CompetitorCard({
   onScanSitemap: () => void;
   onDeepCrawl: () => void;
   onRemove: () => void;
+  onGBPLookup: (placeId: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [screenshotLoaded, setScreenshotLoaded] = useState(false);
@@ -1124,6 +1151,18 @@ function CompetitorCard({
   const [sitemapExpanded, setSitemapExpanded] = useState(false);
   const [crawlSectionExpanded, setCrawlSectionExpanded] = useState(false);
   const [crawlPageExpanded, setCrawlPageExpanded] = useState<number | null>(null);
+  // GBP state
+  const [gbpSearching, setGbpSearching] = useState(false);
+  const [gbpQuery, setGbpQuery] = useState('');
+  const [gbpResults, setGbpResults] = useState<GBPSearchResult[]>([]);
+  const [gbpSearchLoading, setGbpSearchLoading] = useState(false);
+  const [gbpSelectLoading, setGbpSelectLoading] = useState<string | null>(null);
+  const [gbpSearchError, setGbpSearchError] = useState<string | null>(null);
+  const [gbpSuggestions, setGbpSuggestions] = useState<GBPSearchResult[]>([]);
+  const [gbpSuggestLoading, setGbpSuggestLoading] = useState(false);
+  const [gbpSuggestDismissed, setGbpSuggestDismissed] = useState(false);
+  const gbpAutoSearched = useRef(false);
+  const gbpInputRef = useRef<HTMLInputElement>(null);
 
   const websiteUrl = `https://${domain}`;
   const thumbUrl = `https://image.thum.io/get/width/800/crop/420/url/${websiteUrl}`;
