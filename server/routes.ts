@@ -3142,7 +3142,7 @@ Please analyze these meeting notes and extract actionable insights.`;
       const {
         businessName, location, websiteUrl, hasWebsite, googleMapsUrl, hasGBP,
         reviewCount, rating, gbpPhotoCount, gbpPostsLast30Days,
-        facebookUrl, instagramUrl, industry,
+        facebookUrl, instagramUrl, linkedinUrl, industry,
       } = req.body;
 
       if (!businessName) {
@@ -3156,7 +3156,7 @@ Please analyze these meeting notes and extract actionable insights.`;
         rating: rating != null ? String(rating) : "unknown",
         gbpPhotos: gbpPhotoCount != null ? String(gbpPhotoCount) : "unknown",
         gbpPosts30Days: gbpPostsLast30Days != null ? String(gbpPostsLast30Days) : "unknown",
-        socialProfiles: (facebookUrl || instagramUrl) ? "detected" : "not detected",
+        socialProfiles: (facebookUrl || instagramUrl || linkedinUrl) ? "detected" : "not detected",
       };
 
       const prompt = `You are assisting a digital marketing sales consultant preparing for a call.

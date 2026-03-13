@@ -313,8 +313,8 @@ export interface SitemapPage {
 export interface AiCallPrepOutput {
   whatTheyDo: string;
   strengths: string[];
-  facts: Record<string, any>;
-  gaps: { area: string; issue: string; evidence: string; impact: string; severity: 'high' | 'medium' | 'low' }[];
+  facts: { website: string; gbp: string; reviews: string; rating: string; gbpPhotos: string; gbpPosts30Days: string; socialProfiles: string; [key: string]: string };
+  gaps: { area?: string; title?: string; issue?: string; evidence?: string; impact?: string; severity?: string }[];
   salesHook: string;
   generatedAt: Date;
 }

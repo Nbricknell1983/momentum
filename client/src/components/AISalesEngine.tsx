@@ -149,7 +149,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
   const [preCallInputs, setPreCallInputs] = useState({
     businessName: '', location: '', website: '', industry: '', gbpLink: '',
     reviewCount: null as number | null, rating: null as number | null,
-    facebookUrl: '', instagramUrl: '',
+    facebookUrl: '', instagramUrl: '', linkedinUrl: '',
     gbpPhotoCount: null as number | null, gbpPostsLast30Days: null as number | null,
   });
   const preCallSaveRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -163,8 +163,8 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         website: 'website',
       };
       for (const [inputKey, leadField] of Object.entries(FIELD_MAP)) {
-        if (next[inputKey] !== prev[inputKey]) {
-          const value = next[inputKey];
+        if ((next as any)[inputKey] !== (prev as any)[inputKey]) {
+          const value = (next as any)[inputKey];
           dispatch(patchLead({ id: selectedLead.id, updates: { [leadField]: value || undefined } }));
           if (preCallSaveRef.current[inputKey]) clearTimeout(preCallSaveRef.current[inputKey]);
           preCallSaveRef.current[inputKey] = setTimeout(() => {
@@ -208,6 +208,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         rating: sd?.googleRating ?? null,
         facebookUrl: selectedLead.facebookUrl || '',
         instagramUrl: selectedLead.instagramUrl || '',
+        linkedinUrl: selectedLead.linkedinUrl || '',
         gbpPhotoCount: null,
         gbpPostsLast30Days: null,
       });
@@ -224,7 +225,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         suburb: selectedLead.areaName || selectedLead.territory || '',
       }));
       if (selectedLead.aiCallPrep) {
-        setPreCallResult(selectedLead.aiCallPrep);
+        setPreCallResult(selectedLead.aiCallPrep as unknown as PreCallResult);
       } else {
         setPreCallResult(null);
       }
@@ -285,6 +286,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         gbpPostsLast30Days: preCallInputs.gbpPostsLast30Days,
         facebookUrl: preCallInputs.facebookUrl || null,
         instagramUrl: preCallInputs.instagramUrl || null,
+        linkedinUrl: preCallInputs.linkedinUrl || null,
         industry: preCallInputs.industry,
       };
       const res = await fetch('/api/ai/sales-engine/pre-call', {
@@ -643,7 +645,7 @@ function GapCard({ gap, index, onSave }: { gap: PreCallGap; index: number; onSav
 }
 
 function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate, onSaveToNotes, hasLead }: {
-  inputs: { businessName: string; location: string; website: string; industry: string; gbpLink: string };
+  inputs: { businessName: string; location: string; website: string; industry: string; gbpLink: string; reviewCount?: number | null; rating?: number | null; facebookUrl?: string; instagramUrl?: string; linkedinUrl?: string; gbpPhotoCount?: number | null; gbpPostsLast30Days?: number | null };
   setInputs: (fn: (prev: any) => any) => void;
   loading: boolean;
   result: PreCallResult | null;
@@ -652,6 +654,17 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
   onSaveToNotes: (text: string) => void;
   hasLead: boolean;
 }) {
+  // Always compute facts live from current inputs so they never go stale
+  const liveFacts: PreCallFacts = {
+    website: inputs.website?.trim() ? 'yes' : 'no',
+    gbp: inputs.gbpLink?.trim() ? 'yes' : 'no',
+    reviews: inputs.reviewCount != null ? String(inputs.reviewCount) : 'unknown',
+    rating: inputs.rating != null ? String(inputs.rating) : 'unknown',
+    gbpPhotos: inputs.gbpPhotoCount != null ? String(inputs.gbpPhotoCount) : 'unknown',
+    gbpPosts30Days: inputs.gbpPostsLast30Days != null ? String(inputs.gbpPostsLast30Days) : 'unknown',
+    socialProfiles: (inputs.facebookUrl || inputs.instagramUrl || inputs.linkedinUrl) ? 'detected' : 'not detected',
+  };
+
   return (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -683,7 +696,7 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
 
       {result && (
         <div className="space-y-3 pt-1">
-          <FactsPanel facts={result.facts} />
+          <FactsPanel facts={liveFacts} />
           <ResultCard title="What they do and who they serve" content={result.whatTheyDo} onSave={hasLead ? onSaveToNotes : undefined} />
           <ResultCard title="3 strengths in their online presence" content={result.strengths.map((s, i) => `${i + 1}. ${s}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
           <div className="space-y-2">

@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, updateLead, patchLead } from '@/store';
 import {
@@ -603,20 +603,20 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const rating = lead.sourceData?.googleRating;
   const mapsUrl = lead.sourceData?.googleMapsUrl;
 
-  // Auto-search on mount when no GBP linked and lead has a name
+  // Auto-search on mount when no GBP linked and lead has a company name
   useEffect(() => {
-    if (hasGBP || autoSearched.current || !lead.name?.trim()) return;
+    if (hasGBP || autoSearched.current || !lead.companyName?.trim()) return;
     autoSearched.current = true;
     setSuggestLoading(true);
-    fetch(`/api/google-places/find?query=${encodeURIComponent(lead.name.trim())}`)
+    fetch(`/api/google-places/find?query=${encodeURIComponent(lead.companyName.trim())}`)
       .then(r => r.json())
       .then(data => { if (data.results?.length) setSuggestions(data.results.slice(0, 3)); })
       .catch(() => {})
       .finally(() => setSuggestLoading(false));
-  }, [hasGBP, lead.name]);
+  }, [hasGBP, lead.companyName]);
 
   const openSearch = () => {
-    setQuery(lead.name || '');
+    setQuery(lead.companyName || '');
     setResults([]);
     setSearchError(null);
     setSearching(true);
