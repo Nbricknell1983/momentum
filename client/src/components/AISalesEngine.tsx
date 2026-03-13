@@ -24,6 +24,7 @@ interface AISalesEngineProps {
   activeSection?: EngineSection | null;
   selectedLeadOverride?: Lead | null;
   embedded?: boolean;
+  onSectionChange?: (section: EngineSection | null) => void;
 }
 
 interface PreCallFacts {
@@ -132,7 +133,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
   );
 }
 
-export default function AISalesEngine({ isOpen, onClose, activeSection: externalSection, selectedLeadOverride, embedded }: AISalesEngineProps) {
+export default function AISalesEngine({ isOpen, onClose, activeSection: externalSection, selectedLeadOverride, embedded, onSectionChange }: AISalesEngineProps) {
   const leads = useSelector((state: RootState) => state.app.leads);
   const selectedLeadId = useSelector((state: RootState) => state.app.selectedLeadId);
   const dispatch = useDispatch();
@@ -289,6 +290,10 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       setOpenSection(getDefaultSection(selectedLead.stage));
     }
   }, [externalSection, selectedLead]);
+
+  useEffect(() => {
+    onSectionChange?.(openSection);
+  }, [openSection, onSectionChange]);
 
   const handlePreCall = async () => {
     if (!preCallInputs.businessName.trim()) {

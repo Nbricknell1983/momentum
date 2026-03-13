@@ -1,0 +1,702 @@
+Build this feature directly into the existing Momentum / deal detail UI as a production-ready “Growth Plan Engine” and DO NOT use mock data.
+
+CORE PRODUCT INTENT
+This feature is not just a calculator. It is the strategy engine that will power:
+1. the in-app Growth Plan workspace
+2. exported PDF strategy documents
+3. a public-facing shareable URL / premium landing page
+4. sales follow-up summaries
+5. future proposal / strategy exports
+
+Because of that, build this as a reusable domain engine with a presentational UI layer on top.
+
+CRITICAL RULES
+- Do not redesign the overall page.
+- Do not create a fake demo page.
+- Do not hardcode Vanti values.
+- Do not seed placeholder stats with fake numbers.
+- Use the current live deal/client/online presence data that already exists in the app.
+- Where data is not yet available, show clean empty states, warnings, helper text, or “Add / Connect data” prompts.
+- The feature must live inside the CURRENT deal workspace and inherit the CURRENT styling, spacing, and data model.
+- Preserve the existing 3-column layout:
+  - Left: conversation / stage / next contact / MRR / log actions
+  - Center: AI deal summary / online presence / website preview / analysis workspace
+  - Right: AI Sales Engine accordion
+- The feature belongs inside the existing “Growth Plan” item in the right-side AI Sales Engine.
+- Expanding “Growth Plan” should activate a Growth Plan workspace in the CENTER column.
+- The implementation must feel native to the product and production-ready.
+- Do not return a standalone prototype.
+- Do not return a separate landing page unless the codebase already uses one for internal workspaces.
+- Reuse the actual current app structure, hooks, services, cards, inputs, and mutation patterns.
+
+STACK
+- React
+- TypeScript
+- Tailwind
+- Framer Motion
+- shadcn/ui where useful
+- no fake API layer
+- no mock server
+- reuse current stores / queries / hooks / deal state / online presence state / sitemap state if they already exist
+
+PRIMARY GOAL
+Implement a real “Growth Plan” / “Paid Search Opportunity Model” workspace that combines:
+- live deal data
+- live online presence data
+- live sitemap/crawl data if available
+- real user-entered assumptions
+- benchmark presets by industry
+- persisted growth plan values on the deal record
+to calculate and compile:
+- estimated clicks
+- leads low / mid / high
+- CPA low / mid / high
+- customers low / mid / high
+- revenue low / mid / high
+- ROI low / mid / high
+- break-even leads
+- break-even customers
+- reachable demand
+- untapped demand
+- opportunity score
+- commentary
+- warnings
+- strengths
+- gaps
+- recommended actions
+- 12-month roadmap
+- export-ready summary sections for PDF and public URL
+
+THIS MUST NOT USE MOCK DATA
+Instead:
+- read existing deal/account/business fields from the actual current data source
+- read industry, location, website, ad spend, sitemap page count, and website coverage inputs from the actual current entity if available
+- if a value does not exist yet, render an empty input with helper text
+- save entered assumptions back to the deal/client record or a new nested growthPlan object
+- when no keyword/market data exists yet, show a clear empty state telling the rep to add/import it
+
+ARCHITECTURE REQUIREMENT
+Build this as a reusable strategy engine, not a UI-only feature.
+
+The calculations, insights, recommendations, roadmap, and export sections must live in reusable domain files so the SAME growthPlan object can later be rendered into:
+- the in-app Growth Plan workspace
+- a PDF strategy document
+- a public share page / public URL
+- copy summary / follow-up content
+
+REQUIRED DOMAIN MODEL
+Create a normalized Growth Plan object with this shape or a very close equivalent:
+
+growthPlan: {
+  isActive: boolean,
+  inputs: {
+    calculatorMode: "budget" | "market",
+    industry: string | null,
+    targetLocation: string | null,
+    keywordCluster: string | null,
+    monthlyPackagePrice: number | null,
+    managementFee: number | null,
+    netAdSpend: number | null,
+    averageJobValue: number | null,
+    closeRate: number | null,
+    avgCpc: number | null,
+    lowCpc: number | null,
+    highCpc: number | null,
+    competition: string | null,
+    totalMonthlySearches: number | null,
+    ctr: number | null,
+    impressionShare: number | null,
+    cvrLow: number | null,
+    cvrMid: number | null,
+    cvrHigh: number | null,
+    landingPageExists: boolean | null,
+    pageRelevanceScore: number | null,
+    seoCoverageStatus: "missing" | "weak" | "moderate" | "strong" | null,
+    paidCampaignActive: boolean | null,
+    notes: string | null
+  },
+  calculations: {
+    estimatedClicks: number | null,
+    leadsLow: number | null,
+    leadsMid: number | null,
+    leadsHigh: number | null,
+    cpaLow: number | null,
+    cpaMid: number | null,
+    cpaHigh: number | null,
+    customersLow: number | null,
+    customersMid: number | null,
+    customersHigh: number | null,
+    revenueLow: number | null,
+    revenueMid: number | null,
+    revenueHigh: number | null,
+    roiLow: number | null,
+    roiMid: number | null,
+    roiHigh: number | null,
+    totalInvestment: number | null,
+    breakEvenCustomers: number | null,
+    breakEvenLeads: number | null,
+    reachableDemand: number | null,
+    untappedDemand: number | null,
+    opportunityScore: number | null
+  },
+  insights: {
+    summaryHeadline: string | null,
+    summaryBody: string | null,
+    warnings: string[],
+    commentary: string[],
+    strengths: string[],
+    gaps: string[],
+    assumptions: string[]
+  },
+  recommendations: Array<{
+    title: string,
+    reason: string,
+    priority: "high" | "medium" | "low",
+    category: string,
+    expectedImpact: string
+  }>,
+  roadmap: {
+    q1: string[],
+    q2: string[],
+    q3: string[],
+    q4: string[]
+  },
+  export: {
+    executiveSummary: string | null,
+    shortSummary: string | null,
+    pdfSections: Array<{
+      id: string,
+      title: string,
+      body: string,
+      data?: Record<string, unknown>
+    }>,
+    publicPageSections: Array<{
+      id: string,
+      title: string,
+      body: string,
+      data?: Record<string, unknown>
+    }>
+  },
+  metadata: {
+    generatedAt: string | null,
+    updatedAt: string | null,
+    basedOnLiveData: boolean,
+    missingFields: string[]
+  }
+}
+
+ARCHITECTURE RULES
+1. Separate calculation logic from rendering
+- calculations must live in utility/domain files
+- commentary generation must live in utility/domain files
+- roadmap generation must live in utility/domain files
+- recommendations must live in utility/domain files
+- export section generation must live in utility/domain files
+
+2. UI components should consume the Growth Plan object
+- do not bury business logic inside card components
+- cards should render from structured output
+
+3. Save generated outputs
+- do not only save assumptions
+- also save the latest generated strategy outputs snapshot so exports do not need to be recalculated differently in each surface
+
+4. Missing data support
+- include metadata.missingFields so the PDF and public page can gracefully hide or replace sections when inputs are incomplete
+
+5. Extensibility
+- keep the model flexible so future additions like keyword clusters, competitor analysis, sitemap page matches, screenshots, and AI-written observations can be added cleanly
+
+DATA INTEGRATION REQUIREMENTS
+
+1. Use existing deal/client data first
+Inspect the current codebase and reuse existing sources/hooks/selectors/services for:
+- deal name
+- business name
+- business address / location
+- industry
+- website URL
+- Google Business Profile state
+- reviews count / rating
+- ad spend channels and totals
+- sitemap capture status
+- pages analysed
+- website preview state
+- stage
+- next contact
+- AI deal summary context
+
+2. Create persisted growth plan data
+If no current structure exists, add a nested growthPlan field to the deal record or equivalent persisted entity.
+
+3. Persist real user edits
+- save Growth Plan assumptions to the deal
+- restore them when the deal is reopened
+- debounce saves where appropriate
+- add optimistic UI updates if the app already uses them
+- reuse existing mutation patterns in the codebase
+
+4. No keyword planner API integration yet unless already present
+- build the UI and calculation engine ready for real keyword planner data
+- for now, use persisted real user-entered fields for keyword metrics
+- if the app already has keyword planner import logic, wire it in
+- otherwise create “Add market data” inputs and a future-ready import button placeholder with proper disabled state
+
+UI BEHAVIOR
+
+A. Right column AI Sales Engine
+Keep the existing accordion items:
+- Win Before You Dial
+- Control the Call
+- Win the Follow-Up
+- Growth Plan
+- Multiply Your Pipeline
+
+When “Growth Plan” is clicked:
+- it becomes active/highlighted
+- the center column swaps or expands to show the Growth Plan workspace
+- animate smoothly
+- preserve the current page shell and surrounding cards
+- do not navigate away from the deal
+
+B. Center column Growth Plan workspace
+Render a premium workspace inside the current center panel area.
+This should visually feel like part of the same product.
+
+TOP ACTION BAR
+Include:
+- title: Growth Plan
+- subtitle: Turn insight into a 12-month strategy
+- buttons:
+  - Save to Deal
+  - Copy Summary
+  - Generate PDF
+- PDF can be a disabled button or toast placeholder unless PDF infra already exists
+- Copy Summary should copy a generated plain-English summary from live calculations
+
+TOP KPI ROW
+Render 4 compact summary cards:
+- Search Demand
+- Estimated Leads
+- Revenue Potential
+- ROI Range
+
+Use actual live/calculated values only.
+If values are missing, show:
+- “No data”
+- small helper text like “Add market data to calculate”
+- no fake numbers
+
+MODE TOGGLE
+Segmented control:
+- Budget Forecast
+- Market Opportunity
+
+Behavior:
+- Budget Forecast mode starts from Net Ad Spend and Avg CPC
+- Market Opportunity mode starts from Total Monthly Searches, Impression Share, CTR
+- toggle updates calculations live
+- persist selected mode per deal
+
+MAIN CONTENT GRID
+Use a 2-column layout.
+
+LEFT COLUMN = Assumptions / Inputs
+
+CARD 1: Business Inputs
+Fields:
+- Industry
+- Target Location
+- Monthly Package Price
+- Management Fee
+- Net Ad Spend
+- Average Job Value
+- Close Rate %
+
+Field behavior:
+- prefill from live deal/business data where possible
+- allow manual overrides
+- save overrides into growthPlan
+- show “Using business value” vs “Custom override” where appropriate
+
+CARD 2: Market Inputs
+Fields:
+- Keyword Cluster
+- Total Monthly Searches
+- Average CPC
+- Low CPC
+- High CPC
+- Competition
+- CTR %
+- Impression Share %
+
+Do not invent data.
+If blank, leave blank and show helper text:
+“Enter Keyword Planner or market data to unlock opportunity forecasting.”
+
+CARD 3: Benchmark Inputs
+Fields:
+- CVR Low %
+- CVR Mid %
+- CVR High %
+
+Auto-load defaults from industry benchmarks only when values are blank.
+Do not overwrite user-entered saved values.
+Allow manual override and save them.
+
+CARD 4: Coverage Inputs
+Fields:
+- Dedicated landing page exists?
+- Page relevance score
+- SEO coverage status
+- Paid campaign active?
+
+Where possible, infer defaults from existing site/page data:
+- if ad spend channel contains Google Ads, default paidCampaignActive = true
+- if website/sitemap context implies weak coverage, prefill carefully but still allow override
+- do not over-assume matching landing pages unless the app already has a way to verify them
+- always allow manual override and save
+
+RIGHT COLUMN = Outputs / Insights
+
+CARD 1: Forecast
+Show:
+- Estimated Clicks
+- Leads Low / Mid / High
+- CPA Low / Mid / High
+
+CARD 2: Revenue Projection
+Show:
+- Customers Low / Mid / High
+- Revenue Low / Mid / High
+- ROI Low / Mid / High
+
+CARD 3: Break-even
+Show:
+- Break-even customers
+- Break-even leads
+- Total investment
+- optional:
+  - minimum job value
+  - minimum close rate
+
+CARD 4: Opportunity
+Show:
+- Total market demand
+- Reachable demand
+- Untapped demand
+- Opportunity score / 100
+- signal chip:
+  - High Opportunity
+  - Moderate Opportunity
+  - Limited Opportunity
+
+CARD 5: AI Commentary
+Generate commentary from live numbers only.
+Examples:
+- “At current assumptions, this model forecasts 19–34 leads per month.”
+- “The commercial upside appears strong, but the model depends heavily on close rate.”
+- “Demand exists, but low impression share suggests limited visibility.”
+- “This theme appears under-covered by the current website.”
+- “A dedicated landing page is likely the clearest next step.”
+
+CARD 6: Recommended Actions
+Generate 3 priority actions based on live conditions, such as:
+- Add keyword planner data
+- Create landing page
+- Increase budget
+- Improve conversion rate
+- Split campaigns by intent
+- Track calls/forms separately
+- Tighten local keyword targeting
+
+BELOW MAIN GRID
+
+CARD: Demand vs Coverage
+Show:
+- Total search demand
+- Website coverage status
+- Paid coverage status
+- Untapped share
+
+Use bars / chips, but only with real values.
+When values are missing, show graceful empty states.
+
+CARD: Scenario Comparison
+Table with rows:
+- Low
+- Mid
+- High
+Columns:
+- Leads
+- CPA
+- Revenue
+- ROI
+
+CARD: 12-Month Growth Roadmap
+Generate quarter-by-quarter actions from live conditions.
+Structure:
+- Q1 Foundations
+- Q2 Demand Capture
+- Q3 Expansion
+- Q4 Domination
+
+ROADMAP RULES
+Base quarter recommendations on actual conditions:
+- missing market data => Q1 should include collecting/importing search data
+- no landing page => Q1 or Q2 should include page creation
+- low impression share => Q2 should include budget/visibility improvements
+- weak coverage => Q1 should include SEO alignment
+- campaign active but low ROI => improve conversion and campaign structure
+- strong ROI => expansion recommendations
+
+DESIGN REQUIREMENTS
+- match the current UI exactly
+- use the existing Momentum visual language
+- soft gray card backgrounds
+- clean borders
+- medium-large rounded corners
+- restrained premium spacing
+- strong numeric typography
+- subtle motion with Framer Motion
+- orange accent only where useful
+- green/amber/red for opportunity and warnings
+- no clutter
+- no flashy dashboard look
+- must feel like it was always part of Momentum
+
+CALCULATION LOGIC
+
+1. Budget Forecast mode
+Estimated Clicks = Net Ad Spend / Avg CPC
+
+Leads Low = Estimated Clicks * CVR Low
+Leads Mid = Estimated Clicks * CVR Mid
+Leads High = Estimated Clicks * CVR High
+
+CPA Low = Net Ad Spend / Leads Low
+CPA Mid = Net Ad Spend / Leads Mid
+CPA High = Net Ad Spend / Leads High
+
+Customers Low = Leads Low * Close Rate
+Customers Mid = Leads Mid * Close Rate
+Customers High = Leads High * Close Rate
+
+Revenue Low = Customers Low * Average Job Value
+Revenue Mid = Customers Mid * Average Job Value
+Revenue High = Customers High * Average Job Value
+
+Total Investment = Net Ad Spend + Management Fee
+
+ROI Low = Revenue Low / Total Investment
+ROI Mid = Revenue Mid / Total Investment
+ROI High = Revenue High / Total Investment
+
+2. Market Opportunity mode
+Reachable Impressions = Total Monthly Searches * ImpressionShare
+Estimated Clicks = Reachable Impressions * CTR
+
+Then continue with the same lead, customer, revenue, and ROI formulas.
+
+3. Break-even
+BreakEvenCustomers = TotalInvestment / AverageJobValue
+BreakEvenLeads = BreakEvenCustomers / CloseRate
+
+4. Opportunity Score
+Build a weighted score out of 100 using:
+- demand size
+- impression share gap
+- seo coverage weakness
+- campaign inactive or underdeveloped
+- landing page absence
+- commercial value / average job value
+Keep the logic transparent and maintainable.
+
+VALIDATION RULES
+- Avg CPC must be > 0
+- Job Value must be > 0 for revenue/ROI
+- Close Rate between 0 and 1
+- CTR between 0 and 1
+- Impression Share between 0 and 1
+- CVR Low <= CVR Mid <= CVR High
+- Total Monthly Searches >= 0
+- Management Fee >= 0
+- Net Ad Spend >= 0
+
+WARNINGS / EMPTY STATES
+Display elegant inline warnings such as:
+- “Add average CPC to calculate click forecast.”
+- “Add average job value to calculate revenue and ROI.”
+- “Enter market demand data to unlock market opportunity mode.”
+- “Low scenario lead volume is under 15.”
+- “Low scenario ROI is below break-even.”
+- “No dedicated landing page is currently flagged for this theme.”
+
+BENCHMARK PRESETS
+Create a benchmark constants file, but use it only as fallback defaults when the deal has no saved values.
+
+Example presets:
+Dentists
+- CVR Low: 0.14
+- CVR Mid: 0.20
+- CVR High: 0.25
+- CTR: 0.05
+- Impression Share: 0.35
+
+Builders
+- CVR Low: 0.05
+- CVR Mid: 0.08
+- CVR High: 0.12
+- CTR: 0.04
+- Impression Share: 0.28
+
+Electricians
+- CVR Low: 0.12
+- CVR Mid: 0.18
+- CVR High: 0.24
+- CTR: 0.06
+- Impression Share: 0.40
+
+Plumbers
+- CVR Low: 0.10
+- CVR Mid: 0.16
+- CVR High: 0.22
+- CTR: 0.06
+- Impression Share: 0.38
+
+DATA WIRING INSTRUCTIONS
+- inspect the current component/file structure and use the real deal detail page
+- reuse current hooks/services for fetching and mutating the deal
+- reuse current online presence object for website/ad spend/sitemap context
+- reuse existing card shell and typography components if they exist
+- reuse the current accordion component for the right panel
+- reuse the current toast system
+- reuse current button/input/select/textarea components
+- reuse current loading and empty-state patterns
+
+EXPORT SECTION MAPPING
+Prepare the Growth Plan object so these sections can be reused for PDF and public URL rendering:
+- Summary
+- Business Context
+- Paid Search Opportunity
+- Market Demand
+- Demand vs Coverage
+- Forecast Scenarios
+- Financial Return
+- Strategic Gaps
+- Priority Recommendations
+- 12-Month Roadmap
+- Next Steps
+
+For each section, generate structured export content in growthPlan.export.pdfSections and growthPlan.export.publicPageSections.
+
+EXAMPLES OF EXPORT CONTENT
+- Executive Summary: concise strategic summary with lead/revenue/ROI ranges
+- Market Opportunity: demand, CPC, reachability, visibility observations
+- Demand vs Coverage: current website and paid-search alignment
+- Forecast Scenarios: low/mid/high metrics
+- Gaps: missing page, weak coverage, low visibility, data gaps
+- Recommendations: top 3 actions with rationale
+- Roadmap: quarter-by-quarter plan
+
+SUMMARY GENERATION
+Create a function that produces a readable summary from live calculations, such as:
+“Based on current assumptions, this opportunity could generate 19–34 leads per month with an estimated ROI range of 1.2x to 2.1x. The clearest growth lever is improving website coverage and capturing more available demand.”
+
+Use that for:
+- Copy Summary button
+- executive summary
+- short summary
+- future PDF/public page lead section
+
+INTERACTIONS
+- all numeric fields update calculations live
+- dropdown changes benchmark defaults only when local values are blank
+- mode toggle animates
+- accordion open/close animates
+- export buttons show toasts
+- Save to Deal stores current assumptions plus generated outputs
+- Copy Summary copies live summary text
+- Generate PDF uses existing PDF flow if present, otherwise show a clear placeholder toast
+
+STATE MANAGEMENT
+- use React state/hooks integrated with current data flows
+- keep calculations in separate utility files
+- derive outputs with useMemo
+- debounce persistence for editable fields
+- maintain a clean component tree
+
+FILES TO CREATE / UPDATE
+Follow the existing codebase conventions, but likely create/update files such as:
+
+- components/deals/growth-plan/GrowthPlanWorkspace.tsx
+- components/deals/growth-plan/GrowthPlanTopBar.tsx
+- components/deals/growth-plan/ModeToggle.tsx
+- components/deals/growth-plan/AssumptionsPanel.tsx
+- components/deals/growth-plan/cards/SummaryStatCard.tsx
+- components/deals/growth-plan/cards/ForecastCard.tsx
+- components/deals/growth-plan/cards/RevenueProjectionCard.tsx
+- components/deals/growth-plan/cards/BreakEvenCard.tsx
+- components/deals/growth-plan/cards/OpportunityCard.tsx
+- components/deals/growth-plan/cards/AICommentaryCard.tsx
+- components/deals/growth-plan/cards/DemandCoverageCard.tsx
+- components/deals/growth-plan/cards/RecommendedActionsCard.tsx
+- components/deals/growth-plan/cards/RoadmapCard.tsx
+- components/deals/growth-plan/ScenarioTable.tsx
+- lib/growth-plan/types.ts
+- lib/growth-plan/benchmarks.ts
+- lib/growth-plan/calculations.ts
+- lib/growth-plan/commentary.ts
+- lib/growth-plan/recommendations.ts
+- lib/growth-plan/roadmap.ts
+- lib/growth-plan/export.ts
+- lib/growth-plan/validation.ts
+- lib/growth-plan/summary.ts
+
+Also update the existing deal detail page and AI Sales Engine accordion so Growth Plan can activate and render this workspace.
+
+IMPLEMENTATION DETAILS
+
+1. Use real persisted state
+- load growthPlan from the deal if it exists
+- merge with live business data and fallback benchmark defaults
+- never overwrite saved user assumptions silently
+
+2. Separate raw inputs from calculated outputs
+- calculation utilities in pure files
+- commentary engine in pure files
+- roadmap generator in pure files
+- recommendations engine in pure files
+- export section builder in pure files
+
+3. Memoize calculations
+- useMemo for derived outputs
+- avoid unnecessary rerenders
+
+4. Save outputs snapshot
+When user clicks Save to Deal or autosave runs, store:
+- inputs
+- calculations
+- insights
+- recommendations
+- roadmap
+- export
+- metadata
+
+5. Empty states
+When market data is missing, the UI should still feel premium and useful, not broken.
+Example:
+- show summary cards with “No data”
+- show a card explaining what inputs are needed to unlock the forecast
+- still allow user to save assumptions
+
+FINAL DELIVERABLE
+Return production-ready React/TypeScript code integrated into the current deal workspace, using real data bindings and persisted assumptions.
+
+Do not return:
+- a standalone prototype
+- a fake demo
+- hardcoded Vanti values
+- mock stats in the UI
+
+Build it as a real feature inside the existing Momentum deal workspace, with a reusable Growth Plan engine underneath that can later power the PDF and public URL from the same structured output.

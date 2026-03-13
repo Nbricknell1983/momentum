@@ -1,4 +1,5 @@
 // Core types for Momentum Agent
+import type { PaidSearchGrowthPlan } from '@/lib/growth-plan/types';
 
 export type Stage = 
   | 'suspect'
@@ -299,6 +300,7 @@ export interface Lead {
   aiFollowUp?: AiFollowUpOutput;
   aiConversationInsights?: AiConversationInsightsOutput;
   aiGrowthPlan?: AiGrowthPlanOutput;
+  paidSearchGrowthPlan?: PaidSearchGrowthPlan;
   aiProspects?: AiProspectOutput[];
   sitemapUrl?: string;
   sitemapPages?: SitemapPage[];

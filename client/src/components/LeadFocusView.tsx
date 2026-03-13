@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, ArrowLeft, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,8 +12,10 @@ import LeadCardExpanded from './LeadCardExpanded';
 import AISalesEngine from './AISalesEngine';
 import ConversationIntelligence from './ConversationIntelligence';
 import DealIntelligencePanel from './DealIntelligencePanel';
+import GrowthPlanWorkspace from './GrowthPlanWorkspace';
 
-type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'prospect';
+type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'growth_plan' | 'prospect';
+type CenterView = 'deal_intelligence' | 'growth_plan';
 
 interface LeadFocusViewProps {
   lead: Lead;
@@ -28,10 +30,20 @@ export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasN
   const momentumResult = calculateDealMomentumScore(lead, activities);
   const trafficStatus = getTrafficLightStatus(lead);
   const [aiSection, setAiSection] = useState<EngineSection | null>(null);
+  const [centerView, setCenterView] = useState<CenterView>('deal_intelligence');
 
   useEffect(() => {
     setAiSection(null);
+    setCenterView('deal_intelligence');
   }, [lead.id]);
+
+  const handleSectionChange = useCallback((section: EngineSection | null) => {
+    if (section === 'growth_plan') {
+      setCenterView('growth_plan');
+    } else {
+      setCenterView('deal_intelligence');
+    }
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -122,14 +134,23 @@ export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasN
               isExpanded={true}
               onToggle={onClose}
               focusMode={true}
-              onAiSectionChange={(section) => setAiSection(section)}
+              onAiSectionChange={(section) => setAiSection(section as EngineSection)}
             />
           </div>
         </ScrollArea>
 
-        <ScrollArea className="flex-1 border-l">
-          <DealIntelligencePanel lead={lead} />
-        </ScrollArea>
+        <div className="flex-1 border-l min-h-0 overflow-hidden">
+          {centerView === 'growth_plan' ? (
+            <GrowthPlanWorkspace
+              lead={lead}
+              onBack={() => setCenterView('deal_intelligence')}
+            />
+          ) : (
+            <ScrollArea className="h-full">
+              <DealIntelligencePanel lead={lead} />
+            </ScrollArea>
+          )}
+        </div>
 
         <div className="w-[380px] shrink-0 border-l bg-muted/5">
           <AISalesEngine
@@ -138,6 +159,7 @@ export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasN
             activeSection={aiSection}
             selectedLeadOverride={lead}
             embedded={true}
+            onSectionChange={handleSectionChange}
           />
         </div>
       </div>
