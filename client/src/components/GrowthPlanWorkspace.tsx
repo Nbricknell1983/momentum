@@ -412,7 +412,7 @@ export default function GrowthPlanWorkspace({ lead, onBack }: GrowthPlanWorkspac
                     />
                   </div>
                   <NumInput label="Monthly Package $" value={inputs.monthlyPackagePrice} onChange={v => setInput('monthlyPackagePrice', v)} prefix="$" placeholder="5000" testId="input-package-price" />
-                  <NumInput label="Management Fee $" value={inputs.managementFee} onChange={v => setInput('managementFee', v)} prefix="$" placeholder="1500" helper="Agency fee/mo" testId="input-mgmt-fee" />
+                  <NumInput label="Management Fee %" value={inputs.managementFee !== null ? inputs.managementFee * 100 : null} onChange={v => setInput('managementFee', v !== null ? v / 100 : null)} suffix="%" placeholder="20" helper="% of net ad spend" testId="input-mgmt-fee" />
                   <NumInput label="Net Ad Spend $" value={inputs.netAdSpend} onChange={v => setInput('netAdSpend', v)} prefix="$" placeholder="2500" helper="Media budget/mo" testId="input-ad-spend" />
                   <NumInput label="Avg Job Value $" value={inputs.averageJobValue} onChange={v => setInput('averageJobValue', v)} prefix="$" placeholder="4000" testId="input-job-value" />
                   <div className="col-span-2">

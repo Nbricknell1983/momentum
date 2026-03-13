@@ -146,7 +146,7 @@ export function generateInsights(
     assumptions.push(`Avg job value: $${inputs.averageJobValue.toLocaleString()}`);
   }
   if (inputs.managementFee !== null) {
-    assumptions.push(`Management fee: $${inputs.managementFee.toLocaleString()}/mo`);
+    assumptions.push(`Management fee: ${(inputs.managementFee * 100).toFixed(0)}% of ad spend`);
   }
 
   // --- HEADLINE ---

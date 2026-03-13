@@ -40,10 +40,11 @@ export function runCalculations(inputs: GrowthPlanInputs): GrowthPlanCalculation
     }
   }
 
-  // Total Investment
+  // Total Investment — managementFee is a decimal percentage of netAdSpend (e.g. 0.20 = 20%)
   const spend = n(netAdSpend);
-  const fee = n(managementFee);
-  const rawInvestment = (spend ?? 0) + (fee ?? 0);
+  const feeRate = n(managementFee);
+  const managementFeeAmount = spend !== null && feeRate !== null ? spend * feeRate : 0;
+  const rawInvestment = (spend ?? 0) + managementFeeAmount;
   const totalInvestment = rawInvestment > 0 ? rawInvestment : null;
 
   // Leads
