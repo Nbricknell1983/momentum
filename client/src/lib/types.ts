@@ -223,6 +223,9 @@ export interface LeadSourceData {
   googleRating?: number;
   googleReviewCount?: number;
   googleTypes?: string[];
+  googleMapsUrl?: string;
+  googlePhotoCount?: number;
+  category?: string;
   abn?: string;
   abnState?: string;
   abnPostcode?: string;

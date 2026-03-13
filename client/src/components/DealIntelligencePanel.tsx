@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, updateLead } from '@/store';
+import { RootState, updateLead, patchLead } from '@/store';
 import {
   Lead,
   Activity,
@@ -26,14 +26,18 @@ import {
   Pencil,
   Check,
   X,
+  Loader2,
+  Search,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { format, differenceInDays, isPast, isToday } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateLeadInFirestore } from '@/lib/firestoreService';
+import { useToast } from '@/hooks/use-toast';
 
 interface DealIntelligencePanelProps {
   lead: Lead;
@@ -225,11 +229,48 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const activities = useSelector((state: RootState) => state.app.activities);
   const dispatch = useDispatch();
   const { orgId, authReady } = useAuth();
+  const { toast } = useToast();
   const debounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const health = useMemo(() => computeDealHealth(lead, activities), [lead, activities]);
   const summary = useMemo(() => generateDealSummary(lead, activities), [lead, activities]);
   const nextAction = useMemo(() => getNextBestAction(lead, activities), [lead, activities]);
+
+  const handleGBPLookup = useCallback(async (placeId: string) => {
+    if (!placeId.trim() || !orgId || !authReady) return;
+    try {
+      const res = await fetch(`/api/google-places/details/${placeId.trim()}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch GBP data');
+      }
+      const data = await res.json();
+      const sourceData: any = {
+        ...(lead.sourceData || { source: 'manual' }),
+        googlePlaceId: data.placeId || placeId.trim(),
+        googleRating: data.rating ?? lead.sourceData?.googleRating,
+        googleReviewCount: data.reviewCount ?? lead.sourceData?.googleReviewCount,
+        googleTypes: data.types || lead.sourceData?.googleTypes,
+        googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${data.placeId || placeId.trim()}`,
+        category: data.primaryType || lead.sourceData?.category,
+      };
+      const leadUpdates: Partial<Lead> = {
+        sourceData,
+        address: lead.address || data.address || undefined,
+        phone: lead.phone || data.phone || undefined,
+        website: lead.website || data.website || undefined,
+        updatedAt: new Date(),
+      };
+      dispatch(patchLead({ id: lead.id, updates: leadUpdates }));
+      await updateLeadInFirestore(orgId, lead.id, leadUpdates, authReady);
+      toast({
+        title: 'GBP Data Loaded',
+        description: `${data.reviewCount || 0} reviews · ${data.rating || 'No'} rating · ${data.primaryType || 'Business'}`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Lookup Failed', description: err.message || 'Could not fetch Google Business data', variant: 'destructive' });
+    }
+  }, [lead, orgId, authReady, dispatch, toast]);
 
   const handleUpdatePresenceField = useCallback((field: keyof Lead, value: string) => {
     dispatch(updateLead({ ...lead, [field]: value || undefined, updatedAt: new Date() }));
@@ -312,19 +353,9 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             link={lead.website}
             onSave={(v) => handleUpdatePresenceField('website', v)}
           />
-          <PresenceRow
-            icon={<MapPin className="h-3.5 w-3.5" />}
-            label="Google Business"
-            value={lead.sourceData?.googlePlaceId ? 'Profile detected' : null}
-            fallback="Not yet analysed"
-          />
-          <PresenceRow
-            icon={<Star className="h-3.5 w-3.5" />}
-            label="Reviews"
-            value={lead.sourceData?.googleReviewCount != null
-              ? `${lead.sourceData.googleReviewCount} reviews (${lead.sourceData.googleRating || 'N/A'} rating)`
-              : null}
-            fallback="No review data"
+          <GBPLookupRow
+            lead={lead}
+            onLookup={handleGBPLookup}
           />
           <EditablePresenceRow
             icon={<SiFacebook className="h-3 w-3" />}
@@ -511,5 +542,126 @@ function EditablePresenceRow({ icon, label, value, placeholder, link, onSave }: 
       </span>
       <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
     </div>
+  );
+}
+
+function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: string) => Promise<void> }) {
+  const [entering, setEntering] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const hasGBP = !!lead.sourceData?.googlePlaceId;
+  const reviewCount = lead.sourceData?.googleReviewCount;
+  const rating = lead.sourceData?.googleRating;
+  const mapsUrl = lead.sourceData?.googleMapsUrl;
+
+  const startEntering = () => {
+    setDraft(lead.sourceData?.googlePlaceId || '');
+    setEntering(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleLookup = async () => {
+    if (!draft.trim()) return;
+    setLoading(true);
+    try {
+      await onLookup(draft.trim());
+      setEntering(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleLookup();
+    if (e.key === 'Escape') { setEntering(false); setDraft(''); }
+  };
+
+  if (entering) {
+    return (
+      <div className="space-y-1.5 py-0.5">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-amber-600"><MapPin className="h-3.5 w-3.5" /></span>
+          <span className="text-muted-foreground text-xs w-[76px] shrink-0">Google Place ID</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Input
+            ref={inputRef}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Paste Place ID from Google Maps…"
+            className="h-6 text-xs px-1.5 flex-1"
+            disabled={loading}
+          />
+          <Button
+            size="sm"
+            className="h-6 px-2 text-xs shrink-0"
+            onClick={handleLookup}
+            disabled={loading || !draft.trim()}
+          >
+            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+          </Button>
+          <button
+            onClick={() => { setEntering(false); setDraft(''); }}
+            className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+        <p className="text-[10px] text-muted-foreground pl-[calc(3.5rem+0.5rem)]">
+          Find the Place ID at <a href="https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder" target="_blank" rel="noopener noreferrer" className="underline">Google's Place ID Finder</a> or from the URL in Google Maps.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
+        onClick={startEntering}
+      >
+        <span className={`shrink-0 ${hasGBP ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+          <MapPin className="h-3.5 w-3.5" />
+        </span>
+        <span className="text-muted-foreground text-xs w-[76px] shrink-0">Google Business</span>
+        <span className={`truncate text-xs flex-1 ${hasGBP ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+          {hasGBP ? (
+            mapsUrl ? (
+              <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="hover:underline inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                Profile linked <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            ) : 'Profile linked'
+          ) : 'Add Place ID…'}
+        </span>
+        <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+      </div>
+      {hasGBP && (
+        <div
+          className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
+          onClick={startEntering}
+        >
+          <span className={`shrink-0 ${reviewCount != null ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+            <Star className="h-3.5 w-3.5" />
+          </span>
+          <span className="text-muted-foreground text-xs w-[76px] shrink-0">Reviews</span>
+          <span className={`truncate text-xs flex-1 ${reviewCount != null ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+            {reviewCount != null
+              ? `${reviewCount} reviews · ${rating ?? 'N/A'}★`
+              : 'No review data'}
+          </span>
+          <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+        </div>
+      )}
+      {!hasGBP && (
+        <div className="flex items-center gap-2 py-0.5">
+          <span className="shrink-0 text-muted-foreground"><Star className="h-3.5 w-3.5" /></span>
+          <span className="text-muted-foreground text-xs w-[76px] shrink-0">Reviews</span>
+          <span className="truncate text-xs text-muted-foreground italic">No review data</span>
+        </div>
+      )}
+    </>
   );
 }
