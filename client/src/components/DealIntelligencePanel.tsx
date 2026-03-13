@@ -573,10 +573,23 @@ function EditablePresenceRow({ icon, label, value, placeholder, link, onSave }: 
   );
 }
 
+interface GBPSearchResult {
+  placeId: string;
+  name: string;
+  address: string;
+  rating: number | null;
+  reviewCount: number;
+  phone: string | null;
+  website: string | null;
+}
+
 function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: string) => Promise<void> }) {
-  const [entering, setEntering] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<GBPSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [selectLoading, setSelectLoading] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const hasGBP = !!lead.sourceData?.googlePlaceId;
@@ -584,63 +597,107 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const rating = lead.sourceData?.googleRating;
   const mapsUrl = lead.sourceData?.googleMapsUrl;
 
-  const startEntering = () => {
-    setDraft(lead.sourceData?.googlePlaceId || '');
-    setEntering(true);
+  const openSearch = () => {
+    setQuery(lead.name || '');
+    setResults([]);
+    setSearchError(null);
+    setSearching(true);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const handleLookup = async () => {
-    if (!draft.trim()) return;
-    setLoading(true);
+  const closeSearch = () => {
+    setSearching(false);
+    setResults([]);
+    setQuery('');
+    setSearchError(null);
+  };
+
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setSearchLoading(true);
+    setSearchError(null);
+    setResults([]);
     try {
-      await onLookup(draft.trim());
-      setEntering(false);
+      const res = await fetch(`/api/google-places/find?query=${encodeURIComponent(query.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Search failed');
+      setResults(data.results || []);
+      if ((data.results || []).length === 0) setSearchError('No businesses found — try adding a suburb or state.');
+    } catch (e: any) {
+      setSearchError(e.message || 'Search failed');
     } finally {
-      setLoading(false);
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSelect = async (placeId: string) => {
+    setSelectLoading(placeId);
+    try {
+      await onLookup(placeId);
+      closeSearch();
+    } finally {
+      setSelectLoading(null);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleLookup();
-    if (e.key === 'Escape') { setEntering(false); setDraft(''); }
+    if (e.key === 'Enter') handleSearch();
+    if (e.key === 'Escape') closeSearch();
   };
 
-  if (entering) {
+  if (searching) {
     return (
       <div className="space-y-1.5 py-0.5">
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 text-amber-600"><MapPin className="h-3.5 w-3.5" /></span>
-          <span className="text-muted-foreground text-xs w-[76px] shrink-0">Google Place ID</span>
-        </div>
         <div className="flex items-center gap-1.5">
+          <span className="shrink-0 text-amber-600"><MapPin className="h-3.5 w-3.5" /></span>
           <Input
             ref={inputRef}
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Paste Place ID from Google Maps…"
+            placeholder="Business name + suburb…"
             className="h-6 text-xs px-1.5 flex-1"
-            disabled={loading}
+            disabled={searchLoading}
           />
           <Button
             size="sm"
             className="h-6 px-2 text-xs shrink-0"
-            onClick={handleLookup}
-            disabled={loading || !draft.trim()}
+            onClick={handleSearch}
+            disabled={searchLoading || !query.trim()}
           >
-            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+            {searchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
           </Button>
-          <button
-            onClick={() => { setEntering(false); setDraft(''); }}
-            className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted"
-          >
+          <button onClick={closeSearch} className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted">
             <X className="h-3 w-3" />
           </button>
         </div>
-        <p className="text-[10px] text-muted-foreground pl-[calc(3.5rem+0.5rem)]">
-          Find the Place ID at <a href="https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder" target="_blank" rel="noopener noreferrer" className="underline">Google's Place ID Finder</a> or from the URL in Google Maps.
-        </p>
+        {searchError && (
+          <p className="text-[10px] text-destructive pl-5">{searchError}</p>
+        )}
+        {results.length > 0 && (
+          <div className="border rounded bg-background shadow-sm overflow-hidden ml-5">
+            {results.map(r => (
+              <button
+                key={r.placeId}
+                onClick={() => handleSelect(r.placeId)}
+                disabled={!!selectLoading}
+                className="w-full text-left px-2 py-1.5 hover:bg-muted/60 border-b last:border-b-0 transition-colors disabled:opacity-60"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium truncate">{r.name}</span>
+                  {selectLoading === r.placeId
+                    ? <Loader2 className="h-3 w-3 animate-spin shrink-0 text-violet-600" />
+                    : r.rating != null && (
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {r.rating}★ · {r.reviewCount}
+                      </span>
+                    )}
+                </div>
+                <p className="text-[10px] text-muted-foreground truncate">{r.address}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -649,7 +706,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     <>
       <div
         className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
-        onClick={startEntering}
+        onClick={openSearch}
       >
         <span className={`shrink-0 ${hasGBP ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
           <MapPin className="h-3.5 w-3.5" />
@@ -662,23 +719,21 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
                 Profile linked <ExternalLink className="h-2.5 w-2.5" />
               </a>
             ) : 'Profile linked'
-          ) : 'Add Place ID…'}
+          ) : 'Search business name…'}
         </span>
         <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
       </div>
       {hasGBP && (
         <div
           className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
-          onClick={startEntering}
+          onClick={openSearch}
         >
           <span className={`shrink-0 ${reviewCount != null ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
             <Star className="h-3.5 w-3.5" />
           </span>
           <span className="text-muted-foreground text-xs w-[76px] shrink-0">Reviews</span>
           <span className={`truncate text-xs flex-1 ${reviewCount != null ? 'text-foreground' : 'text-muted-foreground italic'}`}>
-            {reviewCount != null
-              ? `${reviewCount} reviews · ${rating ?? 'N/A'}★`
-              : 'No review data'}
+            {reviewCount != null ? `${reviewCount} reviews · ${rating ?? 'N/A'}★` : 'No review data'}
           </span>
           <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
         </div>

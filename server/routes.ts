@@ -1795,6 +1795,58 @@ Return valid JSON:
     }
   });
 
+  // Search for a business by name (for GBP lookup in Deal Intelligence Panel)
+  app.get("/api/google-places/find", async (req, res) => {
+    try {
+      const { query } = req.query;
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google Places API key not configured." });
+      }
+      if (!query || typeof query !== 'string' || !query.trim()) {
+        return res.status(400).json({ error: "query is required" });
+      }
+
+      const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.nationalPhoneNumber,places.websiteUri'
+        },
+        body: JSON.stringify({
+          textQuery: query.trim(),
+          maxResultCount: 5,
+          languageCode: 'en-AU'
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: data.error?.message || 'Google Places API error' });
+      }
+
+      const results = (data.places || [])
+        .filter((p: any) => p.businessStatus !== 'CLOSED_PERMANENTLY')
+        .map((p: any) => ({
+          placeId: p.id,
+          name: p.displayName?.text || '',
+          address: p.formattedAddress || '',
+          rating: p.rating ?? null,
+          reviewCount: p.userRatingCount ?? 0,
+          phone: p.nationalPhoneNumber || null,
+          website: p.websiteUri || null
+        }));
+
+      res.json({ results });
+    } catch (error) {
+      console.error("Error finding business by name:", error);
+      res.status(500).json({ error: "Failed to search for business" });
+    }
+  });
+
   // ===============================
   // Sitemap Fetch & Parse
   // ===============================
