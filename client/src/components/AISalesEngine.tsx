@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, patchLead } from '@/store';
-import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp, Mic, MicOff, Upload, AlertTriangle } from 'lucide-react';
+import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp, Mic, MicOff, Upload, AlertTriangle, Clock } from 'lucide-react';
 import GrowthPlanSection from '@/components/GrowthPlanSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -510,6 +510,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                     onGenerate={handlePreCall}
                     onSaveToNotes={saveToNotes}
                     hasLead={!!selectedLead}
+                    generatedAt={selectedLead?.aiCallPrep?.generatedAt}
                   />
                 )}
                 {sectionKey === 'objection' && (
@@ -683,7 +684,7 @@ function GapCard({ gap, index, onSave }: { gap: PreCallGap; index: number; onSav
   );
 }
 
-function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate, onSaveToNotes, hasLead }: {
+function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate, onSaveToNotes, hasLead, generatedAt }: {
   inputs: { businessName: string; location: string; website: string; industry: string; gbpLink: string; reviewCount?: number | null; rating?: number | null; facebookUrl?: string; instagramUrl?: string; linkedinUrl?: string; gbpPhotoCount?: number | null; gbpPostsLast30Days?: number | null };
   setInputs: (fn: (prev: any) => any) => void;
   loading: boolean;
@@ -692,6 +693,7 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
   onGenerate: () => void;
   onSaveToNotes: (text: string) => void;
   hasLead: boolean;
+  generatedAt?: Date;
 }) {
   // Always compute facts live from current inputs so they never go stale
   const liveFacts: PreCallFacts = {
@@ -703,6 +705,12 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
     gbpPosts30Days: inputs.gbpPostsLast30Days != null ? String(inputs.gbpPostsLast30Days) : 'unknown',
     socialProfiles: (inputs.facebookUrl || inputs.instagramUrl || inputs.linkedinUrl) ? 'detected' : 'not detected',
   };
+
+  const genDate = generatedAt ? new Date(generatedAt) : null;
+  const genLabel = genDate
+    ? genDate.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+      ' ' + genDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true })
+    : null;
 
   return (
     <div className="space-y-3">
@@ -726,16 +734,24 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
           <Input value={inputs.website} onChange={e => setInputs(p => ({ ...p, website: e.target.value }))} placeholder="https://..." className="h-8 text-sm" data-testid="input-precall-website" />
         </div>
       </div>
+
+      <FactsPanel facts={liveFacts} />
+
       <Button onClick={onGenerate} disabled={loading} className="w-full h-8 text-sm gap-2" data-testid="button-generate-precall">
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-        {loading ? 'Generating...' : 'Generate Call Prep'}
+        {loading ? 'Generating...' : result ? 'Regenerate Call Prep' : 'Generate Call Prep'}
       </Button>
 
       <InlineError error={error} onRetry={onGenerate} />
 
       {result && (
         <div className="space-y-3 pt-1">
-          <FactsPanel facts={liveFacts} />
+          {genLabel && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground bg-muted/40 rounded px-2 py-1">
+              <Clock className="h-3 w-3 flex-shrink-0" />
+              <span>Last generated {genLabel} — click Regenerate for fresh analysis</span>
+            </div>
+          )}
           <ResultCard title="What they do and who they serve" content={result.whatTheyDo} onSave={hasLead ? onSaveToNotes : undefined} />
           <ResultCard title="3 strengths in their online presence" content={result.strengths.map((s, i) => `${i + 1}. ${s}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
           <div className="space-y-2">
@@ -745,9 +761,6 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
             ))}
           </div>
           <ResultCard title="Sales Hook" content={result.salesHook} onSave={hasLead ? onSaveToNotes : undefined} highlight />
-          <Button variant="outline" size="sm" onClick={onGenerate} className="w-full gap-1 text-xs" data-testid="button-regenerate-precall">
-            <RotateCcw className="h-3 w-3" /> Regenerate
-          </Button>
         </div>
       )}
     </div>
