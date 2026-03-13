@@ -37,6 +37,9 @@ export default function PipelinePage() {
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
   const [newContactEmail, setNewContactEmail] = useState('');
+  const [newWebsite, setNewWebsite] = useState('');
+  const [newIndustry, setNewIndustry] = useState('');
+  const [newNotes, setNewNotes] = useState('');
   const [newRegionId, setNewRegionId] = useState('');
   const [newAreaId, setNewAreaId] = useState('');
   const [showArchivedWarning, setShowArchivedWarning] = useState(false);
@@ -263,6 +266,9 @@ export default function PipelinePage() {
         contactName: newContactName || undefined,
         phone: newContactPhone || undefined,
         email: newContactEmail || undefined,
+        website: newWebsite || undefined,
+        industry: newIndustry || undefined,
+        notes: newNotes || undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,
@@ -282,6 +288,9 @@ export default function PipelinePage() {
       setNewContactName('');
       setNewContactPhone('');
       setNewContactEmail('');
+      setNewWebsite('');
+      setNewIndustry('');
+      setNewNotes('');
       setNewRegionId('');
       setNewAreaId('');
       setShowArchivedWarning(false);
@@ -361,6 +370,9 @@ export default function PipelinePage() {
         contactName: newContactName || undefined,
         phone: newContactPhone || undefined,
         email: newContactEmail || undefined,
+        website: newWebsite || undefined,
+        industry: newIndustry || undefined,
+        notes: newNotes || undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
         archived: false,
@@ -555,6 +567,21 @@ export default function PipelinePage() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <Label>Business details</Label>
+                  <Input
+                    value={newWebsite}
+                    onChange={(e) => setNewWebsite(e.target.value)}
+                    placeholder="Website (e.g. www.example.com.au)"
+                    data-testid="input-new-website"
+                  />
+                  <Input
+                    value={newIndustry}
+                    onChange={(e) => setNewIndustry(e.target.value)}
+                    placeholder="Industry (e.g. Plumbing, Dental, Café)"
+                    data-testid="input-new-industry"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label>Primary contact</Label>
                   <Input
                     value={newContactName}
@@ -574,6 +601,15 @@ export default function PipelinePage() {
                     placeholder="Email"
                     type="email"
                     data-testid="input-new-contact-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Input
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    placeholder="Any context about this lead..."
+                    data-testid="input-new-notes"
                   />
                 </div>
                 {showArchivedWarning && matchingArchivedLead ? (

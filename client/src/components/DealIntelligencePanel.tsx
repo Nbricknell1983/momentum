@@ -276,6 +276,13 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Online Presence</span>
         </div>
         <div className="space-y-1.5">
+          {lead.industry && (
+            <PresenceRow
+              icon={<Zap className="h-3.5 w-3.5" />}
+              label="Industry"
+              value={lead.industry}
+            />
+          )}
           <PresenceRow
             icon={<Globe className="h-3.5 w-3.5" />}
             label="Website"

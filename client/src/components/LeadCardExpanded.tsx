@@ -995,6 +995,13 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
               className="h-8"
               data-testid={`input-website-${lead.id}`}
             />
+            <Input
+              value={lead.industry || ''}
+              onChange={(e) => handleUpdateField('industry', e.target.value)}
+              placeholder="Industry (e.g. Plumbing, Dental, Café)"
+              className="h-8"
+              data-testid={`input-industry-${lead.id}`}
+            />
             <div className="grid grid-cols-3 gap-2">
               <div className="relative">
                 <SiFacebook className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-600" />

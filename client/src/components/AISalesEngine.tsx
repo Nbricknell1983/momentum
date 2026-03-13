@@ -189,13 +189,13 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       setFollowUpInputs(prev => ({
         ...prev,
         business: selectedLead.companyName || '',
-        industry: (sd as any)?.category || '',
+        industry: selectedLead.industry || (sd as any)?.category || (sd as any)?.googleTypes?.[0] || '',
         location: selectedLead.territory || selectedLead.areaName || '',
         meetingNotes: selectedLead.notes || '',
       }));
       setProspectInputs(prev => ({
         ...prev,
-        businessType: (sd as any)?.category || '',
+        businessType: selectedLead.industry || (sd as any)?.category || (sd as any)?.googleTypes?.[0] || '',
         suburb: selectedLead.areaName || selectedLead.territory || '',
       }));
       if (selectedLead.aiCallPrep) {
