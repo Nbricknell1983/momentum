@@ -246,6 +246,20 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [newCompetitor, setNewCompetitor] = useState('');
   const [competitorCrawling, setCompetitorCrawling] = useState<Record<string, boolean>>({});
   const [competitorStats, setCompetitorStats] = useState<Record<string, { pages: number; servicePages: number; error?: string }>>({});
+  const [screenshotCacheBust, setScreenshotCacheBust] = useState<number>(Date.now());
+  const [screenshotLoaded, setScreenshotLoaded] = useState(false);
+  const [screenshotError, setScreenshotError] = useState(false);
+  const prevWebsite = useRef<string | undefined>(undefined);
+
+  // Auto-reset screenshot state when website changes
+  useEffect(() => {
+    if (lead.website !== prevWebsite.current) {
+      prevWebsite.current = lead.website;
+      setScreenshotLoaded(false);
+      setScreenshotError(false);
+      setScreenshotCacheBust(Date.now());
+    }
+  }, [lead.website]);
 
   const saveCompetitorDomains = useCallback(async (domains: string[]) => {
     if (!orgId || !authReady) return;
@@ -499,6 +513,67 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
           />
           <SitemapRow lead={lead} onFetch={handleSitemapFetch} onCrawl={handleCrawlPages} />
         </div>
+
+        {/* Website screenshot preview */}
+        {lead.website && (() => {
+          const websiteUrl = lead.website.startsWith('http') ? lead.website : `https://${lead.website}`;
+          const thumbUrl = `https://image.thum.io/get/width/800/crop/500/url/${websiteUrl}?${screenshotCacheBust}`;
+          return (
+            <div className="mt-2.5 rounded-md overflow-hidden border" data-testid="card-website-screenshot">
+              <div className="flex items-center justify-between px-2 py-1 bg-muted/40 border-b">
+                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
+                  <Image className="h-2.5 w-2.5" /> Website Preview
+                </span>
+                <div className="flex items-center gap-2">
+                  {screenshotLoaded && !screenshotError && (
+                    <a
+                      href={websiteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-0.5"
+                    >
+                      <ExternalLink className="h-2.5 w-2.5" /> Visit
+                    </a>
+                  )}
+                  <button
+                    onClick={() => {
+                      setScreenshotLoaded(false);
+                      setScreenshotError(false);
+                      setScreenshotCacheBust(Date.now());
+                    }}
+                    title="Refresh screenshot"
+                    className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                    data-testid="button-refresh-screenshot"
+                  >
+                    <RefreshCw className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              </div>
+              {!screenshotError ? (
+                <div className="relative bg-muted/20">
+                  {!screenshotLoaded && (
+                    <div className="absolute inset-0 flex items-center justify-center h-28 bg-muted/30">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                  <img
+                    src={thumbUrl}
+                    alt={`Screenshot of ${lead.companyName} website`}
+                    className={`w-full object-cover object-top transition-opacity duration-300 ${screenshotLoaded ? 'opacity-100' : 'opacity-0'}`}
+                    style={{ height: screenshotLoaded ? 'auto' : '7rem', maxHeight: '200px' }}
+                    onLoad={() => setScreenshotLoaded(true)}
+                    onError={() => { setScreenshotError(true); setScreenshotLoaded(true); }}
+                    data-testid="img-website-screenshot"
+                  />
+                </div>
+              ) : (
+                <div className="h-14 flex items-center justify-center bg-muted/20">
+                  <p className="text-[10px] text-muted-foreground">Could not load preview</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       <div className="rounded-lg border bg-card p-3 space-y-3" data-testid="card-competitor-snapshot">
