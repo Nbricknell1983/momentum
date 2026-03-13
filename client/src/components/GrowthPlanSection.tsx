@@ -585,6 +585,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
         body: JSON.stringify({
           businessName, websiteUrl, industry, location,
           sitemapPages: lead?.sitemapPages || [],
+          crawledPages: lead?.crawledPages || [],
           hasGBP: !!(lead?.sourceData as any)?.googleMapsUrl,
           gbpLink: (lead?.sourceData as any)?.googleMapsUrl || null,
           reviewCount: reviewCount ?? null,
@@ -664,6 +665,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           businessName, websiteUrl, industry, location,
           strategyDiagnosis: strategyDiagnosis || undefined,
           sitemapPages: lead?.sitemapPages || [],
+          crawledPages: lead?.crawledPages || [],
           reviewCount: reviewCount ?? null,
           rating: rating ?? null,
           gbpLink,
@@ -1126,6 +1128,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           businessName, websiteUrl, industry, location,
           strategyDiagnosis: strategyDiagnosis || undefined,
           sitemapPages: lead?.sitemapPages || [],
+          crawledPages: lead?.crawledPages || [],
           reviewCount: reviewCount ?? null,
           rating: rating ?? null,
           gbpLink,

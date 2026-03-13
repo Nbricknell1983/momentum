@@ -5,6 +5,7 @@ import {
   Lead,
   Activity,
   SitemapPage,
+  CrawledPage,
   STAGE_LABELS,
 } from '@/lib/types';
 import {
@@ -29,6 +30,12 @@ import {
   X,
   Loader2,
   Search,
+  ScanLine,
+  ChevronDown,
+  ChevronUp,
+  Tag,
+  Link2,
+  Image,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
@@ -300,6 +307,41 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     }
   }, [lead, orgId, authReady, dispatch, toast]);
 
+  const handleCrawlPages = useCallback(async () => {
+    const pages = lead.sitemapPages;
+    if (!pages?.length || !orgId || !authReady) return;
+    const urls = pages.map(p => p.url);
+    const domain = (() => {
+      try { return lead.website ? new URL(lead.website.startsWith('http') ? lead.website : `https://${lead.website}`).hostname : undefined; } catch { return undefined; }
+    })();
+    try {
+      const res = await fetch('/api/crawl-pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls, domain }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Crawl failed');
+      }
+      const data = await res.json();
+      const updates: Partial<Lead> = {
+        crawledPages: data.crawledPages,
+        crawledAt: new Date(),
+        updatedAt: new Date(),
+      };
+      dispatch(patchLead({ id: lead.id, updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady);
+      const success = data.crawledPages.filter((p: any) => !p.error).length;
+      toast({
+        title: 'Pages Analysed',
+        description: `Extracted SEO signals from ${success} of ${data.crawledPages.length} pages`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Crawl Failed', description: err.message || 'Could not crawl pages', variant: 'destructive' });
+    }
+  }, [lead, orgId, authReady, dispatch, toast]);
+
   const handleUpdatePresenceField = useCallback((field: keyof Lead, value: string) => {
     dispatch(updateLead({ ...lead, [field]: value || undefined, updatedAt: new Date() }));
     if (orgId && authReady) {
@@ -409,7 +451,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             link={lead.linkedinUrl}
             onSave={(v) => handleUpdatePresenceField('linkedinUrl', v)}
           />
-          <SitemapRow lead={lead} onFetch={handleSitemapFetch} />
+          <SitemapRow lead={lead} onFetch={handleSitemapFetch} onCrawl={handleCrawlPages} />
         </div>
       </div>
 
@@ -805,15 +847,19 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   );
 }
 
-function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => Promise<void> }) {
+function SitemapRow({ lead, onFetch, onCrawl }: { lead: Lead; onFetch: (url: string) => Promise<void>; onCrawl: () => Promise<void> }) {
   const [loading, setLoading] = useState(false);
+  const [crawling, setCrawling] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [crawlExpanded, setCrawlExpanded] = useState<number | null>(null);
 
   const hasSitemap = (lead.sitemapPages?.length ?? 0) > 0;
   const pages = lead.sitemapPages || [];
   const fetchedAt = lead.sitemapFetchedAt;
+  const crawledPages = lead.crawledPages || [];
+  const crawledAt = lead.crawledAt;
+  const hasCrawl = crawledPages.length > 0;
 
-  // Derive sitemap URL silently from lead website — never shown in UI
   const derivedSitemapUrl = (() => {
     const w = lead.website?.trim();
     if (!w) return null;
@@ -826,14 +872,14 @@ function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => P
   const handleFetch = async () => {
     if (!derivedSitemapUrl) return;
     setLoading(true);
-    try {
-      await onFetch(derivedSitemapUrl);
-    } finally {
-      setLoading(false);
-    }
+    try { await onFetch(derivedSitemapUrl); } finally { setLoading(false); }
   };
 
-  // Group pages by top-level section
+  const handleCrawl = async () => {
+    setCrawling(true);
+    try { await onCrawl(); } finally { setCrawling(false); }
+  };
+
   const sections = pages.reduce<Record<string, SitemapPage[]>>((acc, p) => {
     try {
       const parts = new URL(p.url).pathname.split('/').filter(Boolean);
@@ -844,8 +890,11 @@ function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => P
     return acc;
   }, {});
 
+  const successCrawls = crawledPages.filter(p => !p.error);
+
   return (
     <div className="space-y-1">
+      {/* Sitemap row */}
       <div className="flex items-center gap-2 py-0.5">
         <span className={`shrink-0 ${hasSitemap ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
           <FileText className="h-3.5 w-3.5" />
@@ -857,7 +906,7 @@ function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => P
         {derivedSitemapUrl && (
           <button
             onClick={handleFetch}
-            disabled={loading}
+            disabled={loading || crawling}
             className="shrink-0 flex items-center gap-0.5 text-[10px] text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50"
           >
             {loading
@@ -866,8 +915,10 @@ function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => P
           </button>
         )}
       </div>
-      {hasSitemap && pages.length > 0 && (
+
+      {hasSitemap && (
         <div className="ml-[calc(1rem+0.5rem+76px+0.5rem)] space-y-1">
+          {/* Pages list toggle */}
           <button
             onClick={() => setExpanded(e => !e)}
             className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
@@ -875,8 +926,9 @@ function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => P
             {expanded ? 'Hide pages' : `View ${pages.length} pages`}
             {fetchedAt && <span className="text-muted-foreground">· {format(new Date(fetchedAt), 'dd/MM/yy')}</span>}
           </button>
+
           {expanded && (
-            <div className="bg-muted/40 rounded border p-2 space-y-2 max-h-48 overflow-y-auto">
+            <div className="bg-muted/40 rounded border p-2 space-y-2 max-h-40 overflow-y-auto">
               {Object.entries(sections).slice(0, 20).map(([section, sectionPages]) => (
                 <div key={section}>
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
@@ -897,6 +949,130 @@ function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => P
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Deep Crawl row */}
+          <div className="flex items-center gap-2 pt-0.5">
+            <ScanLine className={`h-3 w-3 shrink-0 ${hasCrawl ? 'text-emerald-500' : 'text-muted-foreground'}`} />
+            <span className={`text-[10px] flex-1 ${hasCrawl ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+              {hasCrawl
+                ? `${successCrawls.length} pages analysed · SEO signals extracted`
+                : 'Deep crawl not yet run'}
+            </span>
+            <button
+              onClick={handleCrawl}
+              disabled={crawling || loading}
+              data-testid="button-crawl-pages"
+              className="shrink-0 flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline disabled:opacity-50"
+            >
+              {crawling
+                ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Crawling…</>
+                : hasCrawl ? 'Re-crawl' : 'Crawl pages'}
+            </button>
+          </div>
+
+          {/* Crawled pages results */}
+          {hasCrawl && (
+            <div className="space-y-1 mt-1">
+              {crawledAt && (
+                <p className="text-[9px] text-muted-foreground">Analysed {format(new Date(crawledAt), 'dd/MM/yy HH:mm')}</p>
+              )}
+              <div className="space-y-1 max-h-80 overflow-y-auto">
+                {crawledPages.map((cp, idx) => {
+                  const path = (() => { try { return new URL(cp.url).pathname || '/'; } catch { return cp.url; } })();
+                  const isOpen = crawlExpanded === idx;
+                  return (
+                    <div key={idx} className="rounded border bg-muted/30 overflow-hidden">
+                      <button
+                        onClick={() => setCrawlExpanded(isOpen ? null : idx)}
+                        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/60 transition-colors"
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cp.error ? 'bg-red-400' : 'bg-emerald-400'}`} />
+                        <span className="text-[10px] text-foreground/80 truncate flex-1">{path}</span>
+                        {isOpen ? <ChevronUp className="h-2.5 w-2.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-2.5 w-2.5 text-muted-foreground shrink-0" />}
+                      </button>
+                      {isOpen && (
+                        <div className="px-2 pb-2 space-y-1.5 text-[10px]">
+                          {cp.error ? (
+                            <p className="text-red-500">{cp.error}</p>
+                          ) : (
+                            <>
+                              {cp.title && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Title</p>
+                                  <p className="text-foreground/90">{cp.title}</p>
+                                </div>
+                              )}
+                              {cp.metaDescription && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Meta Description</p>
+                                  <p className="text-foreground/70">{cp.metaDescription}</p>
+                                </div>
+                              )}
+                              {cp.h1 && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">H1</p>
+                                  <p className="text-foreground/90 font-medium">{cp.h1}</p>
+                                </div>
+                              )}
+                              {cp.h2s && cp.h2s.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">H2 Headings</p>
+                                  <ul className="space-y-0.5">
+                                    {cp.h2s.map((h, i) => <li key={i} className="text-foreground/70">· {h}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {cp.h3s && cp.h3s.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">H3 Headings</p>
+                                  <ul className="space-y-0.5">
+                                    {cp.h3s.map((h, i) => <li key={i} className="text-foreground/70">· {h}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {cp.bodyText && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Body Text Snippet</p>
+                                  <p className="text-foreground/60 line-clamp-3">{cp.bodyText}</p>
+                                </div>
+                              )}
+                              {cp.imageAlts && cp.imageAlts.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5 flex items-center gap-0.5"><Image className="h-2.5 w-2.5" /> Image Alt Tags</p>
+                                  <ul className="space-y-0.5">
+                                    {cp.imageAlts.slice(0, 5).map((a, i) => <li key={i} className="text-foreground/70">· {a}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {cp.schemaTypes && cp.schemaTypes.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5 flex items-center gap-0.5"><Tag className="h-2.5 w-2.5" /> Schema Types</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {cp.schemaTypes.map((s, i) => (
+                                      <span key={i} className="bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 rounded px-1 py-0.5 text-[9px]">{s}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {cp.internalLinks && cp.internalLinks.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5 flex items-center gap-0.5"><Link2 className="h-2.5 w-2.5" /> Internal Links ({cp.internalLinks.length})</p>
+                                  <ul className="space-y-0.5">
+                                    {cp.internalLinks.slice(0, 6).map((l, i) => <li key={i} className="text-foreground/60 truncate">· {l}</li>)}
+                                    {cp.internalLinks.length > 6 && <li className="text-muted-foreground">+{cp.internalLinks.length - 6} more</li>}
+                                  </ul>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

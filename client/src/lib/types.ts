@@ -301,6 +301,8 @@ export interface Lead {
   sitemapUrl?: string;
   sitemapPages?: SitemapPage[];
   sitemapFetchedAt?: Date;
+  crawledPages?: CrawledPage[];
+  crawledAt?: Date;
 }
 
 export interface SitemapPage {
@@ -308,6 +310,21 @@ export interface SitemapPage {
   lastmod?: string;
   changefreq?: string;
   priority?: string;
+}
+
+export interface CrawledPage {
+  url: string;
+  title?: string;
+  metaDescription?: string;
+  h1?: string;
+  h2s?: string[];
+  h3s?: string[];
+  bodyText?: string;
+  imageAlts?: string[];
+  internalLinks?: string[];
+  schemaTypes?: string[];
+  status?: number;
+  error?: string;
 }
 
 export interface AiCallPrepOutput {

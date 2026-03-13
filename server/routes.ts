@@ -1957,6 +1957,175 @@ Return valid JSON:
   });
 
   // ===============================
+  // Deep Page Crawler (SEO Signals)
+  // ===============================
+
+  app.post("/api/crawl-pages", async (req, res) => {
+    try {
+      const { urls, domain } = req.body;
+      if (!Array.isArray(urls) || urls.length === 0) {
+        return res.status(400).json({ error: "urls array is required" });
+      }
+
+      const MAX_PAGES = 25;
+      const TIMEOUT_MS = 8000;
+
+      // Prioritise high-value pages: service, location, about, contact, homepage
+      function scorePath(url: string): number {
+        const p = (() => { try { return new URL(url).pathname.toLowerCase(); } catch { return url.toLowerCase(); } })();
+        if (p === '/' || p === '') return 100;
+        const hi = ['service', 'location', 'area', 'suburb', 'city', 'region', 'product', 'about', 'contact'];
+        const mid = ['blog', 'project', 'portfolio', 'work', 'gallery'];
+        if (hi.some(k => p.includes(k))) return 80;
+        if (mid.some(k => p.includes(k))) return 40;
+        return 60;
+      }
+
+      const sorted = [...urls].sort((a, b) => scorePath(b) - scorePath(a)).slice(0, MAX_PAGES);
+
+      function stripHtml(html: string): string {
+        return html
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function extractTag(html: string, tag: string): string | undefined {
+        const m = html.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, 'i'));
+        return m ? stripHtml(m[1]).slice(0, 200).trim() || undefined : undefined;
+      }
+
+      function extractAllTags(html: string, tag: string, limit = 8): string[] {
+        const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, 'gi');
+        const results: string[] = [];
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(html)) !== null && results.length < limit) {
+          const text = stripHtml(m[1]).slice(0, 120).trim();
+          if (text) results.push(text);
+        }
+        return results;
+      }
+
+      async function crawlPage(pageUrl: string): Promise<{
+        url: string; title?: string; metaDescription?: string; h1?: string;
+        h2s?: string[]; h3s?: string[]; bodyText?: string; imageAlts?: string[];
+        internalLinks?: string[]; schemaTypes?: string[]; status?: number; error?: string;
+      }> {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        try {
+          const r = await fetch(pageUrl, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0; +https://battlescore.com.au)',
+              'Accept': 'text/html,application/xhtml+xml',
+            },
+          });
+          clearTimeout(timer);
+          if (!r.ok) return { url: pageUrl, status: r.status, error: `HTTP ${r.status}` };
+
+          const html = await r.text();
+          const status = r.status;
+
+          // Title
+          const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+          const title = titleMatch ? stripHtml(titleMatch[1]).slice(0, 160).trim() || undefined : undefined;
+
+          // Meta description
+          const metaMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{1,300})["']/i)
+            || html.match(/<meta[^>]+content=["']([^"']{1,300})["'][^>]+name=["']description["']/i);
+          const metaDescription = metaMatch ? metaMatch[1].trim() || undefined : undefined;
+
+          // H1 (first)
+          const h1 = extractTag(html, 'h1');
+
+          // H2s and H3s
+          const h2s = extractAllTags(html, 'h2', 6);
+          const h3s = extractAllTags(html, 'h3', 6);
+
+          // Body text (strip nav/header/footer heuristically, take first meaningful chunk)
+          const bodyMatch = html.match(/<body[\s\S]*?>([\s\S]*)<\/body>/i);
+          const rawBody = bodyMatch ? bodyMatch[1] : html;
+          // Remove nav, header, footer, script, style blocks
+          const cleanedBody = rawBody
+            .replace(/<(nav|header|footer|script|style|noscript|svg)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          const bodyText = cleanedBody.slice(0, 600) || undefined;
+
+          // Image alt tags
+          const altRe = /<img[^>]+alt=["']([^"']{2,120})["']/gi;
+          const imageAlts: string[] = [];
+          let altM: RegExpExecArray | null;
+          while ((altM = altRe.exec(html)) !== null && imageAlts.length < 10) {
+            const alt = altM[1].trim();
+            if (alt && !['', 'image', 'photo', 'logo', 'icon'].includes(alt.toLowerCase())) {
+              imageAlts.push(alt);
+            }
+          }
+
+          // Internal links (href starting with / or same domain)
+          const baseDomain = domain || (() => { try { return new URL(pageUrl).hostname; } catch { return ''; } })();
+          const linkRe = /<a[^>]+href=["']([^"'#?]+)["']/gi;
+          const internalPaths = new Set<string>();
+          let linkM: RegExpExecArray | null;
+          while ((linkM = linkRe.exec(html)) !== null && internalPaths.size < 20) {
+            const href = linkM[1];
+            if (href.startsWith('/')) {
+              internalPaths.add(href);
+            } else if (baseDomain && href.includes(baseDomain)) {
+              try { internalPaths.add(new URL(href).pathname); } catch { /* skip */ }
+            }
+          }
+          const internalLinks = [...internalPaths].slice(0, 15);
+
+          // Schema markup types from JSON-LD
+          const schemaTypes: string[] = [];
+          const jsonLdRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+          let schemaM: RegExpExecArray | null;
+          while ((schemaM = jsonLdRe.exec(html)) !== null) {
+            try {
+              const json = JSON.parse(schemaM[1]);
+              const types = Array.isArray(json) ? json.map((j: any) => j['@type']).filter(Boolean) : [json['@type']].filter(Boolean);
+              schemaTypes.push(...types.map((t: any) => String(t)));
+            } catch { /* skip invalid JSON-LD */ }
+          }
+
+          return {
+            url: pageUrl, status, title, metaDescription, h1,
+            h2s: h2s.length ? h2s : undefined,
+            h3s: h3s.length ? h3s : undefined,
+            bodyText,
+            imageAlts: imageAlts.length ? imageAlts : undefined,
+            internalLinks: internalLinks.length ? internalLinks : undefined,
+            schemaTypes: [...new Set(schemaTypes)].filter(Boolean).length ? [...new Set(schemaTypes)] : undefined,
+          };
+        } catch (err: any) {
+          clearTimeout(timer);
+          return { url: pageUrl, error: err.name === 'AbortError' ? 'Timeout' : (err.message || 'Failed') };
+        }
+      }
+
+      // Crawl in batches of 5 for speed
+      const results = [];
+      for (let i = 0; i < sorted.length; i += 5) {
+        const batch = sorted.slice(i, i + 5);
+        const batchResults = await Promise.all(batch.map(crawlPage));
+        results.push(...batchResults);
+      }
+
+      console.log(`[CrawlPages] Crawled ${results.length} pages (${results.filter(r => !r.error).length} success)`);
+      res.json({ crawledPages: results, crawledAt: new Date().toISOString() });
+    } catch (error: any) {
+      console.error("[CrawlPages] Error:", error.message);
+      res.status(500).json({ error: error.message || "Failed to crawl pages" });
+    }
+  });
+
+  // ===============================
   // Domain WHOIS / Age Lookup
   // ===============================
 
@@ -3944,7 +4113,7 @@ Rules:
       const {
         businessName, websiteUrl, industry, location,
         sitemapPages, hasGBP, gbpLink, reviewCount, rating,
-        facebookUrl, instagramUrl, linkedinUrl,
+        facebookUrl, instagramUrl, linkedinUrl, crawledPages,
       } = req.body;
 
       if (!businessName) return res.status(400).json({ error: "Business name is required" });
@@ -3981,6 +4150,23 @@ Rules:
       if (instagramUrl) socialPlatforms.push('Instagram');
       if (linkedinUrl) socialPlatforms.push('LinkedIn');
 
+      // Build crawled page content summary for the prompt
+      const crawled: Array<any> = crawledPages || [];
+      const crawledSummary = crawled.length > 0
+        ? crawled.filter(cp => !cp.error).slice(0, 20).map((cp: any) => {
+            const path = (() => { try { return new URL(cp.url).pathname || '/'; } catch { return cp.url; } })();
+            const parts: string[] = [`URL: ${path}`];
+            if (cp.title) parts.push(`  Title: ${cp.title}`);
+            if (cp.h1) parts.push(`  H1: ${cp.h1}`);
+            if (cp.h2s?.length) parts.push(`  H2s: ${cp.h2s.slice(0, 4).join(' | ')}`);
+            if (cp.metaDescription) parts.push(`  Meta: ${cp.metaDescription.slice(0, 150)}`);
+            if (cp.bodyText) parts.push(`  Body: ${cp.bodyText.slice(0, 200)}`);
+            if (cp.schemaTypes?.length) parts.push(`  Schema: ${cp.schemaTypes.join(', ')}`);
+            if (cp.imageAlts?.length) parts.push(`  Image alts: ${cp.imageAlts.slice(0, 3).join(' | ')}`);
+            return parts.join('\n');
+          }).join('\n\n')
+        : null;
+
       const prompt = `You are a senior digital marketing strategist who has audited thousands of local business websites. You are generating a strategic visibility diagnosis for a sales rep who is about to pitch SEO/digital marketing services to ${businessName}.
 
 Your job is to answer ONE fundamental question:
@@ -4009,6 +4195,10 @@ ${sitemapSummary || '  No sitemap data available'}
 
 Actual URLs found:
 ${pageExamples || '  None'}
+${crawledSummary ? `\n=== DEEP PAGE ANALYSIS (actual HTML content extracted) ===
+The following is real HTML content extracted from crawling individual pages. Use this to assess actual keyword targeting, content quality, title tag optimisation, heading structure, and schema markup presence. This is more reliable than URL inference alone.
+
+${crawledSummary}` : ''}
 
 === SCORING RULES ===
 Score each out of 100. Be honest and calibrated — low scores are expected for businesses with poor structure.
@@ -4109,7 +4299,7 @@ Respond with JSON only:
     try {
       const {
         businessName, websiteUrl, industry, location,
-        strategyDiagnosis, sitemapPages, reviewCount, rating, gbpLink,
+        strategyDiagnosis, sitemapPages, crawledPages, reviewCount, rating, gbpLink,
         facebookUrl, instagramUrl, linkedinUrl, competitors,
       } = req.body;
 
@@ -4154,6 +4344,21 @@ Growth Potential: ${strategyDiagnosis.growthPotential?.summary}
 Forecast: ${strategyDiagnosis.growthPotential?.forecastBand ? JSON.stringify(strategyDiagnosis.growthPotential.forecastBand) : 'Not calculated'}
 ` : '';
 
+      const crawled: Array<any> = crawledPages || [];
+      const crawledContext = crawled.length > 0
+        ? `\n=== DEEP PAGE ANALYSIS (actual HTML extracted) ===\n` +
+          crawled.filter(cp => !cp.error).slice(0, 15).map((cp: any) => {
+            const path = (() => { try { return new URL(cp.url).pathname || '/'; } catch { return cp.url; } })();
+            const parts: string[] = [`URL: ${path}`];
+            if (cp.title) parts.push(`  Title: ${cp.title}`);
+            if (cp.h1) parts.push(`  H1: ${cp.h1}`);
+            if (cp.h2s?.length) parts.push(`  H2s: ${cp.h2s.slice(0, 3).join(' | ')}`);
+            if (cp.metaDescription) parts.push(`  Meta: ${cp.metaDescription.slice(0, 120)}`);
+            if (cp.schemaTypes?.length) parts.push(`  Schema: ${cp.schemaTypes.join(', ')}`);
+            return parts.join('\n');
+          }).join('\n\n')
+        : '';
+
       const sitemapContext = pages.length > 0 ? `
 === WEBSITE STRUCTURE (from sitemap) ===
 Total pages: ${pages.length}
@@ -4161,7 +4366,8 @@ Service pages: ${classified.services.length} (${classified.services.slice(0, 3).
 Location/area pages: ${classified.locations.length} (${classified.locations.slice(0, 3).join(', ') || 'none'})  
 Portfolio/project pages: ${classified.portfolio.length} (${classified.portfolio.slice(0, 3).join(', ') || 'none'})
 Other pages: ${classified.other.length}
-` : '';
+${crawledContext}
+` : crawledContext ? `\n=== WEBSITE STRUCTURE ===\n${crawledContext}\n` : '';
 
       const competitorContext = competitors?.length > 0 ? `
 === COMPETITORS TO BENCHMARK AGAINST ===
