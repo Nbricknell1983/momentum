@@ -130,11 +130,18 @@ function Navbar() {
           </button>
         ))}
       </div>
-      <motion.a href="mailto:nathan@battlescore.com.au" whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
-        className="hidden md:flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white"
-        style={{ background: `linear-gradient(135deg, ${G.violet}, ${G.violet2})`, boxShadow: `0 0 22px ${G.violetGlow}` }}>
-        Book a Demo
-      </motion.a>
+      <div className="hidden md:flex items-center gap-3">
+        <motion.a href="/login" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+          className="px-4 py-2.5 rounded-xl text-sm font-semibold"
+          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: G.text }}>
+          Login
+        </motion.a>
+        <motion.a href="mailto:nathan@battlescore.com.au" whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white"
+          style={{ background: `linear-gradient(135deg, ${G.violet}, ${G.violet2})`, boxShadow: `0 0 22px ${G.violetGlow}` }}>
+          Book a Demo
+        </motion.a>
+      </div>
       <button className="md:hidden text-white" onClick={() => setMobileOpen(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
         {mobileOpen ? <X size={22} /> : <Menu size={22} />}
       </button>
@@ -150,8 +157,13 @@ function Navbar() {
                 {l.label}
               </button>
             ))}
+            <a href="/login"
+              className="text-center px-5 py-3 rounded-xl text-sm font-semibold mt-2"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: G.text }}>
+              Login
+            </a>
             <a href="mailto:nathan@battlescore.com.au"
-              className="text-center px-5 py-3 rounded-xl text-sm font-bold text-white mt-2"
+              className="text-center px-5 py-3 rounded-xl text-sm font-bold text-white"
               style={{ background: `linear-gradient(135deg, ${G.violet}, ${G.violet2})` }}>
               Book a Demo
             </a>
