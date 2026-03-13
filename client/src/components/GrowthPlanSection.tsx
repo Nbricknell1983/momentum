@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink, Link, Sparkles, ChevronDown, ChevronRight, Target, Zap, Clock } from 'lucide-react';
+import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink, Link, Sparkles, ChevronDown, ChevronRight, Target, Zap, Clock, ScanLine, Plus, Trash2, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { auth } from '@/lib/firebase';
-import { Lead, StrategyDiagnosis, StrategyDiagnosisGap, StrategyDiagnosisPriority } from '@/lib/types';
+import { Lead, CrawledPage, StrategyDiagnosis, StrategyDiagnosisGap, StrategyDiagnosisPriority } from '@/lib/types';
+
+interface CompetitorAnalysis {
+  domain: string;
+  totalPages: number;
+  crawledPages: CrawledPage[];
+  error?: string;
+}
 
 interface CrawlData {
   url: string; success: boolean; error?: string; title?: string; metaDescription?: string;
@@ -532,6 +539,9 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
   const [urlCopied, setUrlCopied] = useState(false);
   const [competitorInput, setCompetitorInput] = useState('');
+  const [crawledCompetitors, setCrawledCompetitors] = useState<CompetitorAnalysis[]>([]);
+  const [competitorAnalysisLoading, setCompetitorAnalysisLoading] = useState(false);
+  const [expandedCompetitor, setExpandedCompetitor] = useState<number | null>(null);
 
   useEffect(() => {
     if (lead?.aiGrowthPlan) {
@@ -586,6 +596,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           businessName, websiteUrl, industry, location,
           sitemapPages: lead?.sitemapPages || [],
           crawledPages: lead?.crawledPages || [],
+          crawledCompetitors: crawledCompetitors.length > 0 ? crawledCompetitors : undefined,
           hasGBP: !!(lead?.sourceData as any)?.googleMapsUrl,
           gbpLink: (lead?.sourceData as any)?.googleMapsUrl || null,
           reviewCount: reviewCount ?? null,
@@ -605,6 +616,51 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     } finally {
       setDiagnosisLoading(false);
     }
+  };
+
+  const analyseCompetitors = async () => {
+    const domains = competitorInput.split(/[\n,]+/).map(s => s.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')).filter(Boolean);
+    if (!domains.length) {
+      toast({ title: 'Enter at least one competitor domain', variant: 'destructive' });
+      return;
+    }
+    setCompetitorAnalysisLoading(true);
+    setCrawledCompetitors([]);
+    const results: CompetitorAnalysis[] = [];
+    for (const domain of domains.slice(0, 4)) {
+      try {
+        const base = `https://${domain}`;
+        const sitemapUrl = `${base}/sitemap.xml`;
+        const sRes = await fetch(`/api/sitemap?url=${encodeURIComponent(sitemapUrl)}`);
+        const sData = sRes.ok ? await sRes.json() : null;
+        const sitemapPages: { url: string }[] = (sData?.pages || []).slice(0, 50);
+        const totalPages = sData?.totalPages || 0;
+        let crawledPages: CrawledPage[] = [];
+        if (sitemapPages.length > 0) {
+          const cRes = await fetch('/api/crawl-pages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls: sitemapPages.map(p => p.url), domain }),
+          });
+          if (cRes.ok) {
+            const cData = await cRes.json();
+            crawledPages = cData.crawledPages || [];
+          }
+        }
+        results.push({ domain, totalPages, crawledPages });
+      } catch {
+        results.push({ domain, totalPages: 0, crawledPages: [], error: 'Could not analyse' });
+      }
+    }
+    setCrawledCompetitors(results);
+    setCompetitorAnalysisLoading(false);
+    const ok = results.filter(r => !r.error && r.crawledPages.length > 0).length;
+    toast({
+      title: ok > 0 ? 'Competitors Analysed' : 'Analysis Complete',
+      description: ok > 0
+        ? `Extracted SEO signals from ${ok} competitor${ok !== 1 ? 's' : ''}`
+        : 'Could not fetch competitor data — check the domains are correct',
+    });
   };
 
   const setToolLoading = (tool: string, val: boolean) => setLoading(p => ({ ...p, [tool]: val }));
@@ -666,6 +722,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           strategyDiagnosis: strategyDiagnosis || undefined,
           sitemapPages: lead?.sitemapPages || [],
           crawledPages: lead?.crawledPages || [],
+          crawledCompetitors: crawledCompetitors.length > 0 ? crawledCompetitors : undefined,
           reviewCount: reviewCount ?? null,
           rating: rating ?? null,
           gbpLink,
@@ -1129,6 +1186,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           strategyDiagnosis: strategyDiagnosis || undefined,
           sitemapPages: lead?.sitemapPages || [],
           crawledPages: lead?.crawledPages || [],
+          crawledCompetitors: crawledCompetitors.length > 0 ? crawledCompetitors : undefined,
           reviewCount: reviewCount ?? null,
           rating: rating ?? null,
           gbpLink,
@@ -1283,18 +1341,112 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
 
       {/* ── PDF + Report URL ───────────────────────────────────── */}
       <div className="space-y-2">
-        <div className="space-y-1">
+        <div className="space-y-2">
           <Label className="text-xs text-muted-foreground flex items-center gap-1">
             <BarChart3 className="h-3 w-3" /> Competitor websites (optional)
           </Label>
-          <Input
-            value={competitorInput}
-            onChange={e => setCompetitorInput(e.target.value)}
-            placeholder="e.g. besa.au, lindonhomes.com.au"
-            className="h-8 text-xs"
-            data-testid="input-competitors"
-          />
-          <p className="text-[10px] text-muted-foreground">Comma-separated. AI will factor these into the keyword gap and growth strategy.</p>
+          <div className="flex gap-1.5">
+            <Input
+              value={competitorInput}
+              onChange={e => setCompetitorInput(e.target.value)}
+              placeholder="e.g. besa.au, lindonhomes.com.au"
+              className="h-8 text-xs flex-1"
+              data-testid="input-competitors"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={analyseCompetitors}
+              disabled={competitorAnalysisLoading || !competitorInput.trim()}
+              className="h-8 px-2.5 text-xs gap-1 shrink-0"
+              data-testid="button-analyse-competitors"
+            >
+              {competitorAnalysisLoading
+                ? <><Loader2 className="h-3 w-3 animate-spin" /> Analysing…</>
+                : <><ScanLine className="h-3 w-3" /> Analyse</>}
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Enter domains comma-separated. Click Analyse to crawl their sites and extract real SEO signals for gap comparison.</p>
+
+          {/* Competitor analysis results */}
+          {crawledCompetitors.length > 0 && (
+            <div className="space-y-1.5 mt-1">
+              {crawledCompetitors.map((comp, idx) => {
+                const isOpen = expandedCompetitor === idx;
+                const okPages = comp.crawledPages.filter(p => !p.error);
+                const servicePages = okPages.filter(p => {
+                  const path = (() => { try { return new URL(p.url).pathname.toLowerCase(); } catch { return p.url.toLowerCase(); } })();
+                  return /service|solution|offer/i.test(path);
+                });
+                const locationPages = okPages.filter(p => {
+                  const path = (() => { try { return new URL(p.url).pathname.toLowerCase(); } catch { return p.url.toLowerCase(); } })();
+                  return /location|area|suburb|city/i.test(path);
+                });
+                const schemas = Array.from(new Set(okPages.flatMap(p => p.schemaTypes || [])));
+                return (
+                  <div key={idx} className="rounded border bg-muted/30 overflow-hidden">
+                    <button
+                      onClick={() => setExpandedCompetitor(isOpen ? null : idx)}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-muted/60 transition-colors"
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${comp.error ? 'bg-red-400' : 'bg-emerald-400'}`} />
+                      <span className="text-xs font-medium flex-1 truncate">{comp.domain}</span>
+                      {!comp.error && (
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          {comp.totalPages} pages · {okPages.length} crawled
+                        </span>
+                      )}
+                      {isOpen ? <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />}
+                    </button>
+                    {isOpen && (
+                      <div className="px-2.5 pb-2.5 space-y-2 text-[10px]">
+                        {comp.error ? (
+                          <p className="text-red-500">{comp.error}</p>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <div className="bg-background rounded p-1.5 text-center">
+                                <p className="font-semibold text-sm">{comp.totalPages}</p>
+                                <p className="text-muted-foreground">Total pages</p>
+                              </div>
+                              <div className="bg-background rounded p-1.5 text-center">
+                                <p className="font-semibold text-sm">{servicePages.length}</p>
+                                <p className="text-muted-foreground">Service pages</p>
+                              </div>
+                              <div className="bg-background rounded p-1.5 text-center">
+                                <p className="font-semibold text-sm">{locationPages.length}</p>
+                                <p className="text-muted-foreground">Location pages</p>
+                              </div>
+                            </div>
+                            {schemas.length > 0 && (
+                              <div>
+                                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Schema markup</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {schemas.map((s, i) => <span key={i} className="bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 rounded px-1 py-0.5">{s}</span>)}
+                                </div>
+                              </div>
+                            )}
+                            {okPages.slice(0, 8).map((p, pi) => {
+                              const path = (() => { try { return new URL(p.url).pathname || '/'; } catch { return p.url; } })();
+                              return (
+                                <div key={pi} className="border-t pt-1.5">
+                                  <p className="font-medium text-foreground/80 truncate">{path}</p>
+                                  {p.title && <p className="text-muted-foreground truncate">Title: {p.title}</p>}
+                                  {p.h1 && <p className="text-foreground/70 truncate">H1: {p.h1}</p>}
+                                  {p.h2s?.length ? <p className="text-muted-foreground truncate">H2s: {p.h2s.slice(0, 2).join(' · ')}</p> : null}
+                                </div>
+                              );
+                            })}
+                            {okPages.length > 8 && <p className="text-muted-foreground">+{okPages.length - 8} more pages analysed</p>}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <p className="text-xs text-muted-foreground">Generate a professional 12-month strategy document to send after your call.</p>
         <Button onClick={generatePdf} disabled={pdfLoading || !businessName} className="w-full h-9 text-sm gap-2" data-testid="button-generate-pdf">

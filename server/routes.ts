@@ -4113,7 +4113,7 @@ Rules:
       const {
         businessName, websiteUrl, industry, location,
         sitemapPages, hasGBP, gbpLink, reviewCount, rating,
-        facebookUrl, instagramUrl, linkedinUrl, crawledPages,
+        facebookUrl, instagramUrl, linkedinUrl, crawledPages, crawledCompetitors,
       } = req.body;
 
       if (!businessName) return res.status(400).json({ error: "Business name is required" });
@@ -4167,6 +4167,27 @@ Rules:
           }).join('\n\n')
         : null;
 
+      // Build crawled competitor context
+      const competitorsCrawled: Array<any> = crawledCompetitors || [];
+      const competitorCrawlContext = competitorsCrawled.length > 0
+        ? `\n=== COMPETITOR DEEP ANALYSIS (actual HTML extracted from rival sites) ===\n` +
+          competitorsCrawled.map((comp: any) => {
+            const okPages = (comp.crawledPages || []).filter((p: any) => !p.error);
+            const servicePagesCount = okPages.filter((p: any) => /service|solution|offer/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })())).length;
+            const locationPagesCount = okPages.filter((p: any) => /location|area|suburb|city/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })())).length;
+            const schemas = [...new Set(okPages.flatMap((p: any) => p.schemaTypes || []))];
+            const topPages = okPages.slice(0, 8).map((p: any) => {
+              const path = (() => { try { return new URL(p.url).pathname || '/'; } catch { return p.url; } })();
+              const parts: string[] = [`  ${path}`];
+              if (p.title) parts.push(`    Title: ${p.title}`);
+              if (p.h1) parts.push(`    H1: ${p.h1}`);
+              if (p.h2s?.length) parts.push(`    H2s: ${p.h2s.slice(0, 3).join(' | ')}`);
+              return parts.join('\n');
+            }).join('\n');
+            return `Competitor: ${comp.domain}\n  Total site pages: ${comp.totalPages}\n  Service pages: ${servicePagesCount}\n  Location pages: ${locationPagesCount}\n  Schema types: ${schemas.join(', ') || 'none'}\n  Crawled pages:\n${topPages}`;
+          }).join('\n\n')
+        : '';
+
       const prompt = `You are a senior digital marketing strategist who has audited thousands of local business websites. You are generating a strategic visibility diagnosis for a sales rep who is about to pitch SEO/digital marketing services to ${businessName}.
 
 Your job is to answer ONE fundamental question:
@@ -4199,6 +4220,7 @@ ${crawledSummary ? `\n=== DEEP PAGE ANALYSIS (actual HTML content extracted) ===
 The following is real HTML content extracted from crawling individual pages. Use this to assess actual keyword targeting, content quality, title tag optimisation, heading structure, and schema markup presence. This is more reliable than URL inference alone.
 
 ${crawledSummary}` : ''}
+${competitorCrawlContext ? `\n${competitorCrawlContext}\n\nUse the competitor data to identify content gaps — where competitors have service or location pages that ${businessName} does not. Factor this into gap severity and priorities.` : ''}
 
 === SCORING RULES ===
 Score each out of 100. Be honest and calibrated — low scores are expected for businesses with poor structure.
@@ -4299,7 +4321,7 @@ Respond with JSON only:
     try {
       const {
         businessName, websiteUrl, industry, location,
-        strategyDiagnosis, sitemapPages, crawledPages, reviewCount, rating, gbpLink,
+        strategyDiagnosis, sitemapPages, crawledPages, crawledCompetitors: crawledCompetitorsInput, reviewCount, rating, gbpLink,
         facebookUrl, instagramUrl, linkedinUrl, competitors,
       } = req.body;
 
@@ -4369,11 +4391,29 @@ Other pages: ${classified.other.length}
 ${crawledContext}
 ` : crawledContext ? `\n=== WEBSITE STRUCTURE ===\n${crawledContext}\n` : '';
 
+      // Build crawled competitor context for twelve-month strategy
+      const crawledCompsList: Array<any> = crawledCompetitorsInput || [];
+      const crawledCompsContext = crawledCompsList.length > 0
+        ? `\n=== COMPETITOR DEEP ANALYSIS ===\n` +
+          crawledCompsList.map((comp: any) => {
+            const okPages = (comp.crawledPages || []).filter((p: any) => !p.error);
+            const servicePages = okPages.filter((p: any) => /service|solution|offer/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })()));
+            const locationPages = okPages.filter((p: any) => /location|area|suburb|city/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })()));
+            const schemas = [...new Set(okPages.flatMap((p: any) => p.schemaTypes || []))];
+            const keyPages = okPages.slice(0, 6).map((p: any) => {
+              const path = (() => { try { return new URL(p.url).pathname || '/'; } catch { return p.url; } })();
+              return `  ${path}${p.title ? ' — ' + p.title : ''}${p.h1 ? ' [H1: ' + p.h1 + ']' : ''}`;
+            }).join('\n');
+            return `${comp.domain}: ${comp.totalPages} total pages, ${servicePages.length} service pages, ${locationPages.length} location pages, schema: ${schemas.join(', ') || 'none'}\nKey pages:\n${keyPages}`;
+          }).join('\n\n')
+        : '';
+
       const competitorContext = competitors?.length > 0 ? `
 === COMPETITORS TO BENCHMARK AGAINST ===
 ${competitors.join(', ')}
 These are real competitors ranking in the same market. Factor their typical keyword patterns into the opportunity analysis.
-` : '';
+${crawledCompsContext}
+` : crawledCompsContext ? `\n=== COMPETITOR ANALYSIS ===\n${crawledCompsContext}\n` : '';
 
       const socialProfiles = [facebookUrl && 'Facebook', instagramUrl && 'Instagram', linkedinUrl && 'LinkedIn'].filter(Boolean).join(', ');
 
