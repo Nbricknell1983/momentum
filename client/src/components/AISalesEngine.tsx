@@ -273,6 +273,17 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
     setPreCallResult(null);
     setPreCallError(null);
     try {
+      // Build sitemap section summary from lead data
+      const sitemapPages = selectedLead?.sitemapPages || [];
+      const sitemapSections = sitemapPages.reduce<Record<string, number>>((acc, p) => {
+        try {
+          const parts = new URL(p.url).pathname.split('/').filter(Boolean);
+          const section = parts.length > 0 ? parts[0] : '/';
+          acc[section] = (acc[section] || 0) + 1;
+        } catch { /* skip */ }
+        return acc;
+      }, {});
+
       const payload = {
         businessName: preCallInputs.businessName,
         location: preCallInputs.location,
@@ -288,6 +299,8 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         instagramUrl: preCallInputs.instagramUrl || null,
         linkedinUrl: preCallInputs.linkedinUrl || null,
         industry: preCallInputs.industry,
+        sitemapPageCount: sitemapPages.length || null,
+        sitemapSections: Object.keys(sitemapSections).length > 0 ? sitemapSections : null,
       };
       const res = await fetch('/api/ai/sales-engine/pre-call', {
         method: 'POST',

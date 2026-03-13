@@ -3143,6 +3143,7 @@ Please analyze these meeting notes and extract actionable insights.`;
         businessName, location, websiteUrl, hasWebsite, googleMapsUrl, hasGBP,
         reviewCount, rating, gbpPhotoCount, gbpPostsLast30Days,
         facebookUrl, instagramUrl, linkedinUrl, industry,
+        sitemapPageCount, sitemapSections,
       } = req.body;
 
       if (!businessName) {
@@ -3159,51 +3160,71 @@ Please analyze these meeting notes and extract actionable insights.`;
         socialProfiles: (facebookUrl || instagramUrl || linkedinUrl) ? "detected" : "not detected",
       };
 
-      const prompt = `You are assisting a digital marketing sales consultant preparing for a call.
+      // Build social profile summary
+      const socialPlatforms: string[] = [];
+      if (facebookUrl) socialPlatforms.push(`Facebook (${facebookUrl})`);
+      if (instagramUrl) socialPlatforms.push(`Instagram (${instagramUrl})`);
+      if (linkedinUrl) socialPlatforms.push(`LinkedIn (${linkedinUrl})`);
 
-STRUCTURED BUSINESS DATA:
-businessName: ${businessName}
-location: ${location || "Not specified"}
-websiteUrl: ${websiteUrl || "None"}
-hasWebsite: ${hasWebsite}
-googleMapsUrl: ${googleMapsUrl || "None"}
-hasGBP: ${hasGBP}
-reviewCount: ${reviewCount != null ? reviewCount : "unknown"}
-rating: ${rating != null ? rating : "unknown"}
-gbpPhotoCount: ${gbpPhotoCount != null ? gbpPhotoCount : "unknown"}
-gbpPostsLast30Days: ${gbpPostsLast30Days != null ? gbpPostsLast30Days : "unknown"}
-facebookUrl: ${facebookUrl || "None"}
-instagramUrl: ${instagramUrl || "None"}
-industry: ${industry || "Not specified"}
+      // Build sitemap summary
+      const sitemapSummary = sitemapPageCount
+        ? `${sitemapPageCount} indexed pages found. Sections: ${Object.entries(sitemapSections || {}).map(([s, c]) => `/${s} (${c} pages)`).join(', ') || 'homepage only'}`
+        : 'Not scanned';
 
-RULES — follow these exactly:
-1. Only flag gaps that are SUPPORTED by the data above. Never invent missing assets.
-2. If hasGBP = true → do NOT say the business lacks a Google Business Profile.
-3. If hasWebsite = true → do NOT say the business lacks a website.
-4. If reviewCount < 15 → gap = low review volume. If reviewCount is "unknown", do NOT flag reviews.
-5. If gbpPhotoCount < 10 → gap = weak photo content. If gbpPhotoCount is "unknown", do NOT flag photos.
-6. If gbpPostsLast30Days = 0 → gap = no recent Google Posts activity. If "unknown", do NOT flag posts.
-7. If facebookUrl AND instagramUrl are both "None" → gap = limited social presence.
-8. If hasWebsite = false → gap = missing website.
-9. If hasGBP = false → gap = missing Google Business Profile.
-10. For each gap, provide the evidence from the data and why it matters for leads or rankings.
+      const prompt = `You are a sharp digital marketing analyst who has audited thousands of trade and service business websites. You are preparing intelligence for a sales consultant about to call ${businessName}.
 
-Respond with JSON in this exact format:
+Your job: produce a brutally honest, evidence-based audit using ONLY the data provided. Every point must cite a specific data fact. NO vague filler. NO generic observations.
+
+=== BUSINESS DATA ===
+Business: ${businessName}
+Industry: ${industry || "Not specified"}
+Location: ${location || "Not specified"}
+Website: ${websiteUrl || "None"} (exists: ${hasWebsite})
+Google Business Profile: ${hasGBP ? `Yes — ${googleMapsUrl}` : "No GBP found"}
+Google Reviews: ${reviewCount != null ? `${reviewCount} reviews, ${rating} star average` : "unknown"}
+GBP Photos: ${gbpPhotoCount != null ? gbpPhotoCount : "unknown"}
+GBP Posts (30 days): ${gbpPostsLast30Days != null ? gbpPostsLast30Days : "unknown"}
+Social Profiles: ${socialPlatforms.length > 0 ? socialPlatforms.join(', ') : "None detected"}
+Website Content (sitemap): ${sitemapSummary}
+
+=== ANALYSIS RULES ===
+STRENGTHS — Only list real strengths backed by this specific data:
+- If sitemap shows portfolio/work/projects section → strength: evidence of showcased work
+- If sitemap shows service pages → strength: structured service content
+- If sitemap shows areas/locations pages → strength: geographic targeting content
+- If reviews exist → strength must cite exact count and star rating ("4.2★ from 5 reviews")
+- If social platforms detected → strength must name the actual platforms found
+- If sitemapPageCount > 10 → strength: substantial indexed web presence
+- FORBIDDEN: Do not say "has a website", "geographical presence", "industry expertise", or any generic observation that applies to every business
+- Each strength must be specific enough that it would NOT apply to a different business
+
+GAPS — Only flag gaps with direct data evidence:
+- No GBP → critical gap
+- reviewCount < 15 → low review volume (cite the exact number)
+- gbpPhotoCount < 10 → weak visual content (cite the exact number, only if known)
+- gbpPostsLast30Days = 0 → no Google Posts activity (only if known)
+- No social profiles → limited social reach
+- sitemapPageCount < 5 → thin website content
+- Only flag unknowns if the asset is confirmed missing (hasGBP = false, hasWebsite = false)
+
+Respond with JSON only, no commentary:
 {
-  "whatTheyDo": "2 sentences about what this business does and who they serve",
-  "strengths": ["Strength 1 based on their actual data", "Strength 2", "Strength 3"],
-  "gaps": [
-    { "title": "Gap title", "evidence": "The data point supporting this gap", "impact": "Why this matters for leads or rankings" }
+  "whatTheyDo": "2 punchy sentences — what they build/do and who their clients are. Use industry signals from the sitemap sections if available.",
+  "strengths": [
+    "Specific strength with evidence e.g. 'Portfolio section with 8 project pages demonstrates completed work to prospects'",
+    "Specific strength 2",
+    "Specific strength 3 — if fewer than 3 genuine strengths exist, only return the ones that are real"
   ],
-  "salesHook": "A short conversational opening line for my call based on the strongest gap"
-}
-
-Keep it concise and practical. Only include gaps genuinely supported by the data.`;
+  "gaps": [
+    { "title": "Specific gap title", "evidence": "The exact data point — cite numbers", "impact": "Why this is losing them leads or rankings right now" }
+  ],
+  "salesHook": "A natural 1-sentence conversation opener for the sales rep — should reference the most compelling gap and feel like something a human would actually say on a cold call, not a script"
+}`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1000,
+        max_completion_tokens: 1500,
         response_format: { type: "json_object" },
       });
 
