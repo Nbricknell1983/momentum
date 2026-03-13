@@ -640,8 +640,8 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
 
               {/* Full-page modal */}
               <Dialog open={screenshotModalOpen} onOpenChange={setScreenshotModalOpen}>
-                <DialogContent className="max-w-4xl w-full p-0 overflow-hidden">
-                  <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b bg-muted/40 space-y-0">
+                <DialogContent className="max-w-4xl w-full p-0">
+                  <DialogHeader className="flex flex-row items-center justify-between px-4 pr-12 py-3 border-b bg-muted/40 space-y-0">
                     <DialogTitle className="text-sm font-medium flex items-center gap-2">
                       <Image className="h-3.5 w-3.5" />
                       {lead.companyName} — Website Preview
@@ -1217,8 +1217,8 @@ function CompetitorCard({
 
           {/* Screenshot modal */}
           <Dialog open={screenshotModalOpen} onOpenChange={setScreenshotModalOpen}>
-            <DialogContent className="max-w-4xl w-full p-0 overflow-hidden">
-              <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b bg-muted/40 space-y-0">
+            <DialogContent className="max-w-4xl w-full p-0">
+              <DialogHeader className="flex flex-row items-center justify-between px-4 pr-12 py-3 border-b bg-muted/40 space-y-0">
                 <DialogTitle className="text-sm font-medium flex items-center gap-2">
                   <Image className="h-3.5 w-3.5" /> {domain}
                 </DialogTitle>
