@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   collection,
   type User 
 } from '@/lib/firebase';
@@ -89,6 +90,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (membershipVerified) {
               console.log('[Auth] Membership verified, membershipReady = true');
               setMembershipReady(true);
+              // Stamp last login time
+              try {
+                await updateDoc(doc(db, 'orgs', resolvedOrgId, 'members', firebaseUser.uid), {
+                  lastLoginAt: new Date(),
+                });
+              } catch { /* non-critical */ }
             } else {
               console.error('[Auth] Membership verification failed - user is not an active member');
               setOrgError('Access denied. You are not an active member of this organisation.');

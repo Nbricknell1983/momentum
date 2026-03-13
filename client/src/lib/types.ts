@@ -494,6 +494,7 @@ export interface TeamMember {
   joinedAt: Date;
   invitedBy?: string;
   status: 'active' | 'pending' | 'disabled';
+  lastLoginAt?: Date;
 }
 
 export interface Organization {

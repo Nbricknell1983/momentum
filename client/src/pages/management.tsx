@@ -24,7 +24,7 @@ import {
   Shield,
   Crown,
 } from 'lucide-react';
-import { format, isToday, isThisWeek, subDays } from 'date-fns';
+import { format, isToday, isThisWeek, subDays, formatDistanceToNow } from 'date-fns';
 import { Redirect } from 'wouter';
 
 interface RepMetrics {
@@ -326,14 +326,31 @@ function RepCard({ rep, onClick }: { rep: RepMetrics; onClick: () => void }) {
         </div>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-        <span>{rep.leadCount} leads · {rep.clientCount} clients</span>
-        {rep.lastActivityDate && (
-          <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {format(rep.lastActivityDate, 'dd/MM')}
-          </span>
-        )}
+      <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{rep.leadCount} leads · {rep.clientCount} clients</span>
+          {rep.lastActivityDate && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {format(rep.lastActivityDate, 'dd/MM')}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 text-xs">
+          {rep.member.lastLoginAt ? (
+            <>
+              <div className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
+              <span className="text-muted-foreground">
+                Last login {formatDistanceToNow(rep.member.lastLoginAt instanceof Date ? rep.member.lastLoginAt : new Date(rep.member.lastLoginAt), { addSuffix: true })}
+              </span>
+            </>
+          ) : (
+            <>
+              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30 shrink-0" />
+              <span className="text-muted-foreground/50">Never logged in</span>
+            </>
+          )}
+        </div>
       </div>
 
       {rep.pipelineValue > 0 && (
