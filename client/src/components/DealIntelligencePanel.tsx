@@ -8,6 +8,7 @@ import {
   CrawledPage,
   CompetitorSiteData,
   CompetitorGBPData,
+  MarketingActivity,
   STAGE_LABELS,
 } from '@/lib/types';
 import {
@@ -342,6 +343,14 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     }
   }, [lead, orgId, authReady, dispatch, toast]);
 
+  const saveMarketingActivity = useCallback(async (updated: MarketingActivity[]) => {
+    const updates: Partial<Lead> = { marketingActivity: updated, updatedAt: new Date() };
+    dispatch(patchLead({ id: lead.id, updates }));
+    if (orgId && authReady) {
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+    }
+  }, [lead.id, lead, orgId, authReady, dispatch]);
+
   const handleCompetitorGBPLookup = useCallback(async (domain: string, placeId: string) => {
     if (!orgId || !authReady) return;
     const res = await fetch(`/api/google-places/details/${placeId}`);
@@ -576,6 +585,10 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             placeholder="https://linkedin.com/company/..."
             link={lead.linkedinUrl}
             onSave={(v) => handleUpdatePresenceField('linkedinUrl', v)}
+          />
+          <CurrentMarketingRow
+            activities={lead.marketingActivity || []}
+            onSave={saveMarketingActivity}
           />
           <SitemapRow lead={lead} onFetch={handleSitemapFetch} onCrawl={handleCrawlPages} />
         </div>
@@ -1593,6 +1606,199 @@ function CompetitorCard({
               </div>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MARKETING_CHANNEL_PRESETS = [
+  'Google Ads', 'Facebook Ads', 'Instagram Ads', 'SEO / Organic', 'Email Marketing',
+  'Print / Flyers', 'Radio', 'TV', 'Letterbox Drop', 'Trade Shows', 'Referral Program', 'Other',
+];
+
+function CurrentMarketingRow({
+  activities,
+  onSave,
+}: {
+  activities: MarketingActivity[];
+  onSave: (updated: MarketingActivity[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newChannel, setNewChannel] = useState('');
+  const [newSpend, setNewSpend] = useState('');
+  const [newPeriod, setNewPeriod] = useState<'week' | 'month' | 'year'>('month');
+  const [newNotes, setNewNotes] = useState('');
+
+  const totalMonthly = activities.reduce((sum, a) => {
+    if (!a.spend) return sum;
+    if (a.period === 'week') return sum + a.spend * 4.33;
+    if (a.period === 'year') return sum + a.spend / 12;
+    return sum + a.spend;
+  }, 0);
+
+  const handleAdd = () => {
+    if (!newChannel.trim()) return;
+    const entry: MarketingActivity = {
+      id: Date.now().toString(),
+      channel: newChannel.trim(),
+      spend: newSpend ? parseFloat(newSpend) : undefined,
+      period: newSpend ? newPeriod : undefined,
+      notes: newNotes.trim() || undefined,
+    };
+    onSave([...activities, entry]);
+    setNewChannel('');
+    setNewSpend('');
+    setNewNotes('');
+    setAdding(false);
+  };
+
+  const handleRemove = (id: string) => {
+    onSave(activities.filter(a => a.id !== id));
+  };
+
+  const formatSpend = (a: MarketingActivity) => {
+    if (!a.spend) return null;
+    return `$${a.spend.toLocaleString()}/${a.period === 'week' ? 'wk' : a.period === 'year' ? 'yr' : 'mo'}`;
+  };
+
+  return (
+    <div className="space-y-0.5">
+      {/* Summary row */}
+      <div
+        className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className={`shrink-0 ${activities.length > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-muted-foreground'}`}>
+          <TrendingUp className="h-3.5 w-3.5" />
+        </span>
+        <span className="text-muted-foreground text-xs w-[76px] shrink-0">Ad Spend</span>
+        <span className={`truncate text-xs flex-1 ${activities.length > 0 ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+          {activities.length > 0
+            ? totalMonthly > 0
+              ? `${activities.length} channel${activities.length > 1 ? 's' : ''} · ~$${Math.round(totalMonthly).toLocaleString()}/mo`
+              : `${activities.length} channel${activities.length > 1 ? 's' : ''} tracked`
+            : 'Add marketing channels…'}
+        </span>
+        {open
+          ? <ChevronUp className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+          : <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+        }
+      </div>
+
+      {/* Expanded panel */}
+      {open && (
+        <div className="ml-5 space-y-1.5 pt-1">
+          {/* Existing entries */}
+          {activities.map(a => (
+            <div key={a.id} className="flex items-center gap-2 rounded bg-muted/30 px-2 py-1">
+              <span className="text-[11px] flex-1 font-medium truncate">{a.channel}</span>
+              {formatSpend(a) && (
+                <span className="text-[10px] text-orange-600 dark:text-orange-400 shrink-0 font-semibold">{formatSpend(a)}</span>
+              )}
+              {a.notes && (
+                <span className="text-[10px] text-muted-foreground italic truncate max-w-[80px]">{a.notes}</span>
+              )}
+              <button
+                onClick={() => handleRemove(a.id)}
+                className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                data-testid={`button-remove-marketing-${a.id}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+
+          {/* Add new */}
+          {adding ? (
+            <div className="space-y-1.5 rounded border p-2 bg-muted/20">
+              {/* Channel quick-select */}
+              <div className="flex flex-wrap gap-1">
+                {MARKETING_CHANNEL_PRESETS.map(ch => (
+                  <button
+                    key={ch}
+                    onClick={() => setNewChannel(ch)}
+                    className={`text-[10px] rounded px-1.5 py-0.5 border transition-colors ${newChannel === ch ? 'bg-orange-100 dark:bg-orange-900/40 border-orange-400 text-orange-700 dark:text-orange-300' : 'bg-muted/40 border-transparent hover:border-muted-foreground/30'}`}
+                  >
+                    {ch}
+                  </button>
+                ))}
+              </div>
+              {/* Custom channel name */}
+              <Input
+                value={newChannel}
+                onChange={e => setNewChannel(e.target.value)}
+                placeholder="Or type channel name…"
+                className="h-6 text-xs px-1.5"
+              />
+              {/* Spend row */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground shrink-0">Spend</span>
+                <div className="relative flex-1">
+                  <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>
+                  <Input
+                    value={newSpend}
+                    onChange={e => setNewSpend(e.target.value.replace(/[^0-9.]/g, ''))}
+                    placeholder="e.g. 2500"
+                    className="h-6 text-xs pl-4 pr-1.5"
+                    type="number"
+                  />
+                </div>
+                <span className="text-[10px] text-muted-foreground shrink-0">per</span>
+                <select
+                  value={newPeriod}
+                  onChange={e => setNewPeriod(e.target.value as any)}
+                  className="h-6 text-[10px] rounded border bg-background px-1 text-foreground"
+                >
+                  <option value="week">week</option>
+                  <option value="month">month</option>
+                  <option value="year">year</option>
+                </select>
+              </div>
+              {/* Notes */}
+              <Input
+                value={newNotes}
+                onChange={e => setNewNotes(e.target.value)}
+                placeholder="Notes (optional)…"
+                className="h-6 text-xs px-1.5"
+              />
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-6 px-2.5 text-xs"
+                  onClick={handleAdd}
+                  disabled={!newChannel.trim()}
+                  data-testid="button-add-marketing-confirm"
+                >
+                  Add
+                </Button>
+                <button
+                  onClick={() => { setAdding(false); setNewChannel(''); setNewSpend(''); setNewNotes(''); }}
+                  className="text-[10px] text-muted-foreground hover:underline"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 hover:underline"
+              data-testid="button-add-marketing-channel"
+            >
+              <Plus className="h-3 w-3" /> Add channel
+            </button>
+          )}
+
+          {/* Total summary */}
+          {activities.length > 0 && totalMonthly > 0 && (
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t pt-1">
+              <span>{activities.length} channel{activities.length > 1 ? 's' : ''}</span>
+              <span className="font-semibold text-orange-600 dark:text-orange-400">~${Math.round(totalMonthly).toLocaleString()}/mo total</span>
+            </div>
+          )}
         </div>
       )}
     </div>

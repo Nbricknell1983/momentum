@@ -258,6 +258,7 @@ export interface Lead {
   facebookUrl?: string;
   instagramUrl?: string;
   linkedinUrl?: string;
+  marketingActivity?: MarketingActivity[];
   stage: Stage;
   mrr?: number;
   nepqLabel?: string;
@@ -305,6 +306,14 @@ export interface Lead {
   crawledAt?: Date;
   competitorDomains?: string[];
   competitorData?: Record<string, CompetitorSiteData>;
+}
+
+export interface MarketingActivity {
+  id: string;
+  channel: string;
+  spend?: number;
+  period?: 'week' | 'month' | 'year';
+  notes?: string;
 }
 
 export interface CompetitorGBPData {
