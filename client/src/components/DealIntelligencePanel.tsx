@@ -1,5 +1,4 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, updateLead, patchLead } from '@/store';
 import {
@@ -1693,7 +1692,13 @@ function CompetitorCard({
      - Organic Keywords export (keyword-level rows)
      - Overview snapshot (single-row domain metrics)
    ------------------------------------------------------- */
-function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
+async function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
+  /* Dynamic import avoids Vite ESM/CJS interop issues with xlsx */
+  const xlsx = await import('xlsx');
+  const xlsxRead = xlsx.read ?? (xlsx as any).default?.read;
+  const xlsxUtils = xlsx.utils ?? (xlsx as any).default?.utils;
+  if (!xlsxRead || !xlsxUtils) throw new Error('Excel library failed to load — try a CSV export instead.');
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
