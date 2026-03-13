@@ -142,9 +142,12 @@ export default function TimeBlockCard({
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-1 text-muted-foreground">
             <Target className="h-3 w-3" />
-            <span>{completedTasks}/{totalTasks} tasks</span>
+            {totalTasks === 0
+              ? <span>No tasks scheduled</span>
+              : <span>{completedTasks}/{totalTasks} tasks</span>
+            }
           </div>
-          <span className="font-medium">{completionPercent}%</span>
+          {totalTasks > 0 && <span className="font-medium">{completionPercent}%</span>}
         </div>
         <Progress value={completionPercent} className="h-1.5" />
         

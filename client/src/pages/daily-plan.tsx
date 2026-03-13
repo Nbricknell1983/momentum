@@ -399,7 +399,8 @@ interface PlanTimeBlockCardProps {
 
 function PlanTimeBlockCard({ block, tasks }: PlanTimeBlockCardProps) {
   const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const progress = block.capacity > 0 ? Math.round((completedTasks / block.capacity) * 100) : 0;
+  const totalTasks = tasks.length;
+  const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   
   return (
     <Card className="p-3" data-testid={`card-time-block-${block.id}`}>
@@ -416,7 +417,10 @@ function PlanTimeBlockCard({ block, tasks }: PlanTimeBlockCardProps) {
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
         <span>{PLAN_BLOCK_CATEGORY_LABELS[block.category]}</span>
         <span>|</span>
-        <span>{completedTasks}/{block.capacity} tasks</span>
+        {tasks.length === 0
+          ? <span>No tasks</span>
+          : <span>{completedTasks}/{tasks.length} tasks</span>
+        }
       </div>
       
       <Progress value={progress} className="h-1.5" />

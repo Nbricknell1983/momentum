@@ -2153,14 +2153,18 @@ export function generateClientTaskRecommendations(clients: Client[], maxTasks: n
     
     // Check-in needed (overdue contact)
     const checkInKey = `${client.id}-check_in`;
-    if (daysSinceContact > cadenceDays && !seenClientTasks.has(checkInKey)) {
-      const severityMultiplier = daysSinceContact > cadenceDays * 2 ? 1.5 : 1;
+    const isNeverContacted = !client.lastContactDate;
+    if ((isNeverContacted || daysSinceContact > cadenceDays) && !seenClientTasks.has(checkInKey)) {
+      const severityMultiplier = !isNeverContacted && daysSinceContact > cadenceDays * 2 ? 1.5 : 1;
+      const reasonText = isNeverContacted
+        ? 'No contact recorded yet'
+        : `${daysSinceContact} day${daysSinceContact === 1 ? '' : 's'} since last contact`;
       recommendations.push({
         clientId: client.id,
         clientName: client.businessName,
         taskType: 'check_in',
         title: `Check in with ${client.businessName}`,
-        reason: `${daysSinceContact} days since last contact`,
+        reason: reasonText,
         priority: Math.min(100, Math.round(((client.churnRiskScore || 0) + ((client.totalMRR || 0) / 100)) * severityMultiplier)),
         totalMRR: client.totalMRR || 0,
       });
