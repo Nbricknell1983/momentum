@@ -1,0 +1,406 @@
+Build a premium, animated SaaS landing page for a platform called "Momentum".
+
+Momentum is an AI-powered sales, CRM, and growth platform designed for service businesses and sales teams.
+
+The landing page must feel like a high-end SaaS product and be strong enough to immediately sell the concept to prospects.
+
+The tone should be confident, commercial, and conversion-focused.
+
+The main message of the entire page is:
+
+STOP GUESSING. START GROWING.
+
+This line must be the hero headline and repeated strategically throughout the page.
+
+--------------------------------------------------
+
+DESIGN STYLE
+
+Base the design on the existing Momentum login page style.
+
+Use:
+- dark navy / purple gradient backgrounds
+- glowing accents
+- constellation / particle network background
+- glassmorphism cards
+- soft glow highlights
+- modern SaaS typography
+- premium spacing
+- rounded 2xl cards
+- subtle blur effects
+
+The page must feel like a modern AI SaaS platform similar to:
+
+Stripe
+Linear
+Vercel
+Notion
+Monday
+
+It should feel premium and investor-demo ready.
+
+--------------------------------------------------
+
+ANIMATION
+
+The site must include premium motion using Framer Motion.
+
+Include:
+
+• floating animated particle/network background
+• hero text fade + slide entrance
+• dashboard cards animating in sequence
+• floating UI cards in hero
+• hover lift on cards
+• glowing CTA buttons
+• scroll reveal animations
+• subtle parallax background movement
+• animated metric chips
+• smooth section transitions
+
+Animations should feel polished and professional, not gimmicky.
+
+--------------------------------------------------
+
+TECH STACK
+
+React
+Tailwind CSS
+Framer Motion
+
+Fully responsive
+Reusable components
+Clean architecture
+
+Components to build:
+
+Navbar
+HeroSection
+AnimatedBackground
+DashboardMockup
+ProblemSection
+SolutionSection
+FeaturesSection
+HowItWorksSection
+AISection
+AudienceSection
+OutcomeSection
+CTASection
+Footer
+
+--------------------------------------------------
+
+PAGE STRUCTURE
+
+NAVBAR
+
+Left:
+Momentum logo
+
+Right navigation:
+Features
+How It Works
+AI
+Who It's For
+Demo
+
+Primary CTA button:
+Book a Demo
+
+Navbar should be sticky with a subtle glass effect.
+
+--------------------------------------------------
+
+HERO SECTION
+
+Left side:
+
+Headline (large):
+
+Stop Guessing. Start Growing.
+
+Subheading:
+
+Momentum gives service businesses and sales teams the clarity, structure, and AI-powered insights they need to capture leads, manage pipeline, follow up consistently, and grow revenue.
+
+Additional supporting copy:
+
+Most teams don't lose deals because of a lack of opportunity.  
+They lose them because of missed follow-ups, unclear pipeline visibility, and no clear next action.
+
+Momentum fixes that.
+
+Primary CTA:
+Book a Demo
+
+Secondary CTA:
+See How It Works
+
+Below the CTA buttons show small feature chips:
+
+AI Sales Engine  
+Pipeline Intelligence  
+Follow-Up Prompts  
+Client Growth Insights  
+CRM + Marketing Visibility
+
+--------------------------------------------------
+
+Right side of hero:
+
+Create a premium animated dashboard mockup that includes floating cards such as:
+
+Pipeline Overview
+AI Opportunity Insights
+Lead Snapshot
+Follow-Up Tasks
+Growth Opportunities
+Activity Feed
+
+Cards should appear in staggered animations.
+
+Add small floating labels:
+
+AI Sales Engine
+Client Growth Engine
+Momentum Dashboard
+Revenue Intelligence
+
+--------------------------------------------------
+
+PROBLEM SECTION
+
+Headline:
+
+Most businesses don't have a lead problem.
+
+They have a visibility and follow-up problem.
+
+Create 4 animated problem cards:
+
+Leads go cold because follow-up is inconsistent
+
+Sales reps waste time figuring out what to do next
+
+Pipeline visibility is unclear
+
+Existing clients are rarely expanded or upsold
+
+Short explanation under each.
+
+--------------------------------------------------
+
+SOLUTION SECTION
+
+Headline:
+
+Momentum turns scattered activity into structured growth.
+
+Two-column layout.
+
+Left:
+
+Explain that Momentum combines:
+
+CRM
+Pipeline visibility
+AI meeting preparation
+Follow-up automation
+Client growth intelligence
+Opportunity detection
+Sales performance insights
+
+Right:
+
+Animated stacked modules:
+
+Pre-Call Intelligence
+AI Sales Engine
+Pipeline Dashboard
+Client Growth Engine
+Online Visibility Insights
+Momentum Planner
+
+--------------------------------------------------
+
+FEATURES SECTION
+
+Create 6 strong feature sections.
+
+Feature 1
+
+Know who to call and what to say.
+
+Momentum analyses businesses and surfaces real opportunities before you even pick up the phone.
+
+Feature 2
+
+Run a cleaner pipeline.
+
+Track deals, stages, next actions, and follow-ups without leads slipping through the cracks.
+
+Feature 3
+
+AI-powered sales preparation.
+
+Momentum generates call insights, talking points, and follow-up emails automatically.
+
+Feature 4
+
+Grow existing clients.
+
+Identify upsell opportunities, service gaps, and expansion potential inside your existing accounts.
+
+Feature 5
+
+See performance instantly.
+
+Understand pipeline value, sales activity, and opportunity health in one dashboard.
+
+Feature 6
+
+Built for service businesses.
+
+Momentum was designed for companies that rely on leads, follow-up, and customer relationships to grow.
+
+--------------------------------------------------
+
+HOW IT WORKS
+
+Headline:
+
+How Momentum Works
+
+Show a visual 4-step flow:
+
+1 Capture the lead
+
+2 Understand the opportunity
+
+3 Use AI to prepare and follow up
+
+4 Close, grow, repeat
+
+Each step should have a clean animated card.
+
+--------------------------------------------------
+
+AI SECTION
+
+Headline:
+
+Your AI Sales and Growth Engine
+
+Explain that Momentum is not just a CRM database.
+
+It actively helps teams:
+
+prepare for calls  
+identify opportunities  
+generate follow-up messages  
+structure sales activity  
+grow client accounts  
+
+Display a large AI insight panel mockup showing:
+
+Business Snapshot  
+Strengths  
+Missed Opportunities  
+Biggest Revenue Opportunity  
+Suggested Opening Line  
+Follow-Up Email Draft
+
+--------------------------------------------------
+
+WHO IT'S FOR
+
+Headline:
+
+Built for teams that need momentum, not more admin.
+
+Create cards for:
+
+Sales reps
+Sales managers
+Local service businesses
+Marketing agencies
+Business owners
+Operators who rely on lead generation
+
+--------------------------------------------------
+
+OUTCOME SECTION
+
+Headline:
+
+What Momentum Improves
+
+Show benefit cards:
+
+Faster lead response
+Better meeting preparation
+Consistent follow-up
+Clearer pipeline visibility
+More upsell opportunities
+Stronger team accountability
+
+Do NOT use fake statistics.
+
+--------------------------------------------------
+
+FINAL CTA
+
+Large conversion section.
+
+Headline:
+
+Stop Guessing. Start Growing.
+
+Support copy:
+
+If your team needs better visibility, stronger follow-up, and smarter sales execution, Momentum gives you the structure and intelligence to move faster.
+
+Buttons:
+
+Book a Demo
+Talk to Us
+
+Add glow animation to CTA card.
+
+--------------------------------------------------
+
+FOOTER
+
+Momentum logo
+
+Short brand line:
+
+Turn activity into revenue.
+
+Navigation links
+
+Contact / Demo
+
+Copyright
+
+--------------------------------------------------
+
+IMPORTANT
+
+This page must feel like a real SaaS product landing page.
+
+It should look polished enough to show to real prospects immediately.
+
+Animations should be smooth and premium.
+
+The message must clearly communicate that Momentum helps teams:
+
+capture leads  
+manage pipeline  
+follow up better  
+identify opportunities  
+grow revenue
+
+And reinforce the core message throughout the page:
+
+Stop Guessing. Start Growing.
