@@ -1699,83 +1699,98 @@ async function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
   const xlsxUtils = xlsx.utils ?? (xlsx as any).default?.utils;
   if (!xlsxRead || !xlsxUtils) throw new Error('Excel library failed to load — try a CSV export instead.');
 
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        const wb = xlsxRead(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: Record<string, any>[] = xlsxUtils.sheet_to_json(ws, { defval: null });
+  /* Read the raw bytes first so we can detect encoding */
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const isCSV = file.name.toLowerCase().endsWith('.csv');
 
-        if (!rows.length) { reject(new Error('No data found in file')); return; }
+  /* Detect BOM and decode text for CSV files */
+  let wb: any;
+  if (isCSV) {
+    let text: string;
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+      /* UTF-16 LE (most common Ahrefs export encoding) */
+      text = new TextDecoder('UTF-16LE').decode(buffer.slice(2));
+    } else if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
+      /* UTF-16 BE */
+      text = new TextDecoder('UTF-16BE').decode(buffer.slice(2));
+    } else if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+      /* UTF-8 BOM */
+      text = new TextDecoder('UTF-8').decode(buffer.slice(3));
+    } else {
+      /* Plain UTF-8 */
+      text = new TextDecoder('UTF-8').decode(buffer);
+    }
+    /* Strip any remaining BOM characters just in case */
+    text = text.replace(/^\uFEFF/, '');
+    wb = xlsxRead(text, { type: 'string' });
+  } else {
+    /* Excel binary format */
+    wb = xlsxRead(bytes, { type: 'array' });
+  }
 
-        /* Normalise headers to lowercase for flexible matching */
-        const norm = (s: string) => String(s ?? '').toLowerCase().trim();
+  /* Parse rows from the workbook */
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows: Record<string, any>[] = xlsxUtils.sheet_to_json(ws, { defval: null });
 
-        /* Attempt keywords export detection */
-        const firstRow = rows[0];
-        const headers = Object.keys(firstRow).map(norm);
-        const hasKeyword = headers.some(h => h.includes('keyword') && !h.includes('parent'));
-        const hasPosition = headers.some(h => h.includes('position') || h.includes('rank') && !h.includes('domain'));
+  if (!rows.length) throw new Error('No data found in file');
 
-        /* Helper: find value from row by fuzzy key match */
-        const pick = (row: Record<string, any>, ...terms: string[]): any => {
-          for (const key of Object.keys(row)) {
-            const k = norm(key);
-            if (terms.some(t => k.includes(t))) return row[key];
-          }
-          return null;
-        };
-        const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n; };
+  /* Normalise headers to lowercase for flexible matching */
+  const norm = (s: string) => String(s ?? '').toLowerCase().trim();
 
-        const metrics: AhrefsMetrics = { fetchedAt: new Date() };
+  const firstRow = rows[0];
+  const headers = Object.keys(firstRow).map(norm);
+  const hasKeyword = headers.some(h => h.includes('keyword') && !h.includes('parent'));
+  const hasPosition = headers.some(h => h.includes('position') || (h.includes('rank') && !h.includes('domain')));
 
-        if (hasKeyword && hasPosition) {
-          /* ---------- Organic Keywords export ---------- */
-          const keywords: AhrefsKeyword[] = rows.map(row => ({
-            keyword: String(pick(row, 'keyword') ?? '').trim(),
-            position: num(pick(row, 'current position', 'position', 'rank')),
-            volume: num(pick(row, 'search volume', 'volume')),
-            traffic: num(pick(row, 'traffic')),
-            difficulty: num(pick(row, 'kd', 'keyword difficulty', 'difficulty')),
-            url: String(pick(row, 'url') ?? '').trim() || undefined,
-          })).filter(k => k.keyword);
+  /* Helper: find value from a row by fuzzy key match */
+  const pick = (row: Record<string, any>, ...terms: string[]): any => {
+    for (const key of Object.keys(row)) {
+      const k = norm(key);
+      if (terms.some(t => k.includes(t))) return row[key];
+    }
+    return null;
+  };
+  const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n; };
 
-          /* Sort by traffic descending then position ascending */
-          keywords.sort((a, b) => ((b.traffic ?? 0) - (a.traffic ?? 0)) || ((a.position ?? 999) - (b.position ?? 999)));
-          metrics.topKeywords = keywords.slice(0, 100);
-          metrics.organicKeywords = keywords.length;
-          metrics.organicTraffic = keywords.reduce((s, k) => s + (k.traffic ?? 0), 0);
-        }
+  const metrics: AhrefsMetrics = { fetchedAt: new Date() };
 
-        /* ---------- Check for overview/domain metrics columns ---------- */
-        const dr = num(pick(firstRow, 'domain rating', 'dr'));
-        if (dr !== null) metrics.domainRating = dr;
-        const ar = num(pick(firstRow, 'ahrefs rank', 'rank'));
-        if (ar !== null) metrics.ahrefsRank = ar;
-        const bl = num(pick(firstRow, 'backlinks', 'total backlinks'));
-        if (bl !== null) metrics.backlinks = bl;
-        const rd = num(pick(firstRow, 'referring domains', 'ref domains', 'refdomains'));
-        if (rd !== null) metrics.refdomains = rd;
-        const ok = num(pick(firstRow, 'organic keywords'));
-        if (ok !== null) metrics.organicKeywords = ok;
-        const ot = num(pick(firstRow, 'organic traffic'));
-        if (ot !== null) metrics.organicTraffic = ot;
+  if (hasKeyword && hasPosition) {
+    /* ---------- Organic Keywords export ---------- */
+    const keywords: AhrefsKeyword[] = rows.map(row => ({
+      keyword: String(pick(row, 'keyword') ?? '').trim(),
+      position: num(pick(row, 'current position', 'position', 'rank')),
+      volume: num(pick(row, 'search volume', 'volume')),
+      traffic: num(pick(row, 'traffic')),
+      difficulty: num(pick(row, 'kd', 'keyword difficulty', 'difficulty')),
+      url: String(pick(row, 'url') ?? '').trim() || undefined,
+    })).filter(k => k.keyword);
 
-        if (!metrics.topKeywords?.length && !metrics.domainRating && !metrics.backlinks) {
-          reject(new Error('Could not find recognisable Ahrefs columns. Try an Organic Keywords or Overview export.'));
-          return;
-        }
+    keywords.sort((a, b) => ((b.traffic ?? 0) - (a.traffic ?? 0)) || ((a.position ?? 999) - (b.position ?? 999)));
+    metrics.topKeywords = keywords.slice(0, 100);
+    metrics.organicKeywords = keywords.length;
+    metrics.organicTraffic = keywords.reduce((s, k) => s + (k.traffic ?? 0), 0);
+  }
 
-        resolve(metrics);
-      } catch (err: any) {
-        reject(new Error(err.message || 'Failed to parse file'));
-      }
-    };
-    reader.onerror = () => reject(new Error('File read error'));
-    reader.readAsArrayBuffer(file);
-  });
+  /* ---------- Overview / domain-level metric columns ---------- */
+  const dr = num(pick(firstRow, 'domain rating', 'dr'));
+  if (dr !== null) metrics.domainRating = dr;
+  const ar = num(pick(firstRow, 'ahrefs rank'));
+  if (ar !== null) metrics.ahrefsRank = ar;
+  const bl = num(pick(firstRow, 'backlinks', 'total backlinks'));
+  if (bl !== null) metrics.backlinks = bl;
+  const rd = num(pick(firstRow, 'referring domains', 'ref domains', 'refdomains'));
+  if (rd !== null) metrics.refdomains = rd;
+  const ok = num(pick(firstRow, 'organic keywords'));
+  if (ok !== null) metrics.organicKeywords = ok;
+  const ot = num(pick(firstRow, 'organic traffic'));
+  if (ot !== null) metrics.organicTraffic = ot;
+
+  if (!metrics.topKeywords?.length && !metrics.domainRating && !metrics.backlinks) {
+    throw new Error('Could not find recognisable Ahrefs columns. Try an Organic Keywords or Overview export.');
+  }
+
+  return metrics;
 }
 
 function AhrefsSEOSection({
