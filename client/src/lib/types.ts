@@ -346,11 +346,67 @@ export interface AiFollowUpOutput {
   generatedAt: Date;
 }
 
+export interface StrategyDiagnosisSubScores {
+  serviceClarityScore: number;
+  locationRelevanceScore: number;
+  contentCoverageScore: number;
+  gbpAlignmentScore: number;
+  authorityScore: number;
+}
+
+export interface StrategyDiagnosisGap {
+  title: string;
+  evidence: string;
+  impact: string;
+  severity: 'high' | 'medium' | 'low';
+}
+
+export interface StrategyDiagnosisPriority {
+  rank: number;
+  action: string;
+  description: string;
+  examples?: string[];
+}
+
+export interface StrategyDiagnosisPageBreakdown {
+  type: string;
+  count: number;
+  searchIntent: 'high' | 'medium' | 'low';
+}
+
+export interface StrategyDiagnosis {
+  readinessScore: number;
+  confidence: 'low' | 'medium' | 'high';
+  insightSentence: string;
+  subscores: StrategyDiagnosisSubScores;
+  currentPosition: {
+    summary: string;
+    googleClarity: 'low' | 'moderate' | 'strong';
+    pageBreakdown: StrategyDiagnosisPageBreakdown[];
+  };
+  growthPotential: {
+    summary: string;
+    opportunities: string[];
+    forecastBand: {
+      additionalImpressions: string;
+      additionalVisitors: string;
+      additionalEnquiries: string;
+      confidence: 'low' | 'moderate' | 'strong';
+    };
+  };
+  gaps: StrategyDiagnosisGap[];
+  priorities: StrategyDiagnosisPriority[];
+  pageClassification?: Record<string, string[]>;
+  totalPages?: number;
+  generatedAt?: Date;
+}
+
 export interface AiGrowthPlanOutput {
   xray?: any;
   serp?: any;
   competitor?: any;
   forecast?: any;
+  strategyDiagnosis?: StrategyDiagnosis;
   generatedAt: Date;
 }
 

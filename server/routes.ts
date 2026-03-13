@@ -3901,6 +3901,172 @@ Rules:
     }
   });
 
+  app.post("/api/ai/growth-plan/strategy-diagnosis", async (req, res) => {
+    try {
+      const {
+        businessName, websiteUrl, industry, location,
+        sitemapPages, hasGBP, gbpLink, reviewCount, rating,
+        facebookUrl, instagramUrl, linkedinUrl,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: "Business name is required" });
+
+      // Classify sitemap pages into intent types
+      const pages: Array<{ url: string }> = sitemapPages || [];
+      const classified: Record<string, string[]> = { portfolio: [], services: [], locations: [], blog: [], core: [], other: [] };
+      const SERVICE_RE = /service|what-we-do|solution|offer|repair|install|maintenance|consult|design|build|renovati|construct|plumb|electr|paint|landscap|clean|concrete|cabinet|flooring|render|waterproof|demolish/i;
+      const LOCATION_RE = /area|location|suburb|city|region|local|serve|service-area|near|brisbane|sydney|melbourne|perth|adelaide|gold-coast|sunshine/i;
+      const PORTFOLIO_RE = /portfolio|project|work|case-stud|gallery|showcase|completed|example|before-after|past-work/i;
+      const BLOG_RE = /blog|news|article|post|insight|resource|update|tip|guide/i;
+      const CORE_RE = /about|contact|team|faq|privacy|terms|sitemap|careers|testimonial|review/i;
+
+      for (const p of pages) {
+        try {
+          const slug = new URL(p.url).pathname.toLowerCase();
+          if (PORTFOLIO_RE.test(slug)) classified.portfolio.push(p.url);
+          else if (SERVICE_RE.test(slug)) classified.services.push(p.url);
+          else if (LOCATION_RE.test(slug)) classified.locations.push(p.url);
+          else if (BLOG_RE.test(slug)) classified.blog.push(p.url);
+          else if (CORE_RE.test(slug) || slug === '/' || slug === '') classified.core.push(p.url);
+          else classified.other.push(p.url);
+        } catch { classified.other.push(p.url); }
+      }
+
+      const sitemapSummary = Object.entries(classified)
+        .filter(([, v]) => v.length > 0)
+        .map(([k, v]) => `  ${k} pages: ${v.length} (e.g. ${v.slice(0, 3).join(', ')})`)
+        .join('\n');
+      const pageExamples = pages.slice(0, 25).map(p => `  ${p.url}`).join('\n');
+
+      const socialPlatforms: string[] = [];
+      if (facebookUrl) socialPlatforms.push('Facebook');
+      if (instagramUrl) socialPlatforms.push('Instagram');
+      if (linkedinUrl) socialPlatforms.push('LinkedIn');
+
+      const prompt = `You are a senior digital marketing strategist who has audited thousands of local business websites. You are generating a strategic visibility diagnosis for a sales rep who is about to pitch SEO/digital marketing services to ${businessName}.
+
+Your job is to answer ONE fundamental question:
+"Does Google clearly understand what ${businessName} does and where they do it?"
+
+This is the core ranking truth:
+- Google ranks businesses based on two primary signals: WHAT you do + WHERE you do it
+- Service pages tell Google WHAT the business does
+- Location/suburb pages tell Google WHERE the business operates
+- Portfolio/project pages tell Google almost NOTHING about services or locations
+- A site heavy in portfolio pages but light in service/location pages will struggle to rank for non-brand local searches
+
+=== BUSINESS DATA ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Location: ${location || 'Not specified'}
+Website: ${websiteUrl || 'Not provided'}
+Google Business Profile: ${hasGBP ? `Yes — ${gbpLink}` : 'Not found'}
+Google Reviews: ${reviewCount != null ? `${reviewCount} reviews, ${rating}★ average` : 'Unknown'}
+Social Profiles: ${socialPlatforms.length > 0 ? socialPlatforms.join(', ') : 'None detected'}
+
+=== WEBSITE STRUCTURE (from sitemap) ===
+Total indexed pages: ${pages.length || 0}
+Page classification:
+${sitemapSummary || '  No sitemap data available'}
+
+Actual URLs found:
+${pageExamples || '  None'}
+
+=== SCORING RULES ===
+Score each out of 100. Be honest and calibrated — low scores are expected for businesses with poor structure.
+
+Service Clarity Score: Based on dedicated service pages (slug-level evidence only). 0 = no service pages detected. 30 = 1-2 service pages. 60 = 3-5 service pages. 80+ = 6+ well-structured service pages.
+
+Location Relevance Score: Based on suburb/location pages. 0 = zero location pages. 30 = 1 location page. 60 = 3-5 location pages. 80+ = 6+ location pages or strong area targeting evidence.
+
+Content Coverage Score: Based on total indexed pages and diversity of content types. Heavy portfolio-only sites score low (max 35) even with many pages, because portfolio pages don't help search visibility.
+
+GBP Alignment Score: 0 = no GBP. 40 = GBP exists but few reviews. 70 = GBP with moderate reviews (5-30). 90+ = strong GBP with 30+ reviews.
+
+Authority/Trust Score: Based on review count, social profiles, and content depth signals. Moderate scores unless review count is strong.
+
+=== OUTPUT RULES ===
+- Be honest. Do not inflate scores.
+- If portfolio pages dominate, explicitly call this out as the key structural gap.
+- Do not flag GBP as missing if hasGBP = true.
+- Do not guess at page content beyond what URLs reveal.
+- Forecast must use bands (low/moderate/strong) — avoid false precision unless data supports it.
+- Gap evidence must cite specific data (page counts, review numbers, URL patterns observed).
+
+Respond with JSON only:
+{
+  "readinessScore": 0-100,
+  "confidence": "low|medium|high",
+  "insightSentence": "One sharp sentence for the rep to say on the call — grounded in the data",
+  "subscores": {
+    "serviceClarityScore": 0-100,
+    "locationRelevanceScore": 0-100,
+    "contentCoverageScore": 0-100,
+    "gbpAlignmentScore": 0-100,
+    "authorityScore": 0-100
+  },
+  "currentPosition": {
+    "summary": "2-3 sentences — what Google currently understands about this business based on available evidence",
+    "googleClarity": "low|moderate|strong",
+    "pageBreakdown": [
+      { "type": "Portfolio/Project Pages", "count": 0, "searchIntent": "low" },
+      { "type": "Service Pages", "count": 0, "searchIntent": "high" },
+      { "type": "Location Pages", "count": 0, "searchIntent": "high" },
+      { "type": "Core Pages (About/Contact)", "count": 0, "searchIntent": "low" },
+      { "type": "Blog/Content Pages", "count": 0, "searchIntent": "medium" }
+    ]
+  },
+  "growthPotential": {
+    "summary": "2-3 sentences about the realistic opportunity if key gaps are fixed",
+    "opportunities": [
+      "Specific opportunity 1 — what it would unlock",
+      "Specific opportunity 2",
+      "Specific opportunity 3"
+    ],
+    "forecastBand": {
+      "additionalImpressions": "e.g. +800–1,500/mo",
+      "additionalVisitors": "e.g. +60–120/mo",
+      "additionalEnquiries": "e.g. +5–12/mo",
+      "confidence": "low|moderate|strong"
+    }
+  },
+  "gaps": [
+    {
+      "title": "Specific gap title",
+      "evidence": "The data point — cite URL patterns, page counts, numbers",
+      "impact": "Why this is costing them rankings and leads right now",
+      "severity": "high|medium|low"
+    }
+  ],
+  "priorities": [
+    {
+      "rank": 1,
+      "action": "Short action title",
+      "description": "What to build/fix and why it moves the needle",
+      "examples": ["e.g. /custom-home-builder-brisbane", "/home-builder-eight-mile-plains"]
+    }
+  ]
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 2000,
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const result = JSON.parse(content);
+      // Attach the raw page classification for reference
+      result.pageClassification = classified;
+      result.totalPages = pages.length;
+      res.json(result);
+    } catch (err: any) {
+      console.error("[growth-plan/strategy-diagnosis]", err);
+      res.status(500).json({ error: "Failed to generate strategy diagnosis" });
+    }
+  });
+
   app.post("/api/ai/growth-plan/strategy-data", async (req, res) => {
     try {
       const { businessName, websiteUrl, location, industry, reviewCount, rating, xrayData, serpData, competitorData, forecastData } = req.body;
