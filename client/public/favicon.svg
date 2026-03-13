@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e0c4a"/>
+      <stop offset="100%" stop-color="#0a061a"/>
+    </radialGradient>
+  </defs>
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="110" ry="110" fill="url(#bg)"/>
+  <!-- Aperture blades in violet -->
+  <g transform="translate(256,256)">
+    <!-- Blade 1 -->
+    <path d="M0,-185 A185,185 0 0,1 132,-131 L50,-50 A72,72 0 0,0 0,-72 Z" fill="#7c3aed" opacity="0.95"/>
+    <!-- Blade 2 -->
+    <path d="M132,-131 A185,185 0 0,1 185,0 L72,0 A72,72 0 0,0 50,-50 Z" fill="#9333ea" opacity="0.95"/>
+    <!-- Blade 3 -->
+    <path d="M185,0 A185,185 0 0,1 132,131 L50,50 A72,72 0 0,0 72,0 Z" fill="#7c3aed" opacity="0.95"/>
+    <!-- Blade 4 -->
+    <path d="M132,131 A185,185 0 0,1 0,185 L0,72 A72,72 0 0,0 50,50 Z" fill="#9333ea" opacity="0.95"/>
+    <!-- Blade 5 -->
+    <path d="M0,185 A185,185 0 0,1 -132,131 L-50,50 A72,72 0 0,0 0,72 Z" fill="#7c3aed" opacity="0.95"/>
+    <!-- Blade 6 -->
+    <path d="M-132,131 A185,185 0 0,1 -185,0 L-72,0 A72,72 0 0,0 -50,50 Z" fill="#9333ea" opacity="0.95"/>
+    <!-- Blade 7 -->
+    <path d="M-185,0 A185,185 0 0,1 -132,-131 L-50,-50 A72,72 0 0,0 -72,0 Z" fill="#7c3aed" opacity="0.95"/>
+    <!-- Blade 8 -->
+    <path d="M-132,-131 A185,185 0 0,1 0,-185 L0,-72 A72,72 0 0,0 -50,-50 Z" fill="#9333ea" opacity="0.95"/>
+    <!-- Center hole -->
+    <circle r="58" fill="#0a061a"/>
+    <!-- Glow ring -->
+    <circle r="66" fill="none" stroke="#c084fc" stroke-width="4" opacity="0.6"/>
+  </g>
+</svg>
