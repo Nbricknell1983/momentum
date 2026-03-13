@@ -195,35 +195,61 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectInputs, setProspectInputs] = useState({ businessType: '', suburb: '', nearbySuburbs: '' });
 
+  // Sync form inputs whenever relevant lead data changes (GBP link, reviews, social, industry, website)
   useEffect(() => {
     if (selectedLead) {
       const sd = selectedLead.sourceData;
+      setPreCallInputs(prev => ({
+        ...prev,
+        businessName: selectedLead.companyName || prev.businessName,
+        location: selectedLead.territory || selectedLead.areaName || prev.location,
+        website: selectedLead.website || prev.website,
+        industry: selectedLead.industry || (sd as any)?.category || prev.industry,
+        gbpLink: (sd as any)?.googleMapsUrl || prev.gbpLink,
+        reviewCount: sd?.googleReviewCount ?? prev.reviewCount,
+        rating: sd?.googleRating ?? prev.rating,
+        facebookUrl: selectedLead.facebookUrl || prev.facebookUrl,
+        instagramUrl: selectedLead.instagramUrl || prev.instagramUrl,
+        linkedinUrl: selectedLead.linkedinUrl || prev.linkedinUrl,
+      }));
+      setFollowUpInputs(prev => ({
+        ...prev,
+        business: selectedLead.companyName || prev.business,
+        industry: selectedLead.industry || (sd as any)?.category || (sd as any)?.googleTypes?.[0] || prev.industry,
+        location: selectedLead.territory || selectedLead.areaName || prev.location,
+        meetingNotes: selectedLead.notes || prev.meetingNotes,
+      }));
+      setProspectInputs(prev => ({
+        ...prev,
+        businessType: selectedLead.industry || (sd as any)?.category || (sd as any)?.googleTypes?.[0] || prev.businessType,
+        suburb: selectedLead.areaName || selectedLead.territory || prev.suburb,
+      }));
+    }
+  }, [
+    selectedLead?.companyName, selectedLead?.territory, selectedLead?.areaName,
+    selectedLead?.website, selectedLead?.industry,
+    selectedLead?.sourceData?.googleMapsUrl, selectedLead?.sourceData?.googleReviewCount, selectedLead?.sourceData?.googleRating,
+    selectedLead?.facebookUrl, selectedLead?.instagramUrl, selectedLead?.linkedinUrl,
+    selectedLead?.notes,
+  ]);
+
+  // Reset AI results when switching to a different lead
+  useEffect(() => {
+    if (selectedLead) {
       setPreCallInputs({
         businessName: selectedLead.companyName || '',
         location: selectedLead.territory || selectedLead.areaName || '',
         website: selectedLead.website || '',
-        industry: selectedLead.industry || (sd as any)?.category || '',
-        gbpLink: (sd as any)?.googleMapsUrl || '',
-        reviewCount: sd?.googleReviewCount ?? null,
-        rating: sd?.googleRating ?? null,
+        industry: selectedLead.industry || (selectedLead.sourceData as any)?.category || '',
+        gbpLink: (selectedLead.sourceData as any)?.googleMapsUrl || '',
+        reviewCount: selectedLead.sourceData?.googleReviewCount ?? null,
+        rating: selectedLead.sourceData?.googleRating ?? null,
         facebookUrl: selectedLead.facebookUrl || '',
         instagramUrl: selectedLead.instagramUrl || '',
         linkedinUrl: selectedLead.linkedinUrl || '',
         gbpPhotoCount: null,
         gbpPostsLast30Days: null,
       });
-      setFollowUpInputs(prev => ({
-        ...prev,
-        business: selectedLead.companyName || '',
-        industry: selectedLead.industry || (sd as any)?.category || (sd as any)?.googleTypes?.[0] || '',
-        location: selectedLead.territory || selectedLead.areaName || '',
-        meetingNotes: selectedLead.notes || '',
-      }));
-      setProspectInputs(prev => ({
-        ...prev,
-        businessType: selectedLead.industry || (sd as any)?.category || (sd as any)?.googleTypes?.[0] || '',
-        suburb: selectedLead.areaName || selectedLead.territory || '',
-      }));
       if (selectedLead.aiCallPrep) {
         setPreCallResult(selectedLead.aiCallPrep as unknown as PreCallResult);
       } else {
