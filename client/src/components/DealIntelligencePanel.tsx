@@ -36,6 +36,10 @@ import {
   Tag,
   Link2,
   Image,
+  Plus,
+  Trash2,
+  BarChart3,
+  RefreshCw,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
@@ -239,6 +243,48 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
   const debounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [newCompetitor, setNewCompetitor] = useState('');
+  const [competitorCrawling, setCompetitorCrawling] = useState<Record<string, boolean>>({});
+  const [competitorStats, setCompetitorStats] = useState<Record<string, { pages: number; servicePages: number; error?: string }>>({});
+
+  const saveCompetitorDomains = useCallback(async (domains: string[]) => {
+    if (!orgId || !authReady) return;
+    const updates: Partial<Lead> = { competitorDomains: domains, updatedAt: new Date() };
+    dispatch(patchLead({ id: lead.id, updates }));
+    await updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+  }, [dispatch, lead.id, orgId, authReady]);
+
+  const addCompetitor = useCallback(() => {
+    const raw = newCompetitor.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!raw) return;
+    const existing = lead.competitorDomains || [];
+    if (existing.includes(raw)) { setNewCompetitor(''); return; }
+    const updated = [...existing, raw];
+    saveCompetitorDomains(updated);
+    setNewCompetitor('');
+    toast({ title: 'Competitor saved', description: raw });
+  }, [newCompetitor, lead.competitorDomains, saveCompetitorDomains, toast]);
+
+  const removeCompetitor = useCallback((domain: string) => {
+    const updated = (lead.competitorDomains || []).filter(d => d !== domain);
+    saveCompetitorDomains(updated);
+  }, [lead.competitorDomains, saveCompetitorDomains]);
+
+  const crawlCompetitorSitemap = useCallback(async (domain: string) => {
+    setCompetitorCrawling(p => ({ ...p, [domain]: true }));
+    try {
+      const sitemapUrl = `https://${domain}/sitemap.xml`;
+      const res = await fetch(`/api/sitemap?url=${encodeURIComponent(sitemapUrl)}`);
+      const data = await res.json();
+      const pages: any[] = data.pages || [];
+      const servicePages = pages.filter((p: any) => /service|solution|what-we-do|offering/i.test(p.url)).length;
+      setCompetitorStats(p => ({ ...p, [domain]: { pages: pages.length, servicePages } }));
+    } catch {
+      setCompetitorStats(p => ({ ...p, [domain]: { pages: 0, servicePages: 0, error: 'Could not fetch' } }));
+    } finally {
+      setCompetitorCrawling(p => ({ ...p, [domain]: false }));
+    }
+  }, []);
 
   const health = useMemo(() => computeDealHealth(lead, activities), [lead, activities]);
   const summary = useMemo(() => generateDealSummary(lead, activities), [lead, activities]);
@@ -455,27 +501,105 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-3" data-testid="card-competitor-snapshot">
-        <div className="flex items-center gap-1.5 mb-2">
+      <div className="rounded-lg border bg-card p-3 space-y-3" data-testid="card-competitor-snapshot">
+        <div className="flex items-center gap-1.5">
           <Users className="h-3.5 w-3.5 text-amber-600" />
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Competitor Snapshot</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Competitor Tracking</span>
+          {(lead.competitorDomains?.length ?? 0) > 0 && (
+            <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1.5">
+              {lead.competitorDomains!.length} tracked
+            </Badge>
+          )}
         </div>
-        {lead.aiGrowthPlan?.competitor ? (
-          <div className="space-y-1">
-            {(lead.aiGrowthPlan.competitor as any)?.competitors?.slice(0, 3).map((c: any, i: number) => (
-              <div key={i} className="flex items-center justify-between text-sm">
-                <span className="truncate">{c.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0 ml-2">{c.servicePages || 0} service pages</span>
+
+        {/* Add competitor input */}
+        <div className="flex gap-1.5">
+          <Input
+            value={newCompetitor}
+            onChange={e => setNewCompetitor(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCompetitor(); } }}
+            placeholder="e.g. besa.au or https://competitor.com"
+            className="h-7 text-xs flex-1"
+            data-testid="input-new-competitor"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={addCompetitor}
+            disabled={!newCompetitor.trim()}
+            className="h-7 w-7 p-0 shrink-0"
+            data-testid="button-add-competitor"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* Saved competitor domains */}
+        {(lead.competitorDomains?.length ?? 0) > 0 ? (
+          <div className="space-y-1.5">
+            {lead.competitorDomains!.map(domain => {
+              const stats = competitorStats[domain];
+              const crawling = competitorCrawling[domain];
+              return (
+                <div key={domain} className="rounded border bg-muted/30 px-2.5 py-1.5 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <a
+                      href={`https://${domain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium truncate flex-1 hover:underline"
+                    >
+                      {domain}
+                    </a>
+                    <button
+                      onClick={() => crawlCompetitorSitemap(domain)}
+                      disabled={crawling}
+                      title="Check sitemap"
+                      className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                      data-testid={`button-crawl-competitor-${domain}`}
+                    >
+                      {crawling
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <RefreshCw className="h-3 w-3" />}
+                    </button>
+                    <button
+                      onClick={() => removeCompetitor(domain)}
+                      title="Remove competitor"
+                      className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                      data-testid={`button-remove-competitor-${domain}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {stats && !stats.error && (
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground pl-4">
+                      <span>{stats.pages} pages</span>
+                      {stats.servicePages > 0 && <span>· {stats.servicePages} service pages</span>}
+                    </div>
+                  )}
+                  {stats?.error && (
+                    <p className="text-[10px] text-destructive pl-4">{stats.error}</p>
+                  )}
+                </div>
+              );
+            })}
+            {/* AI analysis insights if available */}
+            {(lead.aiGrowthPlan?.competitor as any)?.insights?.length > 0 && (
+              <div className="rounded border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 px-2.5 py-1.5">
+                <div className="flex items-center gap-1 mb-1">
+                  <BarChart3 className="h-3 w-3 text-amber-600" />
+                  <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wide">AI Gap Insights</span>
+                </div>
+                {(lead.aiGrowthPlan.competitor as any).insights.slice(0, 2).map((insight: string, i: number) => (
+                  <p key={i} className="text-[11px] text-muted-foreground">{insight}</p>
+                ))}
               </div>
-            ))}
-            {(lead.aiGrowthPlan.competitor as any)?.insights?.length > 0 && (
-              <p className="text-[11px] text-muted-foreground mt-1 italic">
-                {(lead.aiGrowthPlan.competitor as any).insights[0]}
-              </p>
             )}
+            <p className="text-[10px] text-muted-foreground">Run full analysis in AI Sales Engine → Growth Plan for deep SEO gap comparison.</p>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground italic">Competitor insights will appear here once growth analysis has been generated.</p>
+          <p className="text-xs text-muted-foreground italic">Add competitor domains above to track and analyse them against this lead.</p>
         )}
       </div>
 
