@@ -400,24 +400,56 @@ export default function LoginPage() {
               </button>
             </TabsContent>
 
-            <TabsContent value="signup" className="space-y-4 mt-0">
-              <div className="space-y-1.5">
-                <Label htmlFor="signup-email" className="text-violet-200/80 text-xs uppercase tracking-wide">Email</Label>
-                <Input id="signup-email" type="email" placeholder="you@example.com" value={email}
-                  onChange={(e) => setEmail(e.target.value)} data-testid="input-signup-email"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/25 focus:border-violet-500 rounded-xl" />
+            <TabsContent value="signup" className="mt-0" data-testid="tab-content-signup">
+              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-4">
+                <div className="text-center">
+                  <div className="inline-flex items-center justify-center h-11 w-11 rounded-full bg-violet-600/20 border border-violet-500/30 mb-3">
+                    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-violet-400" stroke="currentColor" strokeWidth="2">
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinejoin="round" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <h3 className="text-white font-semibold text-base mb-1">Interested in Momentum?</h3>
+                  <p className="text-violet-200/60 text-xs leading-relaxed">
+                    Momentum is currently invite-only. Reach out and let's talk about what it can do for your sales team.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {[
+                    'AI-powered pipeline management',
+                    'Real-time deal momentum scoring',
+                    'Automated nurture & follow-up',
+                    'Stage-aware coaching & insights',
+                  ].map((feature) => (
+                    <div key={feature} className="flex items-center gap-2.5">
+                      <div className="h-1.5 w-1.5 rounded-full bg-violet-400 shrink-0" />
+                      <span className="text-violet-200/70 text-xs">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-white/10 pt-4 space-y-2.5">
+                  <p className="text-violet-200/50 text-xs text-center uppercase tracking-widest">Get in touch</p>
+                  <a
+                    href="mailto:nathan@battlescore.com.au"
+                    data-testid="link-contact-email"
+                    className="flex items-center gap-2.5 w-full rounded-xl px-4 py-2.5 bg-violet-600 hover:bg-violet-500 transition-colors text-white text-sm font-medium justify-center shadow-lg shadow-violet-900/40"
+                  >
+                    <Mail className="h-4 w-4 shrink-0" />
+                    nathan@battlescore.com.au
+                  </a>
+                  <a
+                    href="tel:0403338733"
+                    data-testid="link-contact-phone"
+                    className="flex items-center gap-2.5 w-full rounded-xl px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-white text-sm font-medium justify-center"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 shrink-0" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 .84h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" strokeLinejoin="round" />
+                    </svg>
+                    0403 338 733
+                  </a>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="signup-password" className="text-violet-200/80 text-xs uppercase tracking-wide">Password</Label>
-                <Input id="signup-password" type="password" placeholder="Create a password (min 6 chars)" value={password}
-                  onChange={(e) => setPassword(e.target.value)} data-testid="input-signup-password"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/25 focus:border-violet-500 rounded-xl" />
-              </div>
-              <button type="button" onClick={handleEmailSignUp} disabled={isSubmitting} data-testid="button-signup"
-                className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-500 transition-colors shadow-lg shadow-violet-900/40 disabled:opacity-50">
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                Create Account
-              </button>
             </TabsContent>
           </Tabs>
         </div>
