@@ -303,6 +303,7 @@ export interface Lead {
   sitemapFetchedAt?: Date;
   crawledPages?: CrawledPage[];
   crawledAt?: Date;
+  competitorDomains?: string[];
 }
 
 export interface SitemapPage {

@@ -512,10 +512,11 @@ function TrafficForecastView({ result }: { result: ForecastResult }) {
 
 type ActiveTool = null | 'xray' | 'serp' | 'competitor' | 'forecast';
 
-export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPlan }: {
+export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPlan, onSaveCompetitorDomains }: {
   lead: Lead | null;
   onSaveToNotes: (text: string) => void;
   onSaveGrowthPlan?: (data: { xray?: any; serp?: any; competitor?: any; forecast?: any; strategyDiagnosis?: any }) => void;
+  onSaveCompetitorDomains?: (domains: string[]) => void;
 }) {
   const { toast } = useToast();
   const { orgId } = useAuth();
@@ -554,6 +555,10 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     } else {
       setXrayResult(null); setSerpResult(null); setCompetitorResult(null);
       setForecastResult(null); setStrategyDiagnosis(null);
+    }
+    // Restore saved competitor domains
+    if (lead?.competitorDomains?.length) {
+      setCompetitorInput(lead.competitorDomains.join(', '));
     }
   }, [lead?.id]);
 
@@ -655,10 +660,14 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     setCrawledCompetitors(results);
     setCompetitorAnalysisLoading(false);
     const ok = results.filter(r => !r.error && r.crawledPages.length > 0).length;
+    // Persist the competitor domains to the lead
+    if (domains.length > 0) {
+      onSaveCompetitorDomains?.(domains);
+    }
     toast({
       title: ok > 0 ? 'Competitors Analysed' : 'Analysis Complete',
       description: ok > 0
-        ? `Extracted SEO signals from ${ok} competitor${ok !== 1 ? 's' : ''}`
+        ? `Extracted SEO signals from ${ok} competitor${ok !== 1 ? 's' : ''} · Saved to lead`
         : 'Could not fetch competitor data — check the domains are correct',
     });
   };
@@ -1342,13 +1351,22 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
       {/* ── PDF + Report URL ───────────────────────────────────── */}
       <div className="space-y-2">
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground flex items-center gap-1">
-            <BarChart3 className="h-3 w-3" /> Competitor websites (optional)
+          <Label className="text-xs text-muted-foreground flex items-center gap-2">
+            <BarChart3 className="h-3 w-3" /> Competitor websites
+            {lead?.competitorDomains?.length ? (
+              <span className="ml-auto text-[10px] font-normal text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                <Check className="h-2.5 w-2.5" /> {lead.competitorDomains.length} saved to lead
+              </span>
+            ) : null}
           </Label>
           <div className="flex gap-1.5">
             <Input
               value={competitorInput}
               onChange={e => setCompetitorInput(e.target.value)}
+              onBlur={() => {
+                const domains = competitorInput.split(/[\n,]+/).map(s => s.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')).filter(Boolean);
+                if (domains.length > 0) onSaveCompetitorDomains?.(domains);
+              }}
               placeholder="e.g. besa.au, lindonhomes.com.au"
               className="h-8 text-xs flex-1"
               data-testid="input-competitors"
@@ -1366,7 +1384,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
                 : <><ScanLine className="h-3 w-3" /> Analyse</>}
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground">Enter domains comma-separated. Click Analyse to crawl their sites and extract real SEO signals for gap comparison.</p>
+          <p className="text-[10px] text-muted-foreground">Domains are saved to this lead. Click Analyse to deep-crawl and extract SEO signals for gap comparison.</p>
 
           {/* Competitor analysis results */}
           {crawledCompetitors.length > 0 && (

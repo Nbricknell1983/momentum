@@ -565,6 +565,13 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                         dispatch(patchLead({ id: selectedLead.id, updates: { aiGrowthPlan } }));
                       }
                     }}
+                    onSaveCompetitorDomains={(domains) => {
+                      if (selectedLead && orgId && authReady) {
+                        const updates: Partial<Lead> = { competitorDomains: domains, updatedAt: new Date() };
+                        updateLeadInFirestore(orgId, selectedLead.id, updates, authReady).catch(console.error);
+                        dispatch(patchLead({ id: selectedLead.id, updates }));
+                      }
+                    }}
                   />
                 )}
                 {sectionKey === 'prospect' && (
