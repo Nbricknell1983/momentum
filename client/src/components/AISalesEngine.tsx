@@ -152,6 +152,31 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
     facebookUrl: '', instagramUrl: '',
     gbpPhotoCount: null as number | null, gbpPostsLast30Days: null as number | null,
   });
+  const preCallSaveRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const handlePreCallInputChange = useCallback((updater: (prev: any) => any) => {
+    setPreCallInputs(prev => {
+      const next = updater(prev);
+      if (!selectedLead || !orgId || !authReady) return next;
+      const FIELD_MAP: Record<string, keyof Lead> = {
+        industry: 'industry',
+        website: 'website',
+      };
+      for (const [inputKey, leadField] of Object.entries(FIELD_MAP)) {
+        if (next[inputKey] !== prev[inputKey]) {
+          const value = next[inputKey];
+          dispatch(patchLead({ id: selectedLead.id, updates: { [leadField]: value || undefined } }));
+          if (preCallSaveRef.current[inputKey]) clearTimeout(preCallSaveRef.current[inputKey]);
+          preCallSaveRef.current[inputKey] = setTimeout(() => {
+            updateLeadInFirestore(orgId, selectedLead.id, { [leadField]: value || null, updatedAt: new Date() }, authReady)
+              .catch(err => console.error(`[AISalesEngine] Failed to save ${leadField}:`, err));
+            delete preCallSaveRef.current[inputKey];
+          }, 800);
+        }
+      }
+      return next;
+    });
+  }, [selectedLead, orgId, authReady, dispatch]);
 
   const [objectionLoading, setObjectionLoading] = useState(false);
   const [objectionResults, setObjectionResults] = useState<ObjectionResult[]>([]);
@@ -177,7 +202,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         businessName: selectedLead.companyName || '',
         location: selectedLead.territory || selectedLead.areaName || '',
         website: selectedLead.website || '',
-        industry: (sd as any)?.category || '',
+        industry: selectedLead.industry || (sd as any)?.category || '',
         gbpLink: (sd as any)?.googleMapsUrl || '',
         reviewCount: sd?.googleReviewCount ?? null,
         rating: sd?.googleRating ?? null,
@@ -437,7 +462,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                 {sectionKey === 'pre_call' && (
                   <PreCallSection
                     inputs={preCallInputs}
-                    setInputs={setPreCallInputs}
+                    setInputs={handlePreCallInputChange}
                     loading={preCallLoading}
                     result={preCallResult}
                     error={preCallError}
