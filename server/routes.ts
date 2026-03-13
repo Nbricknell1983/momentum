@@ -3333,6 +3333,7 @@ Rules:
       cb(new Error('Only audio files are allowed'));
     }
   };
+  fs.mkdirSync('/tmp/uploads/', { recursive: true });
   const upload = multer({ dest: '/tmp/uploads/', limits: { fileSize: 25 * 1024 * 1024 }, fileFilter: audioFileFilter });
 
   app.post("/api/ai/sales-engine/transcribe-meeting", (req: any, res: any, next: any) => {
@@ -3354,6 +3355,12 @@ Rules:
 
       const filePath = file.path;
 
+      // Reject files that are too small to be real audio
+      if (file.size < 500) {
+        fs.unlink(filePath, () => {});
+        return res.status(400).json({ error: "Recording is too short. Please record for at least 2 seconds." });
+      }
+
       // Determine extension from MIME type — multer saves without extension, Whisper needs it
       const mimeToExt: Record<string, string> = {
         'audio/webm': '.webm', 'video/webm': '.webm',
@@ -3364,7 +3371,7 @@ Rules:
       const baseMime = (file.mimetype || '').split(';')[0].trim();
       const ext = mimeToExt[baseMime] || path.extname(file.originalname || '') || '.webm';
       const namedPath = `${filePath}${ext}`;
-      fs.renameSync(filePath, namedPath);
+      try { fs.renameSync(filePath, namedPath); } catch { /* already renamed or missing */ }
 
       let transcript: string;
       try {
@@ -3375,11 +3382,20 @@ Rules:
           language: "en",
         });
         transcript = transcription.text;
-        console.log(`[Whisper] Success: "${transcript.slice(0, 80)}..."`);
+        if (!transcript || transcript.trim() === '') {
+          transcript = '';
+          console.log('[Whisper] Empty transcript returned');
+        } else {
+          console.log(`[Whisper] Success: "${transcript.slice(0, 80)}..."`);
+        }
       } catch (whisperErr: any) {
-        console.error("[Whisper] Transcription error:", whisperErr?.message || whisperErr);
+        const whisperMsg = whisperErr?.error?.message || whisperErr?.message || String(whisperErr);
+        console.error("[Whisper] Transcription error:", whisperMsg);
         fs.unlink(namedPath, () => {});
-        return res.status(500).json({ error: "Failed to transcribe audio. Please try again." });
+        if (whisperMsg.includes('too short') || whisperMsg.includes('minimum')) {
+          return res.status(400).json({ error: "Recording is too short. Please record for at least 2 seconds." });
+        }
+        return res.status(500).json({ error: `Transcription failed: ${whisperMsg}` });
       }
 
       fs.unlink(namedPath, () => {});

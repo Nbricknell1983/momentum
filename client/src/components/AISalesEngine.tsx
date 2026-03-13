@@ -1066,9 +1066,19 @@ function FollowUpSection({ inputs, setInputs, loading, result, error, onGenerate
         stopLiveSpeechRecognition();
         const blobType = mimeType || 'audio/webm';
         const blob = new Blob(chunks, { type: blobType });
+        if (blob.size < 1000) {
+          const liveText = liveTranscriptRef.current;
+          if (liveText) {
+            setInputs(p => ({ ...p, meetingNotes: p.meetingNotes ? `${p.meetingNotes}\n\n${liveText}` : liveText }));
+            toast({ title: 'Live transcript saved', description: 'Recording was too short for Whisper — live text captured instead.' });
+          } else {
+            toast({ title: 'Recording too short', description: 'Hold Record for at least 2 seconds before stopping.', variant: 'destructive' });
+          }
+          return;
+        }
         processAudio(blob, liveTranscriptRef.current);
       };
-      recorder.start(1000);
+      recorder.start(100);
       setMediaRecorder(recorder);
       setIsRecording(true);
       startLiveSpeechRecognition();
