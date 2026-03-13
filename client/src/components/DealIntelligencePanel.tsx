@@ -223,10 +223,25 @@ const URGENCY_COLORS = {
 
 export default function DealIntelligencePanel({ lead }: DealIntelligencePanelProps) {
   const activities = useSelector((state: RootState) => state.app.activities);
+  const dispatch = useDispatch();
+  const { orgId, authReady } = useAuth();
+  const debounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const health = useMemo(() => computeDealHealth(lead, activities), [lead, activities]);
   const summary = useMemo(() => generateDealSummary(lead, activities), [lead, activities]);
   const nextAction = useMemo(() => getNextBestAction(lead, activities), [lead, activities]);
+
+  const handleUpdatePresenceField = useCallback((field: keyof Lead, value: string) => {
+    dispatch(updateLead({ ...lead, [field]: value || undefined, updatedAt: new Date() }));
+    if (orgId && authReady) {
+      if (debounceRef.current[field]) clearTimeout(debounceRef.current[field]);
+      debounceRef.current[field] = setTimeout(() => {
+        updateLeadInFirestore(orgId, lead.id, { [field]: value || null, updatedAt: new Date() }, authReady)
+          .catch(err => console.error(`[DealIntelligencePanel] Failed to save ${field}:`, err));
+        delete debounceRef.current[field];
+      }, 800);
+    }
+  }, [dispatch, lead, orgId, authReady]);
 
   return (
     <div className="p-4 space-y-4" data-testid="deal-intelligence-panel">
@@ -281,19 +296,21 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
           <Globe className="h-3.5 w-3.5 text-amber-600" />
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Online Presence</span>
         </div>
-        <div className="space-y-1.5">
-          {lead.industry && (
-            <PresenceRow
-              icon={<Zap className="h-3.5 w-3.5" />}
-              label="Industry"
-              value={lead.industry}
-            />
-          )}
-          <PresenceRow
+        <div className="space-y-1">
+          <EditablePresenceRow
+            icon={<Zap className="h-3.5 w-3.5" />}
+            label="Industry"
+            value={lead.industry || ''}
+            placeholder="e.g. Plumbing, Dental, Café"
+            onSave={(v) => handleUpdatePresenceField('industry', v)}
+          />
+          <EditablePresenceRow
             icon={<Globe className="h-3.5 w-3.5" />}
             label="Website"
-            value={lead.website || null}
+            value={lead.website || ''}
+            placeholder="https://example.com.au"
             link={lead.website}
+            onSave={(v) => handleUpdatePresenceField('website', v)}
           />
           <PresenceRow
             icon={<MapPin className="h-3.5 w-3.5" />}
@@ -309,19 +326,29 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
               : null}
             fallback="No review data"
           />
-          <PresenceRow
+          <EditablePresenceRow
             icon={<SiFacebook className="h-3 w-3" />}
             label="Facebook"
-            value={lead.facebookUrl ? 'Profile linked' : null}
+            value={lead.facebookUrl || ''}
+            placeholder="https://facebook.com/page"
             link={lead.facebookUrl}
-            fallback="Not recorded"
+            onSave={(v) => handleUpdatePresenceField('facebookUrl', v)}
           />
-          <PresenceRow
+          <EditablePresenceRow
             icon={<SiInstagram className="h-3 w-3" />}
             label="Instagram"
-            value={lead.instagramUrl ? 'Profile linked' : null}
+            value={lead.instagramUrl || ''}
+            placeholder="https://instagram.com/handle"
             link={lead.instagramUrl}
-            fallback="Not recorded"
+            onSave={(v) => handleUpdatePresenceField('instagramUrl', v)}
+          />
+          <EditablePresenceRow
+            icon={<SiLinkedin className="h-3 w-3" />}
+            label="LinkedIn"
+            value={lead.linkedinUrl || ''}
+            placeholder="https://linkedin.com/company/..."
+            link={lead.linkedinUrl}
+            onSave={(v) => handleUpdatePresenceField('linkedinUrl', v)}
           />
         </div>
       </div>
@@ -375,11 +402,11 @@ function PresenceRow({ icon, label, value, fallback, link }: {
   const hasValue = !!value;
 
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex items-center gap-2 text-sm py-0.5">
       <span className={`shrink-0 ${hasValue ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
         {icon}
       </span>
-      <span className="text-muted-foreground text-xs w-20 shrink-0">{label}</span>
+      <span className="text-muted-foreground text-xs w-[76px] shrink-0">{label}</span>
       <span className={`truncate text-xs ${hasValue ? 'text-foreground' : 'text-muted-foreground italic'}`}>
         {link && hasValue ? (
           <a href={link.startsWith('http') ? link : `https://${link}`} target="_blank" rel="noopener noreferrer" className="hover:underline inline-flex items-center gap-1">
@@ -387,6 +414,102 @@ function PresenceRow({ icon, label, value, fallback, link }: {
           </a>
         ) : displayValue}
       </span>
+    </div>
+  );
+}
+
+function EditablePresenceRow({ icon, label, value, placeholder, link, onSave }: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  placeholder?: string;
+  link?: string;
+  onSave: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const hasValue = !!value;
+
+  const startEditing = () => {
+    setDraft(value);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const commit = () => {
+    setEditing(false);
+    if (draft !== value) onSave(draft);
+  };
+
+  const cancel = () => {
+    setDraft(value);
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') cancel();
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 py-0.5">
+        <span className="shrink-0 text-amber-600">{icon}</span>
+        <span className="text-muted-foreground text-xs w-[76px] shrink-0">{label}</span>
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          <Input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="h-6 text-xs px-1.5 flex-1 min-w-0"
+          />
+          <button
+            onMouseDown={(e) => { e.preventDefault(); commit(); }}
+            className="shrink-0 p-0.5 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+          >
+            <Check className="h-3 w-3" />
+          </button>
+          <button
+            onMouseDown={(e) => { e.preventDefault(); cancel(); }}
+            className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
+      onClick={startEditing}
+    >
+      <span className={`shrink-0 ${hasValue ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+        {icon}
+      </span>
+      <span className="text-muted-foreground text-xs w-[76px] shrink-0">{label}</span>
+      <span className={`truncate text-xs flex-1 ${hasValue ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+        {hasValue ? (
+          link ? (
+            <a
+              href={link.startsWith('http') ? link : `https://${link}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline inline-flex items-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {value} <ExternalLink className="h-2.5 w-2.5 inline" />
+            </a>
+          ) : value
+        ) : (placeholder ? `Add ${label.toLowerCase()}…` : 'Not recorded')}
+      </span>
+      <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
     </div>
   );
 }
