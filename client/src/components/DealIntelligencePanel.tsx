@@ -4,6 +4,7 @@ import { RootState, updateLead, patchLead } from '@/store';
 import {
   Lead,
   Activity,
+  SitemapPage,
   STAGE_LABELS,
 } from '@/lib/types';
 import {
@@ -272,6 +273,32 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     }
   }, [lead, orgId, authReady, dispatch, toast]);
 
+  const handleSitemapFetch = useCallback(async (sitemapUrl: string) => {
+    if (!sitemapUrl.trim() || !orgId || !authReady) return;
+    try {
+      const res = await fetch(`/api/sitemap?url=${encodeURIComponent(sitemapUrl.trim())}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch sitemap');
+      }
+      const data = await res.json();
+      const updates: Partial<Lead> = {
+        sitemapUrl: sitemapUrl.trim(),
+        sitemapPages: data.pages,
+        sitemapFetchedAt: new Date(),
+        updatedAt: new Date(),
+      };
+      dispatch(patchLead({ id: lead.id, updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady);
+      toast({
+        title: 'Sitemap Captured',
+        description: `Found ${data.totalPages} page${data.totalPages !== 1 ? 's' : ''} across ${Object.keys(data.sections || {}).length} section${Object.keys(data.sections || {}).length !== 1 ? 's' : ''}`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Sitemap Failed', description: err.message || 'Could not fetch sitemap', variant: 'destructive' });
+    }
+  }, [lead, orgId, authReady, dispatch, toast]);
+
   const handleUpdatePresenceField = useCallback((field: keyof Lead, value: string) => {
     dispatch(updateLead({ ...lead, [field]: value || undefined, updatedAt: new Date() }));
     if (orgId && authReady) {
@@ -381,6 +408,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             link={lead.linkedinUrl}
             onSave={(v) => handleUpdatePresenceField('linkedinUrl', v)}
           />
+          <SitemapRow lead={lead} onFetch={handleSitemapFetch} />
         </div>
       </div>
 
@@ -663,5 +691,149 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
         </div>
       )}
     </>
+  );
+}
+
+function SitemapRow({ lead, onFetch }: { lead: Lead; onFetch: (url: string) => Promise<void> }) {
+  const [entering, setEntering] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [expanded, setExpanded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const hasSitemap = !!lead.sitemapUrl;
+  const pages = lead.sitemapPages || [];
+  const fetchedAt = lead.sitemapFetchedAt;
+
+  const startEntering = () => {
+    setDraft(lead.sitemapUrl || '');
+    setEntering(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleFetch = async () => {
+    if (!draft.trim()) return;
+    setLoading(true);
+    try {
+      await onFetch(draft.trim());
+      setEntering(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleFetch();
+    if (e.key === 'Escape') { setEntering(false); setDraft(''); }
+  };
+
+  // Group pages by top-level section
+  const sections = pages.reduce<Record<string, SitemapPage[]>>((acc, p) => {
+    try {
+      const parts = new URL(p.url).pathname.split('/').filter(Boolean);
+      const section = parts.length > 0 ? `/${parts[0]}` : '/';
+      if (!acc[section]) acc[section] = [];
+      acc[section].push(p);
+    } catch { /* skip */ }
+    return acc;
+  }, {});
+
+  if (entering) {
+    return (
+      <div className="space-y-1.5 py-0.5">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-amber-600"><FileText className="h-3.5 w-3.5" /></span>
+          <span className="text-muted-foreground text-xs w-[76px] shrink-0">Sitemap URL</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Input
+            ref={inputRef}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="https://example.com.au/sitemap.xml"
+            className="h-6 text-xs px-1.5 flex-1"
+            disabled={loading}
+          />
+          <Button
+            size="sm"
+            className="h-6 px-2 text-xs shrink-0"
+            onClick={handleFetch}
+            disabled={loading || !draft.trim()}
+          >
+            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+          </Button>
+          <button
+            onClick={() => { setEntering(false); setDraft(''); }}
+            className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+        <p className="text-[10px] text-muted-foreground pl-[calc(3.5rem+0.5rem)]">
+          Paste the sitemap URL (e.g. /sitemap.xml, /sitemap_index.xml) to capture all indexed pages.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <div
+        className="flex items-center gap-2 py-0.5 group cursor-pointer rounded hover:bg-muted/40 -mx-1 px-1 transition-colors"
+        onClick={startEntering}
+      >
+        <span className={`shrink-0 ${hasSitemap ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+          <FileText className="h-3.5 w-3.5" />
+        </span>
+        <span className="text-muted-foreground text-xs w-[76px] shrink-0">Sitemap</span>
+        <span className={`truncate text-xs flex-1 ${hasSitemap ? 'text-foreground' : 'text-muted-foreground italic'}`}>
+          {hasSitemap
+            ? `${pages.length} pages captured`
+            : 'Add sitemap URL…'}
+        </span>
+        <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+      </div>
+      {hasSitemap && pages.length > 0 && (
+        <div className="ml-[calc(1rem+0.5rem+76px+0.5rem)] space-y-1">
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-0.5"
+          >
+            {expanded ? 'Hide pages' : `View ${pages.length} pages`}
+            {fetchedAt && <span className="text-muted-foreground ml-1">· fetched {format(new Date(fetchedAt), 'dd/MM/yy')}</span>}
+          </button>
+          {expanded && (
+            <div className="bg-muted/40 rounded border p-2 space-y-2 max-h-48 overflow-y-auto">
+              {Object.entries(sections).slice(0, 20).map(([section, sectionPages]) => (
+                <div key={section}>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+                    {section} <span className="font-normal normal-case">({sectionPages.length})</span>
+                  </p>
+                  {sectionPages.slice(0, 5).map((p, i) => (
+                    <div key={i} className="flex items-center gap-1 py-0.5">
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline truncate flex-1"
+                      >
+                        {p.url.replace(/^https?:\/\/[^/]+/, '')}
+                      </a>
+                      {p.lastmod && (
+                        <span className="text-[9px] text-muted-foreground shrink-0">{p.lastmod.slice(0, 10)}</span>
+                      )}
+                    </div>
+                  ))}
+                  {sectionPages.length > 5 && (
+                    <p className="text-[9px] text-muted-foreground">+{sectionPages.length - 5} more</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

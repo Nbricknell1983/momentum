@@ -1796,6 +1796,115 @@ Return valid JSON:
   });
 
   // ===============================
+  // Sitemap Fetch & Parse
+  // ===============================
+
+  app.get("/api/sitemap", async (req, res) => {
+    try {
+      const { url } = req.query;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: "url is required" });
+      }
+
+      const MAX_PAGES = 500;
+      const TIMEOUT_MS = 10000;
+
+      async function fetchXml(targetUrl: string): Promise<string> {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        try {
+          const r = await fetch(targetUrl, {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return await r.text();
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      function extractTag(xml: string, tag: string): string | undefined {
+        const m = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`));
+        return m ? m[1].trim() : undefined;
+      }
+
+      function parseUrlset(xml: string): Array<{ url: string; lastmod?: string; changefreq?: string; priority?: string }> {
+        const entries: Array<{ url: string; lastmod?: string; changefreq?: string; priority?: string }> = [];
+        const urlBlocks = xml.match(/<url[\s>][\s\S]*?<\/url>/gi) || [];
+        for (const block of urlBlocks) {
+          const loc = extractTag(block, 'loc');
+          if (loc) {
+            entries.push({
+              url: loc,
+              lastmod: extractTag(block, 'lastmod'),
+              changefreq: extractTag(block, 'changefreq'),
+              priority: extractTag(block, 'priority'),
+            });
+          }
+        }
+        return entries;
+      }
+
+      function parseSitemapIndex(xml: string): string[] {
+        const locs: string[] = [];
+        const sitemapBlocks = xml.match(/<sitemap[\s>][\s\S]*?<\/sitemap>/gi) || [];
+        for (const block of sitemapBlocks) {
+          const loc = extractTag(block, 'loc');
+          if (loc) locs.push(loc);
+        }
+        return locs;
+      }
+
+      const rootXml = await fetchXml(url);
+      const isSitemapIndex = /<sitemapindex/i.test(rootXml);
+
+      let pages: Array<{ url: string; lastmod?: string; changefreq?: string; priority?: string }> = [];
+
+      if (isSitemapIndex) {
+        const childUrls = parseSitemapIndex(rootXml).slice(0, 10);
+        for (const childUrl of childUrls) {
+          if (pages.length >= MAX_PAGES) break;
+          try {
+            const childXml = await fetchXml(childUrl);
+            const childPages = parseUrlset(childXml);
+            pages.push(...childPages.slice(0, MAX_PAGES - pages.length));
+          } catch {
+            // skip failed child sitemaps
+          }
+        }
+      } else {
+        pages = parseUrlset(rootXml);
+      }
+
+      pages = pages.slice(0, MAX_PAGES);
+
+      // Group URLs by top-level path section
+      const sections: Record<string, number> = {};
+      for (const p of pages) {
+        try {
+          const u = new URL(p.url);
+          const parts = u.pathname.split('/').filter(Boolean);
+          const section = parts[0] || '/';
+          sections[section] = (sections[section] || 0) + 1;
+        } catch { /* skip */ }
+      }
+
+      res.json({
+        url,
+        totalPages: pages.length,
+        isSitemapIndex,
+        pages,
+        sections,
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Sitemap] Error:", error.message);
+      res.status(500).json({ error: error.message || "Failed to fetch sitemap" });
+    }
+  });
+
+  // ===============================
   // Domain WHOIS / Age Lookup
   // ===============================
 

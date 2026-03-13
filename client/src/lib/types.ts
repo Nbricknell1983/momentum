@@ -298,6 +298,16 @@ export interface Lead {
   aiConversationInsights?: AiConversationInsightsOutput;
   aiGrowthPlan?: AiGrowthPlanOutput;
   aiProspects?: AiProspectOutput[];
+  sitemapUrl?: string;
+  sitemapPages?: SitemapPage[];
+  sitemapFetchedAt?: Date;
+}
+
+export interface SitemapPage {
+  url: string;
+  lastmod?: string;
+  changefreq?: string;
+  priority?: string;
 }
 
 export interface AiCallPrepOutput {
