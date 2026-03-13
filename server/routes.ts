@@ -1967,7 +1967,7 @@ Return valid JSON:
         return res.status(400).json({ error: "urls array is required" });
       }
 
-      const MAX_PAGES = 25;
+      const HARD_CAP = 500; // absolute server-side safety limit
       const TIMEOUT_MS = 8000;
 
       // Prioritise high-value pages: service, location, about, contact, homepage
@@ -1981,7 +1981,7 @@ Return valid JSON:
         return 60;
       }
 
-      const sorted = [...urls].sort((a, b) => scorePath(b) - scorePath(a)).slice(0, MAX_PAGES);
+      const sorted = [...urls].sort((a, b) => scorePath(b) - scorePath(a)).slice(0, HARD_CAP);
 
       function stripHtml(html: string): string {
         return html
@@ -2109,10 +2109,10 @@ Return valid JSON:
         }
       }
 
-      // Crawl in batches of 5 for speed
+      // Crawl in batches of 10 for speed
       const results = [];
-      for (let i = 0; i < sorted.length; i += 5) {
-        const batch = sorted.slice(i, i + 5);
+      for (let i = 0; i < sorted.length; i += 10) {
+        const batch = sorted.slice(i, i + 10);
         const batchResults = await Promise.all(batch.map(crawlPage));
         results.push(...batchResults);
       }
