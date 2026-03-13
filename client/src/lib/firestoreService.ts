@@ -50,13 +50,19 @@ function convertDatesToTimestamp(data: any): any {
 }
 
 function removeUndefinedFields(obj: any): any {
-  const result: any = {};
-  for (const key in obj) {
-    if (obj[key] !== undefined) {
-      result[key] = obj[key];
-    }
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedFields);
   }
-  return result;
+  if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
+    const result: any = {};
+    for (const key in obj) {
+      if (obj[key] !== undefined) {
+        result[key] = removeUndefinedFields(obj[key]);
+      }
+    }
+    return result;
+  }
+  return obj;
 }
 
 function checkAuthReady(orgId: string | null, authReady: boolean, operation: string, path: string): boolean {
