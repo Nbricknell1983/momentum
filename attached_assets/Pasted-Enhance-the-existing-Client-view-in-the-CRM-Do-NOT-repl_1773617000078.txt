@@ -1,0 +1,442 @@
+Enhance the existing Client view in the CRM.
+
+Do NOT replace the current layout.
+Do NOT remove existing cards or actions.
+Extend the current client experience by adding an AI-first onboarding and handover workflow.
+
+CURRENT UI STRUCTURE
+
+Left column
+- Client details
+- Stage
+- Next contact
+- Account value
+- Log activity
+
+Middle column
+- Account Intelligence
+- Client Health Score
+- Service Performance
+- Retention Signals
+- Expansion Opportunities
+
+Right column
+- AI Client Growth Engine
+- Win Before You Dial
+- Control the Call
+- Win the Follow-Up
+- Growth Plan
+- Multiply Your Pipeline
+
+
+GOAL
+
+Add a new AI-first module to the MIDDLE COLUMN called:
+
+AI Onboarding & Team Handover
+
+This module must help the sales rep capture only the key commercial and strategic inputs, then use AI to generate:
+
+1. Structured internal handover notes
+2. A recommended website sitemap
+3. SEO-focused service and location page recommendations
+4. Google Ads strategy notes
+5. Performance Boost / retargeting notes
+6. A structured delivery brief for the head office team
+7. A clean “Copy for High Response” output
+
+
+CORE PRINCIPLE
+
+The rep should NOT need to manually write long handover notes.
+
+The rep should only need to:
+- enter client context
+- select products sold
+- input goals
+- upload Ahrefs or keyword data
+- provide a few key differentiators and commercial details
+
+Then AI should do the heavy lifting.
+
+The system must feel like:
+“Rep enters sales intelligence → AI turns it into production-ready notes.”
+
+
+--------------------------------------------------
+NEW MODULE
+--------------------------------------------------
+
+Create a new collapsible card in the MIDDLE COLUMN titled:
+
+AI Onboarding & Team Handover
+
+Inside the module create the following tabs:
+
+1. Business Context
+2. Products & Commercials
+3. SEO Inputs
+4. AI Outputs
+5. Final Handover
+
+
+--------------------------------------------------
+TAB 1: BUSINESS CONTEXT
+--------------------------------------------------
+
+Fields:
+
+Business Overview (textarea)
+- what the business does
+
+Target Customers (textarea)
+- who they want to attract
+
+Key Services (textarea)
+- service list or service priorities
+
+Business Goals (textarea)
+- e.g. increase appointments, fill capacity, grow in a suburb, rank locally
+
+Locations / Service Areas (textarea)
+- suburbs, city, regions
+
+Competitor Notes (textarea)
+- known competitors or level of competition
+
+Key Differentiators (textarea)
+- why customers choose them
+
+Brand / Theme Direction (textarea)
+- e.g. clean, clinical, modern, premium, trustworthy
+
+Operational Notes (textarea)
+- anything useful for delivery team
+
+
+--------------------------------------------------
+TAB 2: PRODUCTS & COMMERCIALS
+--------------------------------------------------
+
+Add selectable product toggles:
+
+- Website
+- SEO
+- Google Ads
+- Performance Boost
+- Local SEO
+- GBP Optimisation
+
+When Website is selected, show:
+- Website Page Count (number)
+- Website Objective (textarea)
+- Booking / Lead CTA Preference (textarea)
+
+When SEO is selected, show:
+- SEO Priority Services (textarea)
+- SEO Priority Locations (textarea)
+
+When Google Ads is selected, show:
+- Ads Focus Services (textarea)
+- Monthly Budget (number or text)
+- Fastest Win Service (textarea)
+
+When Performance Boost is selected, show:
+- Retargeting Goal (textarea)
+
+Commercial fields:
+
+Pricing Notes (textarea)
+- include service pricing, margins, average sale value, session price, etc.
+
+Capacity Notes (textarea)
+- e.g. currently 3-5 bookings/day, target 15-20/day
+
+Revenue Opportunity Notes (textarea)
+- useful internal commercial context
+
+
+--------------------------------------------------
+TAB 3: SEO INPUTS
+--------------------------------------------------
+
+This tab is critical.
+
+Add support for Ahrefs / keyword input and AI analysis.
+
+Include:
+
+Keyword Data Upload
+- allow CSV upload for Ahrefs or keyword exports
+
+Manual Keyword Notes (textarea)
+
+Competitor Keyword Notes (textarea)
+
+Current Website URL (text)
+
+Current Sitemap URL (text)
+
+Primary SEO Objective (textarea)
+Example:
+“Build the sitemap and page strategy that gives us the best chance of ranking locally for chiropractic and psychology services.”
+
+AI must use these inputs to infer:
+- priority services
+- priority locations
+- keyword themes
+- page clustering
+- required service pages
+- required location pages
+- content intent
+- SEO gaps in the current structure
+
+
+--------------------------------------------------
+AI ANALYSIS REQUIREMENTS
+--------------------------------------------------
+
+When keyword data is uploaded, AI must:
+
+1. Analyse the Ahrefs / keyword data
+2. Identify the highest-value keyword opportunities based on:
+   - relevance
+   - service intent
+   - local intent
+   - ranking potential
+   - commercial intent
+3. Recommend the best page structure for SEO
+4. Recommend what pages should exist on the website
+5. Recommend which service pages and location pages should be prioritised
+6. Detect content or structure gaps in the current site
+7. Use the client’s business goals to shape the sitemap
+8. Produce a practical recommendation, not generic SEO advice
+
+The AI should think like an SEO strategist and delivery lead, not just a summariser.
+
+It should answer:
+“What site structure gives this client the best chance of ranking and converting?”
+
+
+--------------------------------------------------
+TAB 4: AI OUTPUTS
+--------------------------------------------------
+
+Add buttons:
+
+- Generate AI Strategy
+- Generate SEO Sitemap
+- Generate Team Handover
+- Refresh All Outputs
+
+These outputs should be generated into structured cards:
+
+A. AI Strategy Summary
+Sections:
+- business summary
+- target market
+- growth objective
+- fastest win
+- long-term opportunity
+
+B. SEO Sitemap Recommendation
+Sections:
+- recommended core pages
+- recommended service pages
+- recommended location pages
+- recommended supporting pages
+- recommended booking/contact pages
+
+C. Marketing Strategy Summary
+Sections:
+- SEO focus
+- Google Ads focus
+- Performance Boost focus
+- conversion strategy
+
+D. Team Handover Draft
+Sections:
+- who the client is
+- what they bought
+- what the site needs to achieve
+- what pages need to be built
+- what the ads should focus on
+- what the SEO strategy is
+- design/theme guidance
+- important commercial context
+- operational notes
+
+
+--------------------------------------------------
+AI OUTPUT RULES
+--------------------------------------------------
+
+The AI-generated handover must be detailed and useful.
+
+It must not be generic.
+
+It must include actual strategic reasoning such as:
+- why certain pages are recommended
+- why certain services should be prioritised
+- why Google Ads should focus on one service first
+- what the delivery team should build first
+
+The AI should combine:
+- client business context
+- products sold
+- pricing and capacity data
+- uploaded keyword data
+- location targets
+- known competitors
+- current website / sitemap context if available
+
+The output should feel like a strong internal strategist prepared it.
+
+
+--------------------------------------------------
+TAB 5: FINAL HANDOVER
+--------------------------------------------------
+
+Show the final structured output in a polished internal brief format.
+
+Add a formatted output block titled:
+
+CLIENT HANDOVER NOTES
+
+Output structure:
+
+Client Name
+Location
+Primary Contact
+
+Products Sold
+
+Business Overview
+
+Target Customers
+
+Primary Business Goals
+
+Services to Promote
+
+Commercial Notes
+
+Capacity Notes
+
+Competitor Landscape
+
+Key Differentiators
+
+Brand / Theme Direction
+
+Recommended Website Strategy
+
+Recommended Sitemap
+
+SEO Strategy
+
+Google Ads Strategy
+
+Performance Boost Strategy
+
+Conversion Goals
+
+Operational Notes
+
+Delivery Team Notes
+
+Add action buttons:
+- Copy for High Response
+- Copy as Plain Text
+- Regenerate
+- Edit Before Copying
+
+
+--------------------------------------------------
+EXAMPLE AI BEHAVIOUR
+--------------------------------------------------
+
+If the rep enters:
+- clinic in Moreton Bay / North Brisbane
+- psychology + chiropractor
+- goal of increasing chiro appointments from 3-5 per day to 15-20 per day
+- adults $89 / children $79 chiro pricing
+- psychologist sessions around $218
+- sport injury and immediate availability as differentiators
+- 15-page website
+- Google Ads
+- SEO
+- Performance Boost
+- keyword data related to chiropractic and psychology
+
+Then AI should generate:
+- a commercially sensible website structure
+- dedicated service pages for both psychology and chiropractic
+- location pages based on ranking opportunity
+- a recommendation that Google Ads initially focus on chiropractic due to immediate growth opportunity
+- handover notes that explain the strategy clearly to the website, SEO and paid media teams
+
+
+--------------------------------------------------
+DATA STORAGE
+--------------------------------------------------
+
+Save all data under the client record in Firestore.
+
+Suggested structure:
+
+client_onboarding: {
+  business_context: {},
+  products_and_commercials: {},
+  seo_inputs: {
+    uploaded_files: [],
+    keyword_summary: "",
+    current_website_url: "",
+    current_sitemap_url: "",
+    seo_objective: ""
+  },
+  ai_outputs: {
+    strategy_summary: "",
+    seo_sitemap: "",
+    marketing_strategy: "",
+    team_handover: ""
+  },
+  final_handover: {
+    formatted_notes: "",
+    last_generated_at: "",
+    last_edited_by: ""
+  }
+}
+
+Also store uploaded keyword file references so they can be reused without uploading again.
+
+
+--------------------------------------------------
+UX REQUIREMENTS
+--------------------------------------------------
+
+- match existing CRM card styling
+- collapsible sections
+- tabs inside the module
+- autosave inputs
+- loading spinner during AI generation
+- “last generated” timestamp
+- clear separation between rep inputs and AI outputs
+- make AI outputs editable before copying
+- preserve current page layout and visual hierarchy
+
+
+--------------------------------------------------
+IMPORTANT PRODUCT REQUIREMENT
+--------------------------------------------------
+
+This feature is not just a notes field.
+
+This is an AI production brief generator.
+
+The output must help head office teams execute websites, SEO, Google Ads and retargeting with confidence.
+
+The system should reduce poor handovers, vague notes, and missed strategic context.
+
+The rep provides the ingredients.
+AI produces the strategy, sitemap and handover notes.

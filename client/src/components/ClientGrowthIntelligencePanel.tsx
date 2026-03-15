@@ -8,6 +8,7 @@ import {
   Client, HealthStatus, ChannelStatus, HEALTH_STATUS_LABELS,
   HEALTH_CONTRIBUTOR_LABELS,
 } from '@/lib/types';
+import ClientOnboardingHandover from '@/components/ClientOnboardingHandover';
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = {
@@ -301,6 +302,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
               )}
             </div>
           )}
+
+          {/* AI Onboarding & Team Handover */}
+          <ClientOnboardingHandover client={client} />
         </div>
       </div>
     </ScrollArea>

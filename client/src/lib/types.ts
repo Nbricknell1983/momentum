@@ -1664,6 +1664,46 @@ export interface Client {
   // Next Best Action - highlights what needs to happen next for this client
   nextAction?: string;
   nextActionSetAt?: Date;
+  // AI Onboarding & Team Handover
+  clientOnboarding?: ClientOnboarding;
+}
+
+export interface ClientOnboarding {
+  businessOverview?: string;
+  targetCustomers?: string;
+  keyServices?: string;
+  businessGoals?: string;
+  locations?: string;
+  competitorNotes?: string;
+  keyDifferentiators?: string;
+  brandDirection?: string;
+  operationalNotes?: string;
+  selectedProducts?: string[];
+  websitePageCount?: number;
+  websiteObjective?: string;
+  bookingCtaPreference?: string;
+  seoServices?: string;
+  seoLocations?: string;
+  adsServices?: string;
+  monthlyBudget?: string;
+  fastestWinService?: string;
+  retargetingGoal?: string;
+  pricingNotes?: string;
+  capacityNotes?: string;
+  revenueNotes?: string;
+  seoObjective?: string;
+  manualKeywordNotes?: string;
+  competitorKeywordNotes?: string;
+  currentWebsiteUrl?: string;
+  currentSitemapUrl?: string;
+  keywordSummary?: string;
+  aiStrategyOutput?: string;
+  aiSitemapOutput?: string;
+  aiMarketingOutput?: string;
+  aiHandoverOutput?: string;
+  finalHandoverNotes?: string;
+  lastGeneratedAt?: string;
+  lastEditedAt?: string;
 }
 
 export interface Deliverable {

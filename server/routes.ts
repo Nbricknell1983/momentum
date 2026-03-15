@@ -567,6 +567,100 @@ Be specific and actionable. Focus on retention and growth.`;
     }
   });
 
+  // AI Onboarding & Team Handover — generate all outputs
+  app.post("/api/clients/ai/onboarding-generate", async (req, res) => {
+    try {
+      const { clientName, location, data } = req.body as {
+        clientName: string;
+        location: string;
+        data: Record<string, any>;
+      };
+
+      const products = (data.selectedProducts || []).join(', ') || 'Not specified';
+      const keywordInfo = data.keywordSummary
+        ? `\n\nKEYWORD DATA (from uploaded file):\n${data.keywordSummary.slice(0, 3000)}`
+        : data.manualKeywordNotes
+        ? `\n\nMANUAL KEYWORD NOTES:\n${data.manualKeywordNotes}`
+        : '';
+
+      const productDetails: string[] = [];
+      if ((data.selectedProducts || []).includes('website')) {
+        productDetails.push(`Website: ${data.websitePageCount || '?'} pages. Objective: ${data.websiteObjective || 'N/A'}. CTA preference: ${data.bookingCtaPreference || 'N/A'}`);
+      }
+      if ((data.selectedProducts || []).includes('seo')) {
+        productDetails.push(`SEO: Priority services: ${data.seoServices || 'N/A'}. Priority locations: ${data.seoLocations || 'N/A'}`);
+      }
+      if ((data.selectedProducts || []).includes('google_ads')) {
+        productDetails.push(`Google Ads: Focus services: ${data.adsServices || 'N/A'}. Monthly budget: ${data.monthlyBudget || 'N/A'}. Fastest win: ${data.fastestWinService || 'N/A'}`);
+      }
+      if ((data.selectedProducts || []).includes('performance_boost')) {
+        productDetails.push(`Performance Boost: Retargeting goal: ${data.retargetingGoal || 'N/A'}`);
+      }
+
+      const prompt = `You are a senior digital marketing strategist and delivery lead at a marketing agency. You have been given a new client intake form and must produce four detailed internal outputs.
+
+CLIENT: ${clientName}
+LOCATION: ${location}
+PRODUCTS SOLD: ${products}
+
+BUSINESS CONTEXT:
+- Business overview: ${data.businessOverview || 'N/A'}
+- Target customers: ${data.targetCustomers || 'N/A'}
+- Key services: ${data.keyServices || 'N/A'}
+- Business goals: ${data.businessGoals || 'N/A'}
+- Locations / service areas: ${data.locations || 'N/A'}
+- Competitor notes: ${data.competitorNotes || 'N/A'}
+- Key differentiators: ${data.keyDifferentiators || 'N/A'}
+- Brand / theme direction: ${data.brandDirection || 'N/A'}
+- Operational notes: ${data.operationalNotes || 'N/A'}
+
+PRODUCT DETAILS:
+${productDetails.join('\n') || 'N/A'}
+
+COMMERCIAL DETAILS:
+- Pricing: ${data.pricingNotes || 'N/A'}
+- Capacity: ${data.capacityNotes || 'N/A'}
+- Revenue opportunity: ${data.revenueNotes || 'N/A'}
+
+SEO INPUTS:
+- Current website URL: ${data.currentWebsiteUrl || 'N/A'}
+- Current sitemap URL: ${data.currentSitemapUrl || 'N/A'}
+- SEO objective: ${data.seoObjective || 'N/A'}
+- Competitor keyword notes: ${data.competitorKeywordNotes || 'N/A'}${keywordInfo}
+
+You must return a JSON object with exactly these four keys. Each value is a detailed, non-generic, strategic string using markdown formatting (headers with ##, bullet points with -, bold with **):
+
+{
+  "strategy": "## AI Strategy Summary\\n\\n## Business Summary\\n[2-3 sentences]\\n\\n## Target Market\\n[specific description]\\n\\n## Primary Growth Objective\\n[specific goal with numbers if available]\\n\\n## Fastest Win\\n[specific tactic and why]\\n\\n## Long-Term Opportunity\\n[12-month vision]",
+
+  "sitemap": "## Recommended Website Sitemap\\n\\n## Core Pages\\n[list]\\n\\n## Service Pages\\n[list with reasoning]\\n\\n## Location Pages\\n[list with reasoning]\\n\\n## Supporting Pages\\n[list]\\n\\n## Booking / Contact Pages\\n[list]",
+
+  "marketing": "## Marketing Strategy Summary\\n\\n## SEO Focus\\n[specific strategy]\\n\\n## Google Ads Focus\\n[specific strategy with service priority]\\n\\n## Performance Boost Focus\\n[retargeting strategy]\\n\\n## Conversion Strategy\\n[CTA and landing page recommendations]",
+
+  "handover": "## Team Handover Notes — ${clientName}\\n\\n## Who the Client Is\\n[description]\\n\\n## What They Bought\\n[products and scope]\\n\\n## What the Site Needs to Achieve\\n[commercial goals]\\n\\n## Pages to Build\\n[specific list]\\n\\n## Google Ads Strategy\\n[what to focus on and why]\\n\\n## SEO Strategy\\n[keyword themes, page priorities, ranking approach]\\n\\n## Design / Theme Guidance\\n[brand direction]\\n\\n## Commercial Context\\n[pricing, capacity, revenue opportunity]\\n\\n## Operational Notes\\n[anything delivery team needs to know]"
+}
+
+Be specific, commercial, and strategic. Reference actual services, locations, pricing and goals from the intake data. Do not use placeholder text or generic marketing advice.`;
+
+      const { OpenAI } = await import('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+        max_tokens: 4000,
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      const result = JSON.parse(content);
+      res.json(result);
+    } catch (error) {
+      console.error('Error generating onboarding outputs:', error);
+      res.status(500).json({ error: 'Failed to generate onboarding outputs' });
+    }
+  });
+
   // Generate AI Strategy Plan
   app.post("/api/clients/ai/generate-strategy", async (req, res) => {
     try {
