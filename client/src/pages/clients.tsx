@@ -1868,6 +1868,19 @@ export default function ClientsPage() {
         archived: false,
       };
 
+      // Duplicate check — case-insensitive match on business name
+      const normalised = newBusinessName.trim().toLowerCase();
+      const duplicate = clients.find(c => c.businessName.trim().toLowerCase() === normalised);
+      if (duplicate) {
+        toast({
+          title: "Duplicate client",
+          description: `"${newBusinessName.trim()}" already exists. Please check the client list.`,
+          variant: "destructive",
+        });
+        setIsSaving(false);
+        return;
+      }
+
       const savedClient = await createClientInFirestore(orgId, clientData, authReady);
       dispatch(addClient(savedClient));
 
