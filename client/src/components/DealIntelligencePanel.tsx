@@ -1756,13 +1756,14 @@ async function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
   const metrics: AhrefsMetrics = { fetchedAt: new Date() };
 
   if (hasKeyword && hasPosition) {
-    /* ---------- Organic Keywords export ---------- */
+    /* ---------- Organic Keywords export (has current rankings) ---------- */
     const keywords: AhrefsKeyword[] = rows.map(row => ({
       keyword: String(pick(row, 'keyword') ?? '').trim(),
       position: num(pick(row, 'current position', 'position', 'rank')),
-      volume: num(pick(row, 'search volume', 'volume')),
+      volume: num(pick(row, 'search volume', 'volume', 'avg. monthly searches', 'avg monthly searches')),
       traffic: num(pick(row, 'traffic')),
       difficulty: num(pick(row, 'kd', 'keyword difficulty', 'difficulty')),
+      cpc: num(pick(row, 'cpc')),
       url: String(pick(row, 'url') ?? '').trim() || undefined,
     })).filter(k => k.keyword);
 
@@ -1770,6 +1771,27 @@ async function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
     metrics.topKeywords = keywords.slice(0, 100);
     metrics.organicKeywords = keywords.length;
     metrics.organicTraffic = keywords.reduce((s, k) => s + (k.traffic ?? 0), 0);
+
+  } else if (hasKeyword) {
+    /* ---------- Keyword List / Keyword Planner export (research data — no position) ----------
+       Handles: Ahrefs "List Overview", Ahrefs "Keyword Explorer", Google Keyword Planner exports.
+       These have volume/KD/CPC columns but no "current position" column. */
+    const keywords: AhrefsKeyword[] = rows.map(row => ({
+      keyword: String(pick(row, 'keyword') ?? '').trim(),
+      volume: num(pick(row, 'search volume', 'volume', 'avg. monthly searches', 'avg monthly searches', 'monthly searches')),
+      difficulty: num(pick(row, 'kd', 'keyword difficulty', 'difficulty')),
+      cpc: num(pick(row, 'cpc', 'top of page bid')),
+      traffic: num(pick(row, 'traffic potential', 'tp', 'traffic')),
+    })).filter(k => k.keyword && (k.volume !== null || k.traffic !== null));
+
+    if (!keywords.length) throw new Error('Could not find recognisable Ahrefs columns. Try an Organic Keywords or Overview export.');
+
+    keywords.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+    metrics.topKeywords = keywords.slice(0, 100);
+    metrics.organicKeywords = keywords.length;
+    // Use traffic potential if available, otherwise sum volumes as a proxy
+    const hasTrafficPotential = keywords.some(k => k.traffic !== null);
+    metrics.organicTraffic = keywords.reduce((s, k) => s + (hasTrafficPotential ? (k.traffic ?? 0) : (k.volume ?? 0)), 0);
   }
 
   /* ---------- Overview / domain-level metric columns ---------- */
@@ -1787,7 +1809,7 @@ async function parseAhrefsFile(file: File): Promise<AhrefsMetrics> {
   if (ot !== null) metrics.organicTraffic = ot;
 
   if (!metrics.topKeywords?.length && !metrics.domainRating && !metrics.backlinks) {
-    throw new Error('Could not find recognisable Ahrefs columns. Try an Organic Keywords or Overview export.');
+    throw new Error('Could not find recognisable Ahrefs columns. Try an Organic Keywords, Keyword List, or Domain Overview export.');
   }
 
   return metrics;
