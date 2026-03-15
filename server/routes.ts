@@ -577,79 +577,136 @@ Be specific and actionable. Focus on retention and growth.`;
       };
 
       const products = (data.selectedProducts || []).join(', ') || 'Not specified';
-      const keywordInfo = data.keywordSummary
-        ? `\n\nKEYWORD DATA (from uploaded file):\n${data.keywordSummary.slice(0, 3000)}`
+
+      const hasSold = (p: string) => (data.selectedProducts || []).includes(p);
+      const soldWebsite = hasSold('website');
+      const soldSEO = hasSold('seo');
+      const soldAds = hasSold('google_ads');
+      const soldBoost = hasSold('performance_boost');
+      const soldLocalSEO = hasSold('local_seo');
+      const soldGBP = hasSold('gbp');
+
+      const keywordBlock = data.keywordSummary
+        ? `\n\nKEYWORD DATA (from uploaded file — use these to drive specific page and campaign recommendations):\n${data.keywordSummary.slice(0, 4000)}`
         : data.manualKeywordNotes
-        ? `\n\nMANUAL KEYWORD NOTES:\n${data.manualKeywordNotes}`
+        ? `\n\nKEYWORD NOTES:\n${data.manualKeywordNotes}`
         : '';
 
-      const productDetails: string[] = [];
-      if ((data.selectedProducts || []).includes('website')) {
-        productDetails.push(`Website: ${data.websitePageCount || '?'} pages. Objective: ${data.websiteObjective || 'N/A'}. CTA preference: ${data.bookingCtaPreference || 'N/A'}`);
-      }
-      if ((data.selectedProducts || []).includes('seo')) {
-        productDetails.push(`SEO: Priority services: ${data.seoServices || 'N/A'}. Priority locations: ${data.seoLocations || 'N/A'}`);
-      }
-      if ((data.selectedProducts || []).includes('google_ads')) {
-        productDetails.push(`Google Ads: Focus services: ${data.adsServices || 'N/A'}. Monthly budget: ${data.monthlyBudget || 'N/A'}. Fastest win: ${data.fastestWinService || 'N/A'}`);
-      }
-      if ((data.selectedProducts || []).includes('performance_boost')) {
-        productDetails.push(`Performance Boost: Retargeting goal: ${data.retargetingGoal || 'N/A'}`);
-      }
+      const prompt = `You are a senior delivery strategist at a digital marketing agency. You have received a completed client intake form. Your job is NOT to summarise what the rep wrote. Your job is to SYNTHESISE all of this information into a practical, actionable internal delivery brief that the delivery team will use to start work immediately.
 
-      const prompt = `You are a senior digital marketing strategist and delivery lead at a marketing agency. You have been given a new client intake form and must produce four detailed internal outputs.
+STRICT RULES:
+- Do not restate or paraphrase the rep's notes. Synthesise them into delivery decisions.
+- Every recommendation must be justified by the commercial context (pricing, capacity, conversion goals, local opportunity).
+- If keyword data is provided, use it to drive specific page names, URL slugs, and campaign targets — not generic placeholders.
+- Never write generic marketing advice. Every line must be specific to this client.
+- If a product was not sold, omit that section entirely from the relevant output.
+- Prioritise clarity, actionability, and commercial impact in every sentence.
+
+═══ CLIENT INTAKE DATA ═══
 
 CLIENT: ${clientName}
-LOCATION: ${location}
-PRODUCTS SOLD: ${products}
+LOCATION / SERVICE AREAS: ${location}${data.locations ? `, ${data.locations}` : ''}
+PRODUCTS SOLD: ${products || 'Not specified'}
 
-BUSINESS CONTEXT:
-- Business overview: ${data.businessOverview || 'N/A'}
-- Target customers: ${data.targetCustomers || 'N/A'}
-- Key services: ${data.keyServices || 'N/A'}
+BUSINESS MODEL & CONTEXT:
+- What they do: ${data.businessOverview || 'N/A'}
+- Who they serve (target customers): ${data.targetCustomers || 'N/A'}
+- Key services (what they sell): ${data.keyServices || 'N/A'}
 - Business goals: ${data.businessGoals || 'N/A'}
-- Locations / service areas: ${data.locations || 'N/A'}
-- Competitor notes: ${data.competitorNotes || 'N/A'}
 - Key differentiators: ${data.keyDifferentiators || 'N/A'}
+- Competitor landscape: ${data.competitorNotes || 'N/A'}
 - Brand / theme direction: ${data.brandDirection || 'N/A'}
 - Operational notes: ${data.operationalNotes || 'N/A'}
 
-PRODUCT DETAILS:
-${productDetails.join('\n') || 'N/A'}
+COMMERCIAL MODEL:
+- Pricing / average job value: ${data.pricingNotes || 'N/A'}
+- Current capacity vs target capacity: ${data.capacityNotes || 'N/A'}
+- Revenue opportunity / internal context: ${data.revenueNotes || 'N/A'}
 
-COMMERCIAL DETAILS:
-- Pricing: ${data.pricingNotes || 'N/A'}
-- Capacity: ${data.capacityNotes || 'N/A'}
-- Revenue opportunity: ${data.revenueNotes || 'N/A'}
+PRODUCT SCOPE:
+${soldWebsite ? `- WEBSITE: ${data.websitePageCount || '?'} pages. Objective: ${data.websiteObjective || 'N/A'}. CTA / booking preference: ${data.bookingCtaPreference || 'N/A'}` : ''}
+${soldSEO ? `- SEO: Priority services to rank: ${data.seoServices || 'N/A'}. Priority locations: ${data.seoLocations || 'N/A'}` : ''}
+${soldAds ? `- GOOGLE ADS: Focus services: ${data.adsServices || 'N/A'}. Monthly budget: ${data.monthlyBudget || 'N/A'}. Fastest commercial win: ${data.fastestWinService || 'N/A'}` : ''}
+${soldBoost ? `- PERFORMANCE BOOST: Retargeting goal: ${data.retargetingGoal || 'N/A'}` : ''}
+${soldLocalSEO ? `- LOCAL SEO: Included` : ''}
+${soldGBP ? `- GBP OPTIMISATION: Included` : ''}
 
-SEO INPUTS:
-- Current website URL: ${data.currentWebsiteUrl || 'N/A'}
-- Current sitemap URL: ${data.currentSitemapUrl || 'N/A'}
+SEO / KEYWORD INTELLIGENCE:
+- Website URL: ${data.currentWebsiteUrl || 'N/A'}
+- Sitemap URL: ${data.currentSitemapUrl || 'N/A'}
 - SEO objective: ${data.seoObjective || 'N/A'}
-- Competitor keyword notes: ${data.competitorKeywordNotes || 'N/A'}${keywordInfo}
+- Competitor keyword notes: ${data.competitorKeywordNotes || 'N/A'}${keywordBlock}
 
-You must return a JSON object with exactly these four keys. Each value is a detailed, non-generic, strategic string using markdown formatting (headers with ##, bullet points with -, bold with **):
+═══ OUTPUT INSTRUCTIONS ═══
 
-{
-  "strategy": "## AI Strategy Summary\\n\\n## Business Summary\\n[2-3 sentences]\\n\\n## Target Market\\n[specific description]\\n\\n## Primary Growth Objective\\n[specific goal with numbers if available]\\n\\n## Fastest Win\\n[specific tactic and why]\\n\\n## Long-Term Opportunity\\n[12-month vision]",
+Return a JSON object with exactly these four keys. Use markdown (## for headers, - for bullets, **bold** for emphasis). Each section must be substantive, specific, and decision-ready.
 
-  "sitemap": "## Recommended Website Sitemap\\n\\n## Core Pages\\n[list]\\n\\n## Service Pages\\n[list with reasoning]\\n\\n## Location Pages\\n[list with reasoning]\\n\\n## Supporting Pages\\n[list]\\n\\n## Booking / Contact Pages\\n[list]",
+STRATEGY key — Delivery Strategy Brief:
+Synthesise the business model, commercial goals, capacity targets, and product mix into a concise strategic brief. Include:
+## Commercial Opportunity Analysis
+(How does this business make money? What does capacity growth mean in dollar terms? What's the revenue upside of the campaign?)
+## Service Priority Ranking
+(Which services should be led with commercially, and why — based on pricing, demand signals, conversion likelihood)
+## Location Opportunity
+(Which locations/suburbs/regions have the most immediate ranking and lead-gen opportunity, and why)
+## Fastest Commercial Win
+(The single tactic with the quickest path to revenue — be specific and justify it)
+## 12-Month Growth Trajectory
+(What this business should look like in 12 months if delivery executes well — specific targets)
 
-  "marketing": "## Marketing Strategy Summary\\n\\n## SEO Focus\\n[specific strategy]\\n\\n## Google Ads Focus\\n[specific strategy with service priority]\\n\\n## Performance Boost Focus\\n[retargeting strategy]\\n\\n## Conversion Strategy\\n[CTA and landing page recommendations]",
+SITEMAP key — ${soldWebsite ? 'Recommended Website Sitemap & Page Strategy' : 'N/A (Website not sold — write "Website not included in this package.")'}:
+${soldWebsite ? `Design the sitemap that gives this client the best chance of ranking AND converting. For each page, specify: Page Name | URL Slug | Primary SEO Target Keyword | Purpose / Conversion Role. Sections:
+## Core Pages (Home, About, Contact, Booking)
+## Service Pages (one per core service — justify why each is prioritised)
+## Location Pages (one per priority suburb/region — justify based on search volume or commercial opportunity)
+## Supporting Pages (FAQ, Reviews/Testimonials, Blog if warranted)
+## Conversion Architecture Notes (where to place CTAs, what the primary conversion action is, how to reduce friction)` : 'Write: "Website not included in this package."'}
 
-  "handover": "## Team Handover Notes — ${clientName}\\n\\n## Who the Client Is\\n[description]\\n\\n## What They Bought\\n[products and scope]\\n\\n## What the Site Needs to Achieve\\n[commercial goals]\\n\\n## Pages to Build\\n[specific list]\\n\\n## Google Ads Strategy\\n[what to focus on and why]\\n\\n## SEO Strategy\\n[keyword themes, page priorities, ranking approach]\\n\\n## Design / Theme Guidance\\n[brand direction]\\n\\n## Commercial Context\\n[pricing, capacity, revenue opportunity]\\n\\n## Operational Notes\\n[anything delivery team needs to know]"
-}
+MARKETING key — Channel Delivery Brief:
+${soldSEO ? `## SEO Delivery Plan
+(Which service + location page combinations to build and optimise first. Rank them by commercial priority. For each: target keyword cluster, search intent, why this page first, what the page must do to convert.)` : ''}
+${soldAds ? `## Google Ads Delivery Plan
+(Which campaigns to launch at go-live. For each campaign: service focus, target keywords or intent, recommended bid strategy, expected CPA based on pricing context, why this service first. Do not launch everything — prioritise by fastest commercial return.)` : ''}
+${soldBoost ? `## Performance Boost / Retargeting Plan
+(Who to retarget, what the message angle should be, what the creative hook is, what landing page to send them to, what action to drive. Be specific to this client's buyer journey.)` : ''}
+${soldGBP || soldLocalSEO ? `## Local Presence Plan
+(What needs to happen on GBP and local citations to drive map pack visibility. Specific actions, not generic advice.)` : ''}
+## Conversion Strategy
+(How the website, ads, and SEO work together to drive the client's specific conversion goal — be explicit about the user journey from ad/search to booked appointment/enquiry/call.)
 
-Be specific, commercial, and strategic. Reference actual services, locations, pricing and goals from the intake data. Do not use placeholder text or generic marketing advice.`;
+HANDOVER key — Internal Team Handover Note (${clientName}):
+This is the definitive brief the delivery team reads before touching anything. It must answer every question they will have. Include:
+## Who This Client Is
+(2–3 sentences: what they do, who they serve, what drives their revenue)
+## What We Sold & Why
+(Products, scope, and the commercial rationale for each product in this package)
+## What Success Looks Like
+(Specific, measurable — capacity targets, booking volume, ranking goals, revenue outcomes)
+## Delivery Order & Priorities
+(Step-by-step: what gets built first, in what sequence, and why that order matters commercially)
+${soldWebsite ? `## Website Build Brief\n(Page list with purpose for each, CTA strategy, booking integration, design direction, performance requirements)` : ''}
+${soldSEO ? `## SEO Execution Plan\n(Exact pages to build first with target keywords, on-page requirements, internal linking strategy, content angle for each priority page)` : ''}
+${soldAds ? `## Google Ads Launch Plan\n(Campaign structure, starting budget split, priority services, negative keyword themes, conversion tracking requirements)` : ''}
+${soldBoost ? `## Retargeting Brief\n(Audience segments, message variants, creative direction, landing page destination)` : ''}
+## Commercial Context (Internal)
+(Pricing, margins, capacity targets, revenue opportunity — keep this factual and useful for account management)
+## Risks & Watch-Outs
+(Anything that could cause friction, delay, or underperformance — operational constraints, competitive difficulty, client expectations to manage)`;
 
       const { OpenAI } = await import('openai');
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert digital marketing delivery strategist. You synthesise client intake data into precise, commercial, actionable delivery briefs. You never write generic advice. Every recommendation is justified by the commercial context provided. You write for a delivery team who will act on your output immediately.'
+          },
+          { role: 'user', content: prompt }
+        ],
         response_format: { type: 'json_object' },
-        temperature: 0.7,
-        max_tokens: 4000,
+        temperature: 0.4,
+        max_tokens: 6000,
       });
 
       const content = response.choices[0]?.message?.content || '{}';
