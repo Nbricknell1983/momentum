@@ -573,9 +573,6 @@ Be specific and actionable. Focus on retention and growth.`;
       const { text, fieldLabel } = req.body as { text: string; fieldLabel?: string };
       if (!text?.trim()) return res.status(400).json({ error: 'No text provided' });
 
-      const { OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
       const context = fieldLabel ? ` The field is labelled "${fieldLabel}".` : '';
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -724,8 +721,6 @@ ${soldBoost ? `## Retargeting Brief\n(Audience segments, message variants, creat
 ## Risks & Watch-Outs
 (Anything that could cause friction, delay, or underperformance — operational constraints, competitive difficulty, client expectations to manage)`;
 
-      const { OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
