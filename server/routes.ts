@@ -660,7 +660,7 @@ Be specific and actionable. Focus on retention and growth.`;
       const soldGBP = hasSold('gbp');
 
       const keywordBlock = data.keywordSummary
-        ? `\n\nKEYWORD DATA (from uploaded file — use these to drive specific page and campaign recommendations):\n${data.keywordSummary.slice(0, 4000)}`
+        ? `\n\nKEYWORD DATA (from uploaded Ahrefs/keyword planner file — CRITICAL: use these to identify every service + location combination that has search volume. These keywords must drive the sitemap — one page per keyword cluster that shows commercial intent. Prioritise "service suburb" combinations e.g. "chiropractor deception bay", "psychologist north lakes". Do NOT create generic category pages. Every sitemap page must map to a real keyword from this data or a clear search intent gap):\n${data.keywordSummary.slice(0, 4000)}`
         : data.manualKeywordNotes
         ? `\n\nKEYWORD NOTES:\n${data.manualKeywordNotes}`
         : '';
@@ -727,13 +727,42 @@ Synthesise the business model, commercial goals, capacity targets, and product m
 ## 12-Month Growth Trajectory
 (What this business should look like in 12 months if delivery executes well — specific targets)
 
-SITEMAP key — ${soldWebsite ? 'Recommended Website Sitemap & Page Strategy' : 'N/A (Website not sold — write "Website not included in this package.")'}:
-${soldWebsite ? `Design the sitemap that gives this client the best chance of ranking AND converting. For each page, specify: Page Name | URL Slug | Primary SEO Target Keyword | Purpose / Conversion Role. Sections:
-## Core Pages (Home, About, Contact, Booking)
-## Service Pages (one per core service — justify why each is prioritised)
-## Location Pages (one per priority suburb/region — justify based on search volume or commercial opportunity)
-## Supporting Pages (FAQ, Reviews/Testimonials, Blog if warranted)
-## Conversion Architecture Notes (where to place CTAs, what the primary conversion action is, how to reduce friction)` : 'Write: "Website not included in this package."'}
+SITEMAP key — ${soldWebsite ? 'Recommended Website Sitemap — Keyword-Intent Driven' : 'N/A (Website not sold — write "Website not included in this package.")'}:
+${soldWebsite ? `Design the sitemap based entirely on search intent from the keyword data provided. Every page must exist to rank for a specific search query — no generic category pages.
+
+STRICT RULES:
+- NEVER create pages like "Services Overview", "Psychological Services Overview", "Our Services", or any page without a specific ranking target
+- EVERY page must have a clear ranking purpose tied to a real search term people type into Google
+- Service + location combinations are the highest priority (e.g. "Chiropractor Deception Bay", "Psychologist North Lakes")
+- Use the uploaded keyword data to identify which service + suburb combinations have search volume — prioritise those first
+- If no keyword data is provided, derive service + suburb combinations from the client's services and locations
+
+For each page, output in this exact format:
+**Page:** [Page Name]
+**URL:** /[url-slug]
+**Target Keyword:** [exact keyword this page ranks for]
+**Purpose:** Rank for "[target keyword]" — [one sentence on search intent and what the visitor wants]
+**Priority:** High / Medium / Low (based on commercial value and search volume signals)
+
+Sections:
+
+## Core Pages
+(Home, About, Contact, Booking — these get standard treatment but still need a primary keyword anchor)
+
+## Service Pages — Pure Service Intent
+(Only where the service alone has high search volume — e.g. "Chiropractor" or "Sports Physio". Skip if service + location pages cover this intent better)
+
+## Service + Location Pages ← HIGHEST PRIORITY
+(One page per service + suburb combination that has search demand. These are the pages that drive leads. Generate as many as the keyword data supports. Examples: "Chiropractor Deception Bay | /chiropractor-deception-bay | Target: chiropractor deception bay", "Psychologist North Lakes | /psychologist-north-lakes | Target: psychologist north lakes")
+
+## Location Hub Pages (if warranted)
+(Only create a location hub page for a suburb/region if there are 3+ service pages targeting that location — e.g. "Deception Bay" hub that links to all service + Deception Bay pages. Skip if unnecessary.)
+
+## Supporting Pages
+(FAQ, Reviews/Testimonials — only if they serve a specific search intent or conversion purpose. Blog only if the client has content capacity.)
+
+## Conversion Architecture Notes
+(CTAs placement, primary conversion action, friction reduction strategy)` : 'Write: "Website not included in this package."'}
 
 MARKETING key — Channel Delivery Brief:
 ${soldSEO ? `## SEO Delivery Plan
@@ -771,7 +800,7 @@ ${soldBoost ? `## Retargeting Brief\n(Audience segments, message variants, creat
         messages: [
           {
             role: 'system',
-            content: 'You are an expert digital marketing delivery strategist. You synthesise client intake data into precise, commercial, actionable delivery briefs. You never write generic advice. Every recommendation is justified by the commercial context provided. You write for a delivery team who will act on your output immediately.'
+            content: 'You are an expert digital marketing delivery strategist specialising in local SEO and search intent architecture. You synthesise client intake data into precise, commercial, actionable delivery briefs. You never write generic advice. Every recommendation is justified by the commercial context provided. You write for a delivery team who will act on your output immediately.\n\nCRITICAL SITEMAP RULE: Never create generic pages like "Services Overview", "Our Services", or any category page without a specific ranking target. Every sitemap page must target a real search query. Prioritise "service + suburb" combinations (e.g. "Chiropractor Deception Bay", "Psychologist North Lakes") — these are the pages that drive organic leads. Use the keyword data to identify which combinations have search volume. One page = one target keyword = one ranking purpose.'
           },
           { role: 'user', content: prompt }
         ],
@@ -817,7 +846,7 @@ ${soldBoost ? `## Retargeting Brief\n(Audience segments, message variants, creat
       if (soldGBP) productLabels.push('Google Business Profile optimisation');
 
       const keywordsSection = data.keywordSummary
-        ? `\n\nKEYWORD DATA (use to populate the Keyword Targets section):\n${data.keywordSummary.slice(0, 3000)}`
+        ? `\n\nKEYWORD DATA (from uploaded file — CRITICAL: scan this data for every "service + suburb" combination that has search volume, e.g. "chiropractor deception bay", "psychologist north lakes". Use these to populate the Website Sitemap and SEO Priority Pages sections. One page per keyword cluster. No generic category pages):\n${data.keywordSummary.slice(0, 3000)}`
         : data.manualKeywordNotes
         ? `\n\nKEYWORD NOTES (use to populate the Keyword Targets section):\n${data.manualKeywordNotes}`
         : '';
@@ -876,7 +905,17 @@ Website URL
 ${soldWebsite ? `
 Website Sitemap
 
-[Numbered list of all pages in the sitemap — include home, core services, location pages, support pages. Extract from AI sitemap if available, otherwise build from services and locations data]
+STRICT RULE: Every page listed must have a clear ranking purpose. NEVER write generic pages like "Services Overview" or "Psychological Services Overview". Every page must target a specific search query.
+
+For each page use this format:
+[number]. [Page Name] — /[url-slug] — Target: "[exact keyword]" — Purpose: Rank for "[exact keyword]"
+
+Prioritise service + location combinations above everything else. Examples:
+1. Home — / — Target: "[main service] [main location]" — Purpose: Primary conversion page
+2. Chiropractor Deception Bay — /chiropractor-deception-bay — Target: "chiropractor deception bay" — Purpose: Rank for "chiropractor deception bay"
+3. Psychologist North Lakes — /psychologist-north-lakes — Target: "psychologist north lakes" — Purpose: Rank for "psychologist north lakes"
+
+Extract from AI sitemap if already generated. Otherwise build from keyword data + services + locations. Include core pages, service + location combinations, and supporting pages only if they serve a specific search intent.
 ` : ''}${soldAds ? `
 Google Ads Targeting
 
@@ -884,11 +923,15 @@ Google Ads Targeting
 
 Keyword Targets
 
-[List the most commercially important keywords — 10-20 terms. If keyword data was provided, use the highest-priority terms. Otherwise generate from services + locations]
+[List the most commercially important keywords — 10-20 terms. If keyword data was provided, use the highest-priority terms. Otherwise generate from services + locations. Format: "keyword" — [intent note]]
 ` : ''}${soldSEO ? `
 SEO Priority Pages
 
-[List the first 5-8 pages to build/optimise for SEO, with the target keyword for each. Extract from sitemap or generate from services + locations]
+STRICT RULE: List service + location page combinations first. No generic category pages.
+
+For each page: [Page Name] — /[url-slug] — Target: "[exact keyword]" — Why first: [one sentence on commercial or volume reason]
+
+Extract from sitemap if generated. Otherwise derive from keyword data + services + locations. List 5-10 pages, ordered by commercial priority.
 ` : ''}${soldGBP ? `
 Google Business Profile
 
