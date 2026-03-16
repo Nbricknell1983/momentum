@@ -35,10 +35,54 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'handover', label: '5. Final Handover' },
 ];
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function SuggestButton({ fieldLabel, fieldHint, context, onSuggest }: {
+  fieldLabel: string;
+  fieldHint?: string;
+  context: Record<string, string>;
+  onSuggest: (s: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  if (!context.businessOverview?.trim()) return null;
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={async () => {
+        setLoading(true);
+        try {
+          const res = await fetch('/api/clients/ai/suggest-field', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fieldLabel, fieldHint, context }),
+          });
+          const { suggestion } = await res.json();
+          if (suggestion) onSuggest(suggestion);
+        } catch {}
+        setLoading(false);
+      }}
+      className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 disabled:opacity-50 transition-colors"
+    >
+      {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+      {loading ? 'Suggesting…' : 'AI suggest'}
+    </button>
+  );
+}
+
+function Field({ label, children, onSuggest, fieldHint, context }: {
+  label: string;
+  children: React.ReactNode;
+  onSuggest?: (s: string) => void;
+  fieldHint?: string;
+  context?: Record<string, string>;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+        {onSuggest && context && (
+          <SuggestButton fieldLabel={label} fieldHint={fieldHint} context={context} onSuggest={onSuggest} />
+        )}
+      </div>
       {children}
     </div>
   );
@@ -514,45 +558,87 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
           <div className="p-4 space-y-4 max-h-[600px] overflow-y-auto">
 
             {/* ── TAB 1: BUSINESS CONTEXT ── */}
-            {tab === 'context' && (
-              <div className="space-y-4">
-                <p className="text-xs text-muted-foreground">
-                  Enter key commercial and strategic context. The more detail you provide, the better the AI output.
-                </p>
-                <Field label="Business Overview">
-                  <TA value={data.businessOverview ?? ''} onChange={v => update('businessOverview', v)} placeholder="What the business does, who they are, how long trading..." testId="ta-business-overview" fieldLabel="Business Overview" />
-                </Field>
-                <Field label="Target Customers">
-                  <TA value={data.targetCustomers ?? ''} onChange={v => update('targetCustomers', v)} placeholder="Who they want to attract — demographics, location, intent..." testId="ta-target-customers" fieldLabel="Target Customers" />
-                </Field>
-                <Field label="Key Services">
-                  <TA value={data.keyServices ?? ''} onChange={v => update('keyServices', v)} placeholder="List their main services, and which ones to prioritise..." testId="ta-key-services" fieldLabel="Key Services" />
-                </Field>
-                <Field label="Business Goals">
-                  <TA value={data.businessGoals ?? ''} onChange={v => update('businessGoals', v)} placeholder="e.g. Increase appointments from 5/day to 15/day. Rank locally for chiro. Fill morning slots." testId="ta-business-goals" fieldLabel="Business Goals" />
-                </Field>
-                <Field label="Locations / Service Areas">
-                  <TA value={data.locations ?? ''} onChange={v => update('locations', v)} placeholder="Suburbs, cities, regions they target..." rows={2} testId="ta-locations" fieldLabel="Locations and Service Areas" />
-                </Field>
-                <Field label="Competitor Notes">
-                  <TA value={data.competitorNotes ?? ''} onChange={v => update('competitorNotes', v)} placeholder="Known competitors, competitive level, market position..." rows={2} testId="ta-competitor-notes" fieldLabel="Competitor Notes" />
-                </Field>
-                <Field label="Key Differentiators">
-                  <TA value={data.keyDifferentiators ?? ''} onChange={v => update('keyDifferentiators', v)} placeholder="Why customers choose them over others..." rows={2} testId="ta-differentiators" fieldLabel="Key Differentiators" />
-                </Field>
-                <Field label="Brand / Theme Direction">
-                  <TA value={data.brandDirection ?? ''} onChange={v => update('brandDirection', v)} placeholder="e.g. Clean, clinical, modern. Premium but approachable. Navy and white." rows={2} testId="ta-brand-direction" fieldLabel="Brand and Theme Direction" />
-                </Field>
-                <Field label="Operational Notes">
-                  <TA value={data.operationalNotes ?? ''} onChange={v => update('operationalNotes', v)} placeholder="Anything useful for the delivery team to know..." rows={2} testId="ta-operational-notes" fieldLabel="Operational Notes" />
-                </Field>
-                <div className="flex justify-end pt-2">
-                  <Button size="sm" onClick={() => setTab('products')} className="gap-1.5 text-xs">
-                    Next: Products & Commercials <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
+            {tab === 'context' && (() => {
+              const ctx: Record<string, string> = {
+                businessOverview: data.businessOverview ?? '',
+                targetCustomers: data.targetCustomers ?? '',
+                keyServices: data.keyServices ?? '',
+                businessGoals: data.businessGoals ?? '',
+                locations: data.locations ?? '',
+                competitorNotes: data.competitorNotes ?? '',
+                pricingNotes: data.pricingNotes ?? '',
+                capacityNotes: data.capacityNotes ?? '',
+              };
+              return (
+                <div className="space-y-4">
+                  {data.businessOverview && (
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30">
+                      <Sparkles className="h-3 w-3 text-violet-500 shrink-0" />
+                      <p className="text-[11px] text-violet-700 dark:text-violet-400">Business Overview filled — click <strong>AI suggest</strong> next to any field to auto-fill from context.</p>
+                    </div>
+                  )}
+                  {!data.businessOverview && (
+                    <p className="text-xs text-muted-foreground">Start with Business Overview — once filled, AI can suggest the remaining fields.</p>
+                  )}
+                  <Field label="Business Overview">
+                    <TA value={data.businessOverview ?? ''} onChange={v => update('businessOverview', v)} placeholder="What the business does, who they are, how long trading..." testId="ta-business-overview" fieldLabel="Business Overview" />
+                  </Field>
+                  <Field label="Target Customers"
+                    onSuggest={v => update('targetCustomers', v)}
+                    fieldHint="Who they want to attract — demographics, location, intent to buy"
+                    context={ctx}>
+                    <TA value={data.targetCustomers ?? ''} onChange={v => update('targetCustomers', v)} placeholder="Who they want to attract — demographics, location, intent..." testId="ta-target-customers" fieldLabel="Target Customers" />
+                  </Field>
+                  <Field label="Key Services"
+                    onSuggest={v => update('keyServices', v)}
+                    fieldHint="Their main services and which to prioritise for marketing"
+                    context={ctx}>
+                    <TA value={data.keyServices ?? ''} onChange={v => update('keyServices', v)} placeholder="List their main services, and which ones to prioritise..." testId="ta-key-services" fieldLabel="Key Services" />
+                  </Field>
+                  <Field label="Business Goals"
+                    onSuggest={v => update('businessGoals', v)}
+                    fieldHint="Specific, measurable goals — appointment volume, revenue, ranking, capacity"
+                    context={ctx}>
+                    <TA value={data.businessGoals ?? ''} onChange={v => update('businessGoals', v)} placeholder="e.g. Increase appointments from 5/day to 15/day. Rank locally for chiro. Fill morning slots." testId="ta-business-goals" fieldLabel="Business Goals" />
+                  </Field>
+                  <Field label="Locations / Service Areas"
+                    onSuggest={v => update('locations', v)}
+                    fieldHint="Specific suburbs, cities, or regions they serve or want to target"
+                    context={ctx}>
+                    <TA value={data.locations ?? ''} onChange={v => update('locations', v)} placeholder="Suburbs, cities, regions they target..." rows={2} testId="ta-locations" fieldLabel="Locations and Service Areas" />
+                  </Field>
+                  <Field label="Competitor Notes"
+                    onSuggest={v => update('competitorNotes', v)}
+                    fieldHint="Known competitors, how competitive the market is, their position"
+                    context={ctx}>
+                    <TA value={data.competitorNotes ?? ''} onChange={v => update('competitorNotes', v)} placeholder="Known competitors, competitive level, market position..." rows={2} testId="ta-competitor-notes" fieldLabel="Competitor Notes" />
+                  </Field>
+                  <Field label="Key Differentiators"
+                    onSuggest={v => update('keyDifferentiators', v)}
+                    fieldHint="Why customers choose them over competitors — unique strengths"
+                    context={ctx}>
+                    <TA value={data.keyDifferentiators ?? ''} onChange={v => update('keyDifferentiators', v)} placeholder="Why customers choose them over others..." rows={2} testId="ta-differentiators" fieldLabel="Key Differentiators" />
+                  </Field>
+                  <Field label="Brand / Theme Direction"
+                    onSuggest={v => update('brandDirection', v)}
+                    fieldHint="Visual style, tone, feel — colours, mood, professional vs approachable"
+                    context={ctx}>
+                    <TA value={data.brandDirection ?? ''} onChange={v => update('brandDirection', v)} placeholder="e.g. Clean, clinical, modern. Premium but approachable. Navy and white." rows={2} testId="ta-brand-direction" fieldLabel="Brand and Theme Direction" />
+                  </Field>
+                  <Field label="Operational Notes"
+                    onSuggest={v => update('operationalNotes', v)}
+                    fieldHint="Anything the delivery team needs to know — constraints, integrations, owner preferences"
+                    context={ctx}>
+                    <TA value={data.operationalNotes ?? ''} onChange={v => update('operationalNotes', v)} placeholder="Anything useful for the delivery team to know..." rows={2} testId="ta-operational-notes" fieldLabel="Operational Notes" />
+                  </Field>
+                  <div className="flex justify-end pt-2">
+                    <Button size="sm" onClick={() => setTab('products')} className="gap-1.5 text-xs">
+                      Next: Products & Commercials <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── TAB 2: PRODUCTS & COMMERCIALS ── */}
             {tab === 'products' && (

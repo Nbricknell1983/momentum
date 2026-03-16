@@ -567,6 +567,51 @@ Be specific and actionable. Focus on retention and growth.`;
     }
   });
 
+  // AI suggest a single onboarding field based on business context
+  app.post("/api/clients/ai/suggest-field", async (req, res) => {
+    try {
+      const { fieldLabel, fieldHint, context } = req.body as {
+        fieldLabel: string;
+        fieldHint?: string;
+        context: Record<string, string>;
+      };
+      if (!context?.businessOverview?.trim()) {
+        return res.status(400).json({ error: 'Business overview required' });
+      }
+
+      const contextLines: string[] = [];
+      if (context.businessOverview) contextLines.push(`Business Overview: ${context.businessOverview}`);
+      if (context.keyServices) contextLines.push(`Key Services: ${context.keyServices}`);
+      if (context.locations) contextLines.push(`Locations: ${context.locations}`);
+      if (context.businessGoals) contextLines.push(`Business Goals: ${context.businessGoals}`);
+      if (context.competitorNotes) contextLines.push(`Competitors: ${context.competitorNotes}`);
+      if (context.pricingNotes) contextLines.push(`Pricing: ${context.pricingNotes}`);
+      if (context.capacityNotes) contextLines.push(`Capacity: ${context.capacityNotes}`);
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are filling in a client intake form for a digital marketing agency. Based on the business context provided, generate a specific, accurate suggestion for one field. Only infer what is clearly supported by the context — do not speculate or invent. Be concise and practical. Return only the field content, no labels, no preamble.`,
+          },
+          {
+            role: 'user',
+            content: `BUSINESS CONTEXT:\n${contextLines.join('\n')}\n\nFIELD TO FILL: "${fieldLabel}"${fieldHint ? `\nField guidance: ${fieldHint}` : ''}\n\nWrite the content for this field only.`,
+          },
+        ],
+        temperature: 0.4,
+        max_tokens: 300,
+      });
+
+      const suggestion = response.choices[0]?.message?.content?.trim() || '';
+      res.json({ suggestion });
+    } catch (error) {
+      console.error('Error suggesting field:', error);
+      res.status(500).json({ error: 'Failed to suggest field' });
+    }
+  });
+
   // Tidy speech-to-text dictation
   app.post("/api/clients/ai/tidy-dictation", async (req, res) => {
     try {
