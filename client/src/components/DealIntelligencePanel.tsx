@@ -46,7 +46,7 @@ import {
   BarChart3,
   RefreshCw,
 } from 'lucide-react';
-import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
+import { SiFacebook, SiInstagram, SiLinkedin, SiSalesforce } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
@@ -627,6 +627,14 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             placeholder="https://linkedin.com/company/..."
             link={lead.linkedinUrl}
             onSave={(v) => handleUpdatePresenceField('linkedinUrl', v)}
+          />
+          <EditablePresenceRow
+            icon={<SiSalesforce className="h-3 w-3 text-[#00A1E0]" />}
+            label="Salesforce"
+            value={lead.crmLink || ''}
+            placeholder="Paste Salesforce deal link..."
+            link={lead.crmLink}
+            onSave={(v) => handleUpdatePresenceField('crmLink', v)}
           />
           <CurrentMarketingRow
             activities={lead.marketingActivity || []}
