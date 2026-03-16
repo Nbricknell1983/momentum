@@ -449,30 +449,43 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
     }
   };
 
-  // AI Generation
+  // AI Generation — strategy/sitemap/marketing + handover in parallel
   const handleGenerate = async () => {
     if (generating) return;
     setGenerating(true);
     try {
-      const res = await fetch('/api/clients/ai/onboarding-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: client.businessName,
-          location: client.address || client.regionName || '',
-          data,
+      const payload = {
+        clientName: client.businessName,
+        location: client.address || client.regionName || '',
+        data,
+      };
+
+      // Run both generation endpoints in parallel
+      const [mainRes, handoverRes] = await Promise.all([
+        fetch('/api/clients/ai/onboarding-generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         }),
-      });
-      if (!res.ok) throw new Error('Generation failed');
-      const result = await res.json();
+        fetch('/api/clients/ai/generate-handover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }),
+      ]);
+
+      if (!mainRes.ok) throw new Error('Generation failed');
+      const result = await mainRes.json();
+      const handoverResult = handoverRes.ok ? await handoverRes.json() : {};
+      const handoverText = handoverResult.handover || result.handover || '';
       const now = new Date().toISOString();
-      const handoverText = result.handover || '';
+
       setData(prev => {
         const next = {
           ...prev,
-          aiStrategyOutput: result.strategy || '',
-          aiSitemapOutput: result.sitemap || '',
-          aiMarketingOutput: result.marketing || '',
+          aiStrategyOutput: result.strategy || result.STRATEGY || '',
+          aiSitemapOutput: result.sitemap || result.SITEMAP || '',
+          aiMarketingOutput: result.marketing || result.MARKETING || '',
           aiHandoverOutput: handoverText,
           finalHandoverNotes: handoverText,
           lastGeneratedAt: now,
@@ -481,11 +494,48 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
         return next;
       });
       setTab('outputs');
-      toast({ title: 'AI outputs generated', description: 'Review and edit below.' });
+      toast({ title: 'AI outputs generated', description: 'Review in tab 4 · Handover ready in tab 5.' });
     } catch (err) {
       toast({ title: 'Generation failed', variant: 'destructive' });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // Generate ONLY the final handover note (for tab 5 buttons)
+  const [generatingHandover, setGeneratingHandover] = useState(false);
+  const handleGenerateHandover = async () => {
+    if (generatingHandover) return;
+    setGeneratingHandover(true);
+    try {
+      const res = await fetch('/api/clients/ai/generate-handover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: client.businessName,
+          location: client.address || client.regionName || '',
+          data,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const result = await res.json();
+      const handoverText = result.handover || '';
+      if (!handoverText) throw new Error('Empty response');
+      setData(prev => {
+        const next = {
+          ...prev,
+          aiHandoverOutput: handoverText,
+          finalHandoverNotes: handoverText,
+          lastGeneratedAt: new Date().toISOString(),
+        };
+        scheduleAutosave(next);
+        return next;
+      });
+      toast({ title: 'Handover note generated', description: 'Review and edit before copying.' });
+    } catch (err) {
+      toast({ title: 'Handover generation failed', variant: 'destructive' });
+    } finally {
+      setGeneratingHandover(false);
     }
   };
 
@@ -1010,16 +1060,16 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                     <p className="text-xs text-muted-foreground">{client.businessName} · {client.address || client.regionName || 'Location TBC'}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <CopyButton text={data.finalHandoverNotes || buildFinalHandover(client, data)} />
+                    <CopyButton text={data.finalHandoverNotes || data.aiHandoverOutput || ''} />
                     <Button
                       size="sm"
                       variant="outline"
                       className="gap-1.5 text-xs h-7"
-                      onClick={handleGenerate}
-                      disabled={generating || !isComplete}
+                      onClick={handleGenerateHandover}
+                      disabled={generatingHandover || !isComplete}
                     >
-                      {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                      Regenerate
+                      {generatingHandover ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                      {generatingHandover ? 'Generating…' : 'Regenerate'}
                     </Button>
                   </div>
                 </div>
@@ -1030,11 +1080,11 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                     <p className="text-sm font-medium text-muted-foreground">No handover generated yet</p>
                     <Button
                       size="sm"
-                      onClick={() => !isComplete ? setTab('context') : handleGenerate()}
-                      disabled={generating}
+                      onClick={() => !isComplete ? setTab('context') : handleGenerateHandover()}
+                      disabled={generatingHandover}
                       className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-700 text-white"
                     >
-                      {!isComplete ? 'Add context first' : generating ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</> : <><Sparkles className="h-3.5 w-3.5" /> Generate Handover</>}
+                      {!isComplete ? 'Add context first' : generatingHandover ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</> : <><Sparkles className="h-3.5 w-3.5" /> Generate Handover</>}
                     </Button>
                   </div>
                 ) : (

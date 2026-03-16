@@ -777,15 +777,148 @@ ${soldBoost ? `## Retargeting Brief\n(Audience segments, message variants, creat
         ],
         response_format: { type: 'json_object' },
         temperature: 0.4,
-        max_tokens: 6000,
+        max_tokens: 8000,
       });
 
       const content = response.choices[0]?.message?.content || '{}';
       const result = JSON.parse(content);
-      res.json(result);
+      // Normalize key casing variants the AI might return
+      const handover = result.handover || result.HANDOVER || result.handover_note || result.handoverNote || '';
+      res.json({ ...result, handover });
     } catch (error) {
       console.error('Error generating onboarding outputs:', error);
       res.status(500).json({ error: 'Failed to generate onboarding outputs' });
+    }
+  });
+
+  // Dedicated Final Handover Note generator — clean, readable, team-facing
+  app.post("/api/clients/ai/generate-handover", async (req, res) => {
+    try {
+      const { clientName, location, data } = req.body as {
+        clientName: string;
+        location: string;
+        data: Record<string, any>;
+      };
+
+      const hasSold = (p: string) => (data.selectedProducts || []).includes(p);
+      const soldWebsite = hasSold('website');
+      const soldSEO = hasSold('seo');
+      const soldAds = hasSold('google_ads');
+      const soldBoost = hasSold('performance_boost');
+      const soldLocalSEO = hasSold('local_seo');
+      const soldGBP = hasSold('gbp');
+
+      const productLabels: string[] = [];
+      if (soldWebsite) productLabels.push(`${data.websitePageCount || '?'}-page website build`);
+      if (soldSEO) productLabels.push('SEO campaign');
+      if (soldAds) productLabels.push('Google Ads campaign');
+      if (soldBoost) productLabels.push('Performance Boost / retargeting');
+      if (soldLocalSEO) productLabels.push('Local SEO');
+      if (soldGBP) productLabels.push('Google Business Profile optimisation');
+
+      const keywordsSection = data.keywordSummary
+        ? `\n\nKEYWORD DATA (use to populate the Keyword Targets section):\n${data.keywordSummary.slice(0, 3000)}`
+        : data.manualKeywordNotes
+        ? `\n\nKEYWORD NOTES (use to populate the Keyword Targets section):\n${data.manualKeywordNotes}`
+        : '';
+
+      const aiContext = [
+        data.aiStrategyOutput ? `STRATEGY BRIEF (already generated):\n${data.aiStrategyOutput.slice(0, 1500)}` : '',
+        data.aiSitemapOutput ? `SITEMAP (already generated):\n${data.aiSitemapOutput.slice(0, 1500)}` : '',
+        data.aiMarketingOutput ? `MARKETING PLAN (already generated):\n${data.aiMarketingOutput.slice(0, 1000)}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      const handoverPrompt = `You are writing an internal handover note for the delivery team at a digital marketing agency. Write it exactly in the format and tone shown below. This note must be clear, practical, and complete — the delivery team should be able to start work immediately after reading it.
+
+CLIENT: ${clientName}
+LOCATION: ${location || data.locations || 'Not specified'}
+PRODUCTS SOLD: ${productLabels.join(', ') || 'Not specified'}
+
+INTAKE DATA:
+- Business: ${data.businessOverview || 'N/A'}
+- Target customers: ${data.targetCustomers || 'N/A'}
+- Key services: ${data.keyServices || 'N/A'}
+- Goals: ${data.businessGoals || 'N/A'}
+- Differentiators: ${data.keyDifferentiators || 'N/A'}
+- Competitors: ${data.competitorNotes || 'N/A'}
+- Pricing: ${data.pricingNotes || 'N/A'}
+- Capacity: ${data.capacityNotes || 'N/A'}
+- Brand direction: ${data.brandDirection || 'N/A'}
+- Operational notes: ${data.operationalNotes || 'N/A'}
+- Website URL: ${data.currentWebsiteUrl || 'N/A'}
+- Website objective: ${data.websiteObjective || 'N/A'}
+- CTA/booking preference: ${data.bookingCtaPreference || 'N/A'}
+- SEO priority services: ${data.seoServices || 'N/A'}
+- SEO priority locations: ${data.seoLocations || 'N/A'}
+- Ads focus: ${data.adsServices || 'N/A'}
+- Ads budget: ${data.monthlyBudget || 'N/A'}
+- Retargeting goal: ${data.retargetingGoal || 'N/A'}
+- SEO objective: ${data.seoObjective || 'N/A'}${keywordsSection}
+
+${aiContext ? `PREVIOUSLY GENERATED DELIVERY BRIEFS (extract specific sitemap pages, keywords, campaign details from these):\n${aiContext}` : ''}
+
+WRITE THE HANDOVER NOTE in this exact format (plain text, no markdown, no hashtags, no asterisks):
+
+${clientName}: ${productLabels.join(' + ')} Handover Notes
+Hi Team,
+
+Please see below handover notes for ${clientName}. This client is proceeding with [briefly describe the package — e.g. "a 10-page website build, Google Ads campaign launch, and Google Business Profile setup"].
+
+Business Overview
+
+[2-3 sentences describing the business, what they do, who they serve, and what's driving this campaign]
+
+Products Included
+[bulleted list of products sold — write each as a full sentence e.g. "10-page website build" or "Google Search Ads campaign targeting X services"]
+
+Website URL
+[website URL if provided, or "TBC"]
+${soldWebsite ? `
+Website Sitemap
+
+[Numbered list of all pages in the sitemap — include home, core services, location pages, support pages. Extract from AI sitemap if available, otherwise build from services and locations data]
+` : ''}${soldAds ? `
+Google Ads Targeting
+
+[Campaign location targeting and radius. Be specific — use their locations data]
+
+Keyword Targets
+
+[List the most commercially important keywords — 10-20 terms. If keyword data was provided, use the highest-priority terms. Otherwise generate from services + locations]
+` : ''}${soldSEO ? `
+SEO Priority Pages
+
+[List the first 5-8 pages to build/optimise for SEO, with the target keyword for each. Extract from sitemap or generate from services + locations]
+` : ''}${soldGBP ? `
+Google Business Profile
+
+[Describe what needs to happen with GBP — new creation, optimisation, verification, etc.]
+` : ''}${soldBoost ? `
+Performance Boost / Retargeting
+
+[Who to retarget, what message, what action to drive]
+` : ''}${data.operationalNotes ? `
+Special Notes
+
+[Any operational constraints, client preferences, or delivery watch-outs the team needs to know]
+` : ''}
+Please let me know if you need anything else`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: 'You write internal team handover notes for a digital marketing agency. You write in clear, plain text — no markdown, no hashtags, no asterisks. Your notes are specific, complete, and immediately actionable.' },
+          { role: 'user', content: handoverPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 3000,
+      });
+
+      const handover = response.choices[0]?.message?.content?.trim() || '';
+      res.json({ handover });
+    } catch (error) {
+      console.error('Error generating handover:', error);
+      res.status(500).json({ error: 'Failed to generate handover' });
     }
   });
 
