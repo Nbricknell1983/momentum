@@ -1,0 +1,148 @@
+I want to improve the AI Sales Engine by adding a new educational insight block under:
+
+Control the Call → AI Insights / Gaps
+
+Purpose:
+This section should help sales reps explain the difference between what a human sees on a website and what Google sees when evaluating whether a business deserves to rank.
+
+The current website preview is visually useful, but it only shows what a person sees.
+I want the system to also interpret the website from Google's perspective using sitemap data, crawl data, metadata, headings, page coverage, and topical/location relevance.
+
+Core concept:
+Humans see design, images, branding, and layout.
+Google sees structure, content, pages, headings, internal links, services, locations, metadata, schema, and authority signals.
+
+I want this section to educate the rep and also help them sell the need for a stronger online presence.
+
+Build a new component called:
+“How Google Sees Your Website”
+or
+“Human View vs Google View”
+
+This component should sit inside AI Insights / Gaps and contain the following:
+
+1. Human View
+Show a short explanation like:
+“A customer sees branding, images, and a nice-looking website. But Google does not interpret a website the same way a human does.”
+
+2. Google View
+Show a structured explanation like:
+“Google evaluates whether it clearly understands:
+- what you do
+- where you do it
+- how well each service is supported by dedicated pages
+- how relevant your content is to search intent
+- whether your website structure supports trust and discoverability”
+
+3. Inputs the AI should use
+Use the following data sources when available:
+- sitemap pages captured
+- crawl results
+- homepage screenshot
+- page titles
+- meta descriptions
+- H1s/H2s
+- page URLs
+- internal linking
+- service pages
+- location pages
+- schema markup
+- Google Business Profile data
+- imported keyword data
+- competitor keyword/service/location gaps
+
+4. AI analysis output
+The AI should generate a simple but persuasive analysis with sections like:
+
+A. What humans see
+Example:
+“This site looks legitimate to a human visitor and has a clear brand presence.”
+
+B. What Google sees
+Example:
+“Google currently sees only 8 indexed pages and limited service-location depth. That means Google may not fully understand all the services offered, where they are offered, or which searches the business should appear for.”
+
+C. Key gaps
+Examples:
+- Too few pages to represent all services
+- No dedicated location pages
+- Weak heading structure
+- Missing keyword alignment
+- Limited topical depth
+- No strong internal linking between services and locations
+- Metadata not targeting discovery searches
+- Insufficient schema or entity reinforcement
+
+D. Why it matters
+Examples:
+- Google may not confidently rank the business for high-intent searches
+- Competitors with clearer service/location signals may outrank them
+- The website may look fine to people but still be weak as a search asset
+- A good-looking site is not the same as a high-performing site
+
+E. Recommended next step
+Examples:
+- Build dedicated service pages
+- Build location pages
+- strengthen H1/H2 and on-page copy
+- improve metadata
+- add schema
+- create better internal linking
+- align site structure to real keyword demand
+
+5. Tone and sales intent
+The tone should be consultative, intelligent, and persuasive.
+It should help the rep control the call and explain:
+“Your website may look fine visually, but Google needs more clarity before it can trust and rank you strongly.”
+
+This should feel like insight, not a generic audit.
+It should support NEPQ-style selling by helping create problem awareness without sounding pushy.
+
+6. UI requirements
+Make this component visually strong.
+Use a two-column comparison layout:
+
+Left side: “What Humans See”
+- screenshot preview
+- branding/design comments
+- trust/appearance observations
+
+Right side: “What Google Sees”
+- sitemap count
+- crawl depth
+- page coverage
+- missing services
+- missing locations
+- SEO structure observations
+- content clarity score or visibility score
+
+Below the comparison, show:
+- AI Summary
+- Key Gaps
+- Why This Matters
+- Recommended Actions
+
+7. Dynamic logic
+If only a screenshot exists, generate a limited visual-only insight.
+If sitemap and crawl data exist, generate a stronger SEO/Google interpretation.
+If keyword data is imported, compare keyword opportunities against existing page structure.
+If competitor/service-area data exists, identify structural ranking gaps.
+
+8. Example message style
+Use messaging like:
+
+“This website may look professional to a human visitor, but Google ranks based on clarity, coverage, and relevance. Right now, the site gives Google limited signals about the full range of services and target areas. That creates a visibility gap.”
+
+or
+
+“A human can recognise ABT Roofing because you already know the brand. Google cannot rely on brand familiarity the same way. It needs structured evidence about services, locations, and relevance.”
+
+9. Goal
+The goal is to help reps explain why a business needs:
+- more structure
+- more service/location depth
+- better SEO foundations
+- a website that works as a search asset, not just a brochure
+
+Please build this as a reusable AI insight module inside the AI Sales Engine.
+It must feel premium, intelligent, and sales-enabling.

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, patchLead } from '@/store';
-import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp, Mic, MicOff, Upload, AlertTriangle, Clock } from 'lucide-react';
+import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp, Mic, MicOff, Upload, AlertTriangle, Clock, Eye, Globe, Monitor, AlertCircle, Lightbulb, Zap, ArrowRight } from 'lucide-react';
 import GrowthPlanSection from '@/components/GrowthPlanSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,6 +81,17 @@ interface ProspectResult {
   painPoint: string;
   whyStrongProspect: string;
   openingLine: string;
+}
+
+interface GoogleViewResult {
+  humanView: { headline: string; observations: string[] };
+  googleView: { headline: string; pageDepth: string; serviceSignals: string; locationSignals: string; contentClarity: string; structuralSignals: string };
+  visibilityScore: number;
+  visibilityLabel: string;
+  gaps: Array<{ gap: string; detail: string; severity: 'critical' | 'high' | 'medium' }>;
+  whyItMatters: string[];
+  recommendedActions: Array<{ action: string; impact: string }>;
+  salesAngle: string;
 }
 
 const PRESET_OBJECTIONS = [
@@ -521,18 +532,30 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                   />
                 )}
                 {sectionKey === 'objection' && (
-                  <ObjectionSection
-                    selectedObjections={selectedObjections}
-                    setSelectedObjections={setSelectedObjections}
-                    customObjection={customObjection}
-                    setCustomObjection={setCustomObjection}
-                    loading={objectionLoading}
-                    results={objectionResults}
-                    error={objectionError}
-                    onGenerate={handleObjection}
-                    onSaveToNotes={saveToNotes}
-                    hasLead={!!selectedLead}
-                  />
+                  <div className="space-y-4">
+                    <GoogleViewSection
+                      lead={selectedLead}
+                      onSaveToNotes={saveToNotes}
+                      hasLead={!!selectedLead}
+                    />
+                    <div className="border-t border-dashed pt-4">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <Shield className="h-3 w-3" /> NEPQ Objection Handling
+                      </p>
+                      <ObjectionSection
+                        selectedObjections={selectedObjections}
+                        setSelectedObjections={setSelectedObjections}
+                        customObjection={customObjection}
+                        setCustomObjection={setCustomObjection}
+                        loading={objectionLoading}
+                        results={objectionResults}
+                        error={objectionError}
+                        onGenerate={handleObjection}
+                        onSaveToNotes={saveToNotes}
+                        hasLead={!!selectedLead}
+                      />
+                    </div>
+                  </div>
                 )}
                 {sectionKey === 'follow_up' && (
                   <FollowUpSection
@@ -784,6 +807,223 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
               ))}
           </div>
           <ResultCard title="Sales Hook" content={result.salesHook} onSave={hasLead ? onSaveToNotes : undefined} highlight />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScoreBadge({ score, label }: { score: number; label: string }) {
+  const color = score >= 70 ? 'text-green-600 bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800'
+    : score >= 45 ? 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
+    : 'text-red-600 bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800';
+  const bar = score >= 70 ? 'bg-green-500' : score >= 45 ? 'bg-amber-500' : 'bg-red-500';
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${color}`}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide">Google Visibility Score</span>
+        <span className="text-lg font-bold">{score}/100</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-black/10 overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${bar}`} style={{ width: `${score}%` }} />
+      </div>
+      <p className="text-[10px] mt-1 font-medium">{label}</p>
+    </div>
+  );
+}
+
+function GoogleViewSection({ lead, onSaveToNotes, hasLead }: {
+  lead: any;
+  onSaveToNotes: (text: string) => void;
+  hasLead: boolean;
+}) {
+  const [result, setResult] = useState<GoogleViewResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const hasSitemap = (lead?.sitemapPages?.length ?? 0) > 0;
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const sd = lead?.sourceData;
+      const res = await fetch('/api/ai/sales-engine/google-view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: lead?.companyName || '',
+          website: lead?.website || '',
+          location: lead?.territory || lead?.areaName || '',
+          industry: lead?.industry || (sd as any)?.category || '',
+          sitemapPages: lead?.sitemapPages || [],
+          gbpLink: (sd as any)?.googleMapsUrl || '',
+          reviewCount: sd?.googleReviewCount ?? null,
+          rating: sd?.googleRating ?? null,
+          crawledPages: lead?.crawledPages || [],
+          keywordNotes: '',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      setResult(data);
+    } catch {
+      setError('Could not generate analysis. Check website data is available.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const severityColor = (s: string) =>
+    s === 'critical' ? 'text-red-600 bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+    : s === 'high' ? 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
+    : 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800';
+
+  return (
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-semibold text-foreground flex items-center gap-1.5">
+            <Globe className="h-3.5 w-3.5 text-violet-500" />
+            How Google Sees This Website
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            {hasSitemap ? `${lead.sitemapPages.length} pages analysed` : 'Add sitemap in Deal Intelligence for deeper analysis'}
+          </p>
+        </div>
+        <Button size="sm" onClick={handleGenerate} disabled={loading} className="h-7 text-[11px] gap-1.5 shrink-0 bg-violet-600 hover:bg-violet-700 text-white">
+          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+          {loading ? 'Analysing…' : result ? 'Re-analyse' : 'Analyse'}
+        </Button>
+      </div>
+
+      {error && (
+        <div className="text-xs text-red-600 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-2.5 flex items-center gap-2">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
+        </div>
+      )}
+
+      {result && (
+        <div className="space-y-3">
+          {/* Two-column comparison */}
+          <div className="grid grid-cols-2 gap-2">
+            {/* Human View */}
+            <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Eye className="h-3 w-3 text-muted-foreground" />
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Human sees</p>
+              </div>
+              <p className="text-[11px] leading-relaxed text-foreground">{result.humanView.headline}</p>
+              <ul className="space-y-1">
+                {result.humanView.observations.map((obs, i) => (
+                  <li key={i} className="text-[10px] text-muted-foreground flex items-start gap-1">
+                    <span className="mt-0.5 shrink-0">•</span> {obs}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {/* Google View */}
+            <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-950/20 p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Search className="h-3 w-3 text-violet-500" />
+                <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Google sees</p>
+              </div>
+              <p className="text-[11px] leading-relaxed text-foreground">{result.googleView.headline}</p>
+              <ul className="space-y-1">
+                {[
+                  { label: 'Page depth', val: result.googleView.pageDepth },
+                  { label: 'Services', val: result.googleView.serviceSignals },
+                  { label: 'Locations', val: result.googleView.locationSignals },
+                  { label: 'Content', val: result.googleView.contentClarity },
+                ].map(({ label, val }) => (
+                  <li key={label} className="text-[10px] text-muted-foreground">
+                    <span className="font-medium text-foreground">{label}:</span> {val}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Score */}
+          <ScoreBadge score={result.visibilityScore} label={result.visibilityLabel} />
+
+          {/* Key Gaps */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> Key Gaps
+            </p>
+            {result.gaps.map((g, i) => (
+              <div key={i} className={`rounded-lg border px-2.5 py-2 ${severityColor(g.severity)}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold">{g.gap}</p>
+                  <span className="text-[9px] uppercase font-bold opacity-70">{g.severity}</span>
+                </div>
+                <p className="text-[10px] mt-0.5 opacity-80">{g.detail}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Why It Matters */}
+          <div className="rounded-lg bg-muted/30 border p-2.5 space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+              <Lightbulb className="h-3 w-3" /> Why This Matters
+            </p>
+            <ul className="space-y-1">
+              {result.whyItMatters.map((w, i) => (
+                <li key={i} className="text-[11px] text-foreground flex items-start gap-1.5">
+                  <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" /> {w}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Recommended Actions */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+              <Zap className="h-3 w-3" /> Recommended Actions
+            </p>
+            {result.recommendedActions.map((a, i) => (
+              <div key={i} className="rounded-lg border bg-background p-2 flex gap-2">
+                <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 mt-0.5 shrink-0">{i + 1}</span>
+                <div>
+                  <p className="text-[11px] font-medium text-foreground">{a.action}</p>
+                  <p className="text-[10px] text-muted-foreground">{a.impact}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Sales Angle */}
+          <div className="rounded-lg border-l-2 border-violet-500 bg-violet-50/50 dark:bg-violet-950/20 pl-3 pr-2.5 py-2.5 space-y-1.5">
+            <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Use on the call</p>
+            <p className="text-[11px] italic text-foreground leading-relaxed">"{result.salesAngle}"</p>
+            <div className="flex gap-1.5 pt-0.5">
+              <CopyButton text={result.salesAngle} label="sales-angle" />
+              {hasLead && <Button variant="ghost" size="sm" onClick={() => onSaveToNotes(`Google View Sales Angle:\n"${result.salesAngle}"`)} className="h-6 text-[10px] gap-1 px-2"><Pin className="h-2.5 w-2.5" /> Save</Button>}
+            </div>
+          </div>
+
+          {/* Save full analysis */}
+          {hasLead && (
+            <Button variant="outline" size="sm" className="w-full h-7 text-[11px] gap-1.5"
+              onClick={() => {
+                const text = [
+                  `GOOGLE VIEW ANALYSIS — ${lead?.companyName}`,
+                  `Visibility Score: ${result.visibilityScore}/100 (${result.visibilityLabel})`,
+                  `\nHUMAN VIEW:\n${result.humanView.headline}\n${result.humanView.observations.join('\n')}`,
+                  `\nGOOGLE VIEW:\n${result.googleView.headline}\nPage depth: ${result.googleView.pageDepth}\nServices: ${result.googleView.serviceSignals}\nLocations: ${result.googleView.locationSignals}`,
+                  `\nKEY GAPS:\n${result.gaps.map(g => `[${g.severity.toUpperCase()}] ${g.gap}: ${g.detail}`).join('\n')}`,
+                  `\nWHY IT MATTERS:\n${result.whyItMatters.join('\n')}`,
+                  `\nRECOMMENDED ACTIONS:\n${result.recommendedActions.map((a, i) => `${i + 1}. ${a.action} — ${a.impact}`).join('\n')}`,
+                  `\nSALES ANGLE:\n"${result.salesAngle}"`,
+                ].join('\n');
+                onSaveToNotes(text);
+              }}
+            >
+              <Pin className="h-3 w-3" /> Save Full Analysis to Notes
+            </Button>
+          )}
         </div>
       )}
     </div>

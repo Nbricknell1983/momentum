@@ -3870,6 +3870,110 @@ Respond with JSON only, no commentary:
     }
   });
 
+  // "How Google Sees Your Website" — Human View vs Google View analysis
+  app.post("/api/ai/sales-engine/google-view", async (req, res) => {
+    try {
+      const { businessName, website, location, industry, sitemapPages, gbpLink, reviewCount, rating, keywordNotes, crawledPages } = req.body as {
+        businessName: string;
+        website?: string;
+        location?: string;
+        industry?: string;
+        sitemapPages?: Array<{ url: string }>;
+        gbpLink?: string;
+        reviewCount?: number | null;
+        rating?: number | null;
+        keywordNotes?: string;
+        crawledPages?: Array<{ url: string; title?: string; description?: string; h1?: string; h2s?: string[] }>;
+      };
+
+      const pageUrls = (sitemapPages || []).map(p => p.url);
+      const pageCount = pageUrls.length;
+
+      // Categorise pages
+      const servicePages = pageUrls.filter(u => /service|treatment|specialist|procedure|therapy|repair|install|consult|product/i.test(u));
+      const locationPages = pageUrls.filter(u => /location|suburb|area|city|region|local|near/i.test(u));
+      const blogPages = pageUrls.filter(u => /blog|news|article|post|resource|guide|tip/i.test(u));
+      const corePages = pageUrls.filter(u => /(home|about|contact|book|pricing|review|faq)/i.test(u));
+
+      const crawlSummary = crawledPages?.slice(0, 12).map(p =>
+        `${p.url}${p.title ? ` | Title: ${p.title}` : ''}${p.h1 ? ` | H1: ${p.h1}` : ''}${p.description ? ` | Meta: ${p.description.slice(0, 80)}` : ''}`
+      ).join('\n') || '';
+
+      const prompt = `You are a senior SEO strategist helping a sales rep explain the difference between what a human visitor sees and what Google evaluates when deciding whether to rank a business.
+
+BUSINESS DATA:
+- Business: ${businessName}
+- Location: ${location || 'Not specified'}
+- Industry: ${industry || 'Not specified'}
+- Website: ${website || 'Not provided'}
+- Google Business Profile: ${gbpLink ? `Yes — ${gbpLink}` : 'Not found'}
+- Google Reviews: ${reviewCount != null ? `${reviewCount} reviews` : 'Unknown'}, Rating: ${rating != null ? `${rating}★` : 'Unknown'}
+
+WEBSITE STRUCTURE DATA:
+- Total pages detected: ${pageCount || 0}
+- Service-related pages (${servicePages.length}): ${servicePages.slice(0, 8).join(', ') || 'None detected'}
+- Location pages (${locationPages.length}): ${locationPages.slice(0, 6).join(', ') || 'None detected'}
+- Blog/content pages (${blogPages.length}): ${blogPages.slice(0, 4).join(', ') || 'None'}
+- Core pages: ${corePages.slice(0, 6).join(', ') || 'None confirmed'}
+${crawlSummary ? `\nCRAWLED PAGE DATA (title, H1, meta):\n${crawlSummary}` : ''}
+${keywordNotes ? `\nKEYWORD CONTEXT:\n${keywordNotes}` : ''}
+
+TASK: Generate a precise, consultative analysis explaining the gap between what a human sees and what Google evaluates. This will be used by a sales rep during a discovery call to help the business owner understand why their site may not be performing despite looking good.
+
+RULES:
+- Be specific to this business — no generic advice
+- Reference actual page counts, URL patterns, and observable gaps
+- Use confident, consultative language — not salesy
+- Every observation must be grounded in the data provided
+- Score visibility 0-100 based on page depth, service coverage, location coverage, GBP presence, and content signals
+
+Return a JSON object with exactly these keys:
+
+{
+  "humanView": {
+    "headline": "one sentence describing what a customer sees when they visit the site",
+    "observations": ["2-3 specific observations about the human experience — design, trust, clarity, navigation"]
+  },
+  "googleView": {
+    "headline": "one sentence describing what Google actually evaluates about this site",
+    "pageDepth": "specific observation about total page count and what it means for coverage",
+    "serviceSignals": "how well Google can determine the full range of services offered — be specific",
+    "locationSignals": "how clearly the site signals where this business operates",
+    "contentClarity": "how well page titles, H1s, and meta descriptions align with search intent",
+    "structuralSignals": "observations about internal linking, URL structure, and crawlability"
+  },
+  "visibilityScore": 0-100 integer,
+  "visibilityLabel": "one of: Very Weak / Weak / Moderate / Strong / Very Strong",
+  "gaps": [
+    { "gap": "specific gap title", "detail": "specific detail grounded in this site's data", "severity": "critical|high|medium" }
+  ],
+  "whyItMatters": ["2-3 specific sentences about why these gaps hurt this business's ability to rank and win customers"],
+  "recommendedActions": [
+    { "action": "specific action", "impact": "what this will do for search visibility" }
+  ],
+  "salesAngle": "one powerful consultative sentence a rep can use verbatim to open the conversation about this business's SEO gap"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a senior SEO strategist and sales consultant. You produce precise, data-grounded website analyses that help sales reps explain Google\'s perspective to business owners. Every insight is specific — never generic.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+        max_tokens: 2000,
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (error) {
+      console.error('Error generating Google view analysis:', error);
+      res.status(500).json({ error: 'Failed to generate analysis' });
+    }
+  });
+
+
   app.post("/api/ai/sales-engine/objection", async (req, res) => {
     try {
       const { objections, leadContext } = req.body;
