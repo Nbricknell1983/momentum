@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Client, ClientOnboarding } from '@/lib/types';
@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   ChevronDown, ChevronRight, Sparkles, Copy, Check, RefreshCw,
   Upload, FileText, Zap, Globe, Search, Target, Share2, BarChart2,
-  MapPin, Loader2, ClipboardList
+  MapPin, Loader2, ClipboardList, Mic, MicOff, Wand2
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -44,22 +44,156 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function TA({ value, onChange, placeholder, rows = 3, testId }: {
+const SR_SUPPORTED = typeof window !== 'undefined' && !!(
+  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+);
+
+function TA({ value, onChange, placeholder, rows = 3, testId, fieldLabel }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
   testId?: string;
+  fieldLabel?: string;
 }) {
+  const [recording, setRecording] = useState(false);
+  const [finalText, setFinalText] = useState('');
+  const [interimText, setInterimText] = useState('');
+  const [tidying, setTidying] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const startRecording = () => {
+    const SRClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SRClass) return;
+    const rec = new SRClass();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-AU';
+
+    let accumulated = '';
+    rec.onresult = (e: any) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          accumulated += (accumulated ? ' ' : '') + t.trim();
+        } else {
+          interim += t;
+        }
+      }
+      setFinalText(accumulated);
+      setInterimText(interim);
+    };
+    rec.onend = () => { setRecording(false); setInterimText(''); };
+    rec.onerror = () => { setRecording(false); setInterimText(''); };
+
+    recognitionRef.current = rec;
+    rec.start();
+    setRecording(true);
+    setFinalText('');
+    setInterimText('');
+  };
+
+  const stopRecording = () => {
+    recognitionRef.current?.stop();
+    setRecording(false);
+    setInterimText('');
+  };
+
+  const saveAndTidy = async () => {
+    const raw = finalText.trim();
+    if (!raw) { setFinalText(''); return; }
+    stopRecording();
+    setTidying(true);
+    try {
+      const combined = value ? `${value.trim()}\n\n${raw}` : raw;
+      const res = await fetch('/api/clients/ai/tidy-dictation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: combined, fieldLabel: fieldLabel || '' }),
+      });
+      const json = await res.json();
+      onChange(json.tidied || combined);
+    } catch {
+      onChange(value ? `${value.trim()}\n\n${raw}` : raw);
+    } finally {
+      setTidying(false);
+      setFinalText('');
+    }
+  };
+
+  const discard = () => {
+    stopRecording();
+    setFinalText('');
+    setInterimText('');
+  };
+
+  const hasTranscript = !!(finalText || interimText);
+
   return (
-    <Textarea
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={rows}
-      className="text-sm resize-none"
-      data-testid={testId}
-    />
+    <div className="space-y-1.5">
+      <div className="relative group">
+        <Textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={recording ? 'Listening…' : placeholder}
+          rows={rows}
+          className={`text-sm resize-none pr-9 transition-all ${recording ? 'ring-2 ring-red-400 border-red-300' : ''}`}
+          data-testid={testId}
+        />
+        {SR_SUPPORTED && (
+          <button
+            type="button"
+            onClick={recording ? stopRecording : startRecording}
+            title={recording ? 'Stop dictation' : 'Start dictation'}
+            data-testid={testId ? `mic-${testId}` : undefined}
+            className={`absolute top-2 right-2 p-1.5 rounded-md transition-all ${
+              recording
+                ? 'bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400 animate-pulse'
+                : 'opacity-0 group-hover:opacity-100 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            {recording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </div>
+
+      {/* Live transcript preview */}
+      {hasTranscript && (
+        <div className="rounded-lg border border-red-200 bg-red-50/60 dark:bg-red-950/20 dark:border-red-900/40 p-3 space-y-2">
+          <div className="flex items-center gap-1.5">
+            {recording
+              ? <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-red-600 uppercase tracking-wider"><Mic className="h-3 w-3 animate-pulse" /> Recording</span>
+              : <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Transcript captured — ready to save</span>
+            }
+          </div>
+          <p className="text-sm leading-relaxed">
+            <span className="text-foreground">{finalText}</span>
+            {interimText && <span className="text-muted-foreground italic"> {interimText}</span>}
+          </p>
+          {!recording && finalText && (
+            <div className="flex items-center gap-2 pt-0.5">
+              <Button
+                size="sm"
+                className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+                onClick={saveAndTidy}
+                disabled={tidying}
+                data-testid={testId ? `save-dictation-${testId}` : undefined}
+              >
+                {tidying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                {tidying ? 'Tidying…' : 'Save & Tidy with AI'}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={discard}>
+                Discard
+              </Button>
+            </div>
+          )}
+          {tidying && (
+            <p className="text-[11px] text-muted-foreground">AI is cleaning up the transcript…</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -386,31 +520,31 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                   Enter key commercial and strategic context. The more detail you provide, the better the AI output.
                 </p>
                 <Field label="Business Overview">
-                  <TA value={data.businessOverview ?? ''} onChange={v => update('businessOverview', v)} placeholder="What the business does, who they are, how long trading..." testId="ta-business-overview" />
+                  <TA value={data.businessOverview ?? ''} onChange={v => update('businessOverview', v)} placeholder="What the business does, who they are, how long trading..." testId="ta-business-overview" fieldLabel="Business Overview" />
                 </Field>
                 <Field label="Target Customers">
-                  <TA value={data.targetCustomers ?? ''} onChange={v => update('targetCustomers', v)} placeholder="Who they want to attract — demographics, location, intent..." testId="ta-target-customers" />
+                  <TA value={data.targetCustomers ?? ''} onChange={v => update('targetCustomers', v)} placeholder="Who they want to attract — demographics, location, intent..." testId="ta-target-customers" fieldLabel="Target Customers" />
                 </Field>
                 <Field label="Key Services">
-                  <TA value={data.keyServices ?? ''} onChange={v => update('keyServices', v)} placeholder="List their main services, and which ones to prioritise..." testId="ta-key-services" />
+                  <TA value={data.keyServices ?? ''} onChange={v => update('keyServices', v)} placeholder="List their main services, and which ones to prioritise..." testId="ta-key-services" fieldLabel="Key Services" />
                 </Field>
                 <Field label="Business Goals">
-                  <TA value={data.businessGoals ?? ''} onChange={v => update('businessGoals', v)} placeholder="e.g. Increase appointments from 5/day to 15/day. Rank locally for chiro. Fill morning slots." testId="ta-business-goals" />
+                  <TA value={data.businessGoals ?? ''} onChange={v => update('businessGoals', v)} placeholder="e.g. Increase appointments from 5/day to 15/day. Rank locally for chiro. Fill morning slots." testId="ta-business-goals" fieldLabel="Business Goals" />
                 </Field>
                 <Field label="Locations / Service Areas">
-                  <TA value={data.locations ?? ''} onChange={v => update('locations', v)} placeholder="Suburbs, cities, regions they target..." rows={2} testId="ta-locations" />
+                  <TA value={data.locations ?? ''} onChange={v => update('locations', v)} placeholder="Suburbs, cities, regions they target..." rows={2} testId="ta-locations" fieldLabel="Locations and Service Areas" />
                 </Field>
                 <Field label="Competitor Notes">
-                  <TA value={data.competitorNotes ?? ''} onChange={v => update('competitorNotes', v)} placeholder="Known competitors, competitive level, market position..." rows={2} testId="ta-competitor-notes" />
+                  <TA value={data.competitorNotes ?? ''} onChange={v => update('competitorNotes', v)} placeholder="Known competitors, competitive level, market position..." rows={2} testId="ta-competitor-notes" fieldLabel="Competitor Notes" />
                 </Field>
                 <Field label="Key Differentiators">
-                  <TA value={data.keyDifferentiators ?? ''} onChange={v => update('keyDifferentiators', v)} placeholder="Why customers choose them over others..." rows={2} testId="ta-differentiators" />
+                  <TA value={data.keyDifferentiators ?? ''} onChange={v => update('keyDifferentiators', v)} placeholder="Why customers choose them over others..." rows={2} testId="ta-differentiators" fieldLabel="Key Differentiators" />
                 </Field>
                 <Field label="Brand / Theme Direction">
-                  <TA value={data.brandDirection ?? ''} onChange={v => update('brandDirection', v)} placeholder="e.g. Clean, clinical, modern. Premium but approachable. Navy and white." rows={2} testId="ta-brand-direction" />
+                  <TA value={data.brandDirection ?? ''} onChange={v => update('brandDirection', v)} placeholder="e.g. Clean, clinical, modern. Premium but approachable. Navy and white." rows={2} testId="ta-brand-direction" fieldLabel="Brand and Theme Direction" />
                 </Field>
                 <Field label="Operational Notes">
-                  <TA value={data.operationalNotes ?? ''} onChange={v => update('operationalNotes', v)} placeholder="Anything useful for the delivery team to know..." rows={2} testId="ta-operational-notes" />
+                  <TA value={data.operationalNotes ?? ''} onChange={v => update('operationalNotes', v)} placeholder="Anything useful for the delivery team to know..." rows={2} testId="ta-operational-notes" fieldLabel="Operational Notes" />
                 </Field>
                 <div className="flex justify-end pt-2">
                   <Button size="sm" onClick={() => setTab('products')} className="gap-1.5 text-xs">
@@ -459,10 +593,10 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                       />
                     </Field>
                     <Field label="Website Objective">
-                      <TA value={data.websiteObjective ?? ''} onChange={v => update('websiteObjective', v)} placeholder="What the website needs to achieve..." rows={2} testId="ta-website-objective" />
+                      <TA value={data.websiteObjective ?? ''} onChange={v => update('websiteObjective', v)} placeholder="What the website needs to achieve..." rows={2} testId="ta-website-objective" fieldLabel="Website Objective" />
                     </Field>
                     <Field label="Booking / Lead CTA Preference">
-                      <TA value={data.bookingCtaPreference ?? ''} onChange={v => update('bookingCtaPreference', v)} placeholder="e.g. Book online (Cliniko), call button, contact form..." rows={2} testId="ta-cta-preference" />
+                      <TA value={data.bookingCtaPreference ?? ''} onChange={v => update('bookingCtaPreference', v)} placeholder="e.g. Book online (Cliniko), call button, contact form..." rows={2} testId="ta-cta-preference" fieldLabel="Booking and CTA Preference" />
                     </Field>
                   </div>
                 )}
@@ -471,10 +605,10 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                   <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
                     <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">SEO Details</p>
                     <Field label="Priority Services for SEO">
-                      <TA value={data.seoServices ?? ''} onChange={v => update('seoServices', v)} placeholder="Which services to rank for first..." rows={2} testId="ta-seo-services" />
+                      <TA value={data.seoServices ?? ''} onChange={v => update('seoServices', v)} placeholder="Which services to rank for first..." rows={2} testId="ta-seo-services" fieldLabel="Priority Services for SEO" />
                     </Field>
                     <Field label="Priority Locations for SEO">
-                      <TA value={data.seoLocations ?? ''} onChange={v => update('seoLocations', v)} placeholder="Which suburbs / regions to target first..." rows={2} testId="ta-seo-locations" />
+                      <TA value={data.seoLocations ?? ''} onChange={v => update('seoLocations', v)} placeholder="Which suburbs / regions to target first..." rows={2} testId="ta-seo-locations" fieldLabel="Priority Locations for SEO" />
                     </Field>
                   </div>
                 )}
@@ -483,7 +617,7 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                   <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
                     <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Google Ads Details</p>
                     <Field label="Ads Focus Services">
-                      <TA value={data.adsServices ?? ''} onChange={v => update('adsServices', v)} placeholder="Which services to run ads for..." rows={2} testId="ta-ads-services" />
+                      <TA value={data.adsServices ?? ''} onChange={v => update('adsServices', v)} placeholder="Which services to run ads for..." rows={2} testId="ta-ads-services" fieldLabel="Google Ads Focus Services" />
                     </Field>
                     <Field label="Monthly Budget">
                       <Input
@@ -495,7 +629,7 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                       />
                     </Field>
                     <Field label="Fastest Win Service">
-                      <TA value={data.fastestWinService ?? ''} onChange={v => update('fastestWinService', v)} placeholder="Which service will convert quickest from ads..." rows={2} testId="ta-fastest-win" />
+                      <TA value={data.fastestWinService ?? ''} onChange={v => update('fastestWinService', v)} placeholder="Which service will convert quickest from ads..." rows={2} testId="ta-fastest-win" fieldLabel="Fastest Win Service for Ads" />
                     </Field>
                   </div>
                 )}
@@ -504,7 +638,7 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                   <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
                     <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Performance Boost Details</p>
                     <Field label="Retargeting Goal">
-                      <TA value={data.retargetingGoal ?? ''} onChange={v => update('retargetingGoal', v)} placeholder="e.g. Retarget website visitors who didn't book..." rows={2} testId="ta-retargeting-goal" />
+                      <TA value={data.retargetingGoal ?? ''} onChange={v => update('retargetingGoal', v)} placeholder="e.g. Retarget website visitors who didn't book..." rows={2} testId="ta-retargeting-goal" fieldLabel="Retargeting Goal" />
                     </Field>
                   </div>
                 )}
@@ -513,13 +647,13 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                 <div className="space-y-3 border-t pt-4">
                   <p className="text-xs font-semibold text-muted-foreground">Commercial Details</p>
                   <Field label="Pricing Notes">
-                    <TA value={data.pricingNotes ?? ''} onChange={v => update('pricingNotes', v)} placeholder="Service pricing, average job value, session price, margins..." rows={3} testId="ta-pricing-notes" />
+                    <TA value={data.pricingNotes ?? ''} onChange={v => update('pricingNotes', v)} placeholder="Service pricing, average job value, session price, margins..." rows={3} testId="ta-pricing-notes" fieldLabel="Pricing and Job Value Notes" />
                   </Field>
                   <Field label="Capacity Notes">
-                    <TA value={data.capacityNotes ?? ''} onChange={v => update('capacityNotes', v)} placeholder="e.g. Currently 3–5 appointments/day, target 15–20/day..." rows={2} testId="ta-capacity-notes" />
+                    <TA value={data.capacityNotes ?? ''} onChange={v => update('capacityNotes', v)} placeholder="e.g. Currently 3–5 appointments/day, target 15–20/day..." rows={2} testId="ta-capacity-notes" fieldLabel="Capacity Notes" />
                   </Field>
                   <Field label="Revenue Opportunity Notes">
-                    <TA value={data.revenueNotes ?? ''} onChange={v => update('revenueNotes', v)} placeholder="Internal commercial context useful for the team..." rows={2} testId="ta-revenue-notes" />
+                    <TA value={data.revenueNotes ?? ''} onChange={v => update('revenueNotes', v)} placeholder="Internal commercial context useful for the team..." rows={2} testId="ta-revenue-notes" fieldLabel="Revenue Opportunity Notes" />
                   </Field>
                 </div>
 
@@ -591,14 +725,14 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                     onChange={v => update('seoObjective', v)}
                     placeholder="e.g. Build the sitemap and page strategy that gives us the best chance of ranking locally for chiropractic and psychology services in Moreton Bay."
                     rows={3}
-                    testId="ta-seo-objective"
+                    testId="ta-seo-objective" fieldLabel="SEO Objective"
                   />
                 </Field>
                 <Field label="Manual Keyword Notes">
-                  <TA value={data.manualKeywordNotes ?? ''} onChange={v => update('manualKeywordNotes', v)} placeholder="Key keyword themes, terms they need to rank for, search intent..." rows={3} testId="ta-manual-keywords" />
+                  <TA value={data.manualKeywordNotes ?? ''} onChange={v => update('manualKeywordNotes', v)} placeholder="Key keyword themes, terms they need to rank for, search intent..." rows={3} testId="ta-manual-keywords" fieldLabel="Manual Keyword Notes" />
                 </Field>
                 <Field label="Competitor Keyword Notes">
-                  <TA value={data.competitorKeywordNotes ?? ''} onChange={v => update('competitorKeywordNotes', v)} placeholder="What competitors rank for, keyword gaps, content opportunities..." rows={2} testId="ta-competitor-keywords" />
+                  <TA value={data.competitorKeywordNotes ?? ''} onChange={v => update('competitorKeywordNotes', v)} placeholder="What competitors rank for, keyword gaps, content opportunities..." rows={2} testId="ta-competitor-keywords" fieldLabel="Competitor Keyword Notes" />
                 </Field>
                 <Field label="Current Website URL">
                   <Input

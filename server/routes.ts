@@ -567,6 +567,37 @@ Be specific and actionable. Focus on retention and growth.`;
     }
   });
 
+  // Tidy speech-to-text dictation
+  app.post("/api/clients/ai/tidy-dictation", async (req, res) => {
+    try {
+      const { text, fieldLabel } = req.body as { text: string; fieldLabel?: string };
+      if (!text?.trim()) return res.status(400).json({ error: 'No text provided' });
+
+      const { OpenAI } = await import('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+      const context = fieldLabel ? ` The field is labelled "${fieldLabel}".` : '';
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You clean up speech-to-text dictation for a sales CRM used by digital marketing agencies.${context} Fix grammar and punctuation, remove filler words (um, uh, like, you know), correct obvious speech recognition errors, remove repetition, and make the text clear and readable as professional business notes. Preserve all factual content, numbers, names, and meaning. Return only the cleaned text with no introduction, preamble, or explanation.`,
+          },
+          { role: 'user', content: text.trim() },
+        ],
+        temperature: 0.3,
+        max_tokens: 1000,
+      });
+
+      const tidied = response.choices[0]?.message?.content?.trim() || text;
+      res.json({ tidied });
+    } catch (error) {
+      console.error('Error tidying dictation:', error);
+      res.status(500).json({ error: 'Failed to tidy dictation' });
+    }
+  });
+
   // AI Onboarding & Team Handover — generate all outputs
   app.post("/api/clients/ai/onboarding-generate", async (req, res) => {
     try {
