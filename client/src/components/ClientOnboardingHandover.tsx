@@ -150,7 +150,7 @@ function TA({ value, onChange, placeholder, rows = 3, testId, fieldLabel }: {
             className={`absolute top-2 right-2 p-1.5 rounded-md transition-all ${
               recording
                 ? 'bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400 animate-pulse'
-                : 'opacity-0 group-hover:opacity-100 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                : 'bg-muted/60 text-muted-foreground hover:bg-violet-100 hover:text-violet-600 dark:hover:bg-violet-900/30 dark:hover:text-violet-400'
             }`}
           >
             {recording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
