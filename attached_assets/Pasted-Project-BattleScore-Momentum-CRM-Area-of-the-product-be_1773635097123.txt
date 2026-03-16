@@ -1,0 +1,359 @@
+Project
+BattleScore Momentum CRM
+
+Area of the product being modified
+Momentum → Pipeline → Deal View → Right Side Panel → AI Sales Engine
+
+
+Current UI location
+
+In the Deal screen there is a right panel called:
+
+AI Sales Engine
+
+Within this panel there is a section:
+
+Prospect Strategy Page — Send this link
+
+The UI currently displays a generated strategy URL like:
+
+https://momentum.battlescore.com.au/strategy/Z62aOpWVcp2UC55uGK9E
+
+This link is generated after clicking:
+
+Generate Prospect Strategy Page
+
+
+Problem
+
+The system currently:
+
+• generates a raw ID link
+• does not allow editing of the URL
+• does not assist with sharing the proposal
+• does not generate the follow-up email
+
+The workflow is incomplete.
+
+After generating the strategy, the user still has to:
+
+• manually copy the link
+• write the follow-up email
+• remember what the client said
+• explain the strategy manually
+
+We want to upgrade this into a **Proposal Share System**.
+
+
+Goal
+
+When the user clicks:
+
+Generate Prospect Strategy Page
+
+The system should open a **Share Strategy Modal**.
+
+This modal will:
+
+• generate a clean public URL
+• allow editing the URL slug
+• generate a personalised follow-up email
+• allow the user to copy the link and email quickly
+
+
+IMPORTANT
+
+Do NOT move this feature.
+
+It must remain inside:
+
+Deal View → AI Sales Engine → Prospect Strategy Page
+
+
+Architecture rules
+
+BattleScore is multi-tenant.
+
+You must:
+
+• preserve tenant isolation
+• not expose cross-tenant strategies
+• not break existing links
+• extend existing architecture instead of rewriting it
+
+
+------------------------------------
+
+PART 1 — PUBLIC URL SLUG SYSTEM
+
+
+Add a new optional field to strategy records:
+
+publicSlug
+
+
+Purpose
+
+Allow clean URLs instead of raw IDs.
+
+
+Current link
+
+/strategy/Z62aOpWVcp2UC55uGK9E
+
+
+New link examples
+
+/avanti-growth-plan
+
+/vanti-visibility-strategy
+
+/vanti-digital-growth-plan
+
+
+Slug rules
+
+• lowercase
+• hyphen separated
+• remove punctuation
+• collapse duplicate hyphens
+• trim spaces
+• must be unique
+
+
+Slug generation
+
+Use the business name from the deal.
+
+Example:
+
+Business name
+Vanti Built
+
+Auto suggestion
+
+vanti-growth-plan
+
+
+If duplicate exists
+
+vanti-growth-plan-2
+
+
+Slug uniqueness must be enforced per tenant.
+
+
+------------------------------------
+
+PART 2 — ROUTING
+
+
+Support clean routes:
+
+/:publicSlug
+
+
+Routing logic
+
+1. attempt to resolve proposal using tenant + publicSlug
+2. fallback to existing strategy ID
+3. render existing strategy page
+
+
+Important
+
+Do NOT rewrite the strategy rendering component.
+
+
+------------------------------------
+
+PART 3 — SHARE STRATEGY MODAL
+
+
+When user clicks
+
+Generate Prospect Strategy Page
+
+Open a centered modal.
+
+
+Modal title
+
+Share Growth Strategy
+
+
+Modal layout
+
+
+SECTION 1 — PUBLIC LINK
+
+Editable slug field
+
+Live preview
+
+Example preview
+
+https://momentum.battlescore.com.au/vanti-growth-plan
+
+
+Buttons
+
+Copy Link
+
+Open Link
+
+Regenerate Slug
+
+
+------------------------------------
+
+SECTION 2 — AI GENERATED EMAIL
+
+
+Below the link generate a follow-up email.
+
+This email must be generated from:
+
+Deal Intelligence
+
+Conversation Intelligence
+
+AI Sales Engine analysis
+
+Growth Strategy insights
+
+
+The email must:
+
+• reference what the client said
+• show understanding
+• highlight opportunity gaps
+• communicate cost of inaction
+• introduce the strategy link
+
+
+Tone
+
+Consultative
+
+Not pushy
+
+Influenced by:
+
+NEPQ
+
+Chris Voss negotiation style
+
+
+Buttons
+
+Copy Subject
+
+Copy Email Body
+
+Copy Full Email
+
+Regenerate Email
+
+Edit Email
+
+
+------------------------------------
+
+PART 4 — EMAIL GENERATION DATA
+
+
+The generator must read data from:
+
+Deal Intelligence panel
+
+Conversation Intelligence logs
+
+AI Sales Engine analysis
+
+Online presence analysis
+
+Growth strategy recommendations
+
+
+Use this information to personalise the email.
+
+
+------------------------------------
+
+PART 5 — EMAIL STRUCTURE
+
+
+Structure the email as:
+
+
+1 Acknowledge conversation
+
+2 Reflect client goals
+
+3 Introduce insight discovered
+
+4 Highlight visibility gaps
+
+5 Frame cost of doing nothing
+
+6 Introduce strategy link
+
+7 Invite discussion
+
+
+Avoid:
+
+• aggressive sales language
+• hype
+• generic marketing copy
+
+
+------------------------------------
+
+PART 6 — SECURITY
+
+
+Ensure:
+
+• strategy only accessible if marked public
+• slug resolution scoped by tenant
+• no cross tenant data access
+
+
+------------------------------------
+
+PART 7 — REGRESSION TESTING
+
+
+Confirm:
+
+Existing ID links still work
+
+Slug links resolve correctly
+
+Slug validation blocks invalid characters
+
+Duplicate slug handled safely
+
+Email generator works even if some fields missing
+
+Share modal opens reliably
+
+Copy buttons work
+
+Tenant isolation preserved
+
+
+------------------------------------
+
+Implementation approach
+
+
+Extend the existing "Generate Prospect Strategy Page" logic.
+
+Do NOT create a new proposal system.
+
+Add slug support and the Share Strategy Modal.
+
+Reuse existing strategy rendering components.

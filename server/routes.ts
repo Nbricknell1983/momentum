@@ -5550,6 +5550,31 @@ Make it specific to their industry and location.`;
   // Strategy Reports — prospect-facing 12-month strategy landing pages
   // ──────────────────────────────────────────────────────────────────────────
 
+  function generateSlug(businessName: string): string {
+    return businessName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') + '-growth-plan';
+  }
+
+  async function findUniqueSlug(fs: FirebaseFirestore.Firestore, baseSlug: string, orgId: string, excludeId?: string): Promise<string> {
+    let slug = baseSlug;
+    let attempt = 1;
+    while (true) {
+      const q = await fs.collection('strategyReports')
+        .where('publicSlug', '==', slug)
+        .where('orgId', '==', orgId)
+        .limit(1).get();
+      const conflict = q.docs.find(d => d.id !== excludeId);
+      if (!conflict) return slug;
+      attempt++;
+      slug = `${baseSlug}-${attempt}`;
+    }
+  }
+
   app.post("/api/strategy-reports", async (req, res) => {
     try {
       if (!firestore) return res.status(503).json({ error: "Firestore not available" });
@@ -5566,15 +5591,167 @@ Make it specific to their industry and location.`;
       }
       const reportData = req.body;
       if (!reportData.businessName) return res.status(400).json({ error: "businessName required" });
+      const orgId = reportData.orgId || uid;
+      const baseSlug = generateSlug(reportData.businessName);
+      const publicSlug = await findUniqueSlug(firestore, baseSlug, orgId);
       const ref = firestore.collection('strategyReports').doc();
       const now = new Date();
       const expiresAt = new Date(now);
       expiresAt.setDate(expiresAt.getDate() + 365);
-      await ref.set({ ...reportData, id: ref.id, type: 'strategy', createdAt: now, createdBy: uid, expiresAt });
-      res.json({ id: ref.id, url: `/strategy/${ref.id}` });
+      await ref.set({ ...reportData, id: ref.id, publicSlug, orgId, type: 'strategy', createdAt: now, createdBy: uid, expiresAt });
+      res.json({ id: ref.id, publicSlug, url: `/strategy/${ref.id}` });
     } catch (err) {
       console.error("[strategy-reports POST]", err);
       res.status(500).json({ error: "Failed to create strategy report" });
+    }
+  });
+
+  // Check slug availability (must come before /:reportId)
+  app.get("/api/strategy-reports/check-slug", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const { slug, orgId, excludeId } = req.query as Record<string, string>;
+      if (!slug || !orgId) return res.status(400).json({ error: "slug and orgId required" });
+      const clean = slug.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      if (!clean) return res.json({ available: false, slug: clean });
+      const q = await firestore.collection('strategyReports')
+        .where('publicSlug', '==', clean).where('orgId', '==', orgId).limit(1).get();
+      const conflict = q.docs.find(d => d.id !== excludeId);
+      res.json({ available: !conflict, slug: clean });
+    } catch (err) {
+      console.error("[check-slug]", err);
+      res.status(500).json({ error: "Check failed" });
+    }
+  });
+
+  // Resolve by publicSlug (must come before /:reportId)
+  app.get("/api/strategy-reports/by-slug/:slug", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const { slug } = req.params;
+      const { orgId } = req.query as { orgId?: string };
+      let q;
+      if (orgId) {
+        q = await firestore.collection('strategyReports')
+          .where('publicSlug', '==', slug).where('orgId', '==', orgId).limit(1).get();
+      } else {
+        q = await firestore.collection('strategyReports')
+          .where('publicSlug', '==', slug).limit(1).get();
+      }
+      if (q.empty) return res.status(404).json({ error: "Strategy not found" });
+      const doc = q.docs[0];
+      const data = doc.data();
+      if (data.expiresAt && data.expiresAt.toDate() < new Date()) return res.status(410).json({ error: "Strategy has expired" });
+      res.json({ ...data, id: doc.id });
+    } catch (err) {
+      console.error("[by-slug]", err);
+      res.status(500).json({ error: "Failed to resolve slug" });
+    }
+  });
+
+  // Update publicSlug for an existing report
+  app.put("/api/strategy-reports/:reportId/slug", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+      const token = authHeader.split(' ')[1];
+      try {
+        const adminModule = (await import('./firebase')).default;
+        await adminModule.auth().verifyIdToken(token);
+      } catch { return res.status(401).json({ error: "Invalid token" }); }
+      const { reportId } = req.params;
+      const { slug } = req.body as { slug: string };
+      if (!slug) return res.status(400).json({ error: "slug required" });
+      const clean = slug.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      if (!clean) return res.status(400).json({ error: "Invalid slug" });
+      const doc = await firestore.collection('strategyReports').doc(reportId).get();
+      if (!doc.exists) return res.status(404).json({ error: "Report not found" });
+      const orgId = doc.data()!.orgId || '';
+      const uniqueSlug = await findUniqueSlug(firestore, clean, orgId, reportId);
+      await firestore.collection('strategyReports').doc(reportId).update({ publicSlug: uniqueSlug });
+      res.json({ publicSlug: uniqueSlug });
+    } catch (err) {
+      console.error("[update-slug]", err);
+      res.status(500).json({ error: "Failed to update slug" });
+    }
+  });
+
+  // AI-generated prospect follow-up email
+  app.post("/api/ai/strategy-email", async (req, res) => {
+    try {
+      const { businessName, industry, location, website, repName, repEmail,
+        strategyDiagnosis, strategy, conversationNotes, servicesDiscussed,
+        painPoints, strategyUrl } = req.body as Record<string, any>;
+
+      const diagnosis = strategyDiagnosis || {};
+      const readinessScore = diagnosis.readinessScore ?? null;
+      const insightSentence = diagnosis.insightSentence || '';
+      const gaps = (diagnosis.gaps || []).slice(0, 3)
+        .map((g: any) => `- ${g.title || g.gap}: ${g.evidence || g.detail || ''}`)
+        .join('\n');
+      const currentPosition = diagnosis.currentPosition?.summary || '';
+      const growthPotential = diagnosis.growthPotential?.summary || '';
+      const execSummary = strategy?.executiveSummary?.summary || strategy?.executiveSummary?.headline || '';
+      const pillars = (strategy?.growthPillars || []).slice(0, 3)
+        .map((p: any) => p.pillar || p.title || '').filter(Boolean).join(', ');
+
+      const prompt = `You are a senior digital marketing consultant writing a follow-up email to a business owner after a discovery call. Style: NEPQ problem-focused + Chris Voss calm authority. Never pushy, no hype.
+
+CONTEXT:
+- Business: ${businessName || 'Not specified'}
+- Industry: ${industry || 'Not specified'}
+- Location: ${location || 'Not specified'}
+- Website: ${website || 'Not specified'}
+${readinessScore !== null ? `- Growth Readiness Score: ${readinessScore}/100` : ''}
+${insightSentence ? `- Key Insight: ${insightSentence}` : ''}
+${currentPosition ? `- Current Position: ${currentPosition}` : ''}
+${growthPotential ? `- Growth Potential: ${growthPotential}` : ''}
+${gaps ? `\nGAPS FOUND:\n${gaps}` : ''}
+${conversationNotes ? `\nCONVERSATION NOTES:\n${conversationNotes}` : ''}
+${servicesDiscussed ? `SERVICES DISCUSSED: ${servicesDiscussed}` : ''}
+${painPoints ? `PAIN POINTS: ${painPoints}` : ''}
+${execSummary ? `STRATEGY SUMMARY: ${execSummary}` : ''}
+${pillars ? `GROWTH PILLARS: ${pillars}` : ''}
+STRATEGY PAGE: ${strategyUrl}
+REP: ${repName || 'Your consultant'} ${repEmail ? `<${repEmail}>` : ''}
+
+EMAIL STRUCTURE (follow in order):
+1. Open acknowledging the conversation — reference something specific
+2. Reflect their goals back — show you understood what they actually want
+3. Share one key insight about their online presence — specific, data-grounded
+4. Frame cost of inaction — what staying the same means for their business
+5. Introduce the strategy page link — not a sales pitch, frame as a resource they can review
+6. Close with ONE Voss-style open question ("What would it mean for your business if...?")
+
+RULES:
+- No exclamation marks. No "excited to share". No "game-changing". No pressure language.
+- Under 250 words. Plain text paragraphs. No bullet points in the email body.
+- Use first name if inferable, otherwise business name.
+
+Return JSON:
+{
+  "subject": "specific subject line referencing their business or a real observation",
+  "firstName": "name used in greeting",
+  "body": "full email body — plain text, paragraphs separated by \\n\\n, include the strategy URL in-line"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You write consultative, NEPQ-influenced follow-up emails for a digital marketing agency. Specific, human, never generic.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.5,
+        max_tokens: 800,
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (err) {
+      console.error("[strategy-email]", err);
+      res.status(500).json({ error: "Failed to generate email" });
     }
   });
 

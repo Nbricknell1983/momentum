@@ -82,14 +82,29 @@ export default function StrategyReportPage() {
 
   useEffect(() => {
     if (!reportId) return;
-    fetch(`/api/strategy-reports/${reportId}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) setError(data.error);
-        else setReport(data);
+    const load = async () => {
+      try {
+        // Try direct Firestore ID lookup first
+        const r1 = await fetch(`/api/strategy-reports/${reportId}`);
+        if (r1.ok) {
+          const data = await r1.json();
+          if (!data.error) { setReport(data); setLoading(false); return; }
+        }
+        // Fall back to slug lookup
+        const r2 = await fetch(`/api/strategy-reports/by-slug/${encodeURIComponent(reportId)}`);
+        const data2 = await r2.json();
+        if (!r2.ok || data2.error) {
+          setError(data2.error || 'Report not found');
+        } else {
+          setReport(data2);
+        }
+      } catch {
+        setError('Failed to load report');
+      } finally {
         setLoading(false);
-      })
-      .catch(() => { setError('Failed to load report'); setLoading(false); });
+      }
+    };
+    load();
   }, [reportId]);
 
   if (loading) {

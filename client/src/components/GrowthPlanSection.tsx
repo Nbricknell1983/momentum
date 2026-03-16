@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink, Link, Sparkles, ChevronDown, ChevronRight, Target, Zap, Clock, ScanLine, Plus, Trash2, ChevronUp } from 'lucide-react';
+import ShareStrategyModal from '@/components/ShareStrategyModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -539,6 +540,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   const [urlLoading, setUrlLoading] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [shareModal, setShareModal] = useState<{ reportId: string; publicSlug: string; strategy: any } | null>(null);
   const [competitorInput, setCompetitorInput] = useState('');
   const [crawledCompetitors, setCrawledCompetitors] = useState<CompetitorAnalysis[]>([]);
   const [competitorAnalysisLoading, setCompetitorAnalysisLoading] = useState(false);
@@ -1228,10 +1230,10 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
         body: JSON.stringify(reportData),
       });
       if (!saveRes.ok) throw new Error('Failed to save strategy report');
-      const { id } = await saveRes.json();
-      const fullUrl = `${window.location.origin}/strategy/${id}`;
+      const { id, publicSlug } = await saveRes.json();
+      const fullUrl = `${window.location.origin}/strategy/${publicSlug || id}`;
       setGeneratedUrl(fullUrl);
-      toast({ title: 'Strategy page generated!', description: 'Ready to send to your prospect.' });
+      setShareModal({ reportId: id, publicSlug: publicSlug || '', strategy });
     } catch (err: any) {
       toast({ title: 'Failed to generate strategy page', description: err.message, variant: 'destructive' });
     } finally { setUrlLoading(false); }
@@ -1253,6 +1255,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   ];
 
   return (
+    <>
     <div className="space-y-3" data-testid="growth-plan-section">
 
       {/* ── AI Strategy Engine ─────────────────────────────────── */}
@@ -1475,24 +1478,40 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           {urlLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
           {urlLoading ? 'Building strategy page...' : 'Generate Prospect Strategy Page'}
         </Button>
-        {generatedUrl && (
+        {generatedUrl && shareModal && (
           <div className="space-y-1.5">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Prospect strategy page — send this link</p>
-            <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/40 text-left">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Prospect strategy page — ready to share</p>
+            <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/40">
               <p className="text-xs text-muted-foreground truncate flex-1">{generatedUrl}</p>
               <Button size="sm" variant="ghost" onClick={copyReportUrl} className="h-7 shrink-0 gap-1 text-xs" data-testid="button-copy-report-url">
                 {urlCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 {urlCopied ? 'Copied!' : 'Copy'}
               </Button>
-              <a href={generatedUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" data-testid="button-open-report-url">
-                  <ExternalLink className="h-3 w-3" /> Open
-                </Button>
-              </a>
             </div>
+            <Button size="sm" variant="default" onClick={() => setShareModal(shareModal)} className="w-full h-8 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-open-share-modal">
+              <Sparkles className="h-3 w-3" /> Share with AI Email
+            </Button>
           </div>
         )}
       </div>
     </div>
+
+    {shareModal && (
+      <ShareStrategyModal
+        reportId={shareModal.reportId}
+        publicSlug={shareModal.publicSlug}
+        orgId={orgId || ''}
+        businessName={businessName || ''}
+        industry={industry}
+        location={location}
+        website={websiteUrl}
+        strategyDiagnosis={strategyDiagnosis}
+        strategy={shareModal.strategy}
+        conversationNotes={lead?.notes}
+        servicesDiscussed={lead?.industry}
+        onClose={() => setShareModal(null)}
+      />
+    )}
+    </>
   );
 }
