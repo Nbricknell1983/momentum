@@ -770,9 +770,18 @@ function PreCallSection({ inputs, setInputs, loading, result, error, onGenerate,
           <ResultCard title="3 strengths in their online presence" content={result.strengths.map((s, i) => `${i + 1}. ${s}`).join('\n')} onSave={hasLead ? onSaveToNotes : undefined} />
           <div className="space-y-2">
             <p className="text-[11px] font-medium text-muted-foreground">AI Insights — Gaps</p>
-            {result.gaps.map((gap, i) => (
-              <GapCard key={i} gap={gap} index={i} onSave={hasLead ? onSaveToNotes : undefined} />
-            ))}
+            {result.gaps
+              .filter(gap => {
+                const t = gap.title?.toLowerCase() ?? '';
+                // Suppress GBP gap if profile is now linked
+                if (/no.*gbp|no.*google business|missing.*gbp|gbp.*missing|google business profile/i.test(t) && inputs.gbpLink?.trim()) return false;
+                // Suppress website gap if website is now set
+                if (/no.*website|missing.*website|website.*missing/i.test(t) && inputs.website?.trim()) return false;
+                return true;
+              })
+              .map((gap, i) => (
+                <GapCard key={i} gap={gap} index={i} onSave={hasLead ? onSaveToNotes : undefined} />
+              ))}
           </div>
           <ResultCard title="Sales Hook" content={result.salesHook} onSave={hasLead ? onSaveToNotes : undefined} highlight />
         </div>
