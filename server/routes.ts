@@ -950,7 +950,7 @@ Please let me know if you need anything else`;
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: 'You write internal team handover notes for a digital marketing agency. You write in clear, plain text — no markdown, no hashtags, no asterisks. Your notes are specific, complete, and immediately actionable.' },
+          { role: 'system', content: 'You write internal team handover notes for a digital marketing agency. You write in clear, plain text — no markdown, no hashtags, no asterisks. Your notes are specific, complete, and immediately actionable.\n\nCRITICAL SITEMAP RULE: In the Website Sitemap and SEO Priority Pages sections, NEVER list generic pages like "Services Overview", "Our Services", or any page without a specific ranking target. Every page must target a real search query. Prioritise "service + suburb" combinations (e.g. "Chiropractor Deception Bay — /chiropractor-deception-bay — Target: chiropractor deception bay"). Use the keyword data provided to identify which combinations have search volume. One page = one target keyword = one clear ranking purpose.' },
           { role: 'user', content: handoverPrompt },
         ],
         temperature: 0.3,
