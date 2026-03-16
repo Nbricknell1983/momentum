@@ -641,119 +641,178 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
             })()}
 
             {/* ── TAB 2: PRODUCTS & COMMERCIALS ── */}
-            {tab === 'products' && (
-              <div className="space-y-5">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2.5">Products Sold</p>
-                  <div className="flex flex-wrap gap-2">
-                    {PRODUCTS.map(({ id, label, icon: Icon }) => (
-                      <button
-                        key={id}
-                        onClick={() => toggleProduct(id)}
-                        data-testid={`toggle-product-${id}`}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                          hasProd(id)
-                            ? 'bg-violet-100 border-violet-300 text-violet-700 dark:bg-violet-900/30 dark:border-violet-700 dark:text-violet-400'
-                            : 'bg-background border-border text-muted-foreground hover:bg-muted/30'
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        {label}
-                      </button>
-                    ))}
+            {tab === 'products' && (() => {
+              const ctx: Record<string, string> = {
+                businessOverview: data.businessOverview ?? '',
+                targetCustomers: data.targetCustomers ?? '',
+                keyServices: data.keyServices ?? '',
+                businessGoals: data.businessGoals ?? '',
+                locations: data.locations ?? '',
+                competitorNotes: data.competitorNotes ?? '',
+                keyDifferentiators: data.keyDifferentiators ?? '',
+                pricingNotes: data.pricingNotes ?? '',
+                capacityNotes: data.capacityNotes ?? '',
+                websiteObjective: data.websiteObjective ?? '',
+                seoServices: data.seoServices ?? '',
+                adsServices: data.adsServices ?? '',
+              };
+              return (
+                <div className="space-y-5">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2.5">Products Sold</p>
+                    <div className="flex flex-wrap gap-2">
+                      {PRODUCTS.map(({ id, label, icon: Icon }) => (
+                        <button
+                          key={id}
+                          onClick={() => toggleProduct(id)}
+                          data-testid={`toggle-product-${id}`}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                            hasProd(id)
+                              ? 'bg-violet-100 border-violet-300 text-violet-700 dark:bg-violet-900/30 dark:border-violet-700 dark:text-violet-400'
+                              : 'bg-background border-border text-muted-foreground hover:bg-muted/30'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Product-specific fields */}
+                  {hasProd('website') && (
+                    <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
+                      <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Website Details</p>
+                      <Field label="Page Count">
+                        <Input
+                          type="number"
+                          value={data.websitePageCount ?? ''}
+                          onChange={e => update('websitePageCount', e.target.value ? parseInt(e.target.value) : undefined)}
+                          placeholder="e.g. 15"
+                          className="h-8 text-sm"
+                          data-testid="input-website-pages"
+                        />
+                      </Field>
+                      <Field label="Website Objective"
+                        onSuggest={v => update('websiteObjective', v)}
+                        fieldHint="What the website needs to achieve — conversions, bookings, credibility, local presence"
+                        context={ctx}>
+                        <TA value={data.websiteObjective ?? ''} onChange={v => update('websiteObjective', v)} placeholder="What the website needs to achieve..." rows={2} testId="ta-website-objective" fieldLabel="Website Objective" />
+                      </Field>
+                      <Field label="Booking / Lead CTA Preference"
+                        onSuggest={v => update('bookingCtaPreference', v)}
+                        fieldHint="Best booking or contact mechanism given how this business operates"
+                        context={ctx}>
+                        <TA value={data.bookingCtaPreference ?? ''} onChange={v => update('bookingCtaPreference', v)} placeholder="e.g. Book online (Cliniko), call button, contact form..." rows={2} testId="ta-cta-preference" fieldLabel="Booking and CTA Preference" />
+                      </Field>
+                    </div>
+                  )}
+
+                  {hasProd('seo') && (
+                    <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
+                      <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">SEO Details</p>
+                      <Field label="Priority Services for SEO"
+                        onSuggest={v => update('seoServices', v)}
+                        fieldHint="Which services to rank for first — highest revenue, clearest intent, best conversion"
+                        context={ctx}>
+                        <TA value={data.seoServices ?? ''} onChange={v => update('seoServices', v)} placeholder="Which services to rank for first..." rows={2} testId="ta-seo-services" fieldLabel="Priority Services for SEO" />
+                      </Field>
+                      <Field label="Priority Locations for SEO"
+                        onSuggest={v => update('seoLocations', v)}
+                        fieldHint="Which suburbs or regions to target first based on their service area and goals"
+                        context={ctx}>
+                        <TA value={data.seoLocations ?? ''} onChange={v => update('seoLocations', v)} placeholder="Which suburbs / regions to target first..." rows={2} testId="ta-seo-locations" fieldLabel="Priority Locations for SEO" />
+                      </Field>
+                    </div>
+                  )}
+
+                  {hasProd('google_ads') && (
+                    <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
+                      <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Google Ads Details</p>
+                      <Field label="Ads Focus Services"
+                        onSuggest={v => update('adsServices', v)}
+                        fieldHint="Which services to run ads for — high margin, fast conversion, underserved demand"
+                        context={ctx}>
+                        <TA value={data.adsServices ?? ''} onChange={v => update('adsServices', v)} placeholder="Which services to run ads for..." rows={2} testId="ta-ads-services" fieldLabel="Google Ads Focus Services" />
+                      </Field>
+                      <Field label="Monthly Budget">
+                        <Input
+                          value={data.monthlyBudget ?? ''}
+                          onChange={e => update('monthlyBudget', e.target.value)}
+                          placeholder="e.g. $2,500/mo"
+                          className="h-8 text-sm"
+                          data-testid="input-monthly-budget"
+                        />
+                      </Field>
+                      <Field label="Fastest Win Service"
+                        onSuggest={v => update('fastestWinService', v)}
+                        fieldHint="Which service will convert quickest from paid ads given their pricing and customer intent"
+                        context={ctx}>
+                        <TA value={data.fastestWinService ?? ''} onChange={v => update('fastestWinService', v)} placeholder="Which service will convert quickest from ads..." rows={2} testId="ta-fastest-win" fieldLabel="Fastest Win Service for Ads" />
+                      </Field>
+                    </div>
+                  )}
+
+                  {hasProd('performance_boost') && (
+                    <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
+                      <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Performance Boost Details</p>
+                      <Field label="Retargeting Goal"
+                        onSuggest={v => update('retargetingGoal', v)}
+                        fieldHint="Retargeting strategy — who to retarget and what action to drive based on the customer journey"
+                        context={ctx}>
+                        <TA value={data.retargetingGoal ?? ''} onChange={v => update('retargetingGoal', v)} placeholder="e.g. Retarget website visitors who didn't book..." rows={2} testId="ta-retargeting-goal" fieldLabel="Retargeting Goal" />
+                      </Field>
+                    </div>
+                  )}
+
+                  {/* Commercial fields — always visible */}
+                  <div className="space-y-3 border-t pt-4">
+                    <p className="text-xs font-semibold text-muted-foreground">Commercial Details</p>
+                    <Field label="Pricing Notes"
+                      onSuggest={v => update('pricingNotes', v)}
+                      fieldHint="Service pricing, session rates, average job value — anything that affects margin or conversion"
+                      context={ctx}>
+                      <TA value={data.pricingNotes ?? ''} onChange={v => update('pricingNotes', v)} placeholder="Service pricing, average job value, session price, margins..." rows={3} testId="ta-pricing-notes" fieldLabel="Pricing and Job Value Notes" />
+                    </Field>
+                    <Field label="Capacity Notes"
+                      onSuggest={v => update('capacityNotes', v)}
+                      fieldHint="Current capacity vs target — appointments/day, staff, bottlenecks"
+                      context={ctx}>
+                      <TA value={data.capacityNotes ?? ''} onChange={v => update('capacityNotes', v)} placeholder="e.g. Currently 3–5 appointments/day, target 15–20/day..." rows={2} testId="ta-capacity-notes" fieldLabel="Capacity Notes" />
+                    </Field>
+                    <Field label="Revenue Opportunity Notes"
+                      onSuggest={v => update('revenueNotes', v)}
+                      fieldHint="Revenue upside if goals are hit — useful commercial context for the delivery team"
+                      context={ctx}>
+                      <TA value={data.revenueNotes ?? ''} onChange={v => update('revenueNotes', v)} placeholder="Internal commercial context useful for the team..." rows={2} testId="ta-revenue-notes" fieldLabel="Revenue Opportunity Notes" />
+                    </Field>
+                  </div>
+
+                  <div className="flex justify-between pt-2">
+                    <Button size="sm" variant="outline" onClick={() => setTab('context')} className="text-xs">Back</Button>
+                    <Button size="sm" onClick={() => setTab('seo')} className="gap-1.5 text-xs">
+                      Next: SEO Inputs <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
-
-                {/* Product-specific fields */}
-                {hasProd('website') && (
-                  <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
-                    <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Website Details</p>
-                    <Field label="Page Count">
-                      <Input
-                        type="number"
-                        value={data.websitePageCount ?? ''}
-                        onChange={e => update('websitePageCount', e.target.value ? parseInt(e.target.value) : undefined)}
-                        placeholder="e.g. 15"
-                        className="h-8 text-sm"
-                        data-testid="input-website-pages"
-                      />
-                    </Field>
-                    <Field label="Website Objective">
-                      <TA value={data.websiteObjective ?? ''} onChange={v => update('websiteObjective', v)} placeholder="What the website needs to achieve..." rows={2} testId="ta-website-objective" fieldLabel="Website Objective" />
-                    </Field>
-                    <Field label="Booking / Lead CTA Preference">
-                      <TA value={data.bookingCtaPreference ?? ''} onChange={v => update('bookingCtaPreference', v)} placeholder="e.g. Book online (Cliniko), call button, contact form..." rows={2} testId="ta-cta-preference" fieldLabel="Booking and CTA Preference" />
-                    </Field>
-                  </div>
-                )}
-
-                {hasProd('seo') && (
-                  <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
-                    <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">SEO Details</p>
-                    <Field label="Priority Services for SEO">
-                      <TA value={data.seoServices ?? ''} onChange={v => update('seoServices', v)} placeholder="Which services to rank for first..." rows={2} testId="ta-seo-services" fieldLabel="Priority Services for SEO" />
-                    </Field>
-                    <Field label="Priority Locations for SEO">
-                      <TA value={data.seoLocations ?? ''} onChange={v => update('seoLocations', v)} placeholder="Which suburbs / regions to target first..." rows={2} testId="ta-seo-locations" fieldLabel="Priority Locations for SEO" />
-                    </Field>
-                  </div>
-                )}
-
-                {hasProd('google_ads') && (
-                  <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
-                    <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Google Ads Details</p>
-                    <Field label="Ads Focus Services">
-                      <TA value={data.adsServices ?? ''} onChange={v => update('adsServices', v)} placeholder="Which services to run ads for..." rows={2} testId="ta-ads-services" fieldLabel="Google Ads Focus Services" />
-                    </Field>
-                    <Field label="Monthly Budget">
-                      <Input
-                        value={data.monthlyBudget ?? ''}
-                        onChange={e => update('monthlyBudget', e.target.value)}
-                        placeholder="e.g. $2,500/mo"
-                        className="h-8 text-sm"
-                        data-testid="input-monthly-budget"
-                      />
-                    </Field>
-                    <Field label="Fastest Win Service">
-                      <TA value={data.fastestWinService ?? ''} onChange={v => update('fastestWinService', v)} placeholder="Which service will convert quickest from ads..." rows={2} testId="ta-fastest-win" fieldLabel="Fastest Win Service for Ads" />
-                    </Field>
-                  </div>
-                )}
-
-                {hasProd('performance_boost') && (
-                  <div className="space-y-3 rounded-lg border border-violet-100 dark:border-violet-900/30 p-3 bg-violet-50/30 dark:bg-violet-900/10">
-                    <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">Performance Boost Details</p>
-                    <Field label="Retargeting Goal">
-                      <TA value={data.retargetingGoal ?? ''} onChange={v => update('retargetingGoal', v)} placeholder="e.g. Retarget website visitors who didn't book..." rows={2} testId="ta-retargeting-goal" fieldLabel="Retargeting Goal" />
-                    </Field>
-                  </div>
-                )}
-
-                {/* Commercial fields — always visible */}
-                <div className="space-y-3 border-t pt-4">
-                  <p className="text-xs font-semibold text-muted-foreground">Commercial Details</p>
-                  <Field label="Pricing Notes">
-                    <TA value={data.pricingNotes ?? ''} onChange={v => update('pricingNotes', v)} placeholder="Service pricing, average job value, session price, margins..." rows={3} testId="ta-pricing-notes" fieldLabel="Pricing and Job Value Notes" />
-                  </Field>
-                  <Field label="Capacity Notes">
-                    <TA value={data.capacityNotes ?? ''} onChange={v => update('capacityNotes', v)} placeholder="e.g. Currently 3–5 appointments/day, target 15–20/day..." rows={2} testId="ta-capacity-notes" fieldLabel="Capacity Notes" />
-                  </Field>
-                  <Field label="Revenue Opportunity Notes">
-                    <TA value={data.revenueNotes ?? ''} onChange={v => update('revenueNotes', v)} placeholder="Internal commercial context useful for the team..." rows={2} testId="ta-revenue-notes" fieldLabel="Revenue Opportunity Notes" />
-                  </Field>
-                </div>
-
-                <div className="flex justify-between pt-2">
-                  <Button size="sm" variant="outline" onClick={() => setTab('context')} className="text-xs">Back</Button>
-                  <Button size="sm" onClick={() => setTab('seo')} className="gap-1.5 text-xs">
-                    Next: SEO Inputs <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── TAB 3: SEO INPUTS ── */}
-            {tab === 'seo' && (
+            {tab === 'seo' && (() => {
+              const ctx: Record<string, string> = {
+                businessOverview: data.businessOverview ?? '',
+                targetCustomers: data.targetCustomers ?? '',
+                keyServices: data.keyServices ?? '',
+                businessGoals: data.businessGoals ?? '',
+                locations: data.locations ?? '',
+                competitorNotes: data.competitorNotes ?? '',
+                seoServices: data.seoServices ?? '',
+                seoLocations: data.seoLocations ?? '',
+                keyDifferentiators: data.keyDifferentiators ?? '',
+                keywordSummary: data.keywordSummary ?? '',
+              };
+              return (
               <div className="space-y-4">
                 <p className="text-xs text-muted-foreground">
                   Upload keyword data or enter manually. AI will use this to recommend page structure and strategy.
@@ -805,7 +864,10 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                   )}
                 </div>
 
-                <Field label="SEO Objective">
+                <Field label="SEO Objective"
+                  onSuggest={v => update('seoObjective', v)}
+                  fieldHint="The main SEO goal — what rankings and pages will drive the most business impact for this client"
+                  context={ctx}>
                   <TA
                     value={data.seoObjective ?? ''}
                     onChange={v => update('seoObjective', v)}
@@ -814,10 +876,16 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                     testId="ta-seo-objective" fieldLabel="SEO Objective"
                   />
                 </Field>
-                <Field label="Manual Keyword Notes">
+                <Field label="Manual Keyword Notes"
+                  onSuggest={v => update('manualKeywordNotes', v)}
+                  fieldHint="Key keyword themes, search terms, and intent signals based on their services and location"
+                  context={ctx}>
                   <TA value={data.manualKeywordNotes ?? ''} onChange={v => update('manualKeywordNotes', v)} placeholder="Key keyword themes, terms they need to rank for, search intent..." rows={3} testId="ta-manual-keywords" fieldLabel="Manual Keyword Notes" />
                 </Field>
-                <Field label="Competitor Keyword Notes">
+                <Field label="Competitor Keyword Notes"
+                  onSuggest={v => update('competitorKeywordNotes', v)}
+                  fieldHint="What competitors likely rank for, keyword gaps they can exploit, content opportunities"
+                  context={ctx}>
                   <TA value={data.competitorKeywordNotes ?? ''} onChange={v => update('competitorKeywordNotes', v)} placeholder="What competitors rank for, keyword gaps, content opportunities..." rows={2} testId="ta-competitor-keywords" fieldLabel="Competitor Keyword Notes" />
                 </Field>
                 <Field label="Current Website URL">
@@ -853,7 +921,8 @@ export default function ClientOnboardingHandover({ client }: { client: Client })
                   </Button>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* ── TAB 4: AI OUTPUTS ── */}
             {tab === 'outputs' && (
