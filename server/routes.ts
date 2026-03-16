@@ -857,100 +857,137 @@ ${soldBoost ? `## Retargeting Brief\n(Audience segments, message variants, creat
         data.aiMarketingOutput ? `MARKETING PLAN (already generated):\n${data.aiMarketingOutput.slice(0, 1000)}` : '',
       ].filter(Boolean).join('\n\n');
 
-      const handoverPrompt = `You are writing an internal handover note for the delivery team at a digital marketing agency. Write it exactly in the format and tone shown below. This note must be clear, practical, and complete — the delivery team should be able to start work immediately after reading it.
+      const pageCount = soldWebsite ? (data.websitePageCount || '?') : null;
 
-CLIENT: ${clientName}
-LOCATION: ${location || data.locations || 'Not specified'}
-PRODUCTS SOLD: ${productLabels.join(', ') || 'Not specified'}
+      const handoverPrompt = `You are writing an internal handover note for a digital marketing agency delivery team. Reproduce the EXACT format and tone of the example below — plain text only, no markdown, no hashtags, no asterisks, no bold.
 
-INTAKE DATA:
-- Business: ${data.businessOverview || 'N/A'}
+CLIENT DATA:
+- Client name: ${clientName}
+- Location / primary area: ${location || data.locations || 'Not specified'}
+- All service areas / suburbs: ${data.seoLocations || data.locations || 'Not specified'}
+- Products sold: ${productLabels.join(', ') || 'Not specified'}
+- Business overview: ${data.businessOverview || 'N/A'}
 - Target customers: ${data.targetCustomers || 'N/A'}
-- Key services: ${data.keyServices || 'N/A'}
-- Goals: ${data.businessGoals || 'N/A'}
-- Differentiators: ${data.keyDifferentiators || 'N/A'}
-- Competitors: ${data.competitorNotes || 'N/A'}
-- Pricing: ${data.pricingNotes || 'N/A'}
-- Capacity: ${data.capacityNotes || 'N/A'}
-- Brand direction: ${data.brandDirection || 'N/A'}
+- Key services offered: ${data.keyServices || 'N/A'}
+- Business goals: ${data.businessGoals || 'N/A'}
 - Operational notes: ${data.operationalNotes || 'N/A'}
 - Website URL: ${data.currentWebsiteUrl || 'N/A'}
+- Website page count: ${pageCount || 'N/A'}
 - Website objective: ${data.websiteObjective || 'N/A'}
-- CTA/booking preference: ${data.bookingCtaPreference || 'N/A'}
+- CTA / booking preference: ${data.bookingCtaPreference || 'N/A'}
 - SEO priority services: ${data.seoServices || 'N/A'}
 - SEO priority locations: ${data.seoLocations || 'N/A'}
-- Ads focus: ${data.adsServices || 'N/A'}
-- Ads budget: ${data.monthlyBudget || 'N/A'}
+- Ads focus services: ${data.adsServices || 'N/A'}
+- Ads monthly budget: ${data.monthlyBudget || 'N/A'}
+- Ads fastest win service: ${data.fastestWinService || 'N/A'}
 - Retargeting goal: ${data.retargetingGoal || 'N/A'}
-- SEO objective: ${data.seoObjective || 'N/A'}${keywordsSection}
+- Brand direction: ${data.brandDirection || 'N/A'}${keywordsSection}
 
-${aiContext ? `PREVIOUSLY GENERATED DELIVERY BRIEFS (extract specific sitemap pages, keywords, campaign details from these):\n${aiContext}` : ''}
+${aiContext ? `PREVIOUSLY GENERATED BRIEFS — extract sitemap pages, keyword clusters, and campaign details from these:\n${aiContext}` : ''}
 
-WRITE THE HANDOVER NOTE in this exact format (plain text, no markdown, no hashtags, no asterisks):
+━━━ EXACT OUTPUT FORMAT ━━━
+
+Write the note using this exact structure and tone. Replace all [placeholders] with real content from the client data above.
 
 ${clientName}: ${productLabels.join(' + ')} Handover Notes
+
 Hi Team,
 
-Please see below handover notes for ${clientName}. This client is proceeding with [briefly describe the package — e.g. "a 10-page website build, Google Ads campaign launch, and Google Business Profile setup"].
+Please see the handover notes for ${clientName}. This client is proceeding with [one sentence describing the package in plain English — e.g. "a 15-page website build focused on increasing local organic traffic for chiropractic and psychological services"].
 
 Business Overview
 
-[2-3 sentences describing the business, what they do, who they serve, and what's driving this campaign]
+[2-3 sentences: what this business does, who they serve, and what is driving this campaign. Be specific — name the services and commercial goals.]
 
 Products Included
-[bulleted list of products sold — write each as a full sentence e.g. "10-page website build" or "Google Search Ads campaign targeting X services"]
+- [product 1 — write as a full sentence, e.g. "15-page website build"]
+- [product 2 — e.g. "Google Search Ads campaign targeting chiropractic services in Deception Bay"]
+[one line per product sold]
 
 Website URL
-[website URL if provided, or "TBC"]
+${data.currentWebsiteUrl || 'TBC'}
 ${soldWebsite ? `
 Website Sitemap
 
-STRICT RULE: Every page listed must have a clear ranking purpose. NEVER write generic pages like "Services Overview" or "Psychological Services Overview". Every page must target a specific search query.
+SITEMAP RULES (follow strictly):
+- Page 1 is always Home, named as: Home - [Primary Service] [Primary Location] (e.g. "Home - Psychologist Moreton Bay")
+- Then list SERVICE pages. Write a "Service:" label before this group (no number on the label).
+  Each service page is named: [Service] - [Primary Location] (e.g. "Psychologist - Deception Bay")
+  Under each service page, write "Anchor links to" then list the specific services, conditions, or topics on that page as bullet points using *
+  Do NOT use generic page names like "Services Overview" or "Chiropractic Services" — name the page after the primary service + location
+- Then list LOCATION pages. Write a "Locations" label before this group (no number on the label).
+  Each location page is just the suburb name (e.g. "Rothwell", "North Lakes") — numbered sequentially continuing from service pages
+  Use the seoLocations data to determine which suburbs to include. Exclude the primary location (already covered by service pages). Add as many location pages as needed to reach the total page count.
+- End with core pages: About Us, Contact Us, Blog (numbered sequentially)
+- Total pages must add up to ${pageCount || 'the page count sold'}
 
-For each page use this format:
-[number]. [Page Name] — /[url-slug] — Target: "[exact keyword]" — Purpose: Rank for "[exact keyword]"
+NUMBER every page (1, 2, 3...) across all groups — the numbering is continuous. Only the group labels ("Service:", "Locations") are not numbered.
 
-Prioritise service + location combinations above everything else. Examples:
-1. Home — / — Target: "[main service] [main location]" — Purpose: Primary conversion page
-2. Chiropractor Deception Bay — /chiropractor-deception-bay — Target: "chiropractor deception bay" — Purpose: Rank for "chiropractor deception bay"
-3. Psychologist North Lakes — /psychologist-north-lakes — Target: "psychologist north lakes" — Purpose: Rank for "psychologist north lakes"
+Example format (use this exact layout):
+1. Home - Psychologist Moreton Bay
 
-Extract from AI sitemap if already generated. Otherwise build from keyword data + services + locations. Include core pages, service + location combinations, and supporting pages only if they serve a specific search intent.
+Service:
+
+2. Psychologist - Deception Bay
+
+Anchor links to
+
+* Emotional Regulation
+* Anxiety
+* Depression
+* CBT
+* Frequently Asked Questions About Psychology Services
+
+3. Chiropractor - Deception Bay
+
+Anchor links to
+
+* Chiropractic Adjustments
+* Sports Injury Chiropractic Care
+* Conditions We Treat
+* What to Expect at Your First Visit
+* Frequently Asked Questions About Chiropractic Care
+
+Locations
+
+4. Rothwell
+5. North Lakes
+6. Kippa-Ring
+
+14. About Us
+15. Contact Us
+16. Blog
+
+Now write the actual sitemap for ${clientName} using the data above. Generate the right anchor links based on the specific services, modalities, conditions, or topics that this business offers.
 ` : ''}${soldAds ? `
-Google Ads Targeting
+Google Ads
 
-[Campaign location targeting and radius. Be specific — use their locations data]
+[One sentence on what the ads campaign focuses on — e.g. "Focus on the Chiropractor in Deception Bay" or "Target [service] searches across [locations]"]
+` : ''}${soldBoost ? `
+PBoost
 
-Keyword Targets
-
-[List the most commercially important keywords — 10-20 terms. If keyword data was provided, use the highest-priority terms. Otherwise generate from services + locations. Format: "keyword" — [intent note]]
-` : ''}${soldSEO ? `
-SEO Priority Pages
-
-STRICT RULE: List service + location page combinations first. No generic category pages.
-
-For each page: [Page Name] — /[url-slug] — Target: "[exact keyword]" — Why first: [one sentence on commercial or volume reason]
-
-Extract from sitemap if generated. Otherwise derive from keyword data + services + locations. List 5-10 pages, ordered by commercial priority.
+[One sentence on what the Performance Boost / retargeting campaign focuses on — e.g. "Focus on the Psychologists" or "Retarget website visitors who viewed [service] pages"]
 ` : ''}${soldGBP ? `
 Google Business Profile
 
-[Describe what needs to happen with GBP — new creation, optimisation, verification, etc.]
-` : ''}${soldBoost ? `
-Performance Boost / Retargeting
+[One sentence on what needs to happen with GBP — optimisation, new listing, verification, etc.]
+` : ''}${soldLocalSEO ? `
+Local SEO
 
-[Who to retarget, what message, what action to drive]
+[One sentence on the local SEO focus — map pack, citation building, etc.]
 ` : ''}${data.operationalNotes ? `
 Special Notes
 
-[Any operational constraints, client preferences, or delivery watch-outs the team needs to know]
+[Any operational notes, watch-outs, or client-specific instructions the delivery team needs to know]
 ` : ''}
+Thanks team
+
 Please let me know if you need anything else`;
 
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: 'You write internal team handover notes for a digital marketing agency. You write in clear, plain text — no markdown, no hashtags, no asterisks. Your notes are specific, complete, and immediately actionable.\n\nCRITICAL SITEMAP RULE: In the Website Sitemap and SEO Priority Pages sections, NEVER list generic pages like "Services Overview", "Our Services", or any page without a specific ranking target. Every page must target a real search query. Prioritise "service + suburb" combinations (e.g. "Chiropractor Deception Bay — /chiropractor-deception-bay — Target: chiropractor deception bay"). Use the keyword data provided to identify which combinations have search volume. One page = one target keyword = one clear ranking purpose.' },
+          { role: 'system', content: 'You write internal team handover notes for a digital marketing agency. Output plain text only — absolutely no markdown, no ## headers, no asterisk bold, no hashtags. Use plain section headings (just the heading text on its own line), numbered lists for sitemap pages, and * bullet points only for anchor links under service pages.\n\nCRITICAL SITEMAP RULES:\n1. Home page is named "Home - [Primary Service] [Primary Location]"\n2. Service pages are named "[Service] - [Primary Location]" with "Anchor links to" bullet list beneath each\n3. Location pages are just suburb names, numbered sequentially\n4. NEVER create generic pages like "Services Overview", "Our Services", or any page without a specific ranking target\n5. Google Ads and PBoost sections are ONE sentence each — just the focus, nothing more\n6. End with: "Thanks team\\n\\nPlease let me know if you need anything else"' },
           { role: 'user', content: handoverPrompt },
         ],
         temperature: 0.3,
