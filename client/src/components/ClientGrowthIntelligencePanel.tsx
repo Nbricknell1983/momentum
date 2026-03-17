@@ -574,12 +574,24 @@ function LocalPresenceSection({ client }: { client: Client }) {
                               </select>
                             </div>
                             <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Radius (km)</p>
+                              <p className="text-[10px] text-muted-foreground mb-1">Radius from centre (km)</p>
                               <select value={scanRadius} onChange={e => setScanRadius(e.target.value)} className="w-full h-8 text-xs rounded border bg-background px-2" data-testid="select-scan-radius">
                                 {RADII.map(r => <option key={r} value={r}>{r} km</option>)}
                               </select>
                             </div>
                           </div>
+                          {/* Coverage summary */}
+                          {(() => {
+                            const r = parseFloat(scanRadius); const g = parseInt(scanGridSize);
+                            const diameter = r * 2; const spacing = parseFloat((diameter / (g - 1)).toFixed(1));
+                            const points = g * g;
+                            return (
+                              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
+                                <MapPin className="h-3 w-3 shrink-0" />
+                                <span>Covers <strong>{diameter}km × {diameter}km</strong> · {points} check points · {spacing}km apart</span>
+                              </div>
+                            );
+                          })()}
                           <div className="flex gap-2">
                             <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
                               {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
@@ -733,12 +745,23 @@ function LocalPresenceSection({ client }: { client: Client }) {
                               </select>
                             </div>
                             <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Radius (km)</p>
+                              <p className="text-[10px] text-muted-foreground mb-1">Radius from centre (km)</p>
                               <select value={scanRadius} onChange={e => setScanRadius(e.target.value)} className="w-full h-8 text-xs rounded border bg-background px-2" data-testid="select-scan-radius">
                                 {RADII.map(r => <option key={r} value={r}>{r} km</option>)}
                               </select>
                             </div>
                           </div>
+                          {(() => {
+                            const r = parseFloat(scanRadius); const g = parseInt(scanGridSize);
+                            const diameter = r * 2; const spacing = parseFloat((diameter / (g - 1)).toFixed(1));
+                            const points = g * g;
+                            return (
+                              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
+                                <MapPin className="h-3 w-3 shrink-0" />
+                                <span>Covers <strong>{diameter}km × {diameter}km</strong> · {points} check points · {spacing}km apart</span>
+                              </div>
+                            );
+                          })()}
                           <div className="flex gap-2">
                             <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
                               {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
