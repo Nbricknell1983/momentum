@@ -2464,7 +2464,9 @@ Return valid JSON:
       }
 
       const MAX_PAGES = 500;
-      const TIMEOUT_MS = 10000;
+      const TIMEOUT_MS = 12000;
+      const MAX_CHILD_SITEMAPS = 15;
+      const MAX_DEPTH = 3;
 
       async function fetchXml(targetUrl: string): Promise<string> {
         const controller = new AbortController();
@@ -2472,16 +2474,43 @@ Return valid JSON:
         try {
           const r = await fetch(targetUrl, {
             signal: controller.signal,
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+              'Accept': 'application/xml,text/xml,*/*',
+            },
           });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return await r.text();
+          const text = await r.text();
+          // Verify it looks like XML, not an HTML error page
+          if (!text.trim().startsWith('<') && !text.includes('<?xml')) {
+            throw new Error('Response is not XML');
+          }
+          return text;
         } finally {
           clearTimeout(timer);
         }
       }
 
+      // Try primary URL, then fallback to http:// if https:// fails
+      async function fetchXmlWithFallback(targetUrl: string): Promise<string> {
+        try {
+          return await fetchXml(targetUrl);
+        } catch (err) {
+          // If https failed, try http and vice versa
+          const fallback = targetUrl.startsWith('https://')
+            ? targetUrl.replace('https://', 'http://')
+            : targetUrl.replace('http://', 'https://');
+          if (fallback !== targetUrl) {
+            return await fetchXml(fallback);
+          }
+          throw err;
+        }
+      }
+
       function extractTag(xml: string, tag: string): string | undefined {
+        // Handle both <tag>value</tag> and CDATA <tag><![CDATA[value]]></tag>
+        const cdataMatch = xml.match(new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tag}>`));
+        if (cdataMatch) return cdataMatch[1].trim();
         const m = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`));
         return m ? m[1].trim() : undefined;
       }
@@ -2513,25 +2542,56 @@ Return valid JSON:
         return locs;
       }
 
-      const rootXml = await fetchXml(url);
-      const isSitemapIndex = /<sitemapindex/i.test(rootXml);
+      // Recursively resolve a sitemap URL into pages, handling nested indexes
+      async function resolvePages(
+        targetUrl: string,
+        depth: number,
+        visited: Set<string>
+      ): Promise<Array<{ url: string; lastmod?: string; changefreq?: string; priority?: string }>> {
+        if (depth > MAX_DEPTH || visited.has(targetUrl)) return [];
+        visited.add(targetUrl);
+        let xml: string;
+        try {
+          xml = await fetchXmlWithFallback(targetUrl);
+        } catch {
+          return [];
+        }
+        if (/<sitemapindex/i.test(xml)) {
+          const childUrls = parseSitemapIndex(xml).slice(0, MAX_CHILD_SITEMAPS);
+          // Fetch all child sitemaps in parallel
+          const results = await Promise.allSettled(
+            childUrls.map(cu => resolvePages(cu, depth + 1, visited))
+          );
+          const merged: Array<{ url: string; lastmod?: string; changefreq?: string; priority?: string }> = [];
+          for (const r of results) {
+            if (r.status === 'fulfilled') merged.push(...r.value);
+          }
+          return merged;
+        }
+        return parseUrlset(xml);
+      }
 
-      let pages: Array<{ url: string; lastmod?: string; changefreq?: string; priority?: string }> = [];
+      // Also try common alternate sitemap locations if the root URL fails or returns 0 pages
+      async function tryAlternateSitemapUrls(baseUrl: string): Promise<string[]> {
+        const alts = ['/sitemap_index.xml', '/wp-sitemap.xml', '/sitemap-index.xml'];
+        const origin = new URL(baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`).origin;
+        return alts.map(a => `${origin}${a}`);
+      }
 
-      if (isSitemapIndex) {
-        const childUrls = parseSitemapIndex(rootXml).slice(0, 10);
-        for (const childUrl of childUrls) {
-          if (pages.length >= MAX_PAGES) break;
-          try {
-            const childXml = await fetchXml(childUrl);
-            const childPages = parseUrlset(childXml);
-            pages.push(...childPages.slice(0, MAX_PAGES - pages.length));
-          } catch {
-            // skip failed child sitemaps
+      const visited = new Set<string>();
+      let pages = await resolvePages(url, 0, visited);
+
+      // If zero pages and the URL was a direct sitemap.xml, try alternates
+      if (pages.length === 0) {
+        const alts = await tryAlternateSitemapUrls(url);
+        for (const alt of alts) {
+          if (visited.has(alt)) continue;
+          const altPages = await resolvePages(alt, 0, visited);
+          if (altPages.length > 0) {
+            pages = altPages;
+            break;
           }
         }
-      } else {
-        pages = parseUrlset(rootXml);
       }
 
       pages = pages.slice(0, MAX_PAGES);
@@ -2550,7 +2610,7 @@ Return valid JSON:
       res.json({
         url,
         totalPages: pages.length,
-        isSitemapIndex,
+        isSitemapIndex: pages.length > 0,
         pages,
         sections,
         fetchedAt: new Date().toISOString(),
