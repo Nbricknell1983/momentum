@@ -1326,12 +1326,18 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     if (hasGBP || autoSearched.current || !lead.companyName?.trim()) return;
     autoSearched.current = true;
     setSuggestLoading(true);
-    fetch(`/api/google-places/find?query=${encodeURIComponent(lead.companyName.trim())}`)
+    // Extract suburb/state from address as location hint (e.g. "Brisbane QLD" from "123 Main St, Brisbane QLD 4000")
+    const locationHint = lead.address
+      ? lead.address.split(',').slice(-2).join(',').trim().replace(/\s+\d{4}.*$/, '').trim()
+      : '';
+    const params = new URLSearchParams({ query: lead.companyName.trim() });
+    if (locationHint) params.set('location', locationHint);
+    fetch(`/api/google-places/find?${params}`)
       .then(r => r.json())
       .then(data => { if (data.results?.length) setSuggestions(data.results.slice(0, 3)); })
       .catch(() => {})
       .finally(() => setSuggestLoading(false));
-  }, [hasGBP, lead.companyName]);
+  }, [hasGBP, lead.companyName, lead.address]);
 
   const openSearch = () => {
     setQuery(lead.companyName || '');
@@ -1355,7 +1361,14 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     setSearchError(null);
     setResults([]);
     try {
-      const res = await fetch(`/api/google-places/find?query=${encodeURIComponent(query.trim())}`);
+      // Include lead address as location hint if the query doesn't already have location context
+      const hasLocationInQuery = /\b(qld|nsw|vic|wa|sa|act|nt|tasmania|queensland|new south wales|victoria|australia)\b/i.test(query);
+      const locationHint = !hasLocationInQuery && lead.address
+        ? lead.address.split(',').slice(-2).join(',').trim().replace(/\s+\d{4}.*$/, '').trim()
+        : '';
+      const params = new URLSearchParams({ query: query.trim() });
+      if (locationHint) params.set('location', locationHint);
+      const res = await fetch(`/api/google-places/find?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Search failed');
       setResults(data.results || []);

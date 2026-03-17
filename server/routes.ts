@@ -2469,7 +2469,7 @@ Return valid JSON:
   // Search for a business by name (for GBP lookup in Deal Intelligence Panel)
   app.get("/api/google-places/find", async (req, res) => {
     try {
-      const { query } = req.query;
+      const { query, location } = req.query;
       const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
       if (!apiKey) {
@@ -2479,37 +2479,59 @@ Return valid JSON:
         return res.status(400).json({ error: "query is required" });
       }
 
-      const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.nationalPhoneNumber,places.websiteUri'
-        },
-        body: JSON.stringify({
-          textQuery: query.trim(),
-          maxResultCount: 5,
-          languageCode: 'en-AU'
-        })
+      const FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.nationalPhoneNumber,places.websiteUri';
+
+      const doSearch = async (textQuery: string) => {
+        const body: Record<string, any> = {
+          textQuery,
+          maxResultCount: 10,
+          languageCode: 'en-AU',
+          regionCode: 'AU',
+        };
+        const r = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': FIELD_MASK,
+          },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error?.message || 'Google Places API error');
+        return (d.places || []) as any[];
+      };
+
+      const toResult = (p: any) => ({
+        placeId: p.id,
+        name: p.displayName?.text || '',
+        address: p.formattedAddress || '',
+        rating: p.rating ?? null,
+        reviewCount: p.userRatingCount ?? 0,
+        phone: p.nationalPhoneNumber || null,
+        website: p.websiteUri || null,
       });
 
-      const data = await response.json();
+      const baseQuery = query.trim();
+      // Build the primary query — include location hint if provided
+      const locationHint = typeof location === 'string' && location.trim() ? location.trim() : '';
+      const primaryQuery = locationHint ? `${baseQuery} ${locationHint}` : baseQuery;
 
-      if (!response.ok) {
-        return res.status(response.status).json({ error: data.error?.message || 'Google Places API error' });
+      let places = await doSearch(primaryQuery);
+
+      // If no results and no location was supplied, retry with "Australia" appended
+      if (places.length === 0 && !locationHint) {
+        places = await doSearch(`${baseQuery} Australia`);
       }
 
-      const results = (data.places || [])
+      // If still nothing, try just appending QLD/NSW/VIC as broad fallbacks
+      if (places.length === 0 && !locationHint) {
+        places = await doSearch(`${baseQuery} Queensland Australia`);
+      }
+
+      const results = places
         .filter((p: any) => p.businessStatus !== 'CLOSED_PERMANENTLY')
-        .map((p: any) => ({
-          placeId: p.id,
-          name: p.displayName?.text || '',
-          address: p.formattedAddress || '',
-          rating: p.rating ?? null,
-          reviewCount: p.userRatingCount ?? 0,
-          phone: p.nationalPhoneNumber || null,
-          website: p.websiteUri || null
-        }));
+        .map(toResult);
 
       res.json({ results });
     } catch (error) {
