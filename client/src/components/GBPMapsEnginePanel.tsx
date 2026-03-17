@@ -55,11 +55,19 @@ function daysSince(dateStr: string): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
 }
 
+interface ScoreFactor {
+  name: string;
+  score: number;
+  max: number;
+  detail: string;
+  hint: string;
+}
+
 interface ScoreBreakdown {
   total: number;
-  prominence: number; prominenceMax: number;
-  relevance: number; relevanceMax: number;
-  distance: number; distanceMax: number;
+  prominence: number; prominenceMax: number; prominenceFactors: ScoreFactor[];
+  relevance: number; relevanceMax: number; relevanceFactors: ScoreFactor[];
+  distance: number; distanceMax: number; distanceFactors: ScoreFactor[];
   weakFactors: string[];
   actions: string[];
 }
@@ -101,6 +109,33 @@ function calcScore(
 
   const prominence = reviewVelocityScore + responseRateScore + engagementScore + geoAuthorityScore;
 
+  const prominenceFactors: ScoreFactor[] = [
+    {
+      name: 'Review Velocity',
+      score: reviewVelocityScore, max: 15,
+      detail: `${recentReviews} new review${recentReviews !== 1 ? 's' : ''} in the last 30 days`,
+      hint: recentReviews >= 10 ? 'Excellent — keep the momentum going' : recentReviews >= 3 ? 'Good — aim for 10+ per month' : 'Low — send review requests after every job',
+    },
+    {
+      name: 'Response Rate',
+      score: responseRateScore, max: 12,
+      detail: `${Math.round(responseRate)}% of reviews replied to (${repliedCount}/${totalReviews})`,
+      hint: responseRate >= 75 ? 'Strong — maintaining a high response rate' : responseRate >= 25 ? 'Moderate — reply to all unanswered reviews' : 'Low — Google rewards businesses that respond to every review',
+    },
+    {
+      name: 'Engagement Signals',
+      score: engagementScore, max: 15,
+      detail: `${totalInteractions.toLocaleString()} total interactions last 30 days (calls + directions + clicks)`,
+      hint: totalInteractions >= 200 ? 'Strong engagement — business is highly visible' : totalInteractions >= 50 ? 'Moderate — run a Google post campaign to increase interactions' : 'Low — create Posts and enable messaging to drive more engagement',
+    },
+    {
+      name: 'Geo Authority',
+      score: geoAuthorityScore, max: 8,
+      detail: `${suburbCount} service area suburb${suburbCount !== 1 ? 's' : ''} defined`,
+      hint: suburbCount >= 30 ? 'Excellent geo authority' : suburbCount >= 10 ? 'Good — add more suburbs to expand reach' : 'Low — upload geo-tagged photos from job sites and add service areas',
+    },
+  ];
+
   // ── Relevance (25) ────────────────────────────────────────────────────────
   const hasPrimaryCategory = !!(playbook?.categoryPrimary);
   const descLen = (playbook?.description || '').length;
@@ -119,12 +154,42 @@ function calcScore(
 
   const relevance = categoryScore + descScore + servicesScore;
 
+  const relevanceFactors: ScoreFactor[] = [
+    {
+      name: 'Primary Category',
+      score: categoryScore, max: 8,
+      detail: hasPrimaryCategory ? `Set to: ${playbook!.categoryPrimary}` : 'No primary category set',
+      hint: hasPrimaryCategory ? 'Good — category is configured' : 'Go to 3-Pack Playbook → Category & Services and set your primary GBP category',
+    },
+    {
+      name: 'Description Quality',
+      score: descScore, max: 9,
+      detail: descLen > 0 ? `${descLen} characters written (target: 500+)` : 'No description written yet',
+      hint: descLen >= 500 ? 'Excellent length — description is fully optimised' : descLen >= 250 ? `Add ${500 - descLen} more characters — include primary keywords and service areas` : 'Go to 3-Pack Playbook → GBP Description and write a keyword-rich 500+ character description',
+    },
+    {
+      name: 'Services Listed',
+      score: servicesScore, max: 8,
+      detail: serviceCount > 0 ? `${serviceCount} service${serviceCount !== 1 ? 's' : ''} listed on GBP` : 'No services added yet',
+      hint: serviceCount >= 15 ? 'Strong — comprehensive service list' : serviceCount >= 5 ? `Add more services — aim for 15+ with keyword-rich descriptions` : 'Go to 3-Pack Playbook → Services and add at least 5 services with descriptions',
+    },
+  ];
+
   // ── Distance (25) ─────────────────────────────────────────────────────────
   let distanceScore = 0;
   if (suburbCount >= 30) distanceScore = 25;
   else if (suburbCount >= 15) distanceScore = 18;
   else if (suburbCount >= 5) distanceScore = 10;
   else if (suburbCount >= 1) distanceScore = 5;
+
+  const distanceFactors: ScoreFactor[] = [
+    {
+      name: 'Suburb Coverage',
+      score: distanceScore, max: 25,
+      detail: suburbCount > 0 ? `${suburbCount} suburb${suburbCount !== 1 ? 's' : ''} in service area (target: 30+)` : 'No service area suburbs defined',
+      hint: suburbCount >= 30 ? 'Excellent coverage — covering a wide service territory' : suburbCount >= 15 ? `Add ${30 - suburbCount} more suburbs to maximise distance score` : suburbCount >= 5 ? 'Add more service area suburbs — and create geo-content pages for each' : 'Go to 3-Pack Playbook → Service Area and add every suburb you serve',
+    },
+  ];
 
   const total = prominence + relevance + distanceScore;
 
@@ -168,9 +233,9 @@ function calcScore(
 
   return {
     total,
-    prominence, prominenceMax: 50,
-    relevance, relevanceMax: 25,
-    distance: distanceScore, distanceMax: 25,
+    prominence, prominenceMax: 50, prominenceFactors,
+    relevance, relevanceMax: 25, relevanceFactors,
+    distance: distanceScore, distanceMax: 25, distanceFactors,
     weakFactors: weakFactors.slice(0, 6),
     actions: actions.slice(0, 5),
   };
@@ -210,7 +275,28 @@ function ScoreCircle({ score }: { score: number }) {
 
 // ── ScoreBar ──────────────────────────────────────────────────────────────────
 
-function ScoreBar({ label, weight, value, max }: { label: string; weight: string; value: number; max: number }) {
+function FactorRow({ factor }: { factor: ScoreFactor }) {
+  const pct = factor.max > 0 ? Math.round((factor.score / factor.max) * 100) : 0;
+  const color = barColor(pct);
+  const scoreColor = pct >= 67 ? 'text-emerald-600' : pct >= 34 ? 'text-amber-600' : 'text-red-500';
+  return (
+    <div className="space-y-1 p-2.5 rounded-lg bg-muted/20 border">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-medium flex-1">{factor.name}</span>
+        <span className={`text-[11px] font-bold ${scoreColor}`}>{factor.score}/{factor.max} pts</span>
+      </div>
+      <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-[10px] text-muted-foreground">{factor.detail}</p>
+      <p className={`text-[10px] font-medium ${pct >= 67 ? 'text-emerald-600' : pct >= 34 ? 'text-amber-600' : 'text-red-500'}`}>
+        {factor.hint}
+      </p>
+    </div>
+  );
+}
+
+function ScoreBar({ label, weight, value, max, factors }: { label: string; weight: string; value: number; max: number; factors: ScoreFactor[] }) {
   const [expanded, setExpanded] = useState(false);
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   const color = barColor(pct);
@@ -218,7 +304,7 @@ function ScoreBar({ label, weight, value, max }: { label: string; weight: string
   return (
     <div>
       <button
-        className="w-full flex items-center gap-3 py-1"
+        className="w-full flex items-center gap-3 py-1.5"
         onClick={() => setExpanded(v => !v)}
         data-testid={`score-bar-${label.toLowerCase()}`}
       >
@@ -230,8 +316,8 @@ function ScoreBar({ label, weight, value, max }: { label: string; weight: string
         <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="ml-28 pb-2 text-[11px] text-muted-foreground leading-relaxed">
-          Score: {value}/{max} pts — click each factor below to see what drives this score.
+        <div className="ml-0 mb-2 space-y-1.5">
+          {factors.map(f => <FactorRow key={f.name} factor={f} />)}
         </div>
       )}
     </div>
@@ -541,10 +627,10 @@ export default function GBPMapsEnginePanel({ client }: Props) {
             {/* Label + bars */}
             <div className="flex-1 min-w-0">
               <p className="text-base font-bold mb-3">Maps Authority Score</p>
-              <div className="space-y-1">
-                <ScoreBar label="Prominence" weight="50%" value={score.prominence} max={score.prominenceMax} />
-                <ScoreBar label="Relevance" weight="25%" value={score.relevance} max={score.relevanceMax} />
-                <ScoreBar label="Distance" weight="25%" value={score.distance} max={score.distanceMax} />
+              <div className="space-y-0.5">
+                <ScoreBar label="Prominence" weight="50%" value={score.prominence} max={score.prominenceMax} factors={score.prominenceFactors} />
+                <ScoreBar label="Relevance" weight="25%" value={score.relevance} max={score.relevanceMax} factors={score.relevanceFactors} />
+                <ScoreBar label="Distance" weight="25%" value={score.distance} max={score.distanceMax} factors={score.distanceFactors} />
               </div>
             </div>
           </div>
