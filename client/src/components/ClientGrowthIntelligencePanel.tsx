@@ -758,9 +758,16 @@ function LocalPresenceSection({ client }: { client: Client }) {
                       </p>
                       <div className="space-y-1.5">
                         {actionKeywords.map((kw, i) => (
-                          <div key={i} className="flex items-start gap-2 text-[11px]">
-                            <span className="shrink-0 flex items-center justify-center h-4 w-4 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 font-bold text-[10px] mt-0.5">{i + 1}</span>
-                            <p className="text-muted-foreground">{threePackAction(kw.keyword, kw.arp)}</p>
+                          <div key={i} className="flex items-center gap-2 text-[11px]">
+                            <span className="shrink-0 flex items-center justify-center h-4 w-4 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 font-bold text-[10px]">{i + 1}</span>
+                            <p className="text-muted-foreground flex-1 min-w-0 truncate">{threePackAction(kw.keyword, kw.arp)}</p>
+                            <button
+                              onClick={() => { setScanKeyword(kw.keyword); setShowRunScan(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                              className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded transition-colors"
+                              data-testid={`btn-action-scan-${i}`}
+                            >
+                              <ScanSearch className="h-2.5 w-2.5" /> Scan
+                            </button>
                           </div>
                         ))}
                       </div>
