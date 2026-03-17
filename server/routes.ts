@@ -6335,5 +6335,106 @@ Return JSON:
     }
   });
 
+  // ============================================
+  // Local Falcon — GBP Rank Tracking
+  // ============================================
+
+  const LOCAL_FALCON_BASE = 'https://api.localfalcon.com';
+
+  async function localFalconPost(path: string, body: Record<string, string | number>) {
+    const apiKey = process.env.LOCAL_FALCON_API_KEY;
+    if (!apiKey) throw new Error('LOCAL_FALCON_API_KEY not set');
+    const params = new URLSearchParams({ api_key: apiKey, ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k, String(v)])) });
+    const resp = await fetch(`${LOCAL_FALCON_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    if (!resp.ok) throw new Error(`Local Falcon API error: ${resp.status}`);
+    return resp.json();
+  }
+
+  // List all connected locations in Local Falcon account
+  app.get('/api/local-falcon/locations', async (req, res) => {
+    try {
+      const query = req.query.query as string || '';
+      const data = await localFalconPost('/v1/locations/', { limit: 100, ...(query ? { query } : {}) });
+      res.json(data);
+    } catch (err: any) {
+      console.error('[local-falcon/locations]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // List scan reports for a specific place_id
+  app.get('/api/local-falcon/reports', async (req, res) => {
+    try {
+      const { placeId, limit = '10' } = req.query as Record<string, string>;
+      if (!placeId) return res.status(400).json({ error: 'placeId required' });
+      const data = await localFalconPost('/v1/reports/', { limit: parseInt(limit), place_id: placeId, platform: 'google' });
+      res.json(data);
+    } catch (err: any) {
+      console.error('[local-falcon/reports]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get a single report with full grid data
+  app.get('/api/local-falcon/reports/:reportKey', async (req, res) => {
+    try {
+      const { reportKey } = req.params;
+      const apiKey = process.env.LOCAL_FALCON_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: 'LOCAL_FALCON_API_KEY not set' });
+      const params = new URLSearchParams({ api_key: apiKey, report_key: reportKey });
+      const resp = await fetch(`${LOCAL_FALCON_BASE}/v1/reports/${reportKey}/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+      if (!resp.ok) throw new Error(`Local Falcon API error: ${resp.status}`);
+      res.json(await resp.json());
+    } catch (err: any) {
+      console.error('[local-falcon/reports/single]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Run a new scan
+  app.post('/api/local-falcon/run-scan', async (req, res) => {
+    try {
+      const { placeId, keyword, lat, lng, gridSize = '7', radius = '3', measurement = 'km' } = req.body;
+      if (!placeId || !keyword || !lat || !lng) return res.status(400).json({ error: 'placeId, keyword, lat, lng required' });
+      const data = await localFalconPost('/v2/run-scan/', {
+        place_id: placeId,
+        keyword,
+        lat,
+        lng,
+        grid_size: gridSize,
+        radius,
+        measurement,
+        platform: 'google',
+      });
+      res.json(data);
+    } catch (err: any) {
+      console.error('[local-falcon/run-scan]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Save/update localFalconPlaceId on a client
+  app.patch('/api/clients/:clientId/local-falcon-place', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, localFalconPlaceId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({ localFalconPlaceId: localFalconPlaceId || null });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[clients/local-falcon-place]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

@@ -1680,6 +1680,14 @@ export interface Client {
   nextActionSetAt?: Date;
   // AI Onboarding & Team Handover
   clientOnboarding?: ClientOnboarding;
+  // Local Falcon GBP rank tracking
+  localFalconPlaceId?: string;
+  localFalconLocation?: {
+    name: string;
+    address: string;
+    lat: string;
+    lng: string;
+  };
 }
 
 export interface ClientOnboarding {

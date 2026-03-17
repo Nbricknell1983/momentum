@@ -1,7 +1,13 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle, Globe, Search, BarChart3, Star, Zap, ChevronRight } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle,
+  Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
+  Loader2, Link2, X, ExternalLink, Radio, Play,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -9,6 +15,11 @@ import {
   HEALTH_CONTRIBUTOR_LABELS,
 } from '@/lib/types';
 import ClientOnboardingHandover from '@/components/ClientOnboardingHandover';
+import { useAuth } from '@/contexts/AuthContext';
+import { updateClientInFirestore } from '@/lib/firestoreService';
+import { useDispatch } from 'react-redux';
+import { updateClient } from '@/store/index';
+import { useToast } from '@/hooks/use-toast';
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = {
@@ -74,6 +85,459 @@ function ScoreArc({ score }: { score: number }) {
         </div>
       </div>
       <span className="text-xs font-medium" style={{ color }}>{label}</span>
+    </div>
+  );
+}
+
+// ── ARP rank colour helper ────────────────────────────────────────────────────
+function arpColor(arp: number | null) {
+  if (arp === null) return 'text-muted-foreground';
+  if (arp <= 3) return 'text-emerald-600 dark:text-emerald-400';
+  if (arp <= 7) return 'text-lime-600 dark:text-lime-400';
+  if (arp <= 13) return 'text-amber-600 dark:text-amber-400';
+  return 'text-red-600 dark:text-red-400';
+}
+function arpBg(arp: number | null) {
+  if (arp === null) return 'bg-muted/40 text-muted-foreground';
+  if (arp <= 3) return 'bg-emerald-500 text-white';
+  if (arp <= 7) return 'bg-lime-500 text-white';
+  if (arp <= 13) return 'bg-amber-400 text-white';
+  if (arp <= 20) return 'bg-red-400 text-white';
+  return 'bg-zinc-400 text-white';
+}
+
+interface LFLocation {
+  id: string;
+  place_id: string;
+  name: string;
+  address: string;
+  lat: string;
+  lng: string;
+  rating: string;
+  reviews: string;
+  url?: string;
+  phone?: string;
+}
+
+interface LFReport {
+  id: string;
+  report_key: string;
+  date: string;
+  keyword: string;
+  grid_size: string;
+  radius: string;
+  measurement: string;
+  arp: string;
+  atrp: string;
+  solv: string;
+  image: string;
+  heatmap: string;
+  pdf: string;
+  public_url: string;
+  place_id: string;
+}
+
+const GRID_SIZES = ['3', '5', '7', '9', '11', '13'];
+const RADII = ['1', '2', '3', '5', '8', '10', '15', '20'];
+
+function LocalPresenceSection({ client }: { client: Client }) {
+  const { orgId, authReady } = useAuth();
+  const dispatch = useDispatch();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
+  const [showRunScan, setShowRunScan] = useState(false);
+  const [scanKeyword, setScanKeyword] = useState('');
+  const [scanGridSize, setScanGridSize] = useState('7');
+  const [scanRadius, setScanRadius] = useState('3');
+
+  const hasLinked = !!client.localFalconPlaceId;
+
+  // Fetch LF locations for picker
+  const { data: locationsData, isLoading: locationsLoading } = useQuery<{ data: { locations: LFLocation[] } }>({
+    queryKey: ['/api/local-falcon/locations', locationSearch],
+    queryFn: async () => {
+      const qs = locationSearch ? `?query=${encodeURIComponent(locationSearch)}` : '';
+      const resp = await fetch(`/api/local-falcon/locations${qs}`);
+      if (!resp.ok) throw new Error('Failed to fetch locations');
+      return resp.json();
+    },
+    enabled: showPicker || isExpanded,
+    staleTime: 60_000,
+  });
+
+  // Fetch scan reports for linked location
+  const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports } = useQuery<{ data: { reports: LFReport[]; count: number } }>({
+    queryKey: ['/api/local-falcon/reports', client.localFalconPlaceId],
+    queryFn: async () => {
+      const resp = await fetch(`/api/local-falcon/reports?placeId=${encodeURIComponent(client.localFalconPlaceId!)}&limit=10`);
+      if (!resp.ok) throw new Error('Failed to fetch reports');
+      return resp.json();
+    },
+    enabled: !!client.localFalconPlaceId && isExpanded,
+    staleTime: 120_000,
+  });
+
+  // Link a location to this client
+  const linkMutation = useMutation({
+    mutationFn: async (loc: LFLocation) => {
+      if (!orgId) throw new Error('No org');
+      await updateClientInFirestore(orgId, client.id, {
+        localFalconPlaceId: loc.place_id,
+        localFalconLocation: { name: loc.name, address: loc.address, lat: loc.lat, lng: loc.lng },
+      }, authReady);
+    },
+    onSuccess: (_, loc) => {
+      dispatch(updateClient({ ...client, localFalconPlaceId: loc.place_id, localFalconLocation: { name: loc.name, address: loc.address, lat: loc.lat, lng: loc.lng } }));
+      setShowPicker(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/local-falcon/reports', loc.place_id] });
+      toast({ title: 'Location linked', description: `${loc.name} linked to this client.` });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to link location', variant: 'destructive' }),
+  });
+
+  // Unlink
+  const unlinkMutation = useMutation({
+    mutationFn: async () => {
+      if (!orgId) throw new Error('No org');
+      await updateClientInFirestore(orgId, client.id, { localFalconPlaceId: undefined, localFalconLocation: undefined }, authReady);
+    },
+    onSuccess: () => {
+      dispatch(updateClient({ ...client, localFalconPlaceId: undefined, localFalconLocation: undefined }));
+      toast({ title: 'Location unlinked' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to unlink location', variant: 'destructive' }),
+  });
+
+  // Run a new scan
+  const runScanMutation = useMutation({
+    mutationFn: async () => {
+      const loc = client.localFalconLocation;
+      if (!loc || !client.localFalconPlaceId) throw new Error('No location linked');
+      if (!scanKeyword.trim()) throw new Error('Keyword required');
+      const resp = await fetch('/api/local-falcon/run-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          placeId: client.localFalconPlaceId,
+          keyword: scanKeyword.trim(),
+          lat: loc.lat,
+          lng: loc.lng,
+          gridSize: scanGridSize,
+          radius: scanRadius,
+          measurement: 'km',
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Scan failed');
+      }
+      return resp.json();
+    },
+    onSuccess: () => {
+      setShowRunScan(false);
+      setScanKeyword('');
+      refetchReports();
+      toast({ title: 'Scan complete', description: 'New scan results are ready.' });
+    },
+    onError: (err: Error) => toast({ title: 'Scan failed', description: err.message, variant: 'destructive' }),
+  });
+
+  const locations = locationsData?.data?.locations || [];
+  const reports = reportsData?.data?.reports || [];
+  const latestReport = reports[0];
+
+  const latestArp = latestReport ? parseFloat(latestReport.arp) : null;
+  const latestSolv = latestReport ? parseFloat(latestReport.solv) : null;
+
+  const filteredLocations = locationSearch
+    ? locations.filter(l =>
+        l.name.toLowerCase().includes(locationSearch.toLowerCase()) ||
+        l.address.toLowerCase().includes(locationSearch.toLowerCase())
+      )
+    : locations;
+
+  return (
+    <div className="border rounded-lg overflow-hidden mb-3">
+      <button
+        className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
+        onClick={() => setIsExpanded(p => !p)}
+        data-testid="toggle-local-presence"
+      >
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-violet-500" />
+          <p className="text-sm font-medium">Local Presence</p>
+          {hasLinked && latestSolv !== null && (
+            <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-600 dark:text-violet-400">
+              {latestSolv.toFixed(0)}% SoLV
+            </Badge>
+          )}
+          {hasLinked && !latestSolv && (
+            <Badge variant="outline" className="text-[10px]">Linked</Badge>
+          )}
+        </div>
+        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+      </button>
+
+      {isExpanded && (
+        <div className="border-t p-3 space-y-3">
+          {/* ── Not linked state ── */}
+          {!hasLinked && !showPicker && (
+            <div className="text-center py-3 space-y-2">
+              <p className="text-xs text-muted-foreground">Connect a Local Falcon location to track GBP rankings</p>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowPicker(true)} data-testid="btn-link-location">
+                <Link2 className="h-3.5 w-3.5" /> Link Location
+              </Button>
+            </div>
+          )}
+
+          {/* ── Location picker ── */}
+          {showPicker && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Search locations…"
+                  value={locationSearch}
+                  onChange={e => setLocationSearch(e.target.value)}
+                  className="h-8 text-xs"
+                  data-testid="input-location-search"
+                />
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => { setShowPicker(false); setLocationSearch(''); }}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              {locationsLoading ? (
+                <div className="flex justify-center py-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredLocations.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-3">No locations found in your Local Falcon account</p>
+              ) : (
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {filteredLocations.map(loc => (
+                    <button
+                      key={loc.id}
+                      className="w-full text-left p-2 rounded border hover:bg-muted/30 transition-colors"
+                      onClick={() => linkMutation.mutate(loc)}
+                      disabled={linkMutation.isPending}
+                      data-testid={`location-option-${loc.id}`}
+                    >
+                      <p className="text-xs font-medium">{loc.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{loc.address}</p>
+                      {(loc.rating && loc.rating !== '0.000') && (
+                        <p className="text-[11px] text-amber-600">★ {parseFloat(loc.rating).toFixed(1)} · {loc.reviews} reviews</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Linked location view ── */}
+          {hasLinked && !showPicker && (
+            <>
+              {/* Location header */}
+              <div className="flex items-start justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate">{client.localFalconLocation?.name || 'Linked Location'}</p>
+                  {client.localFalconLocation?.address && (
+                    <p className="text-[11px] text-muted-foreground truncate">{client.localFalconLocation.address}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0 ml-2">
+                  <Button
+                    size="sm" variant="ghost" className="h-6 text-[11px] px-2 text-muted-foreground"
+                    onClick={() => setShowPicker(true)}
+                    data-testid="btn-change-location"
+                  >
+                    Change
+                  </Button>
+                  <Button
+                    size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground"
+                    onClick={() => unlinkMutation.mutate()}
+                    disabled={unlinkMutation.isPending}
+                    data-testid="btn-unlink-location"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Latest scan metrics */}
+              {reportsLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : latestReport ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-muted/30 rounded p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Avg Rank</p>
+                      <p className={`text-lg font-bold leading-none ${arpColor(latestArp)}`}>
+                        {latestArp !== null ? latestArp.toFixed(1) : '—'}
+                      </p>
+                    </div>
+                    <div className="bg-muted/30 rounded p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">SoLV</p>
+                      <p className="text-lg font-bold leading-none text-violet-600 dark:text-violet-400">
+                        {latestSolv !== null ? `${latestSolv.toFixed(0)}%` : '—'}
+                      </p>
+                    </div>
+                    <div className="bg-muted/30 rounded p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Grid</p>
+                      <p className="text-lg font-bold leading-none text-foreground">
+                        {latestReport.grid_size}×{latestReport.grid_size}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>"{latestReport.keyword}" · {latestReport.radius}{latestReport.measurement} radius</span>
+                    <span>{latestReport.date}</span>
+                  </div>
+
+                  {/* Heatmap thumbnail */}
+                  {(latestReport.heatmap || latestReport.image) && (
+                    <div className="relative rounded overflow-hidden border">
+                      <img
+                        src={latestReport.heatmap || latestReport.image}
+                        alt="Rank heatmap"
+                        className="w-full h-28 object-cover object-top"
+                      />
+                      <a
+                        href={latestReport.public_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute top-1.5 right-1.5 bg-black/60 text-white rounded px-1.5 py-0.5 text-[10px] flex items-center gap-1 hover:bg-black/80"
+                      >
+                        <ExternalLink className="h-2.5 w-2.5" /> Full Report
+                      </a>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {/* Scan history */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Scan History</p>
+                      <button
+                        onClick={() => refetchReports()}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        data-testid="btn-refresh-reports"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {reports.map((r, i) => {
+                        const arp = parseFloat(r.arp);
+                        return (
+                          <div key={r.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/20 text-[11px]">
+                            <span className={`inline-flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold shrink-0 ${arpBg(arp)}`}>
+                              {isNaN(arp) ? '?' : arp.toFixed(0)}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate font-medium">{r.keyword}</p>
+                              <p className="text-muted-foreground">{r.date} · {r.grid_size}×{r.grid_size} · {parseFloat(r.solv).toFixed(0)}% SoLV</p>
+                            </div>
+                            {r.public_url && (
+                              <a href={r.public_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground shrink-0">
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-3">
+                  <p className="text-xs text-muted-foreground">No scans yet for this location</p>
+                </div>
+              )}
+
+              {/* Run new scan */}
+              <div className="pt-1">
+                {!showRunScan ? (
+                  <Button
+                    size="sm" variant="outline" className="w-full gap-1.5 h-8"
+                    onClick={() => setShowRunScan(true)}
+                    data-testid="btn-show-run-scan"
+                  >
+                    <Play className="h-3.5 w-3.5" /> Run New Scan
+                  </Button>
+                ) : (
+                  <div className="border rounded-lg p-3 space-y-2 bg-muted/10">
+                    <p className="text-xs font-medium">New Scan</p>
+                    <Input
+                      placeholder="Keyword (e.g. plumber near me)"
+                      value={scanKeyword}
+                      onChange={e => setScanKeyword(e.target.value)}
+                      className="h-8 text-xs"
+                      data-testid="input-scan-keyword"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Grid Size</p>
+                        <select
+                          value={scanGridSize}
+                          onChange={e => setScanGridSize(e.target.value)}
+                          className="w-full h-8 text-xs rounded border bg-background px-2"
+                          data-testid="select-grid-size"
+                        >
+                          {GRID_SIZES.map(s => <option key={s} value={s}>{s}×{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Radius (km)</p>
+                        <select
+                          value={scanRadius}
+                          onChange={e => setScanRadius(e.target.value)}
+                          className="w-full h-8 text-xs rounded border bg-background px-2"
+                          data-testid="select-scan-radius"
+                        >
+                          {RADII.map(r => <option key={r} value={r}>{r} km</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 h-8 gap-1.5"
+                        onClick={() => runScanMutation.mutate()}
+                        disabled={runScanMutation.isPending || !scanKeyword.trim()}
+                        data-testid="btn-run-scan"
+                      >
+                        {runScanMutation.isPending ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</>
+                        ) : (
+                          <><Radio className="h-3.5 w-3.5" /> Run Scan</>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" className="h-8"
+                        onClick={() => { setShowRunScan(false); setScanKeyword(''); }}
+                        disabled={runScanMutation.isPending}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Uses Local Falcon credits. Larger grids & radii cost more.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -302,6 +766,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
               )}
             </div>
           )}
+
+          {/* Local Presence — Local Falcon */}
+          <LocalPresenceSection client={client} />
 
           {/* AI Onboarding & Team Handover */}
           <ClientOnboardingHandover client={client} />
