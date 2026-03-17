@@ -7530,6 +7530,59 @@ Return JSON:
     }
   });
 
+  // GBP Performance Insights (last 30 days)
+  app.get('/api/gbp/insights', async (req, res) => {
+    try {
+      const { orgId, locationName } = req.query as Record<string, string>;
+      if (!orgId || !locationName) return res.status(400).json({ error: 'orgId and locationName required' });
+      const token = await getGBPAccessToken(orgId);
+
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+
+      const metrics = [
+        'CALL_CLICKS', 'WEBSITE_CLICKS', 'BUSINESS_DIRECTION_REQUESTS',
+        'BUSINESS_IMPRESSIONS_DESKTOP_MAPS', 'BUSINESS_IMPRESSIONS_MOBILE_MAPS',
+        'BUSINESS_IMPRESSIONS_DESKTOP_SEARCH', 'BUSINESS_IMPRESSIONS_MOBILE_SEARCH',
+        'BUSINESS_BOOKINGS',
+      ];
+      const metricsParam = metrics.map(m => `dailyMetric=${m}`).join('&');
+      const dateParam = `dailyRange.startDate.year=${start.getFullYear()}&dailyRange.startDate.month=${start.getMonth() + 1}&dailyRange.startDate.day=${start.getDate()}&dailyRange.endDate.year=${end.getFullYear()}&dailyRange.endDate.month=${end.getMonth() + 1}&dailyRange.endDate.day=${end.getDate()}`;
+      const url = `https://businessprofileperformance.googleapis.com/v1/${locationName}:fetchMultiDailyMetricsTimeSeries?${metricsParam}&${dateParam}`;
+
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || 'Insights API error');
+
+      // Aggregate each metric into a single total
+      const totals: Record<string, number> = {};
+      for (const series of (data.multiDailyMetricTimeSeries || [])) {
+        for (const ts of (series.dailyMetricTimeSeries || [])) {
+          const metric = ts.dailyMetric as string;
+          let sum = 0;
+          for (const pt of (ts.timeSeries?.datedValues || [])) {
+            sum += (pt.value != null ? Number(pt.value) : 0);
+          }
+          totals[metric] = (totals[metric] || 0) + sum;
+        }
+      }
+
+      const phoneCalls = totals['CALL_CLICKS'] || 0;
+      const websiteClicks = totals['WEBSITE_CLICKS'] || 0;
+      const directionRequests = totals['BUSINESS_DIRECTION_REQUESTS'] || 0;
+      const bookingClicks = totals['BUSINESS_BOOKINGS'] || 0;
+      const searchImpressions = (totals['BUSINESS_IMPRESSIONS_DESKTOP_SEARCH'] || 0) + (totals['BUSINESS_IMPRESSIONS_MOBILE_SEARCH'] || 0);
+      const mapsImpressions = (totals['BUSINESS_IMPRESSIONS_DESKTOP_MAPS'] || 0) + (totals['BUSINESS_IMPRESSIONS_MOBILE_MAPS'] || 0);
+      const totalInteractions = phoneCalls + websiteClicks + directionRequests + bookingClicks;
+
+      res.json({ phoneCalls, websiteClicks, directionRequests, bookingClicks, searchImpressions, mapsImpressions, totalInteractions, periodDays: 30 });
+    } catch (err: any) {
+      console.error('[gbp/insights]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Reply to a GBP review
   app.put('/api/gbp/reviews/:locationName/reply', async (req, res) => {
     try {

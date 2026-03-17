@@ -20,6 +20,7 @@ import {
 } from '@/lib/types';
 import ClientOnboardingHandover from '@/components/ClientOnboardingHandover';
 import GBPPlaybookPanel from '@/components/GBPPlaybookPanel';
+import GBPMapsEnginePanel from '@/components/GBPMapsEnginePanel';
 import ScanMapPicker, { type MapPickerResult } from '@/components/ScanMapPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateClientInFirestore } from '@/lib/firestoreService';
@@ -194,7 +195,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const queryClient = useQueryClient();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'rankings' | 'playbook'>('rankings');
+  const [activeTab, setActiveTab] = useState<'rankings' | 'playbook' | 'maps-engine'>('rankings');
   const [showPicker, setShowPicker] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [showRunScan, setShowRunScan] = useState(false);
@@ -554,6 +555,15 @@ function LocalPresenceSection({ client }: { client: Client }) {
             >
               Rank Tracking
             </button>
+            {client.gbpLocationName && (
+              <button
+                onClick={() => setActiveTab('maps-engine')}
+                className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'maps-engine' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`}
+                data-testid="tab-gbp-maps-engine"
+              >
+                Maps Engine
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('playbook')}
               className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'playbook' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`}
@@ -562,6 +572,13 @@ function LocalPresenceSection({ client }: { client: Client }) {
               3-Pack Playbook
             </button>
           </div>
+
+          {/* ── Maps Engine Tab ── */}
+          {activeTab === 'maps-engine' && (
+            <div className="p-3">
+              <GBPMapsEnginePanel client={client} />
+            </div>
+          )}
 
           {/* ── 3-Pack Playbook Tab ── */}
           {activeTab === 'playbook' && (
