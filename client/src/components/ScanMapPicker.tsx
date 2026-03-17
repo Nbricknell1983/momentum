@@ -208,32 +208,40 @@ export default function ScanMapPicker({
           if (name && !names.includes(name)) names.push(name);
         }));
         setLoadingMsg(`Scanning area… ${Math.min(i + BATCH, lngLats.length)}/${lngLats.length} points`);
-        // small pause between batches to avoid rate limiting
         if (i + BATCH < lngLats.length) await new Promise(r => setTimeout(r, 80));
       }
 
       if (!names.length) return;
 
-      // Fetch suburb boundary polygons (parallel, up to 6 at a time)
-      const totalNames = names.length;
-      let done = 0;
+      // Fetch ALL suburb boundary polygons — collect first, then single atomic state update
+      // This avoids the race condition where parallel calls each read stale selectedRef
       const POLY_BATCH = 6;
+      const fetched: SuburbFeature[] = [];
       for (let i = 0; i < names.length; i += POLY_BATCH) {
-        await Promise.all(names.slice(i, i + POLY_BATCH).map(async (name) => {
-          await addSuburb(name, true);
-          done++;
-          setLoadingMsg(`Fetching boundaries… ${done}/${totalNames}`);
-        }));
+        const results = await Promise.all(names.slice(i, i + POLY_BATCH).map(n => fetchSuburbPolygon(n)));
+        results.forEach(f => {
+          if (f && !fetched.find(e => e.key === f.key)) fetched.push(f);
+        });
+        setLoadingMsg(`Fetching boundaries… ${Math.min(i + POLY_BATCH, names.length)}/${names.length}`);
         if (i + POLY_BATCH < names.length) await new Promise(r => setTimeout(r, 100));
       }
 
-      syncMapLayers(selectedRef.current);
+      if (!fetched.length) return;
+
+      // One single atomic merge with existing selected — no race condition
+      const existing = selectedRef.current;
+      const next = [
+        ...existing,
+        ...fetched.filter(f => !existing.find(e => e.key === f.key)),
+      ];
+      setSelected(next);
+      syncMapLayers(next);
     } finally {
       setLoading(false);
       loadingRef.current = false;
       setLoadingMsg('');
     }
-  }, [addSuburb, syncMapLayers]);
+  }, [setSelected, syncMapLayers]);
 
   // ── Canvas drawing ───────────────────────────────────────────────────────
   const drawCanvas = useCallback(() => {
