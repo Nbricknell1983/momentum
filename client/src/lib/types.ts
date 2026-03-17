@@ -226,6 +226,8 @@ export interface LeadSourceData {
   googleTypes?: string[];
   googleMapsUrl?: string;
   googleAddress?: string;
+  googlePhone?: string;
+  googleWebsite?: string;
   googlePhotoCount?: number;
   category?: string;
   abn?: string;
