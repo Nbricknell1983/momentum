@@ -3,11 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle,
   Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
-  Loader2, Link2, X, ExternalLink, Radio, Play,
+  Loader2, Link2, X, ExternalLink, Radio, Play, MessageSquare, ChevronDown,
+  ThumbsUp, Building2, Unlink,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -542,6 +544,333 @@ function LocalPresenceSection({ client }: { client: Client }) {
   );
 }
 
+interface GBPReview {
+  reviewId: string;
+  reviewer: { displayName: string; profilePhotoUrl?: string };
+  starRating: 'ONE' | 'TWO' | 'THREE' | 'FOUR' | 'FIVE';
+  comment?: string;
+  createTime: string;
+  reviewReply?: { comment: string; updateTime: string };
+  name: string;
+}
+
+const STAR_MAP: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+
+function StarRating({ rating }: { rating: string }) {
+  const n = STAR_MAP[rating] ?? 0;
+  return (
+    <span className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map(i => (
+        <Star key={i} className={`h-3.5 w-3.5 ${i <= n ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
+      ))}
+    </span>
+  );
+}
+
+function GBPReviewsSection({ client }: { client: Client }) {
+  const { orgId } = useAuth();
+  const dispatch = useDispatch();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [pickerStep, setPickerStep] = useState<'account' | 'location'>('account');
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+
+  const hasLocation = !!client.gbpLocationName;
+
+  // Check GBP org connection status
+  const { data: gbpStatus } = useQuery<{ connected: boolean }>({
+    queryKey: ['/api/gbp/status', orgId],
+    queryFn: async () => {
+      if (!orgId) return { connected: false };
+      const r = await fetch(`/api/gbp/status?orgId=${orgId}`);
+      return r.json();
+    },
+    enabled: !!orgId,
+    staleTime: 30_000,
+  });
+
+  // Fetch GBP accounts for picker
+  const { data: accountsData, isLoading: accountsLoading } = useQuery<{ accounts: { name: string; accountName: string; type: string }[] }>({
+    queryKey: ['/api/gbp/accounts', orgId],
+    queryFn: async () => {
+      const r = await fetch(`/api/gbp/accounts?orgId=${encodeURIComponent(orgId!)}`);
+      if (!r.ok) throw new Error('Failed to fetch accounts');
+      return r.json();
+    },
+    enabled: !!orgId && gbpStatus?.connected && showPicker && pickerStep === 'account',
+    staleTime: 60_000,
+  });
+
+  // Fetch GBP locations for selected account
+  const { data: locationsData, isLoading: locationsLoading } = useQuery<{ locations: { name: string; title: string; storefrontAddress?: { addressLines?: string[] }; metadata?: { mapsUri?: string } }[] }>({
+    queryKey: ['/api/gbp/locations', orgId, selectedAccount],
+    queryFn: async () => {
+      const r = await fetch(`/api/gbp/locations?orgId=${encodeURIComponent(orgId!)}&accountName=${encodeURIComponent(selectedAccount!)}`);
+      if (!r.ok) throw new Error('Failed to fetch locations');
+      return r.json();
+    },
+    enabled: !!orgId && !!selectedAccount && pickerStep === 'location',
+    staleTime: 60_000,
+  });
+
+  // Fetch GBP reviews for linked location
+  const { data: reviewsData, isLoading: reviewsLoading, refetch: refetchReviews } = useQuery<{ reviews: GBPReview[]; averageRating: string; totalReviewCount: number }>({
+    queryKey: ['/api/gbp/reviews', orgId, client.gbpLocationName],
+    queryFn: async () => {
+      const r = await fetch(`/api/gbp/reviews?orgId=${encodeURIComponent(orgId!)}&locationName=${encodeURIComponent(client.gbpLocationName!)}`);
+      if (!r.ok) throw new Error('Failed to fetch reviews');
+      return r.json();
+    },
+    enabled: !!orgId && !!client.gbpLocationName && isExpanded,
+    staleTime: 120_000,
+  });
+
+  // Link a GBP location to this client
+  const linkMutation = useMutation({
+    mutationFn: async (locationName: string) => {
+      if (!orgId) throw new Error('No org');
+      const r = await fetch(`/api/clients/${client.id}/gbp-location`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, gbpLocationName: locationName }),
+      });
+      if (!r.ok) throw new Error('Failed to link');
+    },
+    onSuccess: (_, locationName) => {
+      dispatch(updateClient({ ...client, gbpLocationName: locationName }));
+      setShowPicker(false);
+      setPickerStep('account');
+      setSelectedAccount(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/gbp/reviews', orgId, locationName] });
+      toast({ title: 'GBP location linked', description: 'Reviews will now load for this client.' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to link GBP location', variant: 'destructive' }),
+  });
+
+  // Unlink GBP location
+  const unlinkMutation = useMutation({
+    mutationFn: async () => {
+      if (!orgId) throw new Error('No org');
+      const r = await fetch(`/api/clients/${client.id}/gbp-location`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, gbpLocationName: null }),
+      });
+      if (!r.ok) throw new Error('Failed to unlink');
+    },
+    onSuccess: () => {
+      dispatch(updateClient({ ...client, gbpLocationName: undefined }));
+      toast({ title: 'Unlinked', description: 'GBP location removed from this client.' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to unlink', variant: 'destructive' }),
+  });
+
+  // Reply to a review
+  const replyMutation = useMutation({
+    mutationFn: async ({ reviewName, reply }: { reviewName: string; reply: string }) => {
+      if (!orgId) throw new Error('No org');
+      const encoded = encodeURIComponent(reviewName);
+      const r = await fetch(`/api/gbp/reviews/${encoded}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, reply }),
+      });
+      if (!r.ok) throw new Error('Failed to post reply');
+    },
+    onSuccess: () => {
+      setReplyingTo(null);
+      setReplyText('');
+      refetchReviews();
+      toast({ title: 'Reply posted', description: 'Your reply has been posted to Google.' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to post reply', variant: 'destructive' }),
+  });
+
+  const avgStars = reviewsData ? STAR_MAP[reviewsData.averageRating] ?? 0 : 0;
+
+  return (
+    <div className="border-t pt-4 mt-4">
+      <button
+        className="w-full flex items-center justify-between text-sm font-medium hover:text-foreground/80 transition-colors"
+        onClick={() => setIsExpanded(v => !v)}
+        data-testid="button-toggle-gbp-reviews"
+      >
+        <span className="flex items-center gap-2">
+          <Star className="h-4 w-4 text-amber-500" />
+          Google Business Reviews
+          {reviewsData && (
+            <Badge variant="outline" className="text-[10px] ml-1">{reviewsData.totalReviewCount} reviews · {avgStars.toFixed(1)}★</Badge>
+          )}
+          {hasLocation && !reviewsData && (
+            <Badge variant="outline" className="text-[10px] ml-1 text-muted-foreground">Linked</Badge>
+          )}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isExpanded && (
+        <div className="mt-3 space-y-3">
+          {!gbpStatus?.connected ? (
+            <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground flex items-start gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+              <span>Google Business Profile is not connected. Go to <strong>Settings → Integrations</strong> to connect your GBP account.</span>
+            </div>
+          ) : !hasLocation ? (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Link a GBP location to pull live reviews for this client.</p>
+              {!showPicker ? (
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setShowPicker(true); setPickerStep('account'); }} data-testid="button-link-gbp-location">
+                  <Link2 className="h-3.5 w-3.5 mr-1.5" /> Link GBP Location
+                </Button>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="p-2 bg-muted/30 border-b flex items-center justify-between">
+                    <span className="text-xs font-medium">{pickerStep === 'account' ? 'Select Account' : 'Select Location'}</span>
+                    <button onClick={() => { setShowPicker(false); setPickerStep('account'); setSelectedAccount(null); }} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                  {pickerStep === 'account' && (
+                    <div className="divide-y max-h-48 overflow-y-auto">
+                      {accountsLoading && <div className="p-3 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" /></div>}
+                      {!accountsLoading && (!accountsData?.accounts?.length) && <p className="p-3 text-xs text-muted-foreground text-center">No accounts found</p>}
+                      {accountsData?.accounts?.map(acc => (
+                        <button key={acc.name} className="w-full text-left p-2.5 text-xs hover:bg-muted/50 flex items-center gap-2" onClick={() => { setSelectedAccount(acc.name); setPickerStep('location'); }}>
+                          <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <div>
+                            <p className="font-medium">{acc.accountName}</p>
+                            <p className="text-muted-foreground">{acc.type}</p>
+                          </div>
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground ml-auto" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {pickerStep === 'location' && (
+                    <div className="divide-y max-h-48 overflow-y-auto">
+                      <button className="w-full text-left p-2 text-xs text-muted-foreground hover:bg-muted/50 flex items-center gap-1.5" onClick={() => { setPickerStep('account'); setSelectedAccount(null); }}>
+                        ← Back to accounts
+                      </button>
+                      {locationsLoading && <div className="p-3 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" /></div>}
+                      {!locationsLoading && (!locationsData?.locations?.length) && <p className="p-3 text-xs text-muted-foreground text-center">No locations found</p>}
+                      {locationsData?.locations?.map(loc => (
+                        <button key={loc.name} className="w-full text-left p-2.5 text-xs hover:bg-muted/50 flex items-start gap-2" onClick={() => linkMutation.mutate(loc.name)} disabled={linkMutation.isPending}>
+                          <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium">{loc.title}</p>
+                            {loc.storefrontAddress?.addressLines && <p className="text-muted-foreground">{loc.storefrontAddress.addressLines.join(', ')}</p>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Header row with avg rating + unlink */}
+              <div className="flex items-center justify-between">
+                {reviewsData && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold">{avgStars.toFixed(1)}</span>
+                    <div>
+                      <StarRating rating={reviewsData.averageRating} />
+                      <p className="text-[11px] text-muted-foreground">{reviewsData.totalReviewCount} review{reviewsData.totalReviewCount !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                )}
+                {reviewsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground" onClick={() => refetchReviews()}>
+                    <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-muted-foreground hover:text-red-500" onClick={() => unlinkMutation.mutate()} disabled={unlinkMutation.isPending} data-testid="button-unlink-gbp">
+                    <Unlink className="h-3 w-3 mr-1" /> Unlink
+                  </Button>
+                </div>
+              </div>
+
+              {/* Reviews list */}
+              {reviewsLoading && (
+                <div className="text-center py-4"><Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" /></div>
+              )}
+              {!reviewsLoading && reviewsData?.reviews && (
+                <div className="space-y-3">
+                  {reviewsData.reviews.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No reviews yet</p>}
+                  {reviewsData.reviews.map(review => (
+                    <div key={review.reviewId} className="border rounded-lg overflow-hidden">
+                      <div className="p-3 space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {review.reviewer.profilePhotoUrl ? (
+                              <img src={review.reviewer.profilePhotoUrl} alt={review.reviewer.displayName} className="h-7 w-7 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0 text-xs font-medium">
+                                {review.reviewer.displayName.charAt(0)}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{review.reviewer.displayName}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {new Date(review.createTime).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                          <StarRating rating={review.starRating} />
+                        </div>
+                        {review.comment && <p className="text-xs text-muted-foreground leading-relaxed">{review.comment}</p>}
+                      </div>
+
+                      {/* Existing reply */}
+                      {review.reviewReply && (
+                        <div className="bg-muted/30 border-t p-2.5">
+                          <p className="text-[11px] font-medium text-muted-foreground mb-0.5 flex items-center gap-1"><MessageSquare className="h-3 w-3" /> Your reply</p>
+                          <p className="text-xs text-muted-foreground">{review.reviewReply.comment}</p>
+                        </div>
+                      )}
+
+                      {/* Reply section */}
+                      {!review.reviewReply && (
+                        <div className="border-t">
+                          {replyingTo === review.reviewId ? (
+                            <div className="p-2.5 space-y-2">
+                              <Textarea
+                                value={replyText}
+                                onChange={e => setReplyText(e.target.value)}
+                                placeholder="Write a reply..."
+                                className="text-xs min-h-[60px] resize-none"
+                                data-testid="input-gbp-reply"
+                              />
+                              <div className="flex gap-1.5">
+                                <Button size="sm" className="h-6 text-[11px] px-2" onClick={() => replyMutation.mutate({ reviewName: review.name, reply: replyText })} disabled={!replyText.trim() || replyMutation.isPending}>
+                                  {replyMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Post Reply'}
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 text-[11px] px-2" onClick={() => { setReplyingTo(null); setReplyText(''); }}>Cancel</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button className="w-full text-left p-2 text-[11px] text-muted-foreground hover:bg-muted/30 flex items-center gap-1.5 transition-colors" onClick={() => { setReplyingTo(review.reviewId); setReplyText(''); }} data-testid={`button-reply-review-${review.reviewId}`}>
+                              <MessageSquare className="h-3 w-3" /> Reply
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ClientGrowthIntelligencePanel({ client }: { client: Client }) {
   const [expandedSection, setExpandedSection] = useState<string | null>('health');
   const healthScore = healthScoreFromClient(client);
@@ -769,6 +1098,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
 
           {/* Local Presence — Local Falcon */}
           <LocalPresenceSection client={client} />
+
+          {/* GBP Reviews */}
+          <GBPReviewsSection client={client} />
 
           {/* AI Onboarding & Team Handover */}
           <ClientOnboardingHandover client={client} />

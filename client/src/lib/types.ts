@@ -1680,6 +1680,8 @@ export interface Client {
   nextActionSetAt?: Date;
   // AI Onboarding & Team Handover
   clientOnboarding?: ClientOnboarding;
+  // Google Business Profile direct link (full resource name: accounts/{id}/locations/{id})
+  gbpLocationName?: string;
   // Local Falcon GBP rank tracking
   localFalconPlaceId?: string;
   localFalconLocation?: {

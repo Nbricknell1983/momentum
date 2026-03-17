@@ -6336,6 +6336,224 @@ Return JSON:
   });
 
   // ============================================
+  // Google Business Profile (GBP) OAuth + API
+  // ============================================
+
+  const GBP_REDIRECT_URI = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/api/gbp/callback`;
+  const GBP_SCOPES = 'https://www.googleapis.com/auth/business.manage';
+
+  // Helper: get or refresh an access token for an org
+  async function getGBPAccessToken(orgId: string): Promise<string> {
+    if (!firestore) throw new Error('Firestore not available');
+    const docRef = firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp');
+    const snap = await docRef.get();
+    if (!snap.exists) throw new Error('GBP not connected for this org');
+    const data = snap.data()!;
+    if (!data.refreshToken) throw new Error('No refresh token');
+    // Return existing access token if still valid
+    if (data.accessToken && data.tokenExpiry && data.tokenExpiry > Date.now() + 60_000) {
+      return data.accessToken;
+    }
+    // Refresh it
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_GBP_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_GBP_CLIENT_SECRET!,
+        refresh_token: data.refreshToken,
+        grant_type: 'refresh_token',
+      }).toString(),
+    });
+    const tokens = await r.json();
+    if (tokens.error) throw new Error(`Token refresh failed: ${tokens.error_description || tokens.error}`);
+    await docRef.update({
+      accessToken: tokens.access_token,
+      tokenExpiry: Date.now() + (tokens.expires_in || 3600) * 1000,
+    });
+    return tokens.access_token;
+  }
+
+  // Initiate GBP OAuth — redirect to Google
+  app.get('/api/gbp/connect', (req, res) => {
+    const orgId = req.query.orgId as string;
+    if (!orgId) return res.status(400).send('orgId required');
+    const state = Buffer.from(JSON.stringify({ orgId })).toString('base64');
+    const params = new URLSearchParams({
+      client_id: process.env.GOOGLE_GBP_CLIENT_ID!,
+      redirect_uri: GBP_REDIRECT_URI,
+      response_type: 'code',
+      scope: GBP_SCOPES,
+      access_type: 'offline',
+      prompt: 'consent',
+      state,
+    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  });
+
+  // GBP OAuth callback
+  app.get('/api/gbp/callback', async (req, res) => {
+    try {
+      const { code, state, error } = req.query as Record<string, string>;
+      if (error) return res.redirect(`/settings?gbp=error&reason=${encodeURIComponent(error)}`);
+      if (!code || !state) return res.redirect('/settings?gbp=error&reason=missing_params');
+      const { orgId } = JSON.parse(Buffer.from(state, 'base64').toString());
+      // Exchange code for tokens
+      const r = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_GBP_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_GBP_CLIENT_SECRET!,
+          redirect_uri: GBP_REDIRECT_URI,
+          grant_type: 'authorization_code',
+        }).toString(),
+      });
+      const tokens = await r.json();
+      if (tokens.error || !tokens.refresh_token) {
+        console.error('[GBP callback] token error:', tokens);
+        return res.redirect(`/settings?gbp=error&reason=${encodeURIComponent(tokens.error || 'no_refresh_token')}`);
+      }
+      if (!firestore) return res.redirect('/settings?gbp=error&reason=no_firestore');
+      // Save tokens to Firestore
+      await firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').set({
+        refreshToken: tokens.refresh_token,
+        accessToken: tokens.access_token,
+        tokenExpiry: Date.now() + (tokens.expires_in || 3600) * 1000,
+        connectedAt: new Date().toISOString(),
+      }, { merge: true });
+      res.redirect('/settings?gbp=connected');
+    } catch (err: any) {
+      console.error('[GBP callback]', err);
+      res.redirect(`/settings?gbp=error&reason=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  // Check GBP connection status
+  app.get('/api/gbp/status', async (req, res) => {
+    try {
+      if (!firestore) return res.json({ connected: false });
+      const orgId = req.query.orgId as string;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      const snap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').get();
+      if (!snap.exists || !snap.data()?.refreshToken) return res.json({ connected: false });
+      res.json({ connected: true, connectedAt: snap.data()?.connectedAt });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Disconnect GBP
+  app.post('/api/gbp/disconnect', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      await firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').delete();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // List GBP accounts
+  app.get('/api/gbp/accounts', async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      const token = await getGBPAccessToken(orgId);
+      const r = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || 'GBP API error');
+      res.json(data);
+    } catch (err: any) {
+      console.error('[gbp/accounts]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // List GBP locations for an account
+  app.get('/api/gbp/locations', async (req, res) => {
+    try {
+      const { orgId, accountName } = req.query as Record<string, string>;
+      if (!orgId || !accountName) return res.status(400).json({ error: 'orgId and accountName required' });
+      const token = await getGBPAccessToken(orgId);
+      const readMask = 'name,title,phoneNumbers,websiteUri,metadata,profile';
+      const r = await fetch(
+        `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=${encodeURIComponent(readMask)}&pageSize=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || 'GBP API error');
+      res.json(data);
+    } catch (err: any) {
+      console.error('[gbp/locations]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get GBP reviews for a location
+  app.get('/api/gbp/reviews', async (req, res) => {
+    try {
+      const { orgId, locationName } = req.query as Record<string, string>;
+      if (!orgId || !locationName) return res.status(400).json({ error: 'orgId and locationName required' });
+      const token = await getGBPAccessToken(orgId);
+      const r = await fetch(
+        `https://mybusiness.googleapis.com/v4/${locationName}/reviews?pageSize=10&orderBy=updateTime%20desc`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || 'GBP API error');
+      res.json(data);
+    } catch (err: any) {
+      console.error('[gbp/reviews]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Reply to a GBP review
+  app.put('/api/gbp/reviews/:locationName/reply', async (req, res) => {
+    try {
+      const { orgId, reviewId, comment } = req.body;
+      const locationName = decodeURIComponent(req.params.locationName);
+      if (!orgId || !reviewId || !comment) return res.status(400).json({ error: 'orgId, reviewId, comment required' });
+      const token = await getGBPAccessToken(orgId);
+      const r = await fetch(
+        `https://mybusiness.googleapis.com/v4/${locationName}/reviews/${reviewId}/reply`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comment }),
+        }
+      );
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || 'Reply failed');
+      res.json(data);
+    } catch (err: any) {
+      console.error('[gbp/reply]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Save GBP location link on a client
+  app.patch('/api/clients/:clientId/gbp-location', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, gbpLocationName } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({ gbpLocationName: gbpLocationName || null });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[clients/gbp-location]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================
   // Local Falcon — GBP Rank Tracking
   // ============================================
 

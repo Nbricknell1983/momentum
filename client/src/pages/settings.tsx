@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, addCadence, updateCadence, deleteCadence } from '@/store';
 import { Cadence, CadenceStep, TouchChannel, Organization, TeamMember, AUSTRALIAN_TIMEZONES } from '@/lib/types';
@@ -18,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays, Camera, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays, Camera, X, Plug, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CHANNEL_ICONS: Record<TouchChannel, typeof Phone> = {
@@ -1208,6 +1209,163 @@ export default function SettingsPage() {
     </TabsContent>
   );
 
+  const qc = useQueryClient();
+
+  const { data: gbpStatus, isLoading: gbpLoading } = useQuery<{ connected: boolean; connectedAt?: string }>({
+    queryKey: ['/api/gbp/status', orgId],
+    queryFn: async () => {
+      if (!orgId) return { connected: false };
+      const r = await fetch(`/api/gbp/status?orgId=${orgId}`);
+      return r.json();
+    },
+    enabled: !!orgId && isManager,
+    staleTime: 30_000,
+  });
+
+  const [gbpSuccessMsg, setGbpSuccessMsg] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('gbp') === 'connected' ? 'Google Business Profile connected successfully!' : null;
+    }
+    return null;
+  });
+
+  const [gbpErrorMsg] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('gbp') === 'error') return p.get('reason') || 'Connection failed';
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (gbpSuccessMsg) {
+      qc.invalidateQueries({ queryKey: ['/api/gbp/status', orgId] });
+      const t = setTimeout(() => setGbpSuccessMsg(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [gbpSuccessMsg, orgId, qc]);
+
+  const disconnectGBP = useMutation({
+    mutationFn: async () => {
+      if (!orgId) throw new Error('No org');
+      const r = await fetch('/api/gbp/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!r.ok) throw new Error('Disconnect failed');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['/api/gbp/status', orgId] });
+      toast({ title: 'Disconnected', description: 'Google Business Profile has been disconnected.' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to disconnect', variant: 'destructive' }),
+  });
+
+  const IntegrationsTab = (
+    <TabsContent value="integrations" className="space-y-6">
+      <div>
+        <h2 className="text-lg font-medium">Integrations</h2>
+        <p className="text-sm text-muted-foreground">Connect third-party tools to enrich your client data</p>
+      </div>
+
+      {gbpSuccessMsg && (
+        <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {gbpSuccessMsg}
+        </div>
+      )}
+
+      {gbpErrorMsg && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          Connection error: {gbpErrorMsg}. Please try again.
+        </div>
+      )}
+
+      {/* Google Business Profile */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-lg bg-blue-50 dark:bg-blue-400/10 flex items-center justify-center shrink-0">
+                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+              </div>
+              <div>
+                <CardTitle className="text-base">Google Business Profile</CardTitle>
+                <CardDescription>Pull live reviews, ratings, and profile data for your clients</CardDescription>
+              </div>
+            </div>
+            {gbpLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mt-1" />
+            ) : gbpStatus?.connected ? (
+              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200">
+                <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground">Not connected</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {gbpStatus?.connected ? (
+            <div className="space-y-3">
+              {gbpStatus.connectedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Connected {new Date(gbpStatus.connectedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                </p>
+              )}
+              <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-muted-foreground">Live reviews and ratings are available in the Local Presence section of each client workspace. Link each client to their GBP location to start pulling data.</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/20"
+                onClick={() => disconnectGBP.mutate()}
+                disabled={disconnectGBP.isPending}
+                data-testid="button-disconnect-gbp"
+              >
+                {disconnectGBP.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <X className="h-3.5 w-3.5 mr-1.5" />}
+                Disconnect
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5 text-xs text-muted-foreground">
+                <p className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Live review count and star rating per client</p>
+                <p className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Recent reviews with text and sentiment</p>
+                <p className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Reply to reviews directly from the client workspace</p>
+              </div>
+              <Button
+                onClick={() => { if (orgId) window.location.href = `/api/gbp/connect?orgId=${orgId}`; }}
+                disabled={!orgId}
+                data-testid="button-connect-gbp"
+                className="gap-2"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="white" fillOpacity="0.9"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="white" fillOpacity="0.9"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="white" fillOpacity="0.9"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="white" fillOpacity="0.9"/>
+                </svg>
+                Connect Google Business Profile
+              </Button>
+              <p className="text-xs text-muted-foreground">You'll be redirected to Google to authorise access. Use the Google account that manages your clients' GBP listings.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </TabsContent>
+  );
+
   const CadencesTab = (
     <TabsContent value="cadences" className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -1276,11 +1434,16 @@ export default function SettingsPage() {
                   <Zap className="h-4 w-4 mr-1" />
                   Cadences
                 </TabsTrigger>
+                <TabsTrigger value="integrations" data-testid="tab-integrations">
+                  <Plug className="h-4 w-4 mr-1" />
+                  Integrations
+                </TabsTrigger>
               </TabsList>
               {MyProfileTab}
               {BusinessProfileTab}
               {TeamTab}
               {CadencesTab}
+              {IntegrationsTab}
             </Tabs>
           </div>
         ) : (
