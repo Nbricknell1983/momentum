@@ -86,24 +86,23 @@ function pointInPolygon(px: number, py: number, poly: [number, number][]): boole
   return inside;
 }
 
-// Sample ~20 pixel points inside the lasso polygon
-function samplePointsInLasso(lasso: [number, number][], n = 20): [number, number][] {
+// Sample a dense grid of pixel points inside the lasso polygon
+function samplePointsInLasso(lasso: [number, number][], gridSize = 10): [number, number][] {
   if (!lasso.length) return [];
   const xs = lasso.map(p => p[0]), ys = lasso.map(p => p[1]);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const cols = Math.ceil(Math.sqrt(n)), rows = cols;
   const pts: [number, number][] = [];
-  for (let r = 0; r <= rows; r++) {
-    for (let c = 0; c <= cols; c++) {
-      const px = minX + (c / cols) * (maxX - minX);
-      const py = minY + (r / rows) * (maxY - minY);
+  for (let r = 0; r <= gridSize; r++) {
+    for (let c = 0; c <= gridSize; c++) {
+      const px = minX + (c / gridSize) * (maxX - minX);
+      const py = minY + (r / gridSize) * (maxY - minY);
       if (pointInPolygon(px, py, lasso)) pts.push([px, py]);
     }
   }
-  // Always include centroid
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  if (!pts.length) pts.push([cx, cy]);
+  if (!pts.length) {
+    pts.push([(minX + maxX) / 2, (minY + maxY) / 2]);
+  }
   return pts;
 }
 
@@ -191,36 +190,42 @@ export default function ScanMapPicker({
     setLoadingMsg('Identifying suburbs in selection…');
 
     try {
-      // Sample pixel points inside the lasso
-      const samplePixels = samplePointsInLasso(path, 25);
+      // Dense 10×10 grid → up to ~100 sample points inside the lasso
+      const samplePixels = samplePointsInLasso(path, 10);
 
-      // Convert pixel → latlng
+      // Convert all pixel coords → latlng
       const lngLats = samplePixels.map(([px, py]) => {
-        const { lng, lat } = map.unproject([px, py]);
+        const { lng, lat } = map.unproject([px, py] as [number, number]);
         return { lat, lng };
       });
 
-      // Reverse geocode each (parallel, up to 12)
+      // Reverse geocode in batches of 8 (parallel per batch)
       const names: string[] = [];
-      await Promise.all(lngLats.slice(0, 12).map(async ({ lat, lng }) => {
-        const name = await reverseGeocodeSuburb(lat, lng);
-        if (name && !names.includes(name)) names.push(name);
-      }));
-
-      if (!names.length) {
-        setLoading(false);
-        loadingRef.current = false;
-        return;
+      const BATCH = 8;
+      for (let i = 0; i < lngLats.length; i += BATCH) {
+        await Promise.all(lngLats.slice(i, i + BATCH).map(async ({ lat, lng }) => {
+          const name = await reverseGeocodeSuburb(lat, lng);
+          if (name && !names.includes(name)) names.push(name);
+        }));
+        setLoadingMsg(`Scanning area… ${Math.min(i + BATCH, lngLats.length)}/${lngLats.length} points`);
+        // small pause between batches to avoid rate limiting
+        if (i + BATCH < lngLats.length) await new Promise(r => setTimeout(r, 80));
       }
 
-      // Fetch polygons for unique suburb names
+      if (!names.length) return;
+
+      // Fetch suburb boundary polygons (parallel, up to 6 at a time)
       const totalNames = names.length;
       let done = 0;
-      await Promise.all(names.map(async (name) => {
-        await addSuburb(name, true);
-        done++;
-        setLoadingMsg(`Fetching boundaries… ${done}/${totalNames}`);
-      }));
+      const POLY_BATCH = 6;
+      for (let i = 0; i < names.length; i += POLY_BATCH) {
+        await Promise.all(names.slice(i, i + POLY_BATCH).map(async (name) => {
+          await addSuburb(name, true);
+          done++;
+          setLoadingMsg(`Fetching boundaries… ${done}/${totalNames}`);
+        }));
+        if (i + POLY_BATCH < names.length) await new Promise(r => setTimeout(r, 100));
+      }
 
       syncMapLayers(selectedRef.current);
     } finally {
