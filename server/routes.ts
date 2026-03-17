@@ -7286,6 +7286,41 @@ Return JSON:
     }
   });
 
+  // Search for a business by name via Google Places (fallback when no LF locations exist)
+  app.get('/api/local-falcon/search-place', async (req, res) => {
+    try {
+      const { query } = req.query as Record<string, string>;
+      if (!query || query.trim().length < 2) return res.json({ places: [] });
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: 'GOOGLE_PLACES_API_KEY not set' });
+      const resp = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount',
+        },
+        body: JSON.stringify({ textQuery: query, languageCode: 'en' }),
+      });
+      if (!resp.ok) throw new Error(`Google Places error: ${resp.status}`);
+      const data = await resp.json();
+      const places = (data.places || []).slice(0, 8).map((p: any) => ({
+        id: p.id,
+        place_id: p.id,
+        name: p.displayName?.text || '',
+        address: p.formattedAddress || '',
+        lat: p.location?.latitude || 0,
+        lng: p.location?.longitude || 0,
+        rating: p.rating ? String(p.rating) : '0',
+        reviews: p.userRatingCount || 0,
+      }));
+      res.json({ places });
+    } catch (err: any) {
+      console.error('[local-falcon/search-place]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // List scan reports for a specific place_id
   app.get('/api/local-falcon/reports', async (req, res) => {
     try {

@@ -209,15 +209,29 @@ function LocalPresenceSection({ client }: { client: Client }) {
 
   // Fetch LF locations for picker
   const { data: locationsData, isLoading: locationsLoading } = useQuery<{ data: { locations: LFLocation[] } }>({
-    queryKey: ['/api/local-falcon/locations', locationSearch],
+    queryKey: ['/api/local-falcon/locations'],
     queryFn: async () => {
-      const qs = locationSearch ? `?query=${encodeURIComponent(locationSearch)}` : '';
-      const resp = await fetch(`/api/local-falcon/locations${qs}`);
+      const resp = await fetch('/api/local-falcon/locations');
       if (!resp.ok) throw new Error('Failed to fetch locations');
       return resp.json();
     },
     enabled: showPicker,
     staleTime: 60_000,
+  });
+
+  const locations = locationsData?.data?.locations || [];
+  const hasNoLFLocations = !locationsLoading && locations.length === 0;
+
+  // Google Places search fallback — used when LF account has no configured locations
+  const { data: placesData, isLoading: placesLoading } = useQuery<{ places: LFLocation[] }>({
+    queryKey: ['/api/local-falcon/search-place', locationSearch],
+    queryFn: async () => {
+      const resp = await fetch(`/api/local-falcon/search-place?query=${encodeURIComponent(locationSearch)}`);
+      if (!resp.ok) throw new Error('Failed to search places');
+      return resp.json();
+    },
+    enabled: showPicker && hasNoLFLocations && locationSearch.trim().length >= 2,
+    staleTime: 30_000,
   });
 
   // Fetch all scan reports for linked location (fetch more to match keywords)
@@ -297,7 +311,6 @@ function LocalPresenceSection({ client }: { client: Client }) {
     onError: (err: Error) => toast({ title: 'Scan failed', description: err.message, variant: 'destructive' }),
   });
 
-  const locations = locationsData?.data?.locations || [];
   const reports = reportsData?.data?.reports || [];
 
   const filteredLocations = locationSearch
@@ -365,36 +378,85 @@ function LocalPresenceSection({ client }: { client: Client }) {
       {isExpanded && (
         <div className="border-t space-y-0">
 
-          {/* ── Location picker modal ── */}
+          {/* ── Location picker ── */}
           {showPicker && (
             <div className="p-3 border-b bg-muted/10 space-y-2">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-medium">Select Local Falcon location</p>
+                <p className="text-xs font-medium">
+                  {hasNoLFLocations ? 'Search business by name' : 'Select Local Falcon location'}
+                </p>
                 <button onClick={() => { setShowPicker(false); setLocationSearch(''); }} className="text-muted-foreground hover:text-foreground">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
               <Input
-                placeholder="Search locations…"
+                placeholder={hasNoLFLocations ? 'Type business name to search…' : 'Search locations…'}
                 value={locationSearch}
                 onChange={e => setLocationSearch(e.target.value)}
                 className="h-8 text-xs"
                 data-testid="input-location-search"
+                autoFocus
               />
-              {locationsLoading ? (
-                <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-              ) : filteredLocations.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-3">No locations found in your Local Falcon account</p>
-              ) : (
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {filteredLocations.map(loc => (
-                    <button key={loc.id} className="w-full text-left p-2 rounded border hover:bg-muted/30 transition-colors" onClick={() => linkMutation.mutate(loc)} disabled={linkMutation.isPending} data-testid={`location-option-${loc.id}`}>
-                      <p className="text-xs font-medium">{loc.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{loc.address}</p>
-                      {(loc.rating && loc.rating !== '0.000') && <p className="text-[11px] text-amber-600">★ {parseFloat(loc.rating).toFixed(1)} · {loc.reviews} reviews</p>}
-                    </button>
-                  ))}
-                </div>
+
+              {/* LF has locations → filter and show them */}
+              {!hasNoLFLocations && (
+                locationsLoading ? (
+                  <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                ) : filteredLocations.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-3">No locations match your search</p>
+                ) : (
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {filteredLocations.map(loc => (
+                      <button key={loc.id} className="w-full text-left p-2 rounded border hover:bg-muted/30 transition-colors" onClick={() => linkMutation.mutate(loc)} disabled={linkMutation.isPending} data-testid={`location-option-${loc.id}`}>
+                        <p className="text-xs font-medium">{loc.name}</p>
+                        <p className="text-[11px] text-muted-foreground">{loc.address}</p>
+                        {(loc.rating && loc.rating !== '0.000') && <p className="text-[11px] text-amber-600">★ {parseFloat(loc.rating).toFixed(1)} · {loc.reviews} reviews</p>}
+                      </button>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {/* LF has no locations → Google Places search mode */}
+              {hasNoLFLocations && (
+                locationSearch.trim().length < 2 ? (
+                  <div className="py-2 space-y-2">
+                    <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+                      Type the client's business name above to search via Google, or add it to your Local Falcon account first.
+                    </p>
+                    <div className="flex gap-2 justify-center">
+                      <a
+                        href="https://app.localfalcon.com/locations"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-[11px] border px-3 py-1.5 rounded hover:bg-muted/30 transition-colors"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Add in Local Falcon
+                      </a>
+                      <button
+                        onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/local-falcon/locations'] })}
+                        className="inline-flex items-center gap-1.5 text-[11px] border rounded px-3 py-1.5 hover:bg-muted/30 transition-colors"
+                      >
+                        <RefreshCw className="h-3 w-3" /> Refresh
+                      </button>
+                    </div>
+                  </div>
+                ) : placesLoading ? (
+                  <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                ) : (placesData?.places || []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-3">No businesses found — try a different name</p>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    <p className="text-[11px] text-muted-foreground px-1">Google search results — select to link:</p>
+                    {(placesData?.places || []).map(loc => (
+                      <button key={loc.id} className="w-full text-left p-2 rounded border hover:bg-muted/30 transition-colors" onClick={() => linkMutation.mutate(loc)} disabled={linkMutation.isPending} data-testid={`place-option-${loc.id}`}>
+                        <p className="text-xs font-medium">{loc.name}</p>
+                        <p className="text-[11px] text-muted-foreground">{loc.address}</p>
+                        {loc.rating && loc.rating !== '0' && <p className="text-[11px] text-amber-600">★ {parseFloat(loc.rating).toFixed(1)} · {loc.reviews} reviews</p>}
+                      </button>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           )}
