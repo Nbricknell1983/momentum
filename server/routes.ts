@@ -7639,25 +7639,36 @@ Return JSON:
         const data = await localFalconPost('/v2/run-scan/', scanPayload);
         return res.json(data);
       } catch (firstErr: any) {
-        const msg = firstErr.message || '';
-        if (!msg.includes("hasn't been added") && !msg.includes('not been added') && !msg.includes('saved locations')) {
-          throw firstErr; // unrelated error — propagate
-        }
-        // Location not in Local Falcon — attempt to add it
-        console.log('[local-falcon/run-scan] Location not saved — attempting to add place_id:', placeId);
+        const msg = (firstErr.message || '').toLowerCase();
+        const isNotSaved = msg.includes("hasn't been added") || msg.includes('not been added') || msg.includes('saved locations') || msg.includes('not found') || msg.includes('invalid location');
+        if (!isNotSaved) throw firstErr; // unrelated error — propagate
+
+        // Location not in Local Falcon — attempt to add it then retry
+        console.log('[local-falcon/run-scan] Location not in saved locations — adding place_id:', placeId);
         try {
           const addPayload: Record<string, string | number> = { place_id: placeId };
           if (businessName) addPayload.label = String(businessName).slice(0, 80);
           await localFalconPost('/v1/locations/add/', addPayload);
-          console.log('[local-falcon/run-scan] Location added successfully, retrying scan...');
+          console.log('[local-falcon/run-scan] Location added — waiting 4s before retry scan...');
         } catch (addErr: any) {
           console.error('[local-falcon/run-scan] Failed to add location:', addErr.message);
-          // If add failed, throw a clear message
-          return res.status(400).json({ error: 'This location needs to be added to your Local Falcon account first. Please visit localfalcon.com and add the business, then try again.' });
+          return res.status(400).json({
+            error: `This business hasn't been added to your Local Falcon account yet. Go to localfalcon.com, add "${businessName || placeId}", then try scanning again.`
+          });
         }
-        // Retry scan after adding
-        const data = await localFalconPost('/v2/run-scan/', scanPayload);
-        return res.json(data);
+
+        // Wait for Local Falcon to process the newly added location
+        await new Promise(r => setTimeout(r, 4000));
+
+        try {
+          const data = await localFalconPost('/v2/run-scan/', scanPayload);
+          return res.json(data);
+        } catch (retryErr: any) {
+          console.error('[local-falcon/run-scan] Retry scan failed after add:', retryErr.message);
+          return res.status(400).json({
+            error: `Location was added to Local Falcon but the scan still failed. Please wait a moment and try again. (${retryErr.message})`
+          });
+        }
       }
     } catch (err: any) {
       console.error('[local-falcon/run-scan]', err);
