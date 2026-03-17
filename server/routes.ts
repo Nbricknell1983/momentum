@@ -1453,6 +1453,72 @@ Focus on practical, achievable actions for a local service business. Tailor reco
     } catch (err: any) { console.error('[photo-strategy]', err); res.status(500).json({ error: err.message }); }
   });
 
+  // GBP Playbook: AI keyword intelligence plan
+  app.post("/api/clients/ai/gbp-keyword-plan", async (req, res) => {
+    try {
+      const { businessName, address, keywords, industry } = req.body;
+      const kwList = (keywords as Array<{ keyword: string; volume?: number; difficulty?: string }>);
+      const kwText = kwList.map(k => `- "${k.keyword}"${k.volume ? ` (vol: ${k.volume})` : ''}${k.difficulty ? ` [diff: ${k.difficulty}]` : ''}`).join('\n');
+      const prompt = `You are a Google Business Profile (GBP) local SEO strategist specialising in 3-pack rankings.
+
+Analyse the following keyword list for a local business and build a strategic GBP optimisation plan that maps each keyword to the GBP signals that will improve its 3-pack ranking.
+
+Business: ${businessName || 'this business'}
+Location: ${address || 'Australia'}
+Industry: ${industry || 'local services'}
+
+Keywords (with monthly search volume where available):
+${kwText}
+
+GBP Signals available:
+- category: Primary & secondary GBP categories
+- description: GBP business description (750 chars)
+- services: GBP services section
+- serviceArea: Service area suburbs
+- reviews: Review quantity, recency & keyword mentions in reviews
+- citations: Directory listings (NAP consistency)
+- engagement: Photos, posts, Q&A activity
+
+Your task:
+1. Group keywords into 3-5 strategic clusters (e.g. "High-Intent Core Services", "Location-Specific Terms", "Long-Tail Opportunities", "Supporting/Informational")
+2. For each cluster: assign a priority (high/medium/low based on volume + intent), write a 1-sentence GBP strategy, and map each keyword to the GBP signals it needs + a specific action
+3. Identify the top 5 highest-value keywords to prioritise first
+4. List 5 quick wins (specific, actionable things to do this week)
+5. Write a 2-sentence executive summary
+
+Return JSON in exactly this shape:
+{
+  "summary": "...",
+  "clusters": [
+    {
+      "name": "...",
+      "priority": "high|medium|low",
+      "strategy": "...",
+      "keywords": [
+        {
+          "keyword": "...",
+          "volume": 0,
+          "signals": ["category","description"],
+          "action": "specific action for this keyword"
+        }
+      ]
+    }
+  ],
+  "topKeywords": ["kw1","kw2","kw3","kw4","kw5"],
+  "quickWins": ["action1","action2","action3","action4","action5"]
+}`;
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 2000,
+      });
+      const result = JSON.parse(completion.choices[0].message.content || '{}');
+      result.generatedAt = new Date().toISOString();
+      res.json(result);
+    } catch (err: any) { console.error('[gbp-keyword-plan]', err); res.status(500).json({ error: err.message }); }
+  });
+
   // GBP Playbook: AI-generate audit score
   app.post("/api/clients/ai/gbp-audit", async (req, res) => {
     try {

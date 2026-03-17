@@ -3,9 +3,10 @@ import {
   Zap, ChevronDown, ChevronRight, Sparkles, Loader2, Copy, Check,
   Send, RefreshCw, Globe, Star, MapPin, Camera, Building2, CheckSquare,
   Square, ClipboardList, FileText, BarChart3, AlertCircle, CheckCircle2,
+  Target, TrendingUp, Lightbulb, Tag,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Client, GBPPlaybook } from '@/lib/types';
+import { Client, GBPPlaybook, GBPKeywordPlan, GBPKeywordCluster } from '@/lib/types';
 
 interface Props {
   client: Client;
@@ -105,6 +106,11 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
   const [photoGuide, setPhotoGuide] = useState<string[]>(playbook.photoShootingGuide || []);
   const [photoLoading, setPhotoLoading] = useState(false);
 
+  // Keyword Intelligence Plan
+  const [kwPlan, setKwPlan] = useState<GBPKeywordPlan | null>(playbook.keywordPlan || null);
+  const [kwPlanLoading, setKwPlanLoading] = useState(false);
+  const [kwOpenCluster, setKwOpenCluster] = useState<number | null>(null);
+
   const savePlaybook = useCallback(async (patch: Partial<GBPPlaybook>) => {
     onPlaybookUpdate(patch);
     try {
@@ -115,6 +121,30 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
       });
     } catch { /* silent */ }
   }, [client.id, client.orgId, onPlaybookUpdate]);
+
+  const handleKwPlan = async () => {
+    if (parsedKeywords.length === 0) { toast({ title: 'No keywords', description: 'Upload a keyword file in SEO Inputs first.', variant: 'destructive' }); return; }
+    setKwPlanLoading(true);
+    try {
+      const resp = await fetch('/api/clients/ai/gbp-keyword-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: client.businessName,
+          address: client.address,
+          industry: client.clientOnboarding?.businessOverview || '',
+          keywords: parsedKeywords.map(k => ({ keyword: k.keyword, volume: k.volume ?? undefined, difficulty: k.difficulty ?? undefined })),
+        }),
+      });
+      if (!resp.ok) throw new Error('Failed');
+      const data: GBPKeywordPlan = await resp.json();
+      setKwPlan(data);
+      setKwOpenCluster(0);
+      await savePlaybook({ keywordPlan: data });
+    } catch (err: any) {
+      toast({ title: 'Keyword analysis failed', description: err.message, variant: 'destructive' });
+    } finally { setKwPlanLoading(false); }
+  };
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -370,6 +400,142 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
                     <span className="text-foreground/70">{gap}</span>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Keyword Intelligence Plan ── */}
+      <div className="rounded-lg border bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-300">Keyword Intelligence Plan</p>
+            {parsedKeywords.length > 0 && (
+              <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-full px-1.5 py-0.5">{parsedKeywords.length} keywords</span>
+            )}
+          </div>
+          <button
+            onClick={handleKwPlan}
+            disabled={kwPlanLoading || parsedKeywords.length === 0}
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
+            data-testid="btn-gbp-keyword-plan"
+          >
+            {kwPlanLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Analysing…</> : <><Sparkles className="h-3 w-3" /> {kwPlan ? 'Re-analyse' : 'Analyse Keywords'}</>}
+          </button>
+        </div>
+
+        {!kwPlan && !kwPlanLoading && (
+          <div className="px-3 pb-2.5">
+            <p className="text-[11px] text-indigo-700/70 dark:text-indigo-400/70">
+              AI maps your {parsedKeywords.length > 0 ? `${parsedKeywords.length} tracked keywords` : 'keyword list'} to the 7 GBP signals — showing exactly which keywords to target where and what to do first.
+            </p>
+          </div>
+        )}
+
+        {kwPlanLoading && (
+          <div className="px-3 pb-2.5 flex items-center gap-2 text-[11px] text-indigo-700/70 dark:text-indigo-400/70">
+            <Loader2 className="h-3 w-3 animate-spin" /> Mapping keywords across GBP signals…
+          </div>
+        )}
+
+        {kwPlan && !kwPlanLoading && (
+          <div className="border-t">
+            {/* Summary */}
+            <div className="px-3 py-2 bg-indigo-50/50 dark:bg-indigo-950/10 border-b">
+              <p className="text-[11px] text-indigo-900/80 dark:text-indigo-300/80 leading-relaxed">{kwPlan.summary}</p>
+            </div>
+
+            {/* Top Keywords */}
+            {kwPlan.topKeywords?.length > 0 && (
+              <div className="px-3 py-2 border-b">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                  <Target className="h-3 w-3" /> Top Priority Keywords
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {kwPlan.topKeywords.map((kw, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 text-[11px] bg-indigo-600 text-white rounded-full px-2.5 py-0.5 font-medium">
+                      <span className="opacity-70">#{i + 1}</span> {kw}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Wins */}
+            {kwPlan.quickWins?.length > 0 && (
+              <div className="px-3 py-2 border-b">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                  <Lightbulb className="h-3 w-3 text-amber-500" /> Quick Wins This Week
+                </p>
+                <div className="space-y-1">
+                  {kwPlan.quickWins.map((win, i) => (
+                    <div key={i} className="flex items-start gap-1.5 text-[11px]">
+                      <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0 mt-0.5" />
+                      <span className="text-foreground/80">{win}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Keyword Clusters */}
+            {kwPlan.clusters?.length > 0 && (
+              <div className="divide-y">
+                {kwPlan.clusters.map((cluster, idx) => {
+                  const isOpen = kwOpenCluster === idx;
+                  const priorityColor = cluster.priority === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : cluster.priority === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+                  return (
+                    <div key={idx}>
+                      <button
+                        onClick={() => setKwOpenCluster(isOpen ? null : idx)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+                        data-testid={`gbp-kwcluster-${idx}`}
+                      >
+                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0 ${priorityColor}`}>{cluster.priority}</span>
+                        <span className="flex-1 text-[11px] font-medium truncate">{cluster.name}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{cluster.keywords?.length || 0} keywords</span>
+                        {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                      </button>
+
+                      {isOpen && (
+                        <div className="px-3 pb-3 space-y-2 bg-muted/10">
+                          <p className="text-[11px] text-muted-foreground italic">{cluster.strategy}</p>
+                          <div className="space-y-1.5">
+                            {cluster.keywords?.map((kw, ki) => (
+                              <div key={ki} className="rounded-md border bg-background p-2 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  <span className="text-[11px] font-semibold flex-1">{kw.keyword}</span>
+                                  {kw.volume != null && kw.volume > 0 && (
+                                    <span className="text-[10px] text-muted-foreground">{kw.volume.toLocaleString()} vol</span>
+                                  )}
+                                </div>
+                                {kw.signals?.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 pl-5">
+                                    {kw.signals.map((sig, si) => (
+                                      <span key={si} className="text-[9px] bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded px-1.5 py-0.5">{SIGNAL_LABELS[sig] || sig}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                {kw.action && (
+                                  <p className="text-[10px] text-foreground/70 pl-5 leading-snug">{kw.action}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {kwPlan.generatedAt && (
+              <div className="px-3 py-1.5 text-[10px] text-muted-foreground border-t">
+                Last analysed: {new Date(kwPlan.generatedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
               </div>
             )}
           </div>

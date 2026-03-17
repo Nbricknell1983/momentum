@@ -1629,6 +1629,26 @@ export interface ClientPainPoint {
   createdAt: Date;
 }
 
+export interface GBPKeywordCluster {
+  name: string;
+  priority: 'high' | 'medium' | 'low';
+  strategy: string;
+  keywords: Array<{
+    keyword: string;
+    volume?: number;
+    signals: string[];
+    action: string;
+  }>;
+}
+
+export interface GBPKeywordPlan {
+  summary: string;
+  clusters: GBPKeywordCluster[];
+  topKeywords: string[];
+  quickWins: string[];
+  generatedAt: string;
+}
+
 export interface GBPPlaybook {
   description?: string;
   descriptionPublishedAt?: string;
@@ -1643,6 +1663,7 @@ export interface GBPPlaybook {
   categoryNotes?: string;
   auditScore?: number;
   auditBreakdown?: Record<string, number>;
+  keywordPlan?: GBPKeywordPlan;
   updatedAt?: string;
 }
 
