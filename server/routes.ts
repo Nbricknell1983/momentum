@@ -7513,6 +7513,81 @@ Return JSON:
     }
   });
 
+  // Fetch a full GBP location snapshot (category, description, services, service area, reviews summary)
+  app.get('/api/gbp/location-snapshot', async (req, res) => {
+    try {
+      const { orgId, locationName } = req.query as Record<string, string>;
+      if (!orgId || !locationName) return res.status(400).json({ error: 'orgId and locationName required' });
+      const token = await getGBPAccessToken(orgId);
+
+      const readMask = [
+        'name', 'title', 'primaryCategory', 'additionalCategories',
+        'profile', 'serviceArea', 'serviceItems',
+        'regularHours', 'phoneNumbers', 'websiteUri', 'metadata',
+      ].join(',');
+
+      const [locResp, reviewResp] = await Promise.all([
+        fetch(
+          `https://mybusinessbusinessinformation.googleapis.com/v1/${locationName}?readMask=${encodeURIComponent(readMask)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        ),
+        fetch(
+          `https://mybusiness.googleapis.com/v4/${locationName}/reviews?pageSize=50`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        ).catch(() => null),
+      ]);
+
+      const loc = await locResp.json();
+      if (!locResp.ok) throw new Error(loc.error?.message || 'GBP location fetch failed');
+
+      let reviewSummary: { avgRating: number; totalCount: number } | null = null;
+      if (reviewResp?.ok) {
+        const rv = await reviewResp.json();
+        const reviews: any[] = rv.reviews || [];
+        if (reviews.length) {
+          const avg = reviews.reduce((s: number, r: any) => {
+            const map: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+            return s + (map[r.starRating] ?? 0);
+          }, 0) / reviews.length;
+          reviewSummary = { avgRating: Math.round(avg * 10) / 10, totalCount: rv.totalReviewCount || reviews.length };
+        }
+      }
+
+      // Extract service area suburb names
+      const serviceAreaRegions: string[] = [];
+      const sa = loc.serviceArea;
+      if (sa?.places?.placeInfos) {
+        sa.places.placeInfos.forEach((p: any) => { if (p.placeName) serviceAreaRegions.push(p.placeName); });
+      }
+
+      // Extract services
+      const services: string[] = (loc.serviceItems || []).map((si: any) =>
+        si.structuredServiceItem?.displayName || si.freeFormServiceItem?.label?.displayName || ''
+      ).filter(Boolean);
+
+      const snapshot = {
+        category: loc.primaryCategory?.displayName || null,
+        categoryId: loc.primaryCategory?.name || null,
+        additionalCategories: (loc.additionalCategories || []).map((c: any) => c.displayName),
+        description: loc.profile?.description || null,
+        descriptionLength: (loc.profile?.description || '').length,
+        services,
+        serviceAreaRegions,
+        reviewSummary,
+        hasWebsite: !!loc.websiteUri,
+        websiteUri: loc.websiteUri || null,
+        hasPhone: !!(loc.phoneNumbers?.primaryPhone),
+        phone: loc.phoneNumbers?.primaryPhone || null,
+        title: loc.title || null,
+      };
+
+      res.json(snapshot);
+    } catch (err: any) {
+      console.error('[gbp/location-snapshot]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ============================================
   // Local Falcon — GBP Rank Tracking
   // ============================================

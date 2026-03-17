@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
 import {
   Zap, ChevronDown, ChevronRight, Sparkles, Loader2, Copy, Check,
-  Send, RefreshCw, Globe, Star, MapPin, Camera, Building2, CheckSquare,
+  Send, Globe, Star, MapPin, Camera, Building2, CheckSquare,
   Square, ClipboardList, FileText, BarChart3, AlertCircle, CheckCircle2,
-  Target, TrendingUp, Lightbulb, Tag,
+  Target, TrendingUp, Lightbulb, Tag, RefreshCw, ArrowRight, XCircle, Info,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Client, GBPPlaybook, GBPKeywordPlan, GBPKeywordCluster } from '@/lib/types';
@@ -12,6 +12,22 @@ interface Props {
   client: Client;
   parsedKeywords: Array<{ keyword: string; volume?: number | null; difficulty?: string | null }>;
   onPlaybookUpdate: (patch: Partial<GBPPlaybook>) => void;
+}
+
+interface GBPSnapshot {
+  category: string | null;
+  categoryId: string | null;
+  additionalCategories: string[];
+  description: string | null;
+  descriptionLength: number;
+  services: string[];
+  serviceAreaRegions: string[];
+  reviewSummary: { avgRating: number; totalCount: number } | null;
+  hasWebsite: boolean;
+  websiteUri: string | null;
+  hasPhone: boolean;
+  phone: string | null;
+  title: string | null;
 }
 
 const CITATIONS = [
@@ -64,13 +80,37 @@ function scoreBg(score: number) {
   return 'bg-red-500';
 }
 
+function GapBadge({ ok, message }: { ok: boolean; message: string }) {
+  return (
+    <div className={`flex items-start gap-1.5 rounded-md px-2 py-1.5 text-[11px] ${ok ? 'bg-green-50 dark:bg-green-950/20 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800' : 'bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'}`}>
+      {ok ? <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5" /> : <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />}
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function CurrentTag({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 rounded border bg-muted/50 px-2 py-1">
+      <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground shrink-0">{label}</span>
+      <span className="text-[11px] font-medium truncate">{value}</span>
+    </div>
+  );
+}
+
 export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpdate }: Props) {
   const { toast } = useToast();
   const playbook: GBPPlaybook = client.gbpPlaybook || {};
   const keywords = parsedKeywords.map(k => k.keyword);
+  const hasGBPLinked = !!client.gbpLocationName;
 
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // GBP Live Snapshot
+  const [snapshot, setSnapshot] = useState<GBPSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
   // Audit
   const [auditLoading, setAuditLoading] = useState(false);
@@ -122,6 +162,36 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
     } catch { /* silent */ }
   }, [client.id, client.orgId, onPlaybookUpdate]);
 
+  // ── Sync from GBP ────────────────────────────────────────────────────────
+  const handleSyncGBP = async () => {
+    if (!hasGBPLinked) {
+      toast({ title: 'No GBP location linked', description: 'Link a GBP location to this client in the Rank Tracking tab first.', variant: 'destructive' });
+      return;
+    }
+    setSnapshotLoading(true);
+    setSnapshotError(null);
+    try {
+      const resp = await fetch(`/api/gbp/location-snapshot?orgId=${encodeURIComponent(client.orgId)}&locationName=${encodeURIComponent(client.gbpLocationName!)}`);
+      if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Sync failed'); }
+      const data: GBPSnapshot = await resp.json();
+      setSnapshot(data);
+
+      // Pre-populate playbook fields from live GBP data if not already set
+      const patch: Partial<GBPPlaybook> = {};
+      if (data.description && !playbook.description) { setDescText(data.description); patch.description = data.description; }
+      if (data.services.length && !playbook.services?.length) { setServices(data.services); patch.services = data.services; }
+      if (data.serviceAreaRegions.length && !playbook.serviceAreaSuburbs?.length) { setSuburbs(data.serviceAreaRegions); patch.serviceAreaSuburbs = data.serviceAreaRegions; }
+      if (Object.keys(patch).length) await savePlaybook(patch);
+
+      toast({ title: 'GBP data synced', description: 'Current state loaded. Gaps are now highlighted below.' });
+    } catch (err: any) {
+      setSnapshotError(err.message);
+      toast({ title: 'Sync failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSnapshotLoading(false);
+    }
+  };
+
   const handleKwPlan = async () => {
     if (parsedKeywords.length === 0) { toast({ title: 'No keywords', description: 'Upload a keyword file in SEO Inputs first.', variant: 'destructive' }); return; }
     setKwPlanLoading(true);
@@ -161,14 +231,19 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           businessName: client.businessName,
-          hasDescription: !!descText,
-          servicesCount: services.length,
-          reviewCount: 0,
+          hasDescription: !!(snapshot?.description || descText),
+          descriptionLength: snapshot?.descriptionLength || descText.length,
+          servicesCount: snapshot ? snapshot.services.length : services.length,
+          reviewCount: snapshot?.reviewSummary?.totalCount || 0,
+          avgRating: snapshot?.reviewSummary?.avgRating || 0,
           hasCitations: Object.values(citations).some(Boolean),
-          serviceAreaCount: suburbs.length,
+          serviceAreaCount: snapshot ? snapshot.serviceAreaRegions.length : suburbs.length,
           hasPhotos: false,
           hasWeeklyPosts: false,
-          categorySet: !!playbook.categoryPrimary,
+          categorySet: !!(snapshot?.category || playbook.categoryPrimary),
+          additionalCategoriesCount: snapshot?.additionalCategories?.length || 0,
+          hasWebsite: snapshot?.hasWebsite || false,
+          hasPhone: snapshot?.hasPhone || false,
         }),
       });
       if (!resp.ok) throw new Error('Audit failed');
@@ -190,8 +265,9 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
           businessName: client.businessName,
           address: client.address,
           keywords,
-          services: services.length ? services : undefined,
-          targetLocations: suburbs.length ? suburbs.slice(0, 5) : undefined,
+          services: services.length ? services : snapshot?.services,
+          targetLocations: suburbs.length ? suburbs.slice(0, 5) : snapshot?.serviceAreaRegions?.slice(0, 5),
+          currentDescription: snapshot?.description || undefined,
         }),
       });
       if (!resp.ok) throw new Error('Draft failed');
@@ -232,7 +308,7 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
       const resp = await fetch('/api/clients/ai/gbp-services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessName: client.businessName, industry, keywords }),
+        body: JSON.stringify({ businessName: client.businessName, industry, keywords, existingServices: snapshot?.services }),
       });
       if (!resp.ok) throw new Error('Failed');
       const { services: list } = await resp.json();
@@ -317,10 +393,11 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
   const toggle = (section: string) => setOpenSection(prev => prev === section ? null : section);
 
   const SignalCard = ({
-    id, title, icon, score, children,
-  }: { id: string; title: string; icon: React.ReactNode; score?: number; children: React.ReactNode }) => {
+    id, title, icon, score, gapStatus, children,
+  }: { id: string; title: string; icon: React.ReactNode; score?: number; gapStatus?: 'ok' | 'gap' | 'missing' | null; children: React.ReactNode }) => {
     const isOpen = openSection === id;
     const hasScore = score != null;
+    const gapDot = gapStatus === 'ok' ? 'bg-green-500' : gapStatus === 'gap' ? 'bg-amber-500' : gapStatus === 'missing' ? 'bg-red-500' : null;
     return (
       <div className="border rounded-lg overflow-hidden">
         <button
@@ -330,6 +407,7 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
         >
           <span className="text-muted-foreground">{icon}</span>
           <span className="flex-1 text-xs font-medium">{title}</span>
+          {gapDot && <span className={`h-2 w-2 rounded-full shrink-0 ${gapDot}`} title={gapStatus === 'ok' ? 'Looks good' : gapStatus === 'gap' ? 'Needs improvement' : 'Not set up'} />}
           {hasScore && (
             <span className={`text-[11px] font-semibold ${scoreColor(score)}`}>{score}/100</span>
           )}
@@ -340,9 +418,96 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
     );
   };
 
+  // ── Compute gap statuses from snapshot ───────────────────────────────────
+  const gaps = {
+    category: snapshot ? (snapshot.category ? (snapshot.additionalCategories.length >= 2 ? 'ok' : 'gap') : 'missing') : null,
+    description: snapshot ? (snapshot.descriptionLength >= 500 ? 'ok' : snapshot.descriptionLength >= 100 ? 'gap' : 'missing') : null,
+    services: snapshot ? (snapshot.services.length >= 15 ? 'ok' : snapshot.services.length >= 5 ? 'gap' : 'missing') : null,
+    reviews: snapshot ? (snapshot.reviewSummary ? ((snapshot.reviewSummary.totalCount >= 30 && snapshot.reviewSummary.avgRating >= 4.3) ? 'ok' : 'gap') : 'missing') : null,
+    serviceArea: snapshot ? (snapshot.serviceAreaRegions.length >= 20 ? 'ok' : snapshot.serviceAreaRegions.length >= 5 ? 'gap' : 'missing') : null,
+    citations: citationsDone >= 8 ? 'ok' : citationsDone >= 3 ? 'gap' : 'missing',
+    engagement: null,
+  } as Record<string, 'ok' | 'gap' | 'missing' | null>;
+
   return (
     <div className="space-y-3">
-      {/* Audit Score Banner */}
+      {/* ── Live GBP Sync Banner ── */}
+      <div className="rounded-lg border bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900/40 dark:to-indigo-950/20 p-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-300">Live GBP Snapshot</p>
+            {snapshot && <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-medium">Synced</span>}
+          </div>
+          <button
+            onClick={handleSyncGBP}
+            disabled={snapshotLoading || !hasGBPLinked}
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
+            data-testid="btn-sync-gbp"
+            title={!hasGBPLinked ? 'Link a GBP location in the Rank Tracking tab first' : ''}
+          >
+            {snapshotLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Syncing…</> : <><RefreshCw className="h-3 w-3" /> {snapshot ? 'Re-sync' : 'Sync from GBP'}</>}
+          </button>
+        </div>
+
+        {!snapshot && !snapshotLoading && (
+          <p className="text-[11px] text-muted-foreground">
+            {hasGBPLinked
+              ? 'Pull your client\'s live GBP data to see exactly what\'s there, what\'s missing, and what to fix first.'
+              : <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Link a GBP location in the Rank Tracking tab to enable gap analysis.</span>
+            }
+          </p>
+        )}
+
+        {snapshot && (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Category:</span>
+              <span className={`font-medium truncate ${snapshot.category ? 'text-foreground' : 'text-red-500'}`}>{snapshot.category || 'Not set'}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Description:</span>
+              <span className={`font-medium ${snapshot.descriptionLength >= 500 ? 'text-green-600' : snapshot.descriptionLength > 0 ? 'text-amber-600' : 'text-red-500'}`}>
+                {snapshot.descriptionLength > 0 ? `${snapshot.descriptionLength} chars` : 'Missing'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <ClipboardList className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Services:</span>
+              <span className={`font-medium ${snapshot.services.length >= 15 ? 'text-green-600' : snapshot.services.length > 0 ? 'text-amber-600' : 'text-red-500'}`}>
+                {snapshot.services.length > 0 ? `${snapshot.services.length} listed` : 'None'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <Star className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Reviews:</span>
+              <span className={`font-medium ${snapshot.reviewSummary ? (snapshot.reviewSummary.totalCount >= 30 ? 'text-green-600' : 'text-amber-600') : 'text-red-500'}`}>
+                {snapshot.reviewSummary ? `${snapshot.reviewSummary.avgRating}★ (${snapshot.reviewSummary.totalCount})` : 'No data'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Service area:</span>
+              <span className={`font-medium ${snapshot.serviceAreaRegions.length >= 20 ? 'text-green-600' : snapshot.serviceAreaRegions.length > 0 ? 'text-amber-600' : 'text-red-500'}`}>
+                {snapshot.serviceAreaRegions.length > 0 ? `${snapshot.serviceAreaRegions.length} suburbs` : 'Not set'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Website:</span>
+              <span className={`font-medium ${snapshot.hasWebsite ? 'text-green-600' : 'text-red-500'}`}>{snapshot.hasWebsite ? 'Linked' : 'Missing'}</span>
+            </div>
+          </div>
+        )}
+
+        {snapshotError && (
+          <p className="text-[11px] text-red-600 dark:text-red-400 mt-1 flex items-center gap-1"><XCircle className="h-3 w-3" />{snapshotError}</p>
+        )}
+      </div>
+
+      {/* ── Audit Score Banner ── */}
       <div className="rounded-lg border bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-950/20 dark:to-indigo-950/20 p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
@@ -361,7 +526,7 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
 
         {!auditResult && !auditLoading && (
           <p className="text-[11px] text-violet-700/70 dark:text-violet-400/70">
-            Run an AI audit to score your GBP across all 7 ranking signals and see exactly what's missing.
+            {snapshot ? 'Sync complete — run AI audit to score your GBP across all 7 signals.' : 'Sync from GBP above, then run audit for an accurate score based on real data.'}
           </p>
         )}
 
@@ -442,12 +607,9 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
 
         {kwPlan && !kwPlanLoading && (
           <div className="border-t">
-            {/* Summary */}
             <div className="px-3 py-2 bg-indigo-50/50 dark:bg-indigo-950/10 border-b">
               <p className="text-[11px] text-indigo-900/80 dark:text-indigo-300/80 leading-relaxed">{kwPlan.summary}</p>
             </div>
-
-            {/* Top Keywords */}
             {kwPlan.topKeywords?.length > 0 && (
               <div className="px-3 py-2 border-b">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
@@ -462,8 +624,6 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
                 </div>
               </div>
             )}
-
-            {/* Quick Wins */}
             {kwPlan.quickWins?.length > 0 && (
               <div className="px-3 py-2 border-b">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
@@ -479,8 +639,6 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
                 </div>
               </div>
             )}
-
-            {/* Keyword Clusters */}
             {kwPlan.clusters?.length > 0 && (
               <div className="divide-y">
                 {kwPlan.clusters.map((cluster, idx) => {
@@ -498,7 +656,6 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
                         <span className="text-[10px] text-muted-foreground shrink-0">{cluster.keywords?.length || 0} keywords</span>
                         {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                       </button>
-
                       {isOpen && (
                         <div className="px-3 pb-3 space-y-2 bg-muted/10">
                           <p className="text-[11px] text-muted-foreground italic">{cluster.strategy}</p>
@@ -532,7 +689,6 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
                 })}
               </div>
             )}
-
             {kwPlan.generatedAt && (
               <div className="px-3 py-1.5 text-[10px] text-muted-foreground border-t">
                 Last analysed: {new Date(kwPlan.generatedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -542,14 +698,31 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
         )}
       </div>
 
-      {/* Signal 1: Primary Category */}
-      <SignalCard id="category" title="1. Primary Category" icon={SIGNAL_ICONS.category} score={auditResult?.breakdown?.category}>
+      {/* ── Signal 1: Primary Category ── */}
+      <SignalCard id="category" title="1. Primary Category" icon={SIGNAL_ICONS.category} score={auditResult?.breakdown?.category} gapStatus={gaps.category}>
         <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            The single biggest ranking factor. Your primary category must match the main keyword you want to rank for. Competitors in the 3-pack almost always share the same primary category.
-          </p>
+          {snapshot?.category && (
+            <div className="space-y-1.5">
+              <CurrentTag value={snapshot.category} label="Current primary" />
+              {snapshot.additionalCategories.length > 0
+                ? <CurrentTag value={snapshot.additionalCategories.join(', ')} label="Additional" />
+                : <GapBadge ok={false} message="No additional categories set — add 3–4 secondary categories to capture more keyword variations." />
+              }
+              {snapshot.additionalCategories.length > 0 && snapshot.additionalCategories.length < 3 && (
+                <GapBadge ok={false} message={`Only ${snapshot.additionalCategories.length} additional categor${snapshot.additionalCategories.length === 1 ? 'y' : 'ies'} — aim for 3–4 to broaden keyword coverage.`} />
+              )}
+              {snapshot.additionalCategories.length >= 3 && (
+                <GapBadge ok message="Good category depth — primary + additional categories are well configured." />
+              )}
+            </div>
+          )}
+          {!snapshot && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              The single biggest ranking factor. Your primary category must match the main keyword you want to rank for. Sync from GBP above to see your current category.
+            </p>
+          )}
           <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-2">
-            <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium mb-1">Action required — in GBP dashboard:</p>
+            <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium mb-1">Ranking playbook:</p>
             <ol className="space-y-0.5 text-[11px] text-amber-700/80 dark:text-amber-400/80 list-decimal list-inside">
               <li>Search your top keyword in incognito</li>
               <li>Check the primary category of all 3 top results</li>
@@ -559,19 +732,19 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
           </div>
           {keywords.length > 0 && (
             <div>
-              <p className="text-[10px] font-medium text-muted-foreground mb-1">Suggested category alignment from your keywords:</p>
+              <p className="text-[10px] font-medium text-muted-foreground mb-1">Your tracked keywords (use these to find the right category):</p>
               <div className="flex flex-wrap gap-1">
-                {keywords.slice(0, 6).map((kw, i) => (
+                {keywords.slice(0, 8).map((kw, i) => (
                   <span key={i} className="text-[10px] bg-muted rounded px-1.5 py-0.5">{kw}</span>
                 ))}
               </div>
             </div>
           )}
           <div>
-            <label className="text-[10px] font-medium text-muted-foreground block mb-1">Note your selected category:</label>
+            <label className="text-[10px] font-medium text-muted-foreground block mb-1">Note confirmed category:</label>
             <input
               type="text"
-              value={playbook.categoryPrimary || ''}
+              value={playbook.categoryPrimary || snapshot?.category || ''}
               onChange={e => savePlaybook({ categoryPrimary: e.target.value })}
               placeholder="e.g. Crane Service"
               className="w-full text-[11px] rounded border border-border bg-muted/40 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-400"
@@ -581,10 +754,25 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
         </div>
       </SignalCard>
 
-      {/* Signal 2: Business Description */}
-      <SignalCard id="description" title="2. Business Description" icon={SIGNAL_ICONS.description} score={auditResult?.breakdown?.description}>
+      {/* ── Signal 2: Business Description ── */}
+      <SignalCard id="description" title="2. Business Description" icon={SIGNAL_ICONS.description} score={auditResult?.breakdown?.description} gapStatus={gaps.description}>
         <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground">AI writes a keyword-rich description with service + location signals, then publishes directly to your GBP.</p>
+          {snapshot?.description && !descText && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Current GBP Description</p>
+              <div className="rounded-md bg-muted/40 border p-2">
+                <p className="text-[11px] leading-relaxed text-foreground/80">{snapshot.description}</p>
+                <p className={`text-[10px] mt-1 font-medium ${snapshot.descriptionLength >= 500 ? 'text-green-600' : 'text-amber-600'}`}>{snapshot.descriptionLength} / 750 chars</p>
+              </div>
+              {snapshot.descriptionLength < 500 && (
+                <GapBadge ok={false} message={`Description is only ${snapshot.descriptionLength} chars — optimal is 500–750. Draft an improved version below.`} />
+              )}
+              {snapshot.descriptionLength >= 500 && (
+                <GapBadge ok message="Good length! AI can still optimise keyword placement and location signals." />
+              )}
+            </div>
+          )}
+          {!snapshot && <p className="text-[11px] text-muted-foreground">AI writes a keyword-rich description with service + location signals, then publishes directly to your GBP.</p>}
           <div className="flex items-center gap-2">
             <button
               onClick={handleDraftDescription}
@@ -592,13 +780,10 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
               className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 border border-violet-300 dark:border-violet-700 rounded px-2 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50"
               data-testid="btn-draft-description"
             >
-              {descLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Drafting…</> : <><Sparkles className="h-3 w-3" /> {descText ? 'Redraft' : 'Draft Description'}</>}
+              {descLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Drafting…</> : <><Sparkles className="h-3 w-3" /> {descText ? 'Redraft' : 'Draft Optimised Description'}</>}
             </button>
             {descText && (
-              <button
-                onClick={() => copyToClipboard(descText, 'desc')}
-                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
-              >
+              <button onClick={() => copyToClipboard(descText, 'desc')} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
                 {copied === 'desc' ? <><Check className="h-3 w-3 text-green-500" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
               </button>
             )}
@@ -637,10 +822,27 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
         </div>
       </SignalCard>
 
-      {/* Signal 3: GBP Services */}
-      <SignalCard id="services" title="3. GBP Services" icon={SIGNAL_ICONS.services} score={auditResult?.breakdown?.services}>
+      {/* ── Signal 3: GBP Services ── */}
+      <SignalCard id="services" title="3. GBP Services" icon={SIGNAL_ICONS.services} score={auditResult?.breakdown?.services} gapStatus={gaps.services}>
         <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground">Winning listings have 15–25 services. Each acts as an additional keyword trigger. AI generates a full list from your keywords.</p>
+          {snapshot && snapshot.services.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Current GBP Services ({snapshot.services.length})</p>
+              <div className="flex flex-wrap gap-1">
+                {snapshot.services.map((s, i) => (
+                  <span key={i} className="text-[10px] bg-muted rounded px-1.5 py-0.5">{s}</span>
+                ))}
+              </div>
+              {snapshot.services.length < 15
+                ? <GapBadge ok={false} message={`Only ${snapshot.services.length} services listed — aim for 15–25. Each service is an extra keyword trigger. Generate more below.`} />
+                : <GapBadge ok message={`${snapshot.services.length} services listed — solid coverage. Review for any keyword gaps.`} />
+              }
+            </div>
+          )}
+          {snapshot && snapshot.services.length === 0 && (
+            <GapBadge ok={false} message="No services listed in GBP — this is a major ranking gap. Generate a full service list below and add it to your GBP." />
+          )}
+          {!snapshot && <p className="text-[11px] text-muted-foreground">Winning listings have 15–25 services. Each acts as an additional keyword trigger. AI generates a full list from your keywords.</p>}
           <div className="flex items-center gap-2">
             <button
               onClick={handleGenerateServices}
@@ -648,35 +850,62 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
               className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 border border-violet-300 dark:border-violet-700 rounded px-2 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50"
               data-testid="btn-generate-services"
             >
-              {servicesLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : <><Sparkles className="h-3 w-3" /> {services.length ? 'Regenerate' : 'Generate Services List'}</>}
+              {servicesLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : <><Sparkles className="h-3 w-3" /> {services.length ? 'Regenerate' : 'Generate Optimised Services List'}</>}
             </button>
             {services.length > 0 && (
-              <button
-                onClick={() => copyToClipboard(services.join('\n'), 'services')}
-                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
-              >
+              <button onClick={() => copyToClipboard(services.join('\n'), 'services')} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
                 {copied === 'services' ? <><Check className="h-3 w-3 text-green-500" /> Copied</> : <><Copy className="h-3 w-3" /> Copy all</>}
               </button>
             )}
           </div>
           {services.length > 0 && (
             <div>
+              <p className="text-[10px] font-medium text-muted-foreground mb-1">AI-generated optimised list ({services.length} services):</p>
               <div className="flex flex-wrap gap-1">
                 {services.map((s, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-muted rounded px-1.5 py-0.5">
-                    {s}
-                  </span>
+                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 text-violet-800 dark:text-violet-300 rounded px-1.5 py-0.5">{s}</span>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1.5">Add each of these in your GBP dashboard under Products & Services.</p>
+              <p className="text-[10px] text-muted-foreground mt-1.5">Add each of these in your GBP dashboard under Products &amp; Services.</p>
             </div>
           )}
         </div>
       </SignalCard>
 
-      {/* Signal 4: Review Strategy */}
-      <SignalCard id="reviews" title="4. Review Strategy" icon={SIGNAL_ICONS.reviews} score={auditResult?.breakdown?.reviews}>
+      {/* ── Signal 4: Review Strategy ── */}
+      <SignalCard id="reviews" title="4. Review Strategy" icon={SIGNAL_ICONS.reviews} score={auditResult?.breakdown?.reviews} gapStatus={gaps.reviews}>
         <div className="space-y-2">
+          {snapshot?.reviewSummary && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3 rounded-md border bg-muted/40 p-2">
+                <div className="text-center">
+                  <p className="text-xl font-bold tabular-nums text-amber-500">{snapshot.reviewSummary.avgRating}</p>
+                  <p className="text-[9px] text-muted-foreground">avg rating</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xl font-bold tabular-nums">{snapshot.reviewSummary.totalCount}</p>
+                  <p className="text-[9px] text-muted-foreground">total reviews</p>
+                </div>
+                <div className="flex-1 space-y-0.5">
+                  {snapshot.reviewSummary.avgRating < 4.0 && <GapBadge ok={false} message="Rating below 4.0 — focus on service quality and flag to client." />}
+                  {snapshot.reviewSummary.avgRating >= 4.0 && snapshot.reviewSummary.avgRating < 4.5 && <GapBadge ok={false} message="Good rating — aim for 4.5+ to outrank competitors." />}
+                  {snapshot.reviewSummary.avgRating >= 4.5 && <GapBadge ok message="Excellent rating — maintain review velocity." />}
+                </div>
+              </div>
+              {snapshot.reviewSummary.totalCount < 20 && (
+                <GapBadge ok={false} message={`Only ${snapshot.reviewSummary.totalCount} reviews — competitors likely have 30–100+. Use the templates below to build velocity.`} />
+              )}
+              {snapshot.reviewSummary.totalCount >= 20 && snapshot.reviewSummary.totalCount < 50 && (
+                <GapBadge ok={false} message="Building momentum — target 50+ reviews to dominate locally." />
+              )}
+              {snapshot.reviewSummary.totalCount >= 50 && (
+                <GapBadge ok message={`${snapshot.reviewSummary.totalCount} reviews — strong social proof. Keep the velocity going.`} />
+              )}
+            </div>
+          )}
+          {snapshot && !snapshot.reviewSummary && (
+            <GapBadge ok={false} message="No review data available — ensure reviews are enabled on this GBP location." />
+          )}
           <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-2 text-[11px] text-blue-800 dark:text-blue-300">
             <p className="font-medium mb-1">Review velocity goal: 2–4 reviews per month</p>
             <p className="text-blue-700/80 dark:text-blue-400/80">Google analyses review count, frequency, and keywords inside reviews. One review per completed job is the ideal cadence.</p>
@@ -687,7 +916,7 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
             className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 border border-violet-300 dark:border-violet-700 rounded px-2 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50"
             data-testid="btn-generate-review-template"
           >
-            {reviewLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : <><Sparkles className="h-3 w-3" /> {reviewTemplate ? 'Regenerate' : 'Generate Review Request'}</>}
+            {reviewLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : <><Sparkles className="h-3 w-3" /> {reviewTemplate ? 'Regenerate' : 'Generate Review Request Templates'}</>}
           </button>
           {reviewTemplate && (
             <div className="space-y-2">
@@ -725,10 +954,27 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
         </div>
       </SignalCard>
 
-      {/* Signal 5: Service Area */}
-      <SignalCard id="serviceArea" title="5. Service Area Suburbs" icon={SIGNAL_ICONS.serviceArea} score={auditResult?.breakdown?.serviceArea}>
+      {/* ── Signal 5: Service Area ── */}
+      <SignalCard id="serviceArea" title="5. Service Area Suburbs" icon={SIGNAL_ICONS.serviceArea} score={auditResult?.breakdown?.serviceArea} gapStatus={gaps.serviceArea}>
         <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground">Add 20–30 suburbs in GBP to trigger "near me" searches across your entire service area.</p>
+          {snapshot && snapshot.serviceAreaRegions.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Current GBP Service Area ({snapshot.serviceAreaRegions.length} suburbs)</p>
+              <div className="flex flex-wrap gap-1">
+                {snapshot.serviceAreaRegions.map((s, i) => (
+                  <span key={i} className="text-[10px] bg-muted rounded px-1.5 py-0.5">{s}</span>
+                ))}
+              </div>
+              {snapshot.serviceAreaRegions.length < 15
+                ? <GapBadge ok={false} message={`Only ${snapshot.serviceAreaRegions.length} suburbs — aim for 20–30 to trigger more "near me" searches.`} />
+                : <GapBadge ok message={`${snapshot.serviceAreaRegions.length} suburbs configured — solid coverage.`} />
+              }
+            </div>
+          )}
+          {snapshot && snapshot.serviceAreaRegions.length === 0 && (
+            <GapBadge ok={false} message="No service area suburbs set in GBP — you are missing all 'near me' searches outside your exact address. Add 20–30 suburbs." />
+          )}
+          {!snapshot && <p className="text-[11px] text-muted-foreground">Add 20–30 suburbs in GBP to trigger "near me" searches across your entire service area.</p>}
           <div className="flex items-center gap-2">
             <button
               onClick={handleGenerateSuburbs}
@@ -739,10 +985,7 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
               {suburbsLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : <><Sparkles className="h-3 w-3" /> {suburbs.length ? 'Regenerate' : 'Generate Suburb List'}</>}
             </button>
             {suburbs.length > 0 && (
-              <button
-                onClick={() => copyToClipboard(suburbs.join(', '), 'suburbs')}
-                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
-              >
+              <button onClick={() => copyToClipboard(suburbs.join(', '), 'suburbs')} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
                 {copied === 'suburbs' ? <><Check className="h-3 w-3 text-green-500" /> Copied</> : <><Copy className="h-3 w-3" /> Copy all</>}
               </button>
             )}
@@ -751,25 +994,28 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
             <div>
               <div className="flex flex-wrap gap-1">
                 {suburbs.map((s, i) => (
-                  <span key={i} className="text-[10px] bg-muted rounded px-1.5 py-0.5">{s}</span>
+                  <span key={i} className="text-[10px] bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 text-violet-800 dark:text-violet-300 rounded px-1.5 py-0.5">{s}</span>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1.5">{suburbs.length} suburbs generated. Paste these into GBP → Info → Service Area.</p>
+              <p className="text-[10px] text-muted-foreground mt-1.5">{suburbs.length} suburbs generated. Paste into GBP → Info → Service Area.</p>
             </div>
           )}
         </div>
       </SignalCard>
 
-      {/* Signal 6: Citations */}
-      <SignalCard id="citations" title="6. Citation Authority" icon={SIGNAL_ICONS.citations} score={auditResult?.breakdown?.citations}>
+      {/* ── Signal 6: Citations ── */}
+      <SignalCard id="citations" title="6. Citation Authority" icon={SIGNAL_ICONS.citations} score={auditResult?.breakdown?.citations} gapStatus={gaps.citations as any}>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] text-muted-foreground">Track which directories your business is listed in. NAP (Name, Address, Phone) must match exactly on every listing.</p>
+            <p className="text-[11px] text-muted-foreground">NAP (Name, Address, Phone) must match exactly on every directory listing.</p>
             <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400">{citationsDone}/{totalCitations}</span>
           </div>
           <div className="h-1.5 rounded-full bg-muted overflow-hidden">
             <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${(citationsDone / totalCitations) * 100}%` }} />
           </div>
+          {citationsDone < 5 && <GapBadge ok={false} message="Less than 5 citations — low citation authority hurts local ranking. Start with the top directories." />}
+          {citationsDone >= 5 && citationsDone < 10 && <GapBadge ok={false} message="Building — aim for 10+ citations to establish strong citation authority." />}
+          {citationsDone >= 10 && <GapBadge ok message="Strong citation footprint — make sure NAP is consistent across all." />}
           <div className="space-y-1.5">
             {CITATIONS.map(c => (
               <button
@@ -789,12 +1035,21 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
         </div>
       </SignalCard>
 
-      {/* Signal 7: Photos & Engagement */}
-      <SignalCard id="engagement" title="7. Photos & Engagement" icon={SIGNAL_ICONS.engagement} score={auditResult?.breakdown?.engagement}>
+      {/* ── Signal 7: Photos & Engagement ── */}
+      <SignalCard id="engagement" title="7. Photos & Engagement" icon={SIGNAL_ICONS.engagement} score={auditResult?.breakdown?.engagement} gapStatus={gaps.engagement}>
         <div className="space-y-2">
           <div className="rounded-md bg-muted/50 p-2 text-[11px] space-y-1">
             <p className="font-medium">Target: 100+ photos on your GBP</p>
             <p className="text-muted-foreground">Businesses with more photos rank higher. Upload photos with geo-targeted filenames so Google reads location signals from the file names.</p>
+          </div>
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-2 text-[11px] text-amber-800 dark:text-amber-300">
+            <p className="font-medium mb-1">Photo ranking playbook:</p>
+            <ul className="list-disc list-inside space-y-0.5 text-amber-700/80 dark:text-amber-400/80">
+              <li>Rename photo files with keyword + suburb before uploading (e.g. <em>crane-hire-brisbane-01.jpg</em>)</li>
+              <li>Strip GPS metadata from photos before uploading</li>
+              <li>Add new photos every week to signal active engagement</li>
+              <li>Include team, job site, and before/after photos</li>
+            </ul>
           </div>
           <button
             onClick={handleGeneratePhotoStrategy}
@@ -802,36 +1057,35 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
             className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 border border-violet-300 dark:border-violet-700 rounded px-2 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50"
             data-testid="btn-generate-photo-strategy"
           >
-            {photoLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : <><Sparkles className="h-3 w-3" /> {photoFilenames.length ? 'Regenerate' : 'Generate Photo Strategy'}</>}
+            {photoLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : <><Sparkles className="h-3 w-3" /> {photoFilenames.length ? 'Regenerate' : 'Generate Photo Filename Strategy'}</>}
           </button>
           {photoFilenames.length > 0 && (
-            <div className="space-y-2">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Geo-targeted filenames to use</p>
-                  <button onClick={() => copyToClipboard(photoFilenames.join('\n'), 'filenames')} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5">
-                    {copied === 'filenames' ? <><Check className="h-3 w-3 text-green-500" /> Copied</> : <><Copy className="h-3 w-3" /> Copy all</>}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {photoFilenames.map((f, i) => (
-                    <span key={i} className="text-[10px] font-mono bg-muted rounded px-1.5 py-0.5">{f}</span>
-                  ))}
-                </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-medium text-muted-foreground">SEO photo filenames to use:</p>
+                <button onClick={() => copyToClipboard(photoFilenames.join('\n'), 'filenames')} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5">
+                  {copied === 'filenames' ? <><Check className="h-3 w-3 text-green-500" /> Copied</> : <><Copy className="h-3 w-3" /> Copy all</>}
+                </button>
               </div>
-              {photoGuide.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Shooting guide</p>
-                  <ul className="space-y-1">
-                    {photoGuide.map((item, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-[11px]">
-                        <Camera className="h-3 w-3 text-violet-500 shrink-0 mt-0.5" />
-                        <span className="text-foreground/80">{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div className="space-y-0.5">
+                {photoFilenames.slice(0, 10).map((f, i) => (
+                  <p key={i} className="text-[11px] font-mono bg-muted/50 rounded px-1.5 py-0.5">{f}</p>
+                ))}
+                {photoFilenames.length > 10 && <p className="text-[10px] text-muted-foreground">+{photoFilenames.length - 10} more filenames</p>}
+              </div>
+            </div>
+          )}
+          {photoGuide.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground mb-1">Shooting guide:</p>
+              <div className="space-y-0.5">
+                {photoGuide.map((g, i) => (
+                  <div key={i} className="flex items-start gap-1.5 text-[11px]">
+                    <ArrowRight className="h-3 w-3 text-violet-500 shrink-0 mt-0.5" />
+                    <span>{g}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
