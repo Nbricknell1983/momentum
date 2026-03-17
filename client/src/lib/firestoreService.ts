@@ -278,8 +278,10 @@ export async function fetchLeads(orgId: string, authReady: boolean = false, filt
   
   try {
     const leadsRef = collection(db, 'orgs', orgId, 'leads');
+    // Use simple where() without orderBy to avoid requiring a composite index.
+    // Sort client-side after fetch.
     const q = filterByUserId
-      ? query(leadsRef, where('userId', '==', filterByUserId), orderBy('updatedAt', 'desc'))
+      ? query(leadsRef, where('userId', '==', filterByUserId))
       : query(leadsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
     const leads = snapshot.docs.map(doc => {
@@ -298,7 +300,7 @@ export async function fetchLeads(orgId: string, authReady: boolean = false, filt
         touchesNoResponse: rest.touchesNoResponse ?? 0,
         nurturePriorityScore: rest.nurturePriorityScore ?? 0,
       } as Lead;
-    });
+    }).sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
     
     logFirestoreOperation('READ', path, orgId, true);
     return leads;
@@ -627,14 +629,15 @@ export async function fetchAllActivities(orgId: string, authReady: boolean = fal
   
   try {
     const activitiesRef = collection(db, 'orgs', orgId, 'activities');
+    // Use simple where() without orderBy to avoid requiring a composite index.
     const q = filterByUserId
-      ? query(activitiesRef, where('userId', '==', filterByUserId), orderBy('createdAt', 'desc'))
+      ? query(activitiesRef, where('userId', '==', filterByUserId))
       : query(activitiesRef, orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-    const activities = snapshot.docs.map(doc => ({
+    const activities = (snapshot.docs.map(doc => ({
       id: doc.id,
       ...convertTimestampToDate(doc.data()),
-    })) as Activity[];
+    })) as Activity[]).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     
     logFirestoreOperation('READ', path, orgId, true);
     return activities;
@@ -1275,8 +1278,9 @@ export async function fetchClients(orgId: string, authReady: boolean = false, fi
   
   try {
     const clientsRef = collection(db, 'orgs', orgId, 'clients');
+    // Use simple where() without orderBy to avoid requiring a composite index.
     const q = filterByUserId
-      ? query(clientsRef, where('userId', '==', filterByUserId), orderBy('updatedAt', 'desc'))
+      ? query(clientsRef, where('userId', '==', filterByUserId))
       : query(clientsRef, orderBy('updatedAt', 'desc'));
     const snapshot = await getDocs(q);
     const clients = snapshot.docs.map(doc => {
@@ -1292,7 +1296,7 @@ export async function fetchClients(orgId: string, authReady: boolean = false, fi
         healthStatus: healthResult.healthStatus,
         healthReasons: healthResult.healthReasons,
       };
-    });
+    }).sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
     
     logFirestoreOperation('READ', path, orgId, true);
     return clients;

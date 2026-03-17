@@ -3925,27 +3925,28 @@ Now generate the ${channel === 'email' ? 'email' : channel === 'call' ? 'call op
       const industry = lead.industry || sd.category || 'Business';
       const location = lead.address || si.targetLocations || '';
 
-      // Pick industry-specific background photo keyword for loremflickr
+      // Pick industry-specific picsum seed for background photo
+      // picsum.photos serves images directly (no redirect) and works reliably in srcDoc iframes
       const industryLower = industry.toLowerCase();
-      let photoKeyword = 'business,office';
-      if (industryLower.includes('construct') || industryLower.includes('builder') || industryLower.includes('building')) photoKeyword = 'construction,builders';
-      else if (industryLower.includes('plumb')) photoKeyword = 'plumbing,pipes';
-      else if (industryLower.includes('electr')) photoKeyword = 'electrician,electrical';
-      else if (industryLower.includes('landscap') || industryLower.includes('garden')) photoKeyword = 'landscaping,garden';
-      else if (industryLower.includes('roof')) photoKeyword = 'roofing,roof';
-      else if (industryLower.includes('paint')) photoKeyword = 'painting,decorator';
-      else if (industryLower.includes('clean')) photoKeyword = 'cleaning,commercial';
-      else if (industryLower.includes('concreet') || industryLower.includes('concrete')) photoKeyword = 'concrete,construction';
-      else if (industryLower.includes('hvac') || industryLower.includes('air con') || industryLower.includes('refriger')) photoKeyword = 'airconditioning,hvac';
-      else if (industryLower.includes('tile') || industryLower.includes('flooring')) photoKeyword = 'tiling,flooring';
-      else if (industryLower.includes('tree') || industryLower.includes('arb')) photoKeyword = 'arborist,tree';
-      else if (industryLower.includes('pool')) photoKeyword = 'swimming pool,pool';
-      else if (industryLower.includes('truck') || industryLower.includes('transport') || industryLower.includes('freight')) photoKeyword = 'truck,transport';
-      else if (industryLower.includes('mechanic') || industryLower.includes('auto') || industryLower.includes('car')) photoKeyword = 'mechanic,garage';
-      else if (industryLower.includes('restaurant') || industryLower.includes('cafe') || industryLower.includes('food')) photoKeyword = 'restaurant,food';
-      else if (industryLower.includes('dental') || industryLower.includes('medical') || industryLower.includes('health')) photoKeyword = 'dental,clinic';
-      else if (industryLower.includes('real estate') || industryLower.includes('property')) photoKeyword = 'real estate,property';
-      else if (industryLower.includes('solar')) photoKeyword = 'solar,panels';
+      let picsumSeed = 100; // generic office/business
+      if (industryLower.includes('construct') || industryLower.includes('builder') || industryLower.includes('building') || industryLower.includes('general contractor')) picsumSeed = 200;
+      else if (industryLower.includes('plumb')) picsumSeed = 210;
+      else if (industryLower.includes('electr')) picsumSeed = 220;
+      else if (industryLower.includes('landscap') || industryLower.includes('garden')) picsumSeed = 230;
+      else if (industryLower.includes('roof')) picsumSeed = 240;
+      else if (industryLower.includes('paint')) picsumSeed = 250;
+      else if (industryLower.includes('clean')) picsumSeed = 260;
+      else if (industryLower.includes('concrete') || industryLower.includes('concreet')) picsumSeed = 270;
+      else if (industryLower.includes('hvac') || industryLower.includes('air con') || industryLower.includes('refriger')) picsumSeed = 280;
+      else if (industryLower.includes('tile') || industryLower.includes('flooring')) picsumSeed = 290;
+      else if (industryLower.includes('tree') || industryLower.includes('arb')) picsumSeed = 300;
+      else if (industryLower.includes('pool')) picsumSeed = 310;
+      else if (industryLower.includes('truck') || industryLower.includes('transport') || industryLower.includes('freight')) picsumSeed = 320;
+      else if (industryLower.includes('mechanic') || industryLower.includes('auto') || industryLower.includes('car')) picsumSeed = 330;
+      else if (industryLower.includes('restaurant') || industryLower.includes('cafe') || industryLower.includes('food')) picsumSeed = 340;
+      else if (industryLower.includes('dental') || industryLower.includes('medical') || industryLower.includes('health')) picsumSeed = 350;
+      else if (industryLower.includes('real estate') || industryLower.includes('property')) picsumSeed = 360;
+      else if (industryLower.includes('solar')) picsumSeed = 370;
 
       // Pick brand colors based on industry
       let brandPrimary = '#1e3a5f', brandAccent = '#f97316', brandLight = '#fff7ed';
@@ -3959,7 +3960,7 @@ Now generate the ${channel === 'email' ? 'email' : channel === 'call' ? 'call op
       const reviewCount = sd.googleReviewCount || 0;
       const reviewRating = sd.googleRating ? sd.googleRating.toFixed(1) : '5.0';
       const stars = '★'.repeat(Math.round(sd.googleRating || 5));
-      const photoUrl = `https://loremflickr.com/1920/1080/${photoKeyword}`;
+      const photoUrl = `https://picsum.photos/seed/${picsumSeed}/1920/1080`;
 
       // Parse city from location
       const cityMatch = location.match(/([A-Z][a-zA-Z\s]+?)(?:\s+(?:QLD|NSW|VIC|SA|WA|ACT|NT|TAS)\s+\d{4}|,|\s*$)/);
@@ -6773,11 +6774,13 @@ Make it specific to their industry and location.`;
       const { clientId } = req.params;
       const snapshot = await firestore.collection('reports')
         .where('clientId', '==', clientId)
-        .orderBy('createdAt', 'desc')
-        .limit(10)
+        .limit(20)
         .get();
 
-      const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const reports = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+        .slice(0, 10);
       res.json(reports);
     } catch (error) {
       console.error("Error listing reports:", error);

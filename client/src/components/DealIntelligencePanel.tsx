@@ -508,6 +508,16 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [mockWebsiteExpanded, setMockWebsiteExpanded] = useState(true);
   const [mockWebsiteModalOpen, setMockWebsiteModalOpen] = useState(false);
 
+  // Sanitize stored HTML — replace loremflickr redirecting URLs with picsum.photos
+  // (picsum serves images directly with CORS headers, works reliably in srcDoc iframes)
+  const sanitizedMockHtml = useMemo(() => {
+    if (!mockWebsiteHtml) return null;
+    return mockWebsiteHtml.replace(
+      /https?:\/\/loremflickr\.com\/(\d+)\/(\d+)\/[^'"\s)]*/g,
+      'https://picsum.photos/seed/200/$1/$2'
+    );
+  }, [mockWebsiteHtml]);
+
   // Auto-reset screenshot state when website changes
   useEffect(() => {
     if (lead.website !== prevWebsite.current) {
@@ -1178,7 +1188,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                   </div>
                 )}
                 <iframe
-                  srcDoc={mockWebsiteHtml}
+                  srcDoc={sanitizedMockHtml || ''}
                   title="Recommended Website Mockup"
                   className="border-0 pointer-events-none"
                   style={{ width: '200%', height: '200%', transform: 'scale(0.5)', transformOrigin: 'top left' }}
@@ -1234,7 +1244,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             </DialogHeader>
             <div className="overflow-y-auto" style={{ height: 'calc(90vh - 56px)' }}>
               <iframe
-                srcDoc={mockWebsiteHtml || ''}
+                srcDoc={sanitizedMockHtml || ''}
                 title="Recommended Website Full View"
                 className="w-full border-0"
                 style={{ height: '100vh', minHeight: '600px' }}
