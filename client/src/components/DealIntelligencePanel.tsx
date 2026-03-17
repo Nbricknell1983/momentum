@@ -52,6 +52,8 @@ import {
   Target,
   Wand2,
   Building2,
+  Maximize2,
+  Layout,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin, SiSalesforce } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
@@ -500,6 +502,11 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [screenshotModalOpen, setScreenshotModalOpen] = useState(false);
   const [discoveringSocial, setDiscoveringSocial] = useState(false);
   const prevWebsite = useRef<string | undefined>(undefined);
+  const [mockWebsiteHtml, setMockWebsiteHtml] = useState<string | null>(lead.mockWebsiteHtml || null);
+  const [mockWebsiteGaps, setMockWebsiteGaps] = useState<string[]>(lead.mockWebsiteGaps || []);
+  const [generatingMockWebsite, setGeneratingMockWebsite] = useState(false);
+  const [mockWebsiteExpanded, setMockWebsiteExpanded] = useState(true);
+  const [mockWebsiteModalOpen, setMockWebsiteModalOpen] = useState(false);
 
   // Auto-reset screenshot state when website changes
   useEffect(() => {
@@ -511,6 +518,12 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       setScreenshotExpanded(true);
     }
   }, [lead.website]);
+
+  // Sync mock website state from lead
+  useEffect(() => {
+    setMockWebsiteHtml(lead.mockWebsiteHtml || null);
+    setMockWebsiteGaps(lead.mockWebsiteGaps || []);
+  }, [lead.mockWebsiteHtml, lead.mockWebsiteGaps]);
 
   const saveCompetitorDomains = useCallback(async (domains: string[]) => {
     if (!orgId || !authReady) return;
@@ -770,6 +783,30 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       toast({ title: 'Sitemap Failed', description: err.message || 'Could not fetch sitemap', variant: 'destructive' });
     }
   }, [lead, orgId, authReady, dispatch, toast]);
+
+  const handleGenerateMockWebsite = useCallback(async () => {
+    if (!orgId || !authReady) return;
+    setGeneratingMockWebsite(true);
+    try {
+      const res = await fetch('/api/leads/ai/mock-website', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: lead.id, orgId }),
+      });
+      if (!res.ok) throw new Error('Generation failed');
+      const data = await res.json();
+      setMockWebsiteHtml(data.html);
+      setMockWebsiteGaps(data.gaps || []);
+      setMockWebsiteExpanded(true);
+      dispatch(patchLead({ id: lead.id, updates: { mockWebsiteHtml: data.html, mockWebsiteGaps: data.gaps || [], updatedAt: new Date() } }));
+      toast({ title: 'Ideal website ready', description: 'Mockup generated from strategy and business data' });
+    } catch (err) {
+      console.error(err);
+      toast({ title: 'Generation failed', description: 'Could not build mock website', variant: 'destructive' });
+    } finally {
+      setGeneratingMockWebsite(false);
+    }
+  }, [lead.id, orgId, authReady, dispatch, toast]);
 
   const handleCrawlPages = useCallback(async () => {
     const pages = lead.sitemapPages;
@@ -1065,6 +1102,149 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             </>
           );
         })()}
+
+        {/* Recommended Website Mockup */}
+        <div className="mt-2.5 rounded-md overflow-hidden border border-violet-100 dark:border-violet-900/40" data-testid="card-mock-website">
+          {/* Header bar */}
+          <div className="flex items-center justify-between px-2.5 py-1.5 bg-violet-50/60 dark:bg-violet-950/20 border-b border-violet-100 dark:border-violet-900/30">
+            <span className="text-[10px] text-violet-700 dark:text-violet-400 font-medium uppercase tracking-wide flex items-center gap-1.5">
+              <Layout className="h-2.5 w-2.5" /> Recommended Website
+            </span>
+            <div className="flex items-center gap-2">
+              {mockWebsiteHtml && (
+                <>
+                  <button
+                    onClick={() => setMockWebsiteModalOpen(true)}
+                    className="text-[10px] text-muted-foreground hover:text-violet-600 flex items-center gap-0.5 transition-colors"
+                    data-testid="button-open-mock-fullscreen"
+                  >
+                    <Maximize2 className="h-2.5 w-2.5" /> Full screen
+                  </button>
+                  <button
+                    onClick={handleGenerateMockWebsite}
+                    disabled={generatingMockWebsite}
+                    title="Regenerate mockup"
+                    className="text-muted-foreground hover:text-violet-600 transition-colors p-0.5"
+                    data-testid="button-regenerate-mock-website"
+                  >
+                    <RefreshCw className={`h-2.5 w-2.5 ${generatingMockWebsite ? 'animate-spin' : ''}`} />
+                  </button>
+                </>
+              )}
+              {mockWebsiteHtml && (
+                <button
+                  onClick={() => setMockWebsiteExpanded(e => !e)}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                  data-testid="button-toggle-mock-website"
+                >
+                  {mockWebsiteExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!mockWebsiteHtml ? (
+            /* Empty state — prompt to generate */
+            <div className="p-4 bg-violet-50/20 dark:bg-violet-950/10">
+              <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+                Generate a full website mockup showing what <span className="font-medium">{lead.companyName}</span>'s ideal site should look like — built from their strategy, services, and target market. Use it to show the prospect: <em>"Here's what you have. Here's what you need."</em>
+              </p>
+              <button
+                onClick={handleGenerateMockWebsite}
+                disabled={generatingMockWebsite}
+                className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium py-2 px-3 rounded-md transition-colors disabled:opacity-60"
+                data-testid="button-generate-mock-website"
+              >
+                {generatingMockWebsite ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Analysing strategy &amp; building mockup…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Build Ideal Website
+                  </>
+                )}
+              </button>
+            </div>
+          ) : mockWebsiteExpanded ? (
+            <div>
+              {/* Scaled iframe preview */}
+              <div className="relative bg-white overflow-hidden cursor-zoom-in group" style={{ height: '220px' }} onClick={() => setMockWebsiteModalOpen(true)}>
+                {generatingMockWebsite && (
+                  <div className="absolute inset-0 bg-white/80 dark:bg-black/60 flex items-center justify-center z-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
+                  </div>
+                )}
+                <iframe
+                  srcDoc={mockWebsiteHtml}
+                  title="Recommended Website Mockup"
+                  className="border-0 pointer-events-none"
+                  style={{ width: '200%', height: '200%', transform: 'scale(0.5)', transformOrigin: 'top left' }}
+                  sandbox=""
+                  data-testid="iframe-mock-website"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-violet-900/20 transition-colors flex items-center justify-center">
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-violet-900/80 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
+                    <Maximize2 className="h-3 w-3" /> View full screen
+                  </span>
+                </div>
+              </div>
+
+              {/* What's missing list */}
+              {mockWebsiteGaps.length > 0 && (
+                <div className="border-t border-amber-100 dark:border-amber-900/30 p-3 bg-amber-50/40 dark:bg-amber-950/10">
+                  <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+                    <AlertTriangle className="h-2.5 w-2.5" /> What their current site is missing
+                  </p>
+                  <ul className="space-y-1">
+                    {mockWebsiteGaps.map((gap, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                        <span className="text-amber-500 mt-0.5 shrink-0">•</span>
+                        {gap}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Mock website full-screen modal */}
+        <Dialog open={mockWebsiteModalOpen} onOpenChange={setMockWebsiteModalOpen}>
+          <DialogContent className="max-w-5xl w-full p-0" style={{ maxHeight: '90vh' }}>
+            <DialogHeader className="px-4 pr-12 py-3 border-b bg-violet-50/60 dark:bg-violet-950/20 space-y-0 flex flex-row items-center justify-between">
+              <DialogTitle className="text-sm font-medium flex items-center gap-2">
+                <Layout className="h-3.5 w-3.5 text-violet-600" />
+                {lead.companyName} — Recommended Website
+              </DialogTitle>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-muted-foreground">AI-generated from strategy data</span>
+                <button
+                  onClick={handleGenerateMockWebsite}
+                  disabled={generatingMockWebsite}
+                  className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1 disabled:opacity-50"
+                  data-testid="button-regenerate-mock-modal"
+                >
+                  <RefreshCw className={`h-3 w-3 ${generatingMockWebsite ? 'animate-spin' : ''}`} />
+                  {generatingMockWebsite ? 'Regenerating…' : 'Regenerate'}
+                </button>
+              </div>
+            </DialogHeader>
+            <div className="overflow-y-auto" style={{ height: 'calc(90vh - 56px)' }}>
+              <iframe
+                srcDoc={mockWebsiteHtml || ''}
+                title="Recommended Website Full View"
+                className="w-full border-0"
+                style={{ height: '100vh', minHeight: '600px' }}
+                sandbox=""
+                data-testid="iframe-mock-website-modal"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <AhrefsSEOSection

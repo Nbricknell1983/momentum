@@ -3681,6 +3681,104 @@ Generate the ${channel === 'email' ? 'email' : channel === 'call' ? 'call opener
     }
   });
 
+  // ============================
+  // AI: MOCK WEBSITE GENERATOR
+  // ============================
+  app.post("/api/leads/ai/mock-website", async (req, res) => {
+    try {
+      const { leadId, orgId } = req.body;
+      if (!leadId || !orgId) return res.status(400).json({ error: "leadId and orgId required" });
+
+      const leadDoc = await db.collection(`orgs/${orgId}/leads`).doc(leadId).get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+      const lead = leadDoc.data() as any;
+
+      const si = lead.strategyIntelligence || {};
+      const sd = lead.sourceData || {};
+
+      const reviewStr = sd.googleReviewCount
+        ? `${sd.googleReviewCount} Google reviews averaging ${sd.googleRating}/5`
+        : 'No Google reviews on record';
+
+      const crawlSummary = (lead.crawledPages || [])
+        .slice(0, 3)
+        .map((p: any) => `[${p.url}] ${(p.bodyText || '').slice(0, 400)}`)
+        .join('\n---\n');
+
+      const industry = lead.industry || sd.category || 'Business';
+      const location = lead.address || si.targetLocations || '';
+
+      const prompt = `You are a world-class web designer and digital marketing strategist specialising in high-converting local business websites. Create a beautiful, complete, self-contained HTML website mockup for this business showing what their IDEAL website should look like.
+
+BUSINESS DATA:
+- Company: ${lead.companyName}
+- Industry: ${industry}
+- Location: ${location}
+- Phone: ${lead.phone || 'Not provided'}
+- Email: ${lead.email || 'Not provided'}
+- Current Website: ${lead.website || 'None'}
+- Google Reviews: ${reviewStr}
+- Business Overview: ${si.businessOverview || 'Not provided'}
+- Ideal Customer: ${si.idealCustomer || 'Not provided'}
+- Core Services: ${si.coreServices || 'Not provided'}
+- Target Locations/Suburbs: ${si.targetLocations || location}
+- Growth Objective: ${si.growthObjective || 'Not provided'}
+- Discovery Notes: ${si.discoveryNotes || 'None'}
+
+CURRENT WEBSITE CONTENT (crawled):
+${crawlSummary || 'No crawl data available — design from business data above'}
+
+DESIGN REQUIREMENTS:
+1. Generate a COMPLETE, self-contained, single-page HTML file with ALL CSS embedded via <style> tags (no external CSS files). Use Google Fonts via <link> only.
+2. The design must be modern, professional, mobile-friendly in appearance, and conversion-focused for local businesses
+3. Choose an industry-appropriate color scheme (e.g., dark blue/gold for builders/trades, green for landscaping, navy/white for professional services)
+4. REQUIRED SECTIONS:
+   a) Sticky header/nav with logo (text), navigation links, and phone number CTA button
+   b) Hero section: strong headline with their service + location, compelling sub-headline, two CTA buttons (Call Now + Get Free Quote), hero background with a gradient or solid color
+   c) Services section: 3-4 service cards with icons (use Unicode/emoji), short description, and "Learn More" links
+   d) Why Choose Us: 3 trust pillars with icons relevant to their industry
+   e) Social proof: review stars + count (use their actual Google review data), 2-3 testimonial cards
+   f) Service areas: suburb/location chips showing target areas
+   g) Contact CTA banner: full-width section with phone, email, and a "Get Free Quote" button
+   h) Footer: company name, ABN (if available), phone, email, copyright
+5. Use the company's REAL name, phone, email, location, and services throughout
+6. Headlines must be SEO-optimised for their primary service + location
+7. All links should be # (mockup only)
+8. Make it look like a real, high-quality website a prospect would be impressed by
+
+ALSO identify 6-8 specific gaps that their CURRENT website likely has based on the industry and available data.
+
+Return ONLY valid JSON in this exact format (no markdown, no extra text):
+{"html":"complete self-contained HTML as a single escaped string","gaps":["gap 1","gap 2","gap 3"]}`;
+
+      const aiRes = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 4000,
+        temperature: 0.7,
+      });
+
+      const content = aiRes.choices[0]?.message?.content;
+      if (!content) throw new Error("No AI response");
+
+      const result = JSON.parse(content);
+      if (!result.html) throw new Error("No HTML in response");
+
+      await db.collection(`orgs/${orgId}/leads`).doc(leadId).update({
+        mockWebsiteHtml: result.html,
+        mockWebsiteGaps: result.gaps || [],
+        mockWebsiteGeneratedAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      res.json({ html: result.html, gaps: result.gaps || [] });
+    } catch (err) {
+      console.error("[mock-website]", err);
+      res.status(500).json({ error: "Failed to generate mock website" });
+    }
+  });
+
   // ===============================
   // ADMIN: USER & TEAM MANAGEMENT
   // ===============================

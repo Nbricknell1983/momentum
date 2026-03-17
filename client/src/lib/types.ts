@@ -323,6 +323,9 @@ export interface Lead {
   competitorDomains?: string[];
   competitorData?: Record<string, CompetitorSiteData>;
   strategyIntelligence?: StrategyIntelligence;
+  mockWebsiteHtml?: string;
+  mockWebsiteGaps?: string[];
+  mockWebsiteGeneratedAt?: Date;
 }
 
 export interface AhrefsKeyword {
