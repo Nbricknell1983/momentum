@@ -1,0 +1,262 @@
+Improve the existing Growth Plan so it uses data from BOTH:
+
+1. Conversation Intelligence
+2. Deal Intelligence
+
+in addition to website, keyword, and competitor analysis.
+
+Currently the Growth Plan relies too heavily on website and SEO signals.
+
+The upgraded system must incorporate insights from the sales conversation and deal context so the strategy reflects what the client actually cares about and what stage the deal is in.
+
+--------------------------------------------------
+
+DATA SOURCES TO USE
+
+The AI Growth Plan must analyse and incorporate signals from the following system modules:
+
+Conversation Intelligence
+- meeting transcripts
+- logged conversations
+- sales notes
+- objections
+- client goals
+- pain points discussed
+- NEPQ insights
+
+Deal Intelligence
+- deal stage
+- deal health score
+- last activity
+- follow-up timing
+- engagement level
+- MRR potential
+- pipeline signals
+
+Lead Profile Data
+- industry
+- service category
+- location
+- service territory
+
+Online Presence Data
+- website
+- social channels
+- Google Business profile
+- reviews
+- ad spend
+- sitemap
+
+SEO / Market Data
+- Ahrefs metrics
+- keyword demand
+- keyword CPC
+- keyword difficulty
+- competitor websites
+- competitor content depth
+
+--------------------------------------------------
+
+HOW AI SHOULD USE CONVERSATION INTELLIGENCE
+
+If conversation notes exist, the AI should prioritise those insights.
+
+Examples:
+
+If the conversation reveals:
+- the client wants more leads
+- the client is frustrated with marketing
+- the client relies on referrals
+- the client wants higher quality clients
+
+Then the Growth Plan should frame the strategy around those goals.
+
+Example transformation:
+
+Instead of:
+
+"Your SEO visibility is low."
+
+Say:
+
+"Based on the conversation, the goal is to generate more consistent enquiries. The current digital footprint suggests the business is difficult to discover in several high-intent searches."
+
+The strategy should always connect technical insights to the **client’s stated goals**.
+
+--------------------------------------------------
+
+HOW AI SHOULD USE DEAL INTELLIGENCE
+
+Deal intelligence should influence the tone and focus of the Growth Plan.
+
+Example rules:
+
+If deal stage = Discovery/Meeting
+→ focus on opportunity and diagnosis
+
+If deal stage = Proposal
+→ focus on roadmap and outcomes
+
+If deal health is low
+→ highlight opportunity and urgency
+
+If deal health is strong
+→ highlight growth potential
+
+If follow-up is overdue
+→ the strategy summary should highlight the most compelling opportunity to re-engage the client.
+
+--------------------------------------------------
+
+EXAMPLE USING CURRENT SCREENSHOT DATA
+
+Example Deal Context:
+
+Industry: General Contractor
+Location: Brisbane South
+Reviews: 5 reviews (4.2)
+Website: 17 pages
+Ad Spend: $2,500/month
+Competitors: Lindon Homes, Besa
+
+AI should interpret this context before generating the Growth Plan.
+
+Example AI reasoning:
+
+Evidence
+- 17 pages but 9 are portfolio pages
+- only one service page
+- no suburb targeting
+- competitors have stronger content depth
+- Google Ads already active
+
+Interpretation
+The business is investing in paid visibility but the website structure limits organic discovery.
+
+Strategic implication
+Paid advertising may generate traffic, but long-term visibility and enquiry growth may remain limited without stronger service and location signals.
+
+Recommended move
+Strengthen service and suburb visibility while continuing to capture demand through paid campaigns.
+
+--------------------------------------------------
+
+WEBSITE MEANING ANALYSIS
+
+The Growth Plan must analyse not just the structure of the website, but what the website is communicating to buyers.
+
+The system should ask internally:
+
+- What problem is the customer trying to solve when they search?
+- What message does the website send?
+- Who is the website speaking to?
+- Does the site help the buyer move forward confidently?
+
+Example:
+
+Portfolio-heavy sites communicate craftsmanship but may under-communicate services and locations.
+
+The AI should highlight this distinction.
+
+--------------------------------------------------
+
+STRATEGIC WHITE SPACE ANALYSIS
+
+Add a section identifying opportunities competitors are NOT covering.
+
+Examples:
+
+- underdeveloped suburb search demand
+- specialised service niches
+- unanswered buyer research questions
+- decision-stage content competitors are missing
+
+This is not only a competitor gap analysis.
+
+It should identify **market opportunities competitors have not yet captured**.
+
+--------------------------------------------------
+
+AI REASONING RULES
+
+The AI must behave as a strategic analyst, not a marketing copywriter.
+
+All insights must follow:
+
+Evidence → Interpretation → Strategic implication → Recommended move
+
+Avoid generic SEO phrases like:
+
+- improve SEO
+- optimise keywords
+- build backlinks
+- create more content
+
+Insights must always reference specific evidence from the data sources.
+
+--------------------------------------------------
+
+DIGITAL VISIBILITY SCORE
+
+Add a Digital Visibility Score (0–100).
+
+This score represents how discoverable and trustworthy the business is online.
+
+Score components:
+
+Search Relevance
+Market Coverage
+Authority Signals
+Local Discovery
+Buyer Confidence
+
+Display this score at the top of the Growth Plan.
+
+Each component should explain why the score is what it is.
+
+--------------------------------------------------
+
+UI PRESENTATION RULE
+
+Upgrade the Growth Plan UI to follow a consulting-style narrative.
+
+Each section must include:
+
+Strategic headline
+Short explanation
+One visual
+Evidence strip
+Strategic implication
+Recommended move
+
+Avoid generic section titles like "SEO Analysis".
+
+Use stronger headlines such as:
+
+"Your website showcases quality, but under-signals discoverability."
+
+--------------------------------------------------
+
+PUBLIC URL + PDF
+
+Ensure the upgraded Growth Plan still outputs:
+
+1. Internal strategy view
+2. Premium strategy PDF
+3. Public share URL
+
+The public URL should feel like a guided strategy presentation with strong visuals and subtle animation.
+
+--------------------------------------------------
+
+SUCCESS CRITERIA
+
+The upgraded Growth Plan must:
+
+- use conversation intelligence
+- use deal intelligence
+- reflect the client's goals from discussions
+- explain the market opportunity clearly
+- identify the biggest constraint to growth
+- feel like a strategic advisor wrote it
+- feel like a Digital Visibility Strategy, not an SEO report

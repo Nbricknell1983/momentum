@@ -4579,65 +4579,162 @@ Rules:
 
   app.post("/api/ai/growth-plan/competitor-gap", async (req, res) => {
     try {
-      const { businessName, websiteUrl, location, industry, serpData, xrayData } = req.body;
+      const {
+        businessName, websiteUrl, location, industry,
+        serpData, xrayData,
+        crawledPages, crawledCompetitors,
+        strategyDiagnosis, sitemapPages,
+        conversationNotes, dealStage, ahrefsData,
+      } = req.body;
       if (!businessName) {
         return res.status(400).json({ error: "Business name is required" });
       }
 
-      const competitorContext = serpData?.competitors
-        ? `Known competitors from SERP: ${serpData.competitors.map((c: any) => c.name).join(', ')}`
-        : '';
-      const websiteContext = xrayData
-        ? `Prospect website signals: ${xrayData.wordCount} words, ${xrayData.internalLinks} internal links, ${xrayData.serviceKeywords?.length || 0} service keywords, ${xrayData.locationKeywords?.length || 0} location keywords`
+      // Build rich prospect crawl context
+      const crawled: Array<any> = crawledPages || [];
+      const prospectCrawlContext = crawled.length > 0
+        ? `=== PROSPECT WEBSITE — ACTUAL CRAWLED CONTENT ===\n` +
+          crawled.filter(cp => !cp.error).slice(0, 20).map((cp: any) => {
+            const path = (() => { try { return new URL(cp.url).pathname || '/'; } catch { return cp.url; } })();
+            const parts: string[] = [`[${path}]`];
+            if (cp.title) parts.push(`  Title: ${cp.title}`);
+            if (cp.h1) parts.push(`  H1: ${cp.h1}`);
+            if (cp.h2s?.length) parts.push(`  H2s: ${cp.h2s.slice(0, 4).join(' | ')}`);
+            if (cp.h3s?.length) parts.push(`  H3s: ${cp.h3s.slice(0, 3).join(' | ')}`);
+            if (cp.metaDescription) parts.push(`  Meta: ${cp.metaDescription.slice(0, 150)}`);
+            if (cp.bodyText) parts.push(`  Content: ${cp.bodyText.slice(0, 300)}`);
+            if (cp.schemaTypes?.length) parts.push(`  Schema: ${cp.schemaTypes.join(', ')}`);
+            return parts.join('\n');
+          }).join('\n\n')
         : '';
 
-      const prompt = `You are an SEO competitive analyst. Compare a prospect against their likely competitors.
+      // Build rich competitor crawl context
+      const competitorsCrawled: Array<any> = crawledCompetitors || [];
+      const competitorCrawlContext = competitorsCrawled.length > 0
+        ? `=== COMPETITOR WEBSITES — ACTUAL CRAWLED CONTENT ===\n` +
+          competitorsCrawled.map((comp: any) => {
+            const okPages = (comp.crawledPages || []).filter((p: any) => !p.error);
+            const SERVICE_RE = /service|solution|offer|what-we-do|build|construct|repair|design|renovati/i;
+            const LOCATION_RE = /location|area|suburb|city|serve|service-area|near/i;
+            const BLOG_RE = /blog|news|article|guide|tip|resource/i;
+            const servicePages = okPages.filter((p: any) => { try { return SERVICE_RE.test(new URL(p.url).pathname); } catch { return false; } });
+            const locationPages = okPages.filter((p: any) => { try { return LOCATION_RE.test(new URL(p.url).pathname); } catch { return false; } });
+            const blogPages = okPages.filter((p: any) => { try { return BLOG_RE.test(new URL(p.url).pathname); } catch { return false; } });
+            const schemas = [...new Set(okPages.flatMap((p: any) => p.schemaTypes || []))];
+            const topPages = okPages.slice(0, 10).map((p: any) => {
+              const path = (() => { try { return new URL(p.url).pathname || '/'; } catch { return p.url; } })();
+              const parts: string[] = [`  [${path}]`];
+              if (p.title) parts.push(`    Title: ${p.title}`);
+              if (p.h1) parts.push(`    H1: ${p.h1}`);
+              if (p.h2s?.length) parts.push(`    H2s: ${p.h2s.slice(0, 3).join(' | ')}`);
+              if (p.bodyText) parts.push(`    Content: ${p.bodyText.slice(0, 250)}`);
+              if (p.schemaTypes?.length) parts.push(`    Schema: ${p.schemaTypes.join(', ')}`);
+              return parts.join('\n');
+            }).join('\n');
+            return `--- ${comp.domain} ---\nTotal pages: ${comp.totalPages || okPages.length}\nService pages: ${servicePages.length}\nLocation pages: ${locationPages.length}\nBlog/content pages: ${blogPages.length}\nSchema types: ${schemas.join(', ') || 'none'}\nCrawled pages:\n${topPages}`;
+          }).join('\n\n')
+        : '';
 
-PROSPECT: ${businessName}
-WEBSITE: ${websiteUrl || 'None'}
-LOCATION: ${location || 'Not specified'}
-INDUSTRY: ${industry || 'Not specified'}
-${competitorContext}
-${websiteContext}
+      // Diagnosis context
+      const diagContext = strategyDiagnosis
+        ? `=== EXISTING STRATEGY DIAGNOSIS ===\nReadiness Score: ${strategyDiagnosis.readinessScore}/100\nKey finding: ${strategyDiagnosis.insightSentence}\nGoogle clarity: ${strategyDiagnosis.currentPosition?.googleClarity}\nGaps: ${strategyDiagnosis.gaps?.map((g: any) => `[${g.severity}] ${g.title}`).join('; ') || 'None'}\n`
+        : '';
+
+      // Ahrefs context
+      const ahrefsContext = ahrefsData?.topKeywords?.length
+        ? `=== KEYWORD MARKET DATA ===\nTop keyword opportunities (monthly searches):\n${ahrefsData.topKeywords.slice(0, 12).map((k: any) => `  ${k.keyword}: ${k.volume}/mo (difficulty ${k.difficulty}, CPC $${k.cpc})`).join('\n')}\n`
+        : '';
+
+      // Conversation context
+      const convContext = conversationNotes
+        ? `=== CONVERSATION INTELLIGENCE ===\nSales notes from conversation with ${businessName}:\n${conversationNotes}\n`
+        : '';
+
+      // Sitemap summary
+      const pages: Array<{ url: string }> = sitemapPages || [];
+      const sitemapSummary = pages.length > 0
+        ? `Total sitemap pages: ${pages.length}\nURLs: ${pages.slice(0, 20).map((p: any) => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')}\n`
+        : '';
+
+      const prompt = `You are a senior competitive intelligence analyst specialising in digital visibility for Australian businesses. You are analysing the competitive landscape for ${businessName} — a ${industry || 'local'} business in ${location || 'Australia'}.
+
+Your job is to produce a deep competitive gap analysis using REAL crawled website content from both the prospect and their competitors. Do not estimate — use the actual data provided.
+
+=== BUSINESS CONTEXT ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Location: ${location || 'Not specified'}
+Website: ${websiteUrl || 'Not provided'}
+Deal Stage: ${dealStage || 'Discovery'}
+Website pages in sitemap: ${sitemapSummary || 'Unknown'}
+
+${diagContext}
+${ahrefsContext}
+${convContext}
+${prospectCrawlContext}
+${competitorCrawlContext}
+
+=== ANALYSIS RULES ===
+- Use the actual crawled page content to assess each competitor's content depth, messaging, and topic coverage
+- Identify specific pages competitors have that the prospect lacks — cite the URL pattern and page purpose
+- Identify content themes competitors cover (e.g. "sloping block builds", "knockdown rebuild", "suburb name") that the prospect does not
+- Look at competitor H1s, H2s, and body text to understand what buyer questions they're answering — note where the prospect is silent on the same topics
+- Identify strategic white space: topics, suburbs, and buyer questions that NO competitor adequately covers
+- Base prospect service/location page counts on actual sitemap/crawl data, not estimates
 
 Respond with JSON:
 {
   "prospect": {
-    "servicePages": estimated_number,
-    "locationPages": estimated_number,
+    "servicePages": number_from_actual_data,
+    "locationPages": number_from_actual_data,
     "contentDepth": "thin|moderate|strong",
     "internalLinking": "weak|moderate|strong",
-    "reviewSignals": "low|moderate|strong"
+    "reviewSignals": "low|moderate|strong",
+    "keyWeaknesses": ["specific weakness with evidence", "..."]
   },
   "competitorAverage": {
-    "servicePages": estimated_number,
-    "locationPages": estimated_number,
+    "servicePages": number,
+    "locationPages": number,
     "contentDepth": "thin|moderate|strong",
     "internalLinking": "weak|moderate|strong",
     "reviewSignals": "low|moderate|strong"
   },
   "competitors": [
     {
-      "name": "Competitor name",
-      "servicePages": number,
-      "locationPages": number,
+      "name": "domain name",
+      "servicePages": number_from_crawl,
+      "locationPages": number_from_crawl,
       "contentDepth": "thin|moderate|strong",
-      "strengths": ["strength 1", "strength 2"]
+      "strengths": ["specific strength from crawled content", "..."],
+      "topicsCovered": ["topic they cover that prospect doesn't", "..."],
+      "contentAdvantage": "one sentence on their biggest content edge"
     }
   ],
-  "insights": ["Key insight about the competitive gap"]
-}
-
-Rules:
-- Generate 3 realistic competitors
-- Base estimates on industry norms for Australian local businesses
-- Insights should be actionable
-- If prospect has a website, factor in the actual signals`;
+  "insights": [
+    "Evidence-based insight referencing specific page data or content",
+    "..."
+  ],
+  "strategicWhiteSpace": [
+    {
+      "opportunity": "Specific gap no competitor has captured",
+      "evidence": "Why this is an uncaptured opportunity (data-backed)",
+      "suggestedMove": "Specific page or content to create"
+    }
+  ],
+  "contentGaps": [
+    {
+      "topic": "Topic competitors cover but prospect does not",
+      "competitorExample": "Which competitor covers it and how",
+      "buyerIntent": "What the buyer is searching for when they find this",
+      "priority": "high|medium|low"
+    }
+  ]
+}`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1000,
+        max_completion_tokens: 2000,
         response_format: { type: "json_object" },
       });
 
@@ -4648,10 +4745,12 @@ Rules:
         if (!result.prospect || !result.competitorAverage) throw new Error("Invalid");
       } catch {
         result = {
-          prospect: { servicePages: 1, locationPages: 0, contentDepth: "thin", internalLinking: "weak", reviewSignals: "low" },
+          prospect: { servicePages: 1, locationPages: 0, contentDepth: "thin", internalLinking: "weak", reviewSignals: "low", keyWeaknesses: [] },
           competitorAverage: { servicePages: 5, locationPages: 3, contentDepth: "moderate", internalLinking: "moderate", reviewSignals: "moderate" },
           competitors: [],
           insights: ["Unable to generate full competitive analysis. Please try again."],
+          strategicWhiteSpace: [],
+          contentGaps: [],
         };
       }
 
@@ -4743,6 +4842,8 @@ Rules:
         businessName, websiteUrl, industry, location,
         sitemapPages, hasGBP, gbpLink, reviewCount, rating,
         facebookUrl, instagramUrl, linkedinUrl, crawledPages, crawledCompetitors,
+        conversationNotes, conversationInsights, objections,
+        dealStage, mrr, adSpend, ahrefsData,
       } = req.body;
 
       if (!businessName) return res.status(400).json({ error: "Business name is required" });
@@ -4788,48 +4889,78 @@ Rules:
             if (cp.title) parts.push(`  Title: ${cp.title}`);
             if (cp.h1) parts.push(`  H1: ${cp.h1}`);
             if (cp.h2s?.length) parts.push(`  H2s: ${cp.h2s.slice(0, 4).join(' | ')}`);
+            if (cp.h3s?.length) parts.push(`  H3s: ${cp.h3s.slice(0, 3).join(' | ')}`);
             if (cp.metaDescription) parts.push(`  Meta: ${cp.metaDescription.slice(0, 150)}`);
-            if (cp.bodyText) parts.push(`  Body: ${cp.bodyText.slice(0, 200)}`);
+            if (cp.bodyText) parts.push(`  Body: ${cp.bodyText.slice(0, 300)}`);
             if (cp.schemaTypes?.length) parts.push(`  Schema: ${cp.schemaTypes.join(', ')}`);
             if (cp.imageAlts?.length) parts.push(`  Image alts: ${cp.imageAlts.slice(0, 3).join(' | ')}`);
             return parts.join('\n');
           }).join('\n\n')
         : null;
 
-      // Build crawled competitor context
+      // Build crawled competitor context with full page content
       const competitorsCrawled: Array<any> = crawledCompetitors || [];
       const competitorCrawlContext = competitorsCrawled.length > 0
         ? `\n=== COMPETITOR DEEP ANALYSIS (actual HTML extracted from rival sites) ===\n` +
           competitorsCrawled.map((comp: any) => {
             const okPages = (comp.crawledPages || []).filter((p: any) => !p.error);
-            const servicePagesCount = okPages.filter((p: any) => /service|solution|offer/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })())).length;
-            const locationPagesCount = okPages.filter((p: any) => /location|area|suburb|city/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })())).length;
+            const servicePagesCount = okPages.filter((p: any) => /service|solution|offer|build|construct|design|renovati/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })())).length;
+            const locationPagesCount = okPages.filter((p: any) => /location|area|suburb|city|serve/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })())).length;
+            const blogPagesCount = okPages.filter((p: any) => /blog|news|article|guide/i.test((() => { try { return new URL(p.url).pathname; } catch { return p.url; } })())).length;
             const schemas = [...new Set(okPages.flatMap((p: any) => p.schemaTypes || []))];
-            const topPages = okPages.slice(0, 8).map((p: any) => {
+            const topPages = okPages.slice(0, 10).map((p: any) => {
               const path = (() => { try { return new URL(p.url).pathname || '/'; } catch { return p.url; } })();
-              const parts: string[] = [`  ${path}`];
+              const parts: string[] = [`  [${path}]`];
               if (p.title) parts.push(`    Title: ${p.title}`);
               if (p.h1) parts.push(`    H1: ${p.h1}`);
               if (p.h2s?.length) parts.push(`    H2s: ${p.h2s.slice(0, 3).join(' | ')}`);
+              if (p.bodyText) parts.push(`    Content: ${p.bodyText.slice(0, 200)}`);
+              if (p.schemaTypes?.length) parts.push(`    Schema: ${p.schemaTypes.join(', ')}`);
               return parts.join('\n');
             }).join('\n');
-            return `Competitor: ${comp.domain}\n  Total site pages: ${comp.totalPages}\n  Service pages: ${servicePagesCount}\n  Location pages: ${locationPagesCount}\n  Schema types: ${schemas.join(', ') || 'none'}\n  Crawled pages:\n${topPages}`;
+            return `Competitor: ${comp.domain}\n  Total site pages: ${comp.totalPages || okPages.length}\n  Service pages: ${servicePagesCount}\n  Location pages: ${locationPagesCount}\n  Blog/content pages: ${blogPagesCount}\n  Schema types: ${schemas.join(', ') || 'none'}\n  Crawled pages:\n${topPages}`;
           }).join('\n\n')
         : '';
 
-      const prompt = `You are a senior digital marketing strategist who has audited thousands of local business websites. You are generating a strategic visibility diagnosis for a sales rep who is about to pitch SEO/digital marketing services to ${businessName}.
+      // Build conversation intelligence context
+      const convIntelContext = (() => {
+        const parts: string[] = [];
+        if (conversationNotes) parts.push(`Sales notes: ${conversationNotes}`);
+        if (conversationInsights?.painPoints?.length) parts.push(`Pain points raised: ${conversationInsights.painPoints.join('; ')}`);
+        if (conversationInsights?.servicesDiscussed?.length) parts.push(`Services discussed: ${conversationInsights.servicesDiscussed.join(', ')}`);
+        if (conversationInsights?.nextSteps?.length) parts.push(`Next steps: ${conversationInsights.nextSteps.join('; ')}`);
+        if (objections?.length) parts.push(`Objections noted: ${Array.isArray(objections) ? objections.join('; ') : objections}`);
+        return parts.length > 0 ? `\n=== CONVERSATION INTELLIGENCE ===\n${parts.join('\n')}\n` : '';
+      })();
 
-Your job is to answer ONE fundamental question:
-"Does Google clearly understand what ${businessName} does and where they do it?"
+      // Build deal intelligence context
+      const dealIntelContext = (() => {
+        const parts: string[] = [];
+        if (dealStage) parts.push(`Deal stage: ${dealStage}`);
+        if (mrr) parts.push(`MRR potential: $${mrr}/mo`);
+        if (adSpend) parts.push(`Current ad spend: ${typeof adSpend === 'object' ? `$${adSpend.spend}/${adSpend.period} on ${adSpend.channel}` : `$${adSpend}/mo`}`);
+        return parts.length > 0 ? `\n=== DEAL INTELLIGENCE ===\n${parts.join('\n')}\n` : '';
+      })();
 
-This is the core ranking truth:
-- Google ranks businesses based on two primary signals: WHAT you do + WHERE you do it
-- Service pages tell Google WHAT the business does
-- Location/suburb pages tell Google WHERE the business operates
-- Portfolio/project pages tell Google almost NOTHING about services or locations
-- A site heavy in portfolio pages but light in service/location pages will struggle to rank for non-brand local searches
+      // Build Ahrefs keyword market context
+      const ahrefsContext = ahrefsData?.topKeywords?.length
+        ? `\n=== KEYWORD MARKET DATA (top search opportunities) ===\n${ahrefsData.topKeywords.slice(0, 15).map((k: any) => `  ${k.keyword}: ${k.volume}/mo volume, difficulty ${k.difficulty}/100, CPC $${k.cpc}`).join('\n')}\n`
+        : '';
 
-=== BUSINESS DATA ===
+      const prompt = `You are a senior digital visibility strategist with deep expertise in local business SEO and digital marketing. You are producing an evidence-based strategy diagnosis for a sales rep preparing to advise ${businessName} on their digital growth.
+
+CRITICAL INSTRUCTION: Every insight must follow Evidence → Interpretation → Strategic Implication → Recommended Move.
+Avoid generic phrases like "improve SEO", "optimise keywords", "build backlinks". Use specific evidence from the data.
+
+Your diagnosis must incorporate ALL available data:
+1. Website structure and crawled content (actual page copy, headings, schema)
+2. Competitor website content (actual crawled data — not estimates)
+3. Conversation intelligence (what the client has said their goals are)
+4. Deal intelligence (stage and context)
+5. Keyword market data (real search volumes)
+6. Google Business Profile signals
+
+=== BUSINESS PROFILE ===
 Business: ${businessName}
 Industry: ${industry || 'Not specified'}
 Location: ${location || 'Not specified'}
@@ -4837,7 +4968,7 @@ Website: ${websiteUrl || 'Not provided'}
 Google Business Profile: ${hasGBP ? `Yes — ${gbpLink}` : 'Not found'}
 Google Reviews: ${reviewCount != null ? `${reviewCount} reviews, ${rating}★ average` : 'Unknown'}
 Social Profiles: ${socialPlatforms.length > 0 ? socialPlatforms.join(', ') : 'None detected'}
-
+${convIntelContext}${dealIntelContext}${ahrefsContext}
 === WEBSITE STRUCTURE (from sitemap) ===
 Total indexed pages: ${pages.length || 0}
 Page classification:
@@ -4846,37 +4977,68 @@ ${sitemapSummary || '  No sitemap data available'}
 Actual URLs found:
 ${pageExamples || '  None'}
 ${crawledSummary ? `\n=== DEEP PAGE ANALYSIS (actual HTML content extracted) ===
-The following is real HTML content extracted from crawling individual pages. Use this to assess actual keyword targeting, content quality, title tag optimisation, heading structure, and schema markup presence. This is more reliable than URL inference alone.
+The following is REAL content crawled from the prospect's website. Use this to assess what messages the website sends to buyers, keyword targeting, content quality, and structural gaps.
 
 ${crawledSummary}` : ''}
-${competitorCrawlContext ? `\n${competitorCrawlContext}\n\nUse the competitor data to identify content gaps — where competitors have service or location pages that ${businessName} does not. Factor this into gap severity and priorities.` : ''}
+${competitorCrawlContext ? `\n${competitorCrawlContext}\n\nUse competitor body text to identify: what topics they cover, what buyer questions they answer, what services/suburbs they rank for — and where ${businessName} is absent.` : ''}
 
 === SCORING RULES ===
 Score each out of 100. Be honest and calibrated — low scores are expected for businesses with poor structure.
 
-Service Clarity Score: Based on dedicated service pages (slug-level evidence only). 0 = no service pages detected. 30 = 1-2 service pages. 60 = 3-5 service pages. 80+ = 6+ well-structured service pages.
+Service Clarity Score: Based on dedicated service pages (slug-level AND crawled body content evidence). 0 = no service pages detected. 30 = 1-2 service pages. 60 = 3-5 service pages. 80+ = 6+ well-structured service pages.
 
 Location Relevance Score: Based on suburb/location pages. 0 = zero location pages. 30 = 1 location page. 60 = 3-5 location pages. 80+ = 6+ location pages or strong area targeting evidence.
 
-Content Coverage Score: Based on total indexed pages and diversity of content types. Heavy portfolio-only sites score low (max 35) even with many pages, because portfolio pages don't help search visibility.
+Content Coverage Score: Based on total indexed pages, diversity of content types, AND what crawled body text actually communicates to buyers. Heavy portfolio-only sites score low (max 35) even with many pages, because portfolio pages don't help search visibility.
 
 GBP Alignment Score: 0 = no GBP. 40 = GBP exists but few reviews. 70 = GBP with moderate reviews (5-30). 90+ = strong GBP with 30+ reviews.
 
 Authority/Trust Score: Based on review count, social profiles, and content depth signals. Moderate scores unless review count is strong.
 
+Digital Visibility Score (0-100): An overall score representing how discoverable and trustworthy the business appears online. Calculate from 5 weighted components:
+- Search Relevance (30%): How well the site's content signals match what buyers search for
+- Market Coverage (25%): How many service + location combinations are covered vs. the opportunity
+- Authority Signals (20%): Review count, quality, social proof, backlinks
+- Local Discovery (15%): GBP completeness, local schema, suburb targeting
+- Buyer Confidence (10%): Site quality, messaging clarity, trust signals from crawled body text
+
+=== CONVERSATION INTELLIGENCE RULES ===
+If conversation notes or client insights are provided:
+- Frame the "currentPosition" summary around the client's stated goals, not just SEO structure
+- The "insightSentence" should connect the SEO gap to what the client said they want
+- The "strategicImplication" in each gap should reference the client's goals
+- Do NOT write generic SEO advice — write as if you know what this client is trying to achieve
+
+=== DEAL STAGE RULES ===
+- Discovery/Meeting → focus on diagnosing the biggest constraint and the growth opportunity
+- Proposal → emphasise roadmap, ROI, and projected outcomes
+- Qualified → show concrete next steps and quick wins
+
 === OUTPUT RULES ===
 - Be honest. Do not inflate scores.
 - If portfolio pages dominate, explicitly call this out as the key structural gap.
 - Do not flag GBP as missing if hasGBP = true.
-- Do not guess at page content beyond what URLs reveal.
-- Forecast must use bands (low/moderate/strong) — avoid false precision unless data supports it.
-- Gap evidence must cite specific data (page counts, review numbers, URL patterns observed).
+- Do not guess at page content beyond what crawled data and URLs reveal.
+- Forecast must use bands — avoid false precision unless data supports it.
+- Gap evidence must cite specific data (page counts, review numbers, URL patterns, body text signals).
+- Strategic white space = opportunities NO competitor has captured yet.
 
 Respond with JSON only:
 {
   "readinessScore": 0-100,
   "confidence": "low|medium|high",
-  "insightSentence": "One sharp sentence for the rep to say on the call — grounded in the data",
+  "insightSentence": "One sharp sentence for the rep to say on the call — grounded in the data and client goals",
+  "clientGoalContext": "1-2 sentences connecting their stated goals (from conversation if available) to the digital visibility opportunity",
+  "digitalVisibilityScore": {
+    "overall": 0-100,
+    "components": {
+      "searchRelevance": { "score": 0-100, "label": "Search Relevance", "explanation": "Why this score — cite specific evidence" },
+      "marketCoverage": { "score": 0-100, "label": "Market Coverage", "explanation": "Why this score — services × locations covered" },
+      "authoritySignals": { "score": 0-100, "label": "Authority Signals", "explanation": "Why this score — reviews, social, trust" },
+      "localDiscovery": { "score": 0-100, "label": "Local Discovery", "explanation": "Why this score — GBP, schema, suburb targeting" },
+      "buyerConfidence": { "score": 0-100, "label": "Buyer Confidence", "explanation": "Why this score — site messaging, clarity, CTA strength" }
+    }
+  },
   "subscores": {
     "serviceClarityScore": 0-100,
     "locationRelevanceScore": 0-100,
@@ -4885,8 +5047,9 @@ Respond with JSON only:
     "authorityScore": 0-100
   },
   "currentPosition": {
-    "summary": "2-3 sentences — what Google currently understands about this business based on available evidence",
+    "summary": "2-3 sentences — what Google currently understands about this business, and what the website communicates to buyers. Connect to client's stated goals if conversation notes provided.",
     "googleClarity": "low|moderate|strong",
+    "websiteMessage": "1 sentence: what does the website primarily communicate to a buyer who lands on it?",
     "pageBreakdown": [
       { "type": "Portfolio/Project Pages", "count": 0, "searchIntent": "low" },
       { "type": "Service Pages", "count": 0, "searchIntent": "high" },
@@ -4896,7 +5059,7 @@ Respond with JSON only:
     ]
   },
   "growthPotential": {
-    "summary": "2-3 sentences about the realistic opportunity if key gaps are fixed",
+    "summary": "2-3 sentences about the realistic opportunity if key gaps are fixed — frame around client's goals if known",
     "opportunities": [
       "Specific opportunity 1 — what it would unlock",
       "Specific opportunity 2",
@@ -4909,6 +5072,14 @@ Respond with JSON only:
       "confidence": "low|moderate|strong"
     }
   },
+  "strategicWhiteSpace": [
+    {
+      "opportunity": "Specific uncaptured market opportunity",
+      "evidence": "Why this is open — cite competitor data or keyword gaps",
+      "suggestedMove": "Specific page or content to create to capture it",
+      "searchDemand": "Estimated monthly searches for this opportunity"
+    }
+  ],
   "gaps": [
     {
       "title": "Specific gap title",
@@ -4930,7 +5101,7 @@ Respond with JSON only:
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 2000,
+        max_completion_tokens: 3500,
         response_format: { type: "json_object" },
       });
 
@@ -4952,6 +5123,7 @@ Respond with JSON only:
         businessName, websiteUrl, industry, location,
         strategyDiagnosis, sitemapPages, crawledPages, crawledCompetitors: crawledCompetitorsInput, reviewCount, rating, gbpLink,
         facebookUrl, instagramUrl, linkedinUrl, competitors,
+        conversationNotes, conversationInsights, objections, dealStage, mrr, adSpend, ahrefsData,
       } = req.body;
 
       if (!businessName) return res.status(400).json({ error: "Business name is required" });
@@ -4974,8 +5146,11 @@ Respond with JSON only:
       const diagContext = strategyDiagnosis ? `
 === AI STRATEGY DIAGNOSIS (already completed) ===
 Growth Readiness Score: ${strategyDiagnosis.readinessScore}/100
+Digital Visibility Score: ${strategyDiagnosis.digitalVisibilityScore?.overall || 'N/A'}/100
 Key Finding: ${strategyDiagnosis.insightSentence}
+Client Goal Context: ${strategyDiagnosis.clientGoalContext || ''}
 Google Clarity: ${strategyDiagnosis.currentPosition?.googleClarity}
+Website Message to Buyers: ${strategyDiagnosis.currentPosition?.websiteMessage || ''}
 Current Position Summary: ${strategyDiagnosis.currentPosition?.summary}
 
 Sub-scores:
@@ -4988,12 +5163,33 @@ Sub-scores:
 Top Gaps:
 ${strategyDiagnosis.gaps?.map((g: any) => `- [${g.severity}] ${g.title}: ${g.evidence}. Impact: ${g.impact}`).join('\n') || 'None'}
 
+Strategic White Space (uncaptured opportunities):
+${strategyDiagnosis.strategicWhiteSpace?.map((s: any) => `- ${s.opportunity}: ${s.evidence} → ${s.suggestedMove}`).join('\n') || 'None'}
+
 Top Priorities:
 ${strategyDiagnosis.priorities?.map((p: any) => `${p.rank}. ${p.action}: ${p.description}${p.examples?.length ? ' (e.g. ' + p.examples.slice(0, 2).join(', ') + ')' : ''}`).join('\n') || 'None'}
 
 Growth Potential: ${strategyDiagnosis.growthPotential?.summary}
 Forecast: ${strategyDiagnosis.growthPotential?.forecastBand ? JSON.stringify(strategyDiagnosis.growthPotential.forecastBand) : 'Not calculated'}
 ` : '';
+
+      // Build conversation + deal intelligence context
+      const strat12ConvContext = (() => {
+        const parts: string[] = [];
+        if (conversationNotes) parts.push(`Sales notes: ${conversationNotes}`);
+        if (conversationInsights?.painPoints?.length) parts.push(`Client pain points: ${conversationInsights.painPoints.join('; ')}`);
+        if (conversationInsights?.servicesDiscussed?.length) parts.push(`Services discussed: ${conversationInsights.servicesDiscussed.join(', ')}`);
+        if (objections?.length) parts.push(`Objections raised: ${Array.isArray(objections) ? objections.map((o: any) => o.objection || o).join('; ') : objections}`);
+        if (dealStage) parts.push(`Deal stage: ${dealStage}`);
+        if (mrr) parts.push(`MRR potential: $${mrr}/mo`);
+        if (adSpend) parts.push(`Current ad spend: ${typeof adSpend === 'object' ? `$${adSpend.spend}/${adSpend.period} on ${adSpend.channel}` : `$${adSpend}/mo`}`);
+        return parts.length > 0 ? `\n=== CONVERSATION & DEAL INTELLIGENCE ===\n${parts.join('\n')}\nIMPORTANT: The strategy narrative must frame recommendations around the client's stated goals and deal stage. Do not write generic strategy — write for THIS client's specific situation.\n` : '';
+      })();
+
+      // Ahrefs keyword context
+      const strat12AhrefsContext = ahrefsData?.topKeywords?.length
+        ? `\n=== KEYWORD MARKET OPPORTUNITY ===\n${ahrefsData.topKeywords.slice(0, 15).map((k: any) => `  ${k.keyword}: ${k.volume}/mo searches, difficulty ${k.difficulty}/100, CPC $${k.cpc}`).join('\n')}\n`
+        : '';
 
       const crawled: Array<any> = crawledPages || [];
       const crawledContext = crawled.length > 0
@@ -5005,6 +5201,7 @@ Forecast: ${strategyDiagnosis.growthPotential?.forecastBand ? JSON.stringify(str
             if (cp.h1) parts.push(`  H1: ${cp.h1}`);
             if (cp.h2s?.length) parts.push(`  H2s: ${cp.h2s.slice(0, 3).join(' | ')}`);
             if (cp.metaDescription) parts.push(`  Meta: ${cp.metaDescription.slice(0, 120)}`);
+            if (cp.bodyText) parts.push(`  Content: ${cp.bodyText.slice(0, 250)}`);
             if (cp.schemaTypes?.length) parts.push(`  Schema: ${cp.schemaTypes.join(', ')}`);
             return parts.join('\n');
           }).join('\n\n')
@@ -5046,7 +5243,9 @@ ${crawledCompsContext}
 
       const socialProfiles = [facebookUrl && 'Facebook', instagramUrl && 'Instagram', linkedinUrl && 'LinkedIn'].filter(Boolean).join(', ');
 
-      const prompt = `You are a senior digital marketing strategist producing a 12-month growth strategy for a sales presentation. This strategy is built on real website data, not assumptions. Use the data provided faithfully — do not invent numbers.
+      const prompt = `You are a senior digital marketing strategist producing a 12-month growth strategy for a sales presentation. This strategy must feel like a strategic advisor wrote it — not an SEO report. Every insight must follow: Evidence → Interpretation → Strategic Implication → Recommended Move.
+
+CRITICAL: If conversation notes or client goals are provided, the strategy narrative must be framed around what the client wants to achieve — not generic SEO tactics. Reference their stated goals throughout.
 
 === BUSINESS PROFILE ===
 Business: ${businessName}
@@ -5056,7 +5255,7 @@ Website: ${websiteUrl || 'Not provided'}
 Google Business Profile: ${gbpLink ? 'Yes — ' + gbpLink : 'Not found'}
 Google Reviews: ${reviewCount != null ? reviewCount + ' reviews, ' + rating + '★' : 'Unknown'}
 Social: ${socialProfiles || 'None detected'}
-${diagContext}${sitemapContext}${competitorContext}
+${strat12ConvContext}${strat12AhrefsContext}${diagContext}${sitemapContext}${competitorContext}
 
 === STRATEGY GENERATION RULES ===
 - Every keyword, gap, and recommendation must relate to the actual industry and location

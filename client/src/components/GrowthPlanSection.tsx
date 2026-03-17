@@ -37,9 +37,12 @@ interface SerpResult {
   serpSnapshot: { position: number; title: string; domain: string; snippet: string; type: string }[];
 }
 interface CompetitorGapResult {
-  prospect: Record<string, string | number>; competitorAverage: Record<string, string | number>;
-  competitors: { name: string; servicePages: number; locationPages: number; contentDepth: string; strengths: string[] }[];
+  prospect: Record<string, string | number> & { keyWeaknesses?: string[] };
+  competitorAverage: Record<string, string | number>;
+  competitors: { name: string; servicePages: number; locationPages: number; contentDepth: string; strengths: string[]; topicsCovered?: string[]; contentAdvantage?: string }[];
   insights: string[];
+  strategicWhiteSpace?: { opportunity: string; evidence: string; suggestedMove: string }[];
+  contentGaps?: { topic: string; competitorExample: string; buyerIntent: string; priority: string }[];
 }
 interface ForecastResult {
   currentEstimate: { monthlyTraffic: number; monthlyLeads: number; monthlyRevenue: number };
@@ -129,8 +132,11 @@ function intentDot(intent: string) {
 
 function ReadinessScoreCard({ diagnosis }: { diagnosis: StrategyDiagnosis }) {
   const score = diagnosis.readinessScore;
+  const dvs = (diagnosis as any).digitalVisibilityScore;
+  const dvsOverall = dvs?.overall ?? null;
   const circumference = 2 * Math.PI * 28;
   const offset = circumference - (score / 100) * circumference;
+  const dvsOffset = dvsOverall !== null ? circumference - (dvsOverall / 100) * circumference : circumference;
   const genDate = diagnosis.generatedAt ? new Date(diagnosis.generatedAt) : null;
   const genLabel = genDate
     ? genDate.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + genDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -145,37 +151,99 @@ function ReadinessScoreCard({ diagnosis }: { diagnosis: StrategyDiagnosis }) {
   ];
 
   return (
-    <div className="border rounded-lg p-3 bg-muted/20 space-y-3" data-testid="readiness-score-card">
-      <div className="flex items-center gap-3">
-        <div className="relative w-16 h-16 shrink-0">
-          <svg viewBox="0 0 64 64" className="w-full h-full -rotate-90">
-            <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="5" className="text-muted/30" />
-            <circle cx="32" cy="32" r="28" fill="none" stroke={scoreRingColor(score)} strokeWidth="5"
-              strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-              style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-lg font-bold ${scoreColor(score)}`}>{score}</span>
+    <div className="border rounded-lg overflow-hidden" data-testid="readiness-score-card">
+      {/* Score header row */}
+      <div className="px-3 pt-3 pb-2 space-y-3">
+        <div className="flex items-start gap-3">
+          {/* Growth Readiness */}
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="relative w-14 h-14 shrink-0">
+              <svg viewBox="0 0 64 64" className="w-full h-full -rotate-90">
+                <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="5" className="text-muted/30" />
+                <circle cx="32" cy="32" r="28" fill="none" stroke={scoreRingColor(score)} strokeWidth="5"
+                  strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className={`text-base font-bold ${scoreColor(score)}`}>{score}</span>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Growth Readiness</p>
+              <p className={`text-xs font-bold ${scoreColor(score)}`}>{score >= 70 ? 'Strong Position' : score >= 45 ? 'Developing' : 'Needs Attention'}</p>
+              <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground mt-0.5">{confidenceLabel(diagnosis.confidence)}</Badge>
+            </div>
           </div>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <p className="text-sm font-semibold">Growth Readiness Score</p>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">{confidenceLabel(diagnosis.confidence)}</Badge>
-          </div>
-          <p className="text-xs text-muted-foreground italic leading-relaxed">"{diagnosis.insightSentence}"</p>
-          {genLabel && (
-            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-              <Clock className="h-2.5 w-2.5" /> Last analysed {genLabel}
-            </p>
+
+          {/* Digital Visibility Score */}
+          {dvsOverall !== null && (
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <div className="relative w-14 h-14 shrink-0">
+                <svg viewBox="0 0 64 64" className="w-full h-full -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="5" className="text-muted/30" />
+                  <circle cx="32" cy="32" r="28" fill="none" stroke={scoreRingColor(dvsOverall)} strokeWidth="5"
+                    strokeDasharray={circumference} strokeDashoffset={dvsOffset} strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className={`text-base font-bold ${scoreColor(dvsOverall)}`}>{dvsOverall}</span>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Digital Visibility</p>
+                <p className={`text-xs font-bold ${scoreColor(dvsOverall)}`}>{dvsOverall >= 70 ? 'Discoverable' : dvsOverall >= 45 ? 'Partial' : 'Hard to Find'}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">Online discoverability</p>
+              </div>
+            </div>
           )}
         </div>
+
+        {/* Digital Visibility Score breakdown */}
+        {dvs?.components && (
+          <div className="space-y-1.5 border-t pt-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Digital Visibility Breakdown</p>
+            {Object.entries(dvs.components).map(([key, comp]: [string, any]) => (
+              <div key={key} className="space-y-0.5" data-testid={`dvs-component-${key}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">{comp.label}</span>
+                  <span className={`text-[10px] font-bold ${scoreColor(comp.score)}`}>{comp.score}/100</span>
+                </div>
+                <div className="h-1 bg-muted/40 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-700 ${comp.score >= 70 ? 'bg-green-500' : comp.score >= 45 ? 'bg-amber-500' : 'bg-red-400'}`}
+                    style={{ width: `${comp.score}%` }} />
+                </div>
+                {comp.explanation && (
+                  <p className="text-[9px] text-muted-foreground/70 leading-tight">{comp.explanation}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Insight sentence */}
+        <p className="text-xs text-muted-foreground italic leading-relaxed border-t pt-2">"{diagnosis.insightSentence}"</p>
+
+        {/* Client goal context */}
+        {(diagnosis as any).clientGoalContext && (
+          <div className="rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-2.5 py-2">
+            <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 mb-0.5 uppercase tracking-wide">Strategic Context</p>
+            <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{(diagnosis as any).clientGoalContext}</p>
+          </div>
+        )}
+
+        {genLabel && (
+          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <Clock className="h-2.5 w-2.5" /> Analysed {genLabel}
+          </p>
+        )}
       </div>
-      <div className="grid grid-cols-5 gap-1.5">
+
+      {/* Sub-scores */}
+      <div className="grid grid-cols-5 gap-px border-t bg-border">
         {subScoreItems.map(s => (
-          <div key={s.label} className="text-center" data-testid={`subscore-${s.label.toLowerCase().replace(/\s/g, '-')}`}>
-            <p className={`text-base font-bold ${scoreColor(s.value)}`}>{s.value}</p>
-            <p className="text-[9px] text-muted-foreground leading-tight">{s.label}</p>
+          <div key={s.label} className="text-center py-2 bg-background" data-testid={`subscore-${s.label.toLowerCase().replace(/\s/g, '-')}`}>
+            <p className={`text-sm font-bold ${scoreColor(s.value)}`}>{s.value}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight px-0.5">{s.label}</p>
           </div>
         ))}
       </div>
@@ -276,14 +344,48 @@ function GrowthPotentialCard({ diagnosis }: { diagnosis: StrategyDiagnosis }) {
 
 function GapCard({ gap, index }: { gap: StrategyDiagnosisGap; index: number }) {
   return (
-    <div className="border rounded-lg p-2.5 space-y-1 bg-muted/20" data-testid={`strategy-gap-${index}`}>
-      <div className="flex items-center gap-2">
+    <div className="border rounded-lg overflow-hidden" data-testid={`strategy-gap-${index}`}>
+      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/30">
         <SeverityIcon severity={gap.severity} />
         <p className="text-xs font-semibold flex-1">{gap.title}</p>
         <SeverityBadge severity={gap.severity} />
       </div>
-      <p className="text-xs text-muted-foreground pl-5">{gap.evidence}</p>
-      <p className="text-xs text-amber-700 dark:text-amber-400 pl-5">{gap.impact}</p>
+      <div className="p-2.5 space-y-1.5">
+        <div className="flex gap-1.5">
+          <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide w-16 shrink-0 pt-0.5">Evidence</span>
+          <p className="text-xs text-muted-foreground">{gap.evidence}</p>
+        </div>
+        {gap.impact && (
+          <div className="flex gap-1.5">
+            <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide w-16 shrink-0 pt-0.5">Impact</span>
+            <p className="text-xs text-amber-700 dark:text-amber-400">{gap.impact}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WhiteSpaceCard({ item, index }: { item: any; index: number }) {
+  return (
+    <div className="border rounded-lg overflow-hidden border-emerald-200 dark:border-emerald-800" data-testid={`white-space-${index}`}>
+      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/30">
+        <Zap className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex-1">{item.opportunity}</p>
+        {item.searchDemand && <Badge className="text-[9px] bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-0">{item.searchDemand}</Badge>}
+      </div>
+      <div className="p-2.5 space-y-1.5">
+        <div className="flex gap-1.5">
+          <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide w-16 shrink-0 pt-0.5">Evidence</span>
+          <p className="text-xs text-muted-foreground">{item.evidence}</p>
+        </div>
+        {item.suggestedMove && (
+          <div className="flex gap-1.5">
+            <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide w-16 shrink-0 pt-0.5">Move</span>
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">{item.suggestedMove}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -312,6 +414,7 @@ function PriorityList({ priorities }: { priorities: StrategyDiagnosisPriority[] 
 }
 
 function StrategyDiagnosisView({ diagnosis, onRegenerate, loading }: { diagnosis: StrategyDiagnosis; onRegenerate: () => void; loading: boolean }) {
+  const strategicWhiteSpace = (diagnosis as any).strategicWhiteSpace as any[] | undefined;
   return (
     <div className="space-y-3" data-testid="strategy-diagnosis-view">
       <ReadinessScoreCard diagnosis={diagnosis} />
@@ -320,14 +423,25 @@ function StrategyDiagnosisView({ diagnosis, onRegenerate, loading }: { diagnosis
 
       {diagnosis.gaps?.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold text-muted-foreground">Biggest Gaps ({diagnosis.gaps.length})</p>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Biggest Constraints ({diagnosis.gaps.length})</p>
           {diagnosis.gaps.map((gap, i) => <GapCard key={i} gap={gap} index={i} />)}
+        </div>
+      )}
+
+      {strategicWhiteSpace && strategicWhiteSpace.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Strategic White Space</p>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Opportunities no competitor has fully captured yet</p>
+          {strategicWhiteSpace.map((item, i) => <WhiteSpaceCard key={i} item={item} index={i} />)}
         </div>
       )}
 
       {diagnosis.priorities?.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold text-muted-foreground">Recommended Priorities</p>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Recommended Moves</p>
           <PriorityList priorities={diagnosis.priorities} />
         </div>
       )}
@@ -453,10 +567,79 @@ function CompetitorGapView({ result }: { result: CompetitorGapResult }) {
           <tbody>{signals.map((signal) => (<tr key={signal} className="border-t"><td className="p-2 text-muted-foreground">{signalLabels[signal]}</td><td className="p-2 text-center font-medium">{String(result.prospect[signal])}</td><td className="p-2 text-center font-medium">{String(result.competitorAverage[signal])}</td></tr>))}</tbody>
         </table>
       </div>
+
       {result.insights.length > 0 && (
-        <div className="border rounded-lg p-3 bg-amber-50 dark:bg-amber-950/20 space-y-1">
-          <p className="text-[11px] font-medium text-muted-foreground mb-1">Key Insights</p>
-          {result.insights.map((insight, i) => <p key={i} className="text-sm">• {insight}</p>)}
+        <div className="border rounded-lg p-3 bg-amber-50 dark:bg-amber-950/20 space-y-1.5">
+          <p className="text-[11px] font-semibold text-muted-foreground mb-1">Key Insights</p>
+          {result.insights.map((insight, i) => <p key={i} className="text-xs">• {insight}</p>)}
+        </div>
+      )}
+
+      {result.competitors?.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Competitor Deep Dive</p>
+          {result.competitors.map((c, i) => (
+            <div key={i} className="border rounded-lg overflow-hidden">
+              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/30">
+                <p className="text-xs font-semibold flex-1">{c.name}</p>
+                <Badge variant="outline" className="text-[9px]">{c.servicePages}s / {c.locationPages}l / {c.contentDepth}</Badge>
+              </div>
+              <div className="p-2.5 space-y-1.5">
+                {c.contentAdvantage && (
+                  <div className="flex gap-1.5">
+                    <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide w-14 shrink-0 pt-0.5">Edge</span>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">{c.contentAdvantage}</p>
+                  </div>
+                )}
+                {c.topicsCovered && c.topicsCovered.length > 0 && (
+                  <div className="flex gap-1.5">
+                    <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0 pt-0.5">Topics</span>
+                    <div className="flex flex-wrap gap-1">
+                      {c.topicsCovered.map((t, ti) => (
+                        <Badge key={ti} variant="secondary" className="text-[9px] px-1.5 py-0">{t}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {c.strengths?.length > 0 && (
+                  <div className="flex gap-1.5">
+                    <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide w-14 shrink-0 pt-0.5">Strengths</span>
+                    <ul className="space-y-0.5">
+                      {c.strengths.map((s, si) => <li key={si} className="text-xs text-muted-foreground">• {s}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result.contentGaps && result.contentGaps.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Content Gap Analysis</p>
+          {result.contentGaps.map((gap, i) => (
+            <div key={i} className="border rounded-lg overflow-hidden">
+              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/30">
+                <p className="text-xs font-semibold flex-1">{gap.topic}</p>
+                <Badge variant={gap.priority === 'high' ? 'destructive' : gap.priority === 'medium' ? 'secondary' : 'outline'} className="text-[9px]">{gap.priority}</Badge>
+              </div>
+              <div className="p-2.5 space-y-1">
+                <p className="text-xs text-muted-foreground">{gap.competitorExample}</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400">Buyer intent: {gap.buyerIntent}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result.strategicWhiteSpace && result.strategicWhiteSpace.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Strategic White Space</p>
+          </div>
+          {result.strategicWhiteSpace.map((item, i) => <WhiteSpaceCard key={i} item={item} index={i} />)}
         </div>
       )}
     </div>
@@ -596,6 +779,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     if (!businessName) { toast({ title: 'Business name required', variant: 'destructive' }); return; }
     setDiagnosisLoading(true); setDiagnosisError(null);
     try {
+      const adSpendData = lead?.marketingActivity?.[0] || null;
       const res = await fetch('/api/ai/growth-plan/strategy-diagnosis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -611,6 +795,13 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           facebookUrl: lead?.facebookUrl || null,
           instagramUrl: lead?.instagramUrl || null,
           linkedinUrl: lead?.linkedinUrl || null,
+          conversationNotes: lead?.notes || null,
+          conversationInsights: lead?.aiConversationInsights || null,
+          objections: lead?.aiObjectionResponses?.map((o: any) => o.objection) || [],
+          dealStage: lead?.stage || null,
+          mrr: lead?.mrr || null,
+          adSpend: adSpendData,
+          ahrefsData: lead?.ahrefsData || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to generate strategy analysis');
@@ -701,7 +892,24 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     if (!businessName) { toast({ title: 'Business name required', variant: 'destructive' }); return; }
     setActiveTool('competitor'); setToolLoading('competitor', true); setToolError('competitor', null);
     try {
-      const res = await fetch('/api/ai/growth-plan/competitor-gap', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessName, websiteUrl, location, industry, serpData: serpResult, xrayData: xrayResult?.crawlData }) });
+      const adSpendData = lead?.marketingActivity?.[0] || null;
+      const res = await fetch('/api/ai/growth-plan/competitor-gap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName, websiteUrl, location, industry,
+          serpData: serpResult,
+          xrayData: xrayResult?.crawlData,
+          crawledPages: lead?.crawledPages || [],
+          crawledCompetitors: crawledCompetitors.length > 0 ? crawledCompetitors : undefined,
+          strategyDiagnosis: strategyDiagnosis || undefined,
+          sitemapPages: lead?.sitemapPages || [],
+          conversationNotes: lead?.notes || null,
+          dealStage: lead?.stage || null,
+          ahrefsData: lead?.ahrefsData || null,
+          adSpend: adSpendData,
+        }),
+      });
       if (!res.ok) throw new Error('Failed to analyse competitor gap');
       const data = await res.json(); setCompetitorResult(data); saveAll({ competitor: data });
     } catch (err: any) { setToolError('competitor', err.message); } finally { setToolLoading('competitor', false); }
@@ -741,6 +949,13 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           instagramUrl: lead?.instagramUrl || null,
           linkedinUrl: lead?.linkedinUrl || null,
           competitors,
+          conversationNotes: lead?.notes || null,
+          conversationInsights: lead?.aiConversationInsights || null,
+          objections: lead?.aiObjectionResponses?.map((o: any) => o.objection) || [],
+          dealStage: lead?.stage || null,
+          mrr: lead?.mrr || null,
+          adSpend: lead?.marketingActivity?.[0] || null,
+          ahrefsData: lead?.ahrefsData || null,
         }),
       });
       if (!res.ok) throw new Error('Strategy generation failed');
@@ -1205,6 +1420,13 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           instagramUrl: lead?.instagramUrl || null,
           linkedinUrl: lead?.linkedinUrl || null,
           competitors,
+          conversationNotes: lead?.notes || null,
+          conversationInsights: lead?.aiConversationInsights || null,
+          objections: lead?.aiObjectionResponses?.map((o: any) => o.objection) || [],
+          dealStage: lead?.stage || null,
+          mrr: lead?.mrr || null,
+          adSpend: lead?.marketingActivity?.[0] || null,
+          ahrefsData: lead?.ahrefsData || null,
         }),
       });
       if (!stratRes.ok) throw new Error('Strategy generation failed');
