@@ -439,21 +439,34 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
         </div>
 
         {recentLogs.length > 0 && (
-          <div className="space-y-1 pt-1" data-testid="recent-conversations-list">
+          <div className="space-y-2 pt-1" data-testid="recent-conversations-list">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Recent</p>
-            {recentLogs.slice(0, 3).map((log) => (
-              <div key={log.id} className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <div
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: CONVERSATION_STAGE_COLORS[log.conversationStageAfter] }}
-                />
-                <span className="truncate">
-                  {log.type === 'conversation' ? 'Conv' : 'Attempt'} via {log.channel}
-                  {log.outcome ? ` — ${CONVERSATION_OUTCOME_LABELS[log.outcome]}` : ''}
-                </span>
-                <span className="shrink-0 ml-auto">
-                  {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
-                </span>
+            {recentLogs.slice(0, 5).map((log) => (
+              <div key={log.id} className="rounded border bg-background/60 px-2 py-1.5 space-y-1 text-[11px]">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-1.5 h-1.5 rounded-full shrink-0 mt-px"
+                    style={{ backgroundColor: CONVERSATION_STAGE_COLORS[log.conversationStageAfter] }}
+                  />
+                  <span className="font-medium text-foreground truncate">
+                    {log.type === 'conversation' ? 'Conv' : 'Attempt'} via {log.channel}
+                    {log.outcome ? ` — ${CONVERSATION_OUTCOME_LABELS[log.outcome]}` : ''}
+                  </span>
+                  <span className="shrink-0 ml-auto text-muted-foreground">
+                    {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
+                  </span>
+                </div>
+                {log.notes && (
+                  <p className="text-muted-foreground pl-3.5 leading-relaxed line-clamp-3" data-testid={`text-log-notes-${log.id}`}>
+                    {log.notes}
+                  </p>
+                )}
+                {log.nextStep && (
+                  <p className="text-blue-600 dark:text-blue-400 pl-3.5 flex items-start gap-1" data-testid={`text-log-nextstep-${log.id}`}>
+                    <ArrowRight className="h-3 w-3 mt-px shrink-0" />
+                    <span>{log.nextStep}</span>
+                  </p>
+                )}
               </div>
             ))}
           </div>
