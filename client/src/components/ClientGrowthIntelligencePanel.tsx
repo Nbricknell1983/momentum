@@ -19,6 +19,7 @@ import {
   HEALTH_CONTRIBUTOR_LABELS,
 } from '@/lib/types';
 import ClientOnboardingHandover from '@/components/ClientOnboardingHandover';
+import GBPPlaybookPanel from '@/components/GBPPlaybookPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateClientInFirestore } from '@/lib/firestoreService';
 import { useDispatch } from 'react-redux';
@@ -193,6 +194,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const queryClient = useQueryClient();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<'rankings' | 'playbook'>('rankings');
   const [showPicker, setShowPicker] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [showRunScan, setShowRunScan] = useState(false);
@@ -505,6 +507,38 @@ function LocalPresenceSection({ client }: { client: Client }) {
 
       {isExpanded && (
         <div className="border-t space-y-0">
+
+          {/* ── Tabs: Rankings | 3-Pack Playbook ── */}
+          <div className="flex border-b">
+            <button
+              onClick={() => setActiveTab('rankings')}
+              className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'rankings' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`}
+              data-testid="tab-gbp-rankings"
+            >
+              Rank Tracking
+            </button>
+            <button
+              onClick={() => setActiveTab('playbook')}
+              className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'playbook' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`}
+              data-testid="tab-gbp-playbook"
+            >
+              3-Pack Playbook
+            </button>
+          </div>
+
+          {/* ── 3-Pack Playbook Tab ── */}
+          {activeTab === 'playbook' && (
+            <div className="p-3">
+              <GBPPlaybookPanel
+                client={client}
+                parsedKeywords={parsedKeywords}
+                onPlaybookUpdate={(_patch) => { /* optimistic update handled inside panel */ }}
+              />
+            </div>
+          )}
+
+          {/* ── Rankings Tab content ── */}
+          {activeTab === 'rankings' && <>
 
           {/* ── Location picker ── */}
           {showPicker && (
@@ -1130,6 +1164,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
               )}
             </>
           )}
+          </>}
         </div>
       )}
     </div>

@@ -1,0 +1,1369 @@
+what action do i need to take to get my Google Business Profile to come up in a 3 pack for specific keywords like 
+
+To appear in the Google Maps 3-pack (the top 3 Google Business Profile results), Google primarily evaluates three ranking factors:
+
+Relevance – how well your listing matches the keyword.
+
+Distance – how close your business is to the searcher.
+
+Prominence – how authoritative and trusted your business is online.
+
+Since you cannot control distance, the actions you take focus on relevance and prominence.
+
+Below is the exact action checklist to rank in the 3-pack for keywords like the ones in your sheet (e.g., crane truck hire Brisbane, crane truck hire near me, etc.).
+
+1. Choose the Right Primary Category
+
+This is the single biggest ranking factor.
+
+Example structure:
+
+Primary category:
+
+Crane service
+
+Secondary categories:
+
+Trucking company
+
+Equipment hire service
+
+Transportation service
+
+Your primary category must match the main keyword you want to rank for.
+
+Example target keyword → category alignment:
+
+Keyword	Category
+crane truck hire	Crane service
+crane hire	Crane service
+truck crane hire	Crane service
+2. Put Keywords in Your Business Description
+
+Your description should include the main service + location signals.
+
+Example:
+
+We provide crane truck hire across Brisbane, North Brisbane, and the surrounding areas. Our crane trucks are ideal for lifting steel, trusses, building materials, and machinery. With fast response times and experienced operators, we support builders, contractors and industrial projects across South East Queensland.
+
+Include:
+
+service
+
+city
+
+surrounding suburbs
+
+3. Add Every Service as a GBP Service
+
+This dramatically improves keyword relevance.
+
+Example services:
+
+Crane truck hire
+
+Truck crane hire
+
+Steel lifting services
+
+Truss lifting
+
+Machinery lifting
+
+Building material transport
+
+Construction lifting services
+
+Each service acts like a keyword trigger.
+
+4. Upload Geotargeted Photos
+
+Google reads image metadata.
+
+Upload photos with filenames like:
+
+crane-truck-hire-brisbane.jpg
+truck-crane-lifting-brisbane.jpg
+steel-lifting-crane-brisbane.jpg
+
+Add photos of:
+
+trucks
+
+lifting jobs
+
+job sites
+
+team
+
+equipment
+
+Businesses with 100+ photos rank higher.
+
+5. Get Consistent Reviews With Keywords
+
+Reviews are one of the strongest prominence signals.
+
+Ask customers to mention the service:
+
+Good review example:
+
+Great crane truck hire service in Brisbane. The operator helped lift our steel beams on site quickly and professionally.
+
+Google reads review text for keywords.
+
+Goal:
+
+2–5 reviews per month consistently
+
+6. Build Location Pages on Your Website
+
+Your website must reinforce your GBP relevance.
+
+Example pages:
+
+/crane-truck-hire-brisbane
+/crane-truck-hire-north-brisbane
+/crane-truck-hire-sunshine-coast
+/crane-truck-hire-gold-coast
+
+Each page should include:
+
+service + location
+
+internal links
+
+schema markup
+
+This sends relevance signals to Google Maps.
+
+7. Embed Your Google Map on Your Website
+
+On your contact page:
+
+<iframe src="Google Maps embed"></iframe>
+
+This helps Google associate the website + GBP entity.
+
+8. Build Citations (Business Listings)
+
+Google measures prominence via mentions across the web.
+
+Important Australian citations:
+
+Yellow Pages
+
+TrueLocal
+
+Hotfrog
+
+Yelp
+
+StartLocal
+
+LocalSearch
+
+AussieWeb
+
+Word of Mouth
+
+Your Name, Address, Phone must be identical.
+
+9. Post Weekly Google Updates
+
+Post once per week:
+
+Examples:
+
+Recent lifting jobs
+
+New crane equipment
+
+Safety tips
+
+Project highlights
+
+Posts keep the listing active and trusted.
+
+10. Add Suburbs in the Service Area
+
+Add 20–30 suburbs.
+
+Example:
+
+Brisbane
+
+North Brisbane
+
+Caboolture
+
+Redcliffe
+
+North Lakes
+
+Deception Bay
+
+Brendale
+
+Strathpine
+
+Ipswich
+
+This helps trigger "near me" searches.
+
+The Ranking Formula (Simplified)
+
+Your chances of appearing in the 3-pack increase when:
+
+Strong category match
++ service keywords
++ keyword reviews
++ local landing pages
++ consistent citations
++ regular activity
++ proximity to searcher
+= Top 3 pack
+Example Strategy for Your Keyword List
+
+From your data, the best opportunities are:
+
+Keyword	Volume	Difficulty
+crane truck hire	800	Very Low
+crane truck hire near me	150	Very Low
+truck crane hire	150	Very Low
+crane truck hire brisbane	250	Medium
+
+This means you can realistically dominate the map pack with the right optimisation.
+
+One Important Thing Most Businesses Miss
+
+Google Maps rankings are heavily influenced by your website structure.
+
+If your website does not clearly show:
+
+Service + Location
+
+Google struggles to rank the GBP.
+
+This is why location service pages are critical.
+
+If You Want, I Can Also Show You
+
+The 7 signals Google actually uses to rank the map pack
+
+A GBP optimisation checklist worth about $2k in agency work
+
+How to engineer the 3-pack using SEO + Google Business Profile together
+
+Just say and I’ll break it down.
+
+yes
+
+To engineer a Google Maps 3-Pack ranking, there are 7 core ranking signals Google uses behind the scenes. Most businesses only optimise 2–3 of them. When you align all 7 together, you dramatically increase your chance of appearing in the top 3 map results.
+
+Since you work heavily with local SEO and growth strategies for clients, this is also the framework you can apply inside your Momentum / BattleScore growth plans.
+
+The 7 Google Maps Ranking Signals
+1. Primary Category (Most Powerful Signal)
+
+Your primary category is the strongest ranking factor in Google Business Profile.
+
+Google essentially asks:
+
+“Does this business primarily do the thing the searcher is asking for?”
+
+Example:
+
+Search:
+crane truck hire
+
+Correct category:
+
+Primary Category
+
+Crane Service
+
+Incorrect category examples:
+
+Trucking Company
+
+Transportation Service
+
+Even if the business does crane hire, Google may not rank it if the category is wrong.
+
+Action:
+
+Audit the top 3 competitors
+
+Match the most common primary category
+
+2. Keyword Relevance
+
+Google analyses multiple places for keywords:
+
+Google reads keywords from:
+
+• Business name
+• Description
+• Services
+• Website content
+• Reviews
+• Google posts
+• Image filenames
+
+Example relevance structure:
+
+Business description example:
+
+Crane truck hire across Brisbane and surrounding areas. Our crane trucks assist with lifting steel, trusses, building materials and machinery for construction and industrial projects.
+
+Notice the pattern:
+
+service + location
+
+3. Website Authority (Huge Impact)
+
+Many people think Google Maps is separate from websites.
+
+It is not.
+
+Your website authority feeds your Google Business Profile rankings.
+
+Google checks:
+
+service pages
+
+location pages
+
+content relevance
+
+backlinks
+
+internal links
+
+Example structure for a crane business:
+
+/crane-truck-hire-brisbane
+/crane-truck-hire-north-brisbane
+/crane-truck-hire-sunshine-coast
+/crane-truck-hire-gold-coast
+
+Each page reinforces relevance signals for maps.
+
+This is why businesses with large local SEO websites dominate the 3-pack.
+
+4. Review Velocity
+
+Google evaluates:
+
+• number of reviews
+• review frequency
+• keywords in reviews
+• rating score
+
+Example review Google loves:
+
+Great crane truck hire service in Brisbane. They lifted our steel beams quickly and professionally.
+
+Goal:
+
+Consistent flow.
+
+Recommended pace:
+
+2–4 reviews per month
+
+5. Proximity to the Searcher
+
+This is the only factor you cannot control.
+
+Google prioritises businesses closest to the searcher.
+
+Example:
+
+Search from North Lakes → businesses in North Lakes rank first.
+
+This is why service area businesses struggle unless the other signals are strong.
+
+6. Citation Authority
+
+Google measures how often your business is mentioned online.
+
+These mentions are called citations.
+
+Important Australian citation sites include:
+
+Yellow Pages
+
+True Local
+
+Yelp
+
+Hotfrog
+
+StartLocal
+
+LocalSearch
+
+AussieWeb
+
+Word of Mouth
+
+The key rule:
+
+Your NAP must match exactly.
+
+NAP =
+
+Name
+Address
+Phone
+
+7. Engagement Signals
+
+Google also measures behaviour:
+
+• calls
+• direction requests
+• website clicks
+• photo views
+
+Listings with higher engagement rise faster.
+
+This is why:
+
+Businesses with lots of photos and posts often rank higher.
+
+How Businesses Actually Win the 3-Pack
+
+The formula usually looks like this:
+
+Correct category
++ keyword services
++ location landing pages
++ regular reviews
++ strong citations
++ consistent activity
++ website authority
+= Google Maps 3-Pack
+The Strategy Agencies Use (But Rarely Explain)
+
+Most agencies quietly use this stacked strategy:
+
+Layer 1 — GBP Optimisation
+
+Category
+Services
+Description
+Photos
+Posts
+
+Layer 2 — Local SEO Website
+
+Service pages
+Location pages
+Internal linking
+
+Layer 3 — Authority
+
+Reviews
+Citations
+Backlinks
+
+When all three layers work together, the business dominates.
+
+Why This Matters For Your System (Momentum)
+
+What you're building with Momentum / BattleScore is actually perfect for this.
+
+Your AI growth engine could automatically detect:
+
+Missing location pages
+
+Weak GBP categories
+
+Review gaps
+
+Citation gaps
+
+Content gaps
+
+Example output:
+
+Audit Foundation Score: 52 / 100
+
+Missing signals:
+• Only 3 service pages
+• No location pages
+• 14 reviews (competitors avg 48)
+• No citations detected
+
+Then generate:
+
+Growth Plan
+
+Add 12 service/location pages
+
+Acquire 15 reviews
+
+Build 25 citations
+
+Post weekly on GBP
+
+That is exactly how agencies sell $2k–$5k/month SEO retainers.
+
+The 3-Pack Growth Playbook (Simple Version)
+
+Step 1
+Correct GBP categories
+
+Step 2
+Add every service as a GBP service
+
+Step 3
+Build location service pages
+
+Step 4
+Get consistent reviews
+
+Step 5
+Build citations
+
+Step 6
+Post weekly on Google
+
+Step 7
+Upload 100+ photos
+
+The Hidden Trick Most SEO's Know
+
+Google Maps rankings improve dramatically when the homepage strongly targets the primary keyword.
+
+Example:
+
+Homepage title:
+
+Crane Truck Hire Brisbane | Company Name
+
+Most businesses don't do this.
+
+If you'd like, I can also show you:
+
+The exact system that lets a business dominate Google Maps in 90 days
+
+It includes:
+
+• the Google Maps authority flywheel
+• the location page multiplier strategy
+• how to reverse engineer the current 3-pack competitors
+
+This is the same strategy agencies charge $3k–$5k/month for.
+
+yes
+
+Below is the exact system used by high-performing local SEO agencies to dominate the Google Maps 3-pack in ~90 days. It’s essentially a reverse-engineering and signal-stacking process.
+
+Since you work with local businesses and growth strategies, this framework is something you could easily turn into an automated audit inside Momentum/BattleScore.
+
+The Google Maps 3-Pack Domination System
+Step 1 — Reverse Engineer the Current 3-Pack
+
+Search the target keyword in an incognito browser.
+
+Example searches:
+
+crane truck hire brisbane
+
+crane hire brisbane
+
+truck crane hire near me
+
+Then analyse the top 3 map results.
+
+Record:
+
+Metric	Business 1	Business 2	Business 3
+Primary Category			
+Reviews			
+Photos			
+Website pages			
+Suburbs mentioned			
+Services listed			
+
+This tells you the ranking benchmark.
+
+You don't need to beat Google — you only need to beat the current top 3.
+
+Step 2 — Fix the Category Alignment
+
+If your category does not match the keyword intent, ranking becomes extremely difficult.
+
+Example:
+
+Keyword
+crane truck hire
+
+Correct primary category:
+
+Crane Service
+
+Then stack secondary categories:
+
+Transportation service
+
+Trucking company
+
+Equipment hire service
+
+Google gives the most weight to the primary category.
+
+Step 3 — Build the Website Signal Layer
+
+Google Maps reads your website to confirm relevance.
+
+Your website should have a service + location structure.
+
+Example:
+
+Homepage
+│
+├── Crane Truck Hire Brisbane
+├── Crane Truck Hire North Brisbane
+├── Crane Truck Hire Sunshine Coast
+├── Crane Truck Hire Gold Coast
+│
+├── Steel Lifting Services
+├── Truss Lifting
+├── Machinery Lifting
+
+Each page should include:
+
+H1 keyword
+
+suburb mentions
+
+internal links
+
+service explanation
+
+This dramatically strengthens the relevance signal.
+
+Step 4 — Expand the GBP Services Section
+
+Most businesses list 3–4 services.
+
+Winning listings often list 15–25 services.
+
+Example services:
+
+Crane truck hire
+
+Truck crane hire
+
+Steel lifting services
+
+Truss lifting
+
+Construction lifting
+
+Machinery transport
+
+Industrial lifting
+
+Equipment lifting
+
+Each one acts like an additional keyword trigger.
+
+Step 5 — Build Review Authority
+
+Reviews influence both prominence and relevance.
+
+Google analyses:
+
+• review count
+• review frequency
+• keywords inside reviews
+
+Example review that helps ranking:
+
+We used them for crane truck hire in Brisbane to lift steel beams. Great service and very professional.
+
+The ideal strategy:
+
+Request 1 review per completed job.
+
+Consistency matters more than volume.
+
+Step 6 — Build Citation Authority
+
+Citations validate the business entity.
+
+Important Australian directories:
+
+Yellow Pages
+
+True Local
+
+Yelp
+
+Hotfrog
+
+AussieWeb
+
+Word of Mouth
+
+StartLocal
+
+LocalSearch
+
+Your:
+
+Name
+Address
+Phone
+
+must be identical everywhere.
+
+Google treats this as trust confirmation.
+
+Step 7 — Build Photo Authority
+
+Listings with more photos consistently rank higher.
+
+Upload:
+
+• trucks
+• job sites
+• equipment
+• staff
+• completed jobs
+
+Use keyword filenames.
+
+Example:
+
+crane-truck-hire-brisbane.jpg
+truck-crane-lifting-steel.jpg
+construction-crane-brisbane.jpg
+
+Businesses ranking in the 3-pack often have:
+
+80–150 photos.
+
+Step 8 — Post Weekly Google Updates
+
+Google rewards active listings.
+
+Post content like:
+
+recent projects
+
+lifting jobs
+
+safety tips
+
+equipment updates
+
+Weekly posting increases engagement signals.
+
+Step 9 — Add Service Area Suburbs
+
+You can add up to 20 service areas.
+
+Example:
+
+Brisbane
+
+North Brisbane
+
+Caboolture
+
+Redcliffe
+
+North Lakes
+
+Brendale
+
+Strathpine
+
+Deception Bay
+
+This helps with “near me” searches.
+
+Step 10 — Create the Authority Flywheel
+
+Once the system is active, rankings compound.
+
+The flywheel looks like this:
+
+Website authority
+      ↓
+Higher Google Maps ranking
+      ↓
+More calls & clicks
+      ↓
+More reviews
+      ↓
+More prominence
+      ↓
+Higher rankings
+
+Businesses that get this right become very hard to displace.
+
+The 90-Day Growth Timeline
+Month 1
+
+Foundation
+
+Fix categories
+
+optimise GBP
+
+build service pages
+
+build citations
+
+Month 2
+
+Authority
+
+build reviews
+
+publish posts
+
+add services
+
+upload photos
+
+Month 3
+
+Momentum
+
+internal links
+
+add location pages
+
+continue reviews
+
+This is usually when 3-pack movement begins.
+
+How This Could Fit Into Momentum / BattleScore
+
+Your system could run a Maps Authority Audit.
+
+Example output:
+
+Maps Authority Score: 58 / 100
+
+Weak Signals Detected
+
+• Only 12 reviews (competitors avg 48)
+• Only 4 GBP services listed
+• No location landing pages
+• Only 9 photos uploaded
+• Only 3 citations detected
+
+Then automatically generate a growth plan.
+
+Example Growth Plan Output
+Priority Actions
+
+1. Add 12 GBP services
+2. Build 4 location landing pages
+3. Acquire 15 new reviews
+4. Upload 40 job photos
+5. Build 20 citations
+
+That is exactly the type of AI-driven growth plan you were describing in your system earlier.
+
+One Final Insight Most People Miss
+
+The homepage keyword still matters heavily for maps.
+
+Your homepage title should include:
+
+Primary Service + City
+
+Example:
+
+Crane Truck Hire Brisbane | Company Name
+
+Many businesses never do this.
+
+If you'd like, I can also show you something extremely powerful:
+
+The “Location Page Multiplier” strategy that lets one business rank in 30–50 suburbs simultaneously.
+
+This is the technique many agencies use to dominate entire regions in Google Maps.
+
+yes
+
+The Location Page Multiplier strategy is one of the most powerful ways to expand visibility across an entire region. It works because Google tries to understand what you do and where you do it. When your website clearly communicates both, Google becomes far more confident ranking your business in the Maps 3-pack and organic results.
+
+Below is the structure and process used by agencies to rank businesses in 20–50 suburbs simultaneously.
+
+1. Understand the Core Principle
+
+Google’s local algorithm is essentially trying to answer two questions:
+
+Service relevance – does the business provide the service being searched?
+
+Location relevance – does the business operate in the location being searched?
+
+Location pages allow you to send a strong signal for both.
+
+Example search:
+
+crane truck hire north lakes
+
+Google will prefer a page specifically about:
+
+Crane Truck Hire North Lakes
+
+rather than a generic “services” page.
+
+2. The Ideal Website Structure
+
+A scalable structure looks like this:
+
+Homepage
+│
+├── Crane Truck Hire
+│   ├── Crane Truck Hire Brisbane
+│   ├── Crane Truck Hire North Brisbane
+│   ├── Crane Truck Hire Caboolture
+│   ├── Crane Truck Hire North Lakes
+│   ├── Crane Truck Hire Redcliffe
+│   └── Crane Truck Hire Strathpine
+│
+├── Steel Lifting Services
+├── Machinery Lifting
+├── Truss Lifting
+
+Each location page targets:
+
+service + suburb
+
+Example:
+
+/crane-truck-hire-north-lakes
+3. What Must Be on Each Location Page
+
+Google can detect thin or duplicated pages, so each page needs a small amount of unique localisation.
+
+Recommended structure:
+
+Page Title
+
+Crane Truck Hire North Lakes
+
+H1
+
+Reliable Crane Truck Hire in North Lakes
+
+Local Context
+
+Mention landmarks, industries, or nearby areas.
+
+Example paragraph:
+
+Our crane truck hire service regularly supports builders and contractors across North Lakes, Mango Hill, Griffin and surrounding Moreton Bay areas.
+
+Services Section
+
+List the main services offered in that area.
+
+Local Project Examples
+
+If possible, reference jobs completed nearby.
+
+Call to Action
+
+Encourage quote requests.
+
+4. Internal Linking (Critical)
+
+Each location page should link to:
+
+the main service page
+
+nearby suburb pages
+
+Example internal links:
+
+Crane Truck Hire Brisbane
+
+Crane Truck Hire Caboolture
+
+Crane Truck Hire Redcliffe
+
+This creates a local authority network within your website.
+
+5. Suburb Selection Strategy
+
+You should prioritise suburbs that:
+
+have search volume
+
+are within your service radius
+
+have commercial activity
+
+Example around Brisbane:
+
+North Lakes
+Caboolture
+Redcliffe
+Strathpine
+Brendale
+Deception Bay
+Morayfield
+Petrie
+Mango Hill
+Kallangur
+
+Creating 15–30 pages is common.
+
+6. How This Influences Google Maps
+
+Location pages reinforce your Google Business Profile service area.
+
+When Google sees:
+
+a location page
+
+reviews mentioning the suburb
+
+service area settings
+
+it becomes much easier for the algorithm to connect the business with that suburb.
+
+7. The Location Authority Effect
+
+Once several suburb pages start ranking, a powerful effect occurs.
+
+More suburb pages
+      ↓
+More keyword relevance
+      ↓
+More organic traffic
+      ↓
+More reviews mentioning locations
+      ↓
+Higher Google Maps prominence
+
+The result is often 3-pack visibility across multiple suburbs.
+
+8. Example Outcome
+
+A business that previously ranked only for:
+
+crane truck hire brisbane
+
+can begin ranking for:
+
+crane truck hire north lakes
+
+crane truck hire caboolture
+
+crane truck hire redcliffe
+
+crane truck hire morayfield
+
+That multiplies visibility across the entire service area.
+
+9. Why Most Businesses Fail at This
+
+Many agencies create duplicate pages.
+
+Google detects this and ignores them.
+
+Effective pages require:
+
+localised wording
+
+internal links
+
+suburb mentions
+
+real service context
+
+Even a small amount of localisation makes a huge difference.
+
+10. How This Fits Your Momentum / BattleScore System
+
+Your system could automatically generate a Location Opportunity Map.
+
+Example output:
+
+Suburb	Search Volume	Opportunity
+North Lakes	150	High
+Caboolture	120	High
+Redcliffe	90	Medium
+Morayfield	80	Medium
+
+Then automatically recommend:
+
+Location pages to build.
+
+Example:
+
+Recommended Pages
+
+/crane-truck-hire-north-lakes
+/crane-truck-hire-caboolture
+/crane-truck-hire-redcliffe
+/crane-truck-hire-morayfield
+
+This aligns perfectly with the AI-driven growth plans you’re building.
+
+One Very Powerful Local SEO Trick
+
+When a business publishes location pages AND Google posts mentioning those suburbs, rankings accelerate much faster.
+
+Example post:
+
+Recently completed a crane lift for a steel frame project in North Lakes.
+
+Google connects:
+
+the suburb
+
+the service
+
+the business entity
+
+This reinforces relevance.
+
+If you want, I can also show you something extremely useful for your work:
+
+the “Local Authority Map” strategy that lets you identify the easiest suburbs to dominate first, often producing results in 30–60 days instead of competing for the hardest areas immediately.
+
+yes
+
+The Local Authority Map strategy is essentially how experienced SEO teams decide where to rank first rather than trying to dominate the entire region at once. It’s about identifying the easiest suburbs to win, building authority there, and then expanding outward.
+
+This approach produces faster wins (30–60 days) and strengthens your overall Google Maps authority.
+
+The Local Authority Map Strategy
+Step 1 — Map the Service Radius
+
+Start by mapping all suburbs within about 20–40 km of the business.
+
+Example for a Brisbane-based service business:
+
+Core suburbs:
+
+Brisbane CBD
+
+North Brisbane
+
+Redcliffe
+
+Caboolture
+
+North Lakes
+
+Brendale
+
+Strathpine
+
+Deception Bay
+
+Mango Hill
+
+Petrie
+
+Morayfield
+
+This becomes your local SEO territory.
+
+Step 2 — Identify Search Demand
+
+Using keyword tools (Ahrefs, SEMrush, Google Keyword Planner), check:
+
+service + suburb
+
+Example:
+
+Keyword	Volume
+crane truck hire brisbane	250
+crane truck hire north lakes	90
+crane truck hire caboolture	120
+crane truck hire redcliffe	80
+crane truck hire morayfield	70
+
+This shows where real search demand exists.
+
+Step 3 — Identify Competition Strength
+
+Next, analyse the current top results.
+
+Look at:
+
+review count
+
+website quality
+
+number of location pages
+
+domain authority
+
+Example analysis:
+
+Suburb	Reviews (top competitor)	Difficulty
+North Lakes	18	Low
+Redcliffe	22	Low
+Caboolture	35	Medium
+Brisbane	110	High
+
+This tells you which suburbs are easier to dominate first.
+
+Step 4 — Build the Local Authority Map
+
+You can then categorise suburbs into priority tiers.
+
+Example:
+
+Tier 1 — Quick Wins
+
+Low competition suburbs.
+
+North Lakes
+
+Redcliffe
+
+Petrie
+
+Mango Hill
+
+Tier 2 — Moderate
+
+Caboolture
+
+Morayfield
+
+Strathpine
+
+Tier 3 — Hard Markets
+
+Brisbane
+
+Gold Coast
+
+The strategy is to win Tier 1 suburbs first.
+
+Step 5 — Build Pages for Tier 1 Suburbs
+
+Create high-quality pages such as:
+
+/crane-truck-hire-north-lakes
+/crane-truck-hire-redcliffe
+/crane-truck-hire-petrie
+/crane-truck-hire-mango-hill
+
+These pages usually rank much faster than major city keywords.
+
+Step 6 — Reinforce With GBP Signals
+
+To strengthen the location signal:
+
+Ask customers from those suburbs to leave reviews mentioning the area.
+
+Example:
+
+Great crane truck hire service in North Lakes.
+
+Also create Google posts referencing the suburb.
+
+Example:
+
+Completed a steel lift project this week in North Lakes.
+
+Google connects these signals together.
+
+Step 7 — Expand the Authority Outward
+
+Once you begin ranking in Tier 1 suburbs, Google starts to see your business as regionally relevant.
+
+Then expand to Tier 2 suburbs.
+
+Example:
+
+Tier 1 authority
+      ↓
+Tier 2 pages rank easier
+      ↓
+City pages rank stronger
+
+This strategy is called local authority stacking.
+
+Example Outcome
+
+Instead of ranking only for:
+
+crane truck hire brisbane
+
+you may begin ranking for:
+
+crane truck hire north lakes
+
+crane truck hire redcliffe
+
+crane truck hire petrie
+
+crane truck hire mango hill
+
+This dramatically increases visibility.
+
+Why This Strategy Works
+
+Google’s algorithm is heavily influenced by local relevance clusters.
+
+If a business ranks in multiple nearby suburbs, Google becomes confident showing it across the entire region.
+
+How This Could Work Inside Momentum / BattleScore
+
+Your platform could generate a Local Authority Map automatically.
+
+Example output:
+
+Suburb	Search Volume	Competition	Priority
+North Lakes	90	Low	Tier 1
+Redcliffe	80	Low	Tier 1
+Caboolture	120	Medium	Tier 2
+Brisbane	250	High	Tier 3
+
+Then generate:
+
+Recommended Page Build Order
+
+North Lakes
+
+Redcliffe
+
+Petrie
+
+Mango Hill
+
+Caboolture
+
+This gives clients a clear growth roadmap.
+
+One Last Powerful Insight
+
+Many agencies overlook this:
+
+Google Maps rankings improve significantly when reviews mention suburbs consistently.
+
+Example review keywords:
+
+North Lakes
+
+Redcliffe
+
+Caboolture
+
+Even if the business address is not in those suburbs.
+
+This strengthens location relevance.

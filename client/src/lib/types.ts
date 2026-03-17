@@ -1629,8 +1629,26 @@ export interface ClientPainPoint {
   createdAt: Date;
 }
 
+export interface GBPPlaybook {
+  description?: string;
+  descriptionPublishedAt?: string;
+  services?: string[];
+  reviewTemplate?: string;
+  serviceAreaSuburbs?: string[];
+  citationChecklist?: Record<string, boolean>;
+  photoFilenames?: string[];
+  photoShootingGuide?: string[];
+  categoryPrimary?: string;
+  categorySecondary?: string[];
+  categoryNotes?: string;
+  auditScore?: number;
+  auditBreakdown?: Record<string, number>;
+  updatedAt?: string;
+}
+
 export interface Client {
   id: string;
+  orgId: string;
   userId: string;
   businessName: string;
   primaryContactName: string;
@@ -1685,6 +1703,8 @@ export interface Client {
   clientOnboarding?: ClientOnboarding;
   // Google Business Profile direct link (full resource name: accounts/{id}/locations/{id})
   gbpLocationName?: string;
+  // GBP 3-Pack Playbook saved data
+  gbpPlaybook?: GBPPlaybook;
   // GBP rank tracking
   localFalconPlaceId?: string;
   localFalconLocation?: {

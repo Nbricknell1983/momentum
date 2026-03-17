@@ -1381,6 +1381,105 @@ Focus on practical, achievable actions for a local service business. Tailor reco
     }
   });
 
+  // GBP Playbook: AI-draft optimised business description
+  app.post("/api/clients/ai/gbp-description", async (req, res) => {
+    try {
+      const { businessName, address, keywords, services, targetLocations } = req.body;
+      const prompt = `You are a Google Business Profile expert. Write a highly optimised GBP business description for:\n\nBusiness: ${businessName || 'this business'}\nAddress: ${address || ''}\nTarget keywords: ${(keywords || []).slice(0, 10).join(', ')}\nServices: ${(services || []).join(', ')}\nTarget locations: ${(targetLocations || []).join(', ')}\n\nThe description must:\n- Be under 750 characters\n- Include the primary service and main location in the first sentence\n- Naturally weave in 3-5 of the target keywords\n- Mention 3-5 target suburbs/locations\n- Sound professional and authentic, not spammy\n- End with a call to action\n\nReturn ONLY the description text, no quotes or preamble.`;
+      const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], max_tokens: 300 });
+      res.json({ text: (completion.choices[0].message.content || '').trim() });
+    } catch (err: any) { console.error('[gbp-description]', err); res.status(500).json({ error: err.message }); }
+  });
+
+  // GBP Playbook: Update GBP description via API
+  app.post("/api/gbp/update-description", async (req, res) => {
+    try {
+      const { orgId, locationName, description } = req.body;
+      if (!orgId || !locationName || !description) return res.status(400).json({ error: 'orgId, locationName, description required' });
+      const token = await getGBPAccessToken(orgId);
+      // Extract locations/{id} from accounts/{aid}/locations/{lid}
+      const locPart = locationName.includes('/locations/') ? 'locations/' + locationName.split('/locations/')[1] : locationName;
+      const r = await fetch(
+        `https://mybusinessbusinessinformation.googleapis.com/v1/${locPart}?updateMask=description`,
+        { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ description }) }
+      );
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || 'GBP update failed');
+      res.json({ success: true });
+    } catch (err: any) { console.error('[gbp/update-description]', err); res.status(500).json({ error: err.message }); }
+  });
+
+  // GBP Playbook: AI-generate GBP services list
+  app.post("/api/clients/ai/gbp-services", async (req, res) => {
+    try {
+      const { businessName, industry, keywords } = req.body;
+      const prompt = `You are a Google Business Profile expert. Generate a list of 15-20 specific GBP services for:\n\nBusiness: ${businessName || 'this business'}\nIndustry: ${industry || 'local services'}\nKeywords: ${(keywords || []).slice(0, 15).join(', ')}\n\nEach service should:\n- Be a specific, searchable service name (3-6 words max)\n- Match real search terms people use\n- Cover all keyword variations\n- Include both general and specific services\n\nReturn a JSON object: { "services": ["service 1", "service 2", ...] }`;
+      const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 400 });
+      const result = JSON.parse(completion.choices[0].message.content || '{"services":[]}');
+      res.json(result);
+    } catch (err: any) { console.error('[gbp-services]', err); res.status(500).json({ error: err.message }); }
+  });
+
+  // GBP Playbook: AI-generate review request template
+  app.post("/api/clients/ai/review-request-template", async (req, res) => {
+    try {
+      const { businessName, primaryService, primaryLocation, keywords } = req.body;
+      const prompt = `You are a local SEO expert. Write a natural, friendly review request message for a business.\n\nBusiness: ${businessName || 'this business'}\nPrimary service: ${primaryService || 'our services'}\nLocation: ${primaryLocation || 'our area'}\nTarget keywords: ${(keywords || []).slice(0, 5).join(', ')}\n\nWrite a SHORT SMS message (under 160 chars) that:\n- Thanks the customer for their business\n- Asks them to leave a review\n- Subtly guides them to mention the service and location\n- Includes a line example of what a good review might say\n- Sounds human, not corporate\n\nReturn JSON: { "sms": "short SMS text", "email": "longer email version (2-3 sentences)", "exampleReview": "example of ideal review text that mentions service + location" }`;
+      const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 400 });
+      const result = JSON.parse(completion.choices[0].message.content || '{}');
+      res.json(result);
+    } catch (err: any) { console.error('[review-request-template]', err); res.status(500).json({ error: err.message }); }
+  });
+
+  // GBP Playbook: AI-generate service area suburbs
+  app.post("/api/clients/ai/service-area-suburbs", async (req, res) => {
+    try {
+      const { businessName, address, keywords, existingSuburbs } = req.body;
+      const prompt = `You are a local SEO expert. Generate a list of 25-30 suburbs/locations for a Google Business Profile service area.\n\nBusiness: ${businessName || 'this business'}\nBusiness address: ${address || ''}\nKeywords: ${(keywords || []).slice(0, 10).join(', ')}\nAlready listed: ${(existingSuburbs || []).join(', ')}\n\nRules:\n- Only include real Australian suburbs/cities\n- Prioritise suburbs within 30-50km of the business address\n- Include a mix of major cities and surrounding suburbs\n- Include suburbs mentioned in the keyword list if any\n- Don't duplicate existing suburbs\n\nReturn JSON: { "suburbs": ["Suburb 1", "Suburb 2", ...] }`;
+      const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 400 });
+      const result = JSON.parse(completion.choices[0].message.content || '{"suburbs":[]}');
+      res.json(result);
+    } catch (err: any) { console.error('[service-area-suburbs]', err); res.status(500).json({ error: err.message }); }
+  });
+
+  // GBP Playbook: AI-generate photo strategy
+  app.post("/api/clients/ai/photo-strategy", async (req, res) => {
+    try {
+      const { businessName, industry, keywords, primaryLocation } = req.body;
+      const prompt = `You are a local SEO expert. Create a GBP photo strategy for:\n\nBusiness: ${businessName || 'this business'}\nIndustry: ${industry || 'local services'}\nKeywords: ${(keywords || []).slice(0, 10).join(', ')}\nPrimary location: ${primaryLocation || 'local area'}\n\nGenerate:\n1. 15 geo-targeted photo filenames (keyword-location format, lowercase with hyphens, .jpg)\n2. A shooting guide of 8 photo categories to capture\n\nReturn JSON: { "filenames": ["file1.jpg", ...], "shootingGuide": ["Category: description of what to shoot", ...] }`;
+      const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 500 });
+      const result = JSON.parse(completion.choices[0].message.content || '{"filenames":[],"shootingGuide":[]}');
+      res.json(result);
+    } catch (err: any) { console.error('[photo-strategy]', err); res.status(500).json({ error: err.message }); }
+  });
+
+  // GBP Playbook: AI-generate audit score
+  app.post("/api/clients/ai/gbp-audit", async (req, res) => {
+    try {
+      const { businessName, hasDescription, servicesCount, reviewCount, avgRating, hasCitations, serviceAreaCount, hasPhotos, hasWeeklyPosts, categorySet } = req.body;
+      const prompt = `You are a Google Business Profile auditor. Score this GBP profile out of 100 across 7 signals.\n\nBusiness: ${businessName || 'this business'}\nData:\n- Description set: ${hasDescription ? 'Yes' : 'No'}\n- Services listed: ${servicesCount || 0}\n- Total reviews: ${reviewCount || 0}\n- Average rating: ${avgRating || 'unknown'}\n- Citations built: ${hasCitations ? 'Yes' : 'Unknown'}\n- Service area suburbs: ${serviceAreaCount || 0}\n- Has 100+ photos: ${hasPhotos ? 'Yes' : 'No'}\n- Posts weekly: ${hasWeeklyPosts ? 'Yes' : 'No'}\n- Primary category optimised: ${categorySet ? 'Yes' : 'No'}\n\nScore each signal 0-100:\n- category: primary category alignment\n- description: keyword-rich description\n- services: number and relevance of listed services\n- reviews: count, frequency, and quality\n- serviceArea: suburb coverage\n- citations: directory presence\n- engagement: photos, posts, activity\n\nReturn JSON: { "total": 0-100, "breakdown": { "category": 0-100, "description": 0-100, "services": 0-100, "reviews": 0-100, "serviceArea": 0-100, "citations": 0-100, "engagement": 0-100 }, "topGaps": ["gap 1", "gap 2", "gap 3"] }`;
+      const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, max_tokens: 400 });
+      const result = JSON.parse(completion.choices[0].message.content || '{}');
+      res.json(result);
+    } catch (err: any) { console.error('[gbp-audit]', err); res.status(500).json({ error: err.message }); }
+  });
+
+  // GBP Playbook: Save playbook data to Firestore
+  app.patch("/api/clients/:clientId/gbp-playbook", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, patch } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      const ref = firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId);
+      const snap = await ref.get();
+      if (!snap.exists) return res.status(404).json({ error: 'Client not found' });
+      const existing = snap.data()?.gbpPlaybook || {};
+      await ref.update({ gbpPlaybook: { ...existing, ...patch, updatedAt: new Date().toISOString() } });
+      res.json({ success: true });
+    } catch (err: any) { console.error('[clients/gbp-playbook]', err); res.status(500).json({ error: err.message }); }
+  });
+
   // Publish a Local Post to GBP
   app.post("/api/gbp/publish-post", async (req, res) => {
     try {
