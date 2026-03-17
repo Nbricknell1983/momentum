@@ -69,8 +69,8 @@ service cloud.firestore {
       
       match /activities/{activityId} {
         allow read: if isOrgMember(orgId);
-        allow create: if isOrgMember(orgId) && request.resource.data.userId == request.auth.uid;
-        allow update: if isOwnerOrSelf(orgId, resource.data.userId);
+        allow create: if isOrgMember(orgId) && (request.resource.data.userId == request.auth.uid || isOrgManager(orgId));
+        allow update: if isOwnerOrSelf(orgId, resource.data.userId) || isOrgManager(orgId);
         allow delete: if isOrgManager(orgId);
       }
       

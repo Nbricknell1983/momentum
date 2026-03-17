@@ -205,7 +205,7 @@ function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
 
 export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode, onAiSectionChange }: LeadCardExpandedProps) {
   const dispatch = useDispatch();
-  const { orgId, authReady } = useAuth();
+  const { orgId, authReady, user } = useAuth();
   const { toast } = useToast();
   const activities = useSelector((state: RootState) => state.app.activities);
   const cadences = useSelector((state: RootState) => state.app.cadences);
@@ -410,7 +410,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
     try {
       // Use logPipelineAction to create both activity AND task for Daily Plan
       const { activity: savedActivity } = await logPipelineAction(orgId, {
-        userId: lead.userId,
+        userId: user?.uid || lead.userId,
         leadId: lead.id,
         type,
         leadName: lead.companyName || lead.contactName,
