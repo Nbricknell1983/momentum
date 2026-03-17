@@ -299,6 +299,16 @@ export default function SettingsPage() {
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCadence, setEditingCadence] = useState<Cadence | null>(null);
+
+  // Active tab — reads ?tab= from URL so OAuth callbacks land on the right tab
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const t = p.get('tab');
+      if (t) return t;
+    }
+    return 'profile';
+  });
   
   // Organization state
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -1222,6 +1232,16 @@ export default function SettingsPage() {
     staleTime: 30_000,
   });
 
+  const { data: gbpCredentials } = useQuery<{ hasCredentials: boolean; redirectUri: string }>({
+    queryKey: ['/api/gbp/credentials-check'],
+    queryFn: async () => {
+      const r = await fetch('/api/gbp/credentials-check');
+      return r.json();
+    },
+    enabled: isManager,
+    staleTime: 60_000,
+  });
+
   const [gbpSuccessMsg, setGbpSuccessMsg] = useState(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
@@ -1278,9 +1298,17 @@ export default function SettingsPage() {
       )}
 
       {gbpErrorMsg && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          Connection error: {gbpErrorMsg}. Please try again.
+        <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Connection failed: {gbpErrorMsg === 'credentials_not_configured' ? 'API credentials not set up' : gbpErrorMsg}</p>
+            {gbpErrorMsg === 'credentials_not_configured' && (
+              <p className="mt-1 text-xs">The GOOGLE_GBP_CLIENT_ID and GOOGLE_GBP_CLIENT_SECRET environment variables are not configured. Set them in your Replit Secrets to enable GBP OAuth.</p>
+            )}
+            {gbpErrorMsg === 'redirect_uri_mismatch' && gbpCredentials?.redirectUri && (
+              <p className="mt-1 text-xs">Make sure <code className="bg-red-100 dark:bg-red-900/30 px-1 rounded">{gbpCredentials.redirectUri}</code> is added as an Authorised redirect URI in your Google Cloud Console OAuth app.</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -1344,21 +1372,43 @@ export default function SettingsPage() {
                 <p className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Recent reviews with text and sentiment</p>
                 <p className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Reply to reviews directly from the client workspace</p>
               </div>
-              <Button
-                onClick={() => { if (orgId) window.location.href = `/api/gbp/connect?orgId=${orgId}`; }}
-                disabled={!orgId}
-                data-testid="button-connect-gbp"
-                className="gap-2"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="white" fillOpacity="0.9"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="white" fillOpacity="0.9"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="white" fillOpacity="0.9"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="white" fillOpacity="0.9"/>
-                </svg>
-                Connect Google Business Profile
-              </Button>
-              <p className="text-xs text-muted-foreground">You'll be redirected to Google to authorise access. Use the Google account that manages your clients' GBP listings.</p>
+
+              {gbpCredentials && !gbpCredentials.hasCredentials ? (
+                <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Setup required before connecting
+                  </p>
+                  <div className="text-xs text-amber-700 dark:text-amber-400 space-y-1.5">
+                    <p>1. Create an OAuth 2.0 Client ID in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="underline font-medium">Google Cloud Console</a> (Application type: Web application)</p>
+                    <p>2. Add this as an Authorised redirect URI:</p>
+                    <code className="block bg-amber-100 dark:bg-amber-900/30 rounded px-2 py-1 text-[11px] break-all font-mono">{gbpCredentials.redirectUri}</code>
+                    <p>3. Add <code className="bg-amber-100 dark:bg-amber-900/30 px-1 rounded">GOOGLE_GBP_CLIENT_ID</code> and <code className="bg-amber-100 dark:bg-amber-900/30 px-1 rounded">GOOGLE_GBP_CLIENT_SECRET</code> to your Replit Secrets</p>
+                    <p>4. Enable the <strong>Business Profile API</strong> in Google Cloud Console</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => { if (orgId) window.location.href = `/api/gbp/connect?orgId=${orgId}`; }}
+                    disabled={!orgId}
+                    data-testid="button-connect-gbp"
+                    className="gap-2"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="white" fillOpacity="0.9"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="white" fillOpacity="0.9"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="white" fillOpacity="0.9"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="white" fillOpacity="0.9"/>
+                    </svg>
+                    Connect Google Business Profile
+                  </Button>
+                  <p className="text-xs text-muted-foreground">You'll be redirected to Google to authorise access. Use the Google account that manages your clients' GBP listings.</p>
+                  {gbpCredentials?.redirectUri && (
+                    <p className="text-[11px] text-muted-foreground/70">Redirect URI: <code className="bg-muted px-1 rounded">{gbpCredentials.redirectUri}</code></p>
+                  )}
+                </>
+              )}
             </div>
           )}
         </CardContent>
@@ -1416,7 +1466,7 @@ export default function SettingsPage() {
           /* ── OWNER / ADMIN VIEW ── */
           <div className="space-y-1">
             <p className="text-xs font-semibold tracking-widest uppercase text-muted-foreground pb-1">Personal</p>
-            <Tabs defaultValue="profile" className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList>
                 <TabsTrigger value="profile" data-testid="tab-profile">
                   <User className="h-4 w-4 mr-1" />

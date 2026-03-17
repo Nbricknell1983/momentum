@@ -7013,8 +7013,17 @@ Return JSON:
   // Google Business Profile (GBP) OAuth + API
   // ============================================
 
-  const GBP_REDIRECT_URI = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/api/gbp/callback`;
   const GBP_SCOPES = 'https://www.googleapis.com/auth/business.manage';
+
+  // Helper: derive the redirect URI from the current request — supports custom domains
+  function getGBPRedirectUri(req: any): string {
+    // Prefer an explicit env var override (set this in production if needed)
+    if (process.env.GBP_REDIRECT_URI) return process.env.GBP_REDIRECT_URI;
+    // Otherwise derive from the incoming request host
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim() || (req.secure ? 'https' : 'https');
+    const host = (req.headers['x-forwarded-host'] as string | undefined) || req.headers.host || '';
+    return `${proto}://${host}/api/gbp/callback`;
+  }
 
   // Helper: get or refresh an access token for an org
   async function getGBPAccessToken(orgId: string): Promise<string> {
@@ -7048,14 +7057,26 @@ Return JSON:
     return tokens.access_token;
   }
 
+  // Check whether GBP OAuth credentials are configured server-side
+  app.get('/api/gbp/credentials-check', (req, res) => {
+    const hasCredentials = !!(process.env.GOOGLE_GBP_CLIENT_ID && process.env.GOOGLE_GBP_CLIENT_SECRET);
+    const redirectUri = getGBPRedirectUri(req);
+    res.json({ hasCredentials, redirectUri });
+  });
+
   // Initiate GBP OAuth — redirect to Google
   app.get('/api/gbp/connect', (req, res) => {
     const orgId = req.query.orgId as string;
     if (!orgId) return res.status(400).send('orgId required');
-    const state = Buffer.from(JSON.stringify({ orgId })).toString('base64');
+    if (!process.env.GOOGLE_GBP_CLIENT_ID || !process.env.GOOGLE_GBP_CLIENT_SECRET) {
+      return res.redirect('/settings?tab=integrations&gbp=error&reason=credentials_not_configured');
+    }
+    const redirectUri = getGBPRedirectUri(req);
+    // Store redirectUri in state so callback uses the exact same value
+    const state = Buffer.from(JSON.stringify({ orgId, redirectUri })).toString('base64');
     const params = new URLSearchParams({
-      client_id: process.env.GOOGLE_GBP_CLIENT_ID!,
-      redirect_uri: GBP_REDIRECT_URI,
+      client_id: process.env.GOOGLE_GBP_CLIENT_ID,
+      redirect_uri: redirectUri,
       response_type: 'code',
       scope: GBP_SCOPES,
       access_type: 'offline',
@@ -7069,9 +7090,12 @@ Return JSON:
   app.get('/api/gbp/callback', async (req, res) => {
     try {
       const { code, state, error } = req.query as Record<string, string>;
-      if (error) return res.redirect(`/settings?gbp=error&reason=${encodeURIComponent(error)}`);
-      if (!code || !state) return res.redirect('/settings?gbp=error&reason=missing_params');
-      const { orgId } = JSON.parse(Buffer.from(state, 'base64').toString());
+      if (error) return res.redirect(`/settings?tab=integrations&gbp=error&reason=${encodeURIComponent(error)}`);
+      if (!code || !state) return res.redirect('/settings?tab=integrations&gbp=error&reason=missing_params');
+      const parsed = JSON.parse(Buffer.from(state, 'base64').toString());
+      const { orgId } = parsed;
+      // Use the exact redirect URI that was used in the auth request (stored in state)
+      const redirectUri = parsed.redirectUri || getGBPRedirectUri(req);
       // Exchange code for tokens
       const r = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -7080,27 +7104,28 @@ Return JSON:
           code,
           client_id: process.env.GOOGLE_GBP_CLIENT_ID!,
           client_secret: process.env.GOOGLE_GBP_CLIENT_SECRET!,
-          redirect_uri: GBP_REDIRECT_URI,
+          redirect_uri: redirectUri,
           grant_type: 'authorization_code',
         }).toString(),
       });
       const tokens = await r.json();
       if (tokens.error || !tokens.refresh_token) {
         console.error('[GBP callback] token error:', tokens);
-        return res.redirect(`/settings?gbp=error&reason=${encodeURIComponent(tokens.error || 'no_refresh_token')}`);
+        return res.redirect(`/settings?tab=integrations&gbp=error&reason=${encodeURIComponent(tokens.error_description || tokens.error || 'no_refresh_token')}`);
       }
-      if (!firestore) return res.redirect('/settings?gbp=error&reason=no_firestore');
+      if (!firestore) return res.redirect('/settings?tab=integrations&gbp=error&reason=no_firestore');
       // Save tokens to Firestore
       await firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').set({
         refreshToken: tokens.refresh_token,
         accessToken: tokens.access_token,
         tokenExpiry: Date.now() + (tokens.expires_in || 3600) * 1000,
         connectedAt: new Date().toISOString(),
+        redirectUri,
       }, { merge: true });
-      res.redirect('/settings?gbp=connected');
+      res.redirect('/settings?tab=integrations&gbp=connected');
     } catch (err: any) {
       console.error('[GBP callback]', err);
-      res.redirect(`/settings?gbp=error&reason=${encodeURIComponent(err.message)}`);
+      res.redirect(`/settings?tab=integrations&gbp=error&reason=${encodeURIComponent(err.message)}`);
     }
   });
 

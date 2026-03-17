@@ -716,9 +716,19 @@ function GBPReviewsSection({ client }: { client: Client }) {
       {isExpanded && (
         <div className="mt-3 space-y-3">
           {!gbpStatus?.connected ? (
-            <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground flex items-start gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
-              <span>Google Business Profile is not connected. Go to <strong>Settings → Integrations</strong> to connect your GBP account.</span>
+            <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+                <span>Google Business Profile is not connected to your account yet.</span>
+              </div>
+              <button
+                onClick={() => window.location.href = '/settings?tab=integrations'}
+                className="ml-5 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                data-testid="button-go-to-gbp-settings"
+              >
+                Go to Settings → Integrations
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
             </div>
           ) : !hasLocation ? (
             <div className="space-y-2">
