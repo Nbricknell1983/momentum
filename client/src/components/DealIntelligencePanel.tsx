@@ -498,6 +498,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [screenshotError, setScreenshotError] = useState(false);
   const [screenshotExpanded, setScreenshotExpanded] = useState(true);
   const [screenshotModalOpen, setScreenshotModalOpen] = useState(false);
+  const [discoveringSocial, setDiscoveringSocial] = useState(false);
   const prevWebsite = useRef<string | undefined>(undefined);
 
   // Auto-reset screenshot state when website changes
@@ -697,8 +698,50 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         title: 'GBP Data Loaded',
         description: `${data.reviewCount || 0} reviews · ${data.rating || 'No'} rating · ${data.primaryType || 'Business'}`,
       });
+
+      // Auto-discover social links if not already set
+      const websiteForSocial = leadUpdates.website || lead.website || data.website;
+      if (websiteForSocial && !lead.facebookUrl && !lead.instagramUrl && !lead.linkedinUrl) {
+        handleDiscoverSocial(websiteForSocial);
+      }
     } catch (err: any) {
       toast({ title: 'Lookup Failed', description: err.message || 'Could not fetch Google Business data', variant: 'destructive' });
+    }
+  }, [lead, orgId, authReady, dispatch, toast]);
+
+  const handleDiscoverSocial = useCallback(async (websiteUrl?: string) => {
+    const url = websiteUrl || lead.website;
+    if (!url || !orgId || !authReady) return;
+    setDiscoveringSocial(true);
+    try {
+      const res = await fetch('/api/leads/discover-social', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: url }),
+      });
+      if (!res.ok) throw new Error('Discovery failed');
+      const data = await res.json() as { facebookUrl: string | null; instagramUrl: string | null; linkedinUrl: string | null };
+      const updates: Partial<Lead> = {};
+      if (data.facebookUrl && !lead.facebookUrl) updates.facebookUrl = data.facebookUrl;
+      if (data.instagramUrl && !lead.instagramUrl) updates.instagramUrl = data.instagramUrl;
+      if (data.linkedinUrl && !lead.linkedinUrl) updates.linkedinUrl = data.linkedinUrl;
+      if (Object.keys(updates).length > 0) {
+        updates.updatedAt = new Date();
+        dispatch(patchLead({ id: lead.id, updates }));
+        await updateLeadInFirestore(orgId, lead.id, updates, authReady);
+        const found = [
+          updates.facebookUrl && 'Facebook',
+          updates.instagramUrl && 'Instagram',
+          updates.linkedinUrl && 'LinkedIn',
+        ].filter(Boolean).join(', ');
+        toast({ title: 'Social profiles found', description: found });
+      } else {
+        toast({ title: 'No new profiles found', description: 'Check the website has visible social links' });
+      }
+    } catch {
+      toast({ title: 'Discovery failed', description: 'Could not read the website', variant: 'destructive' });
+    } finally {
+      setDiscoveringSocial(false);
     }
   }, [lead, orgId, authReady, dispatch, toast]);
 
@@ -826,9 +869,25 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       <StrategyIntelligenceCard lead={lead} />
 
       <div className="rounded-lg border bg-card p-3" data-testid="card-online-presence">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Globe className="h-3.5 w-3.5 text-amber-600" />
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Online Presence</span>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <Globe className="h-3.5 w-3.5 text-amber-600" />
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Online Presence</span>
+          </div>
+          {lead.website && (
+            <button
+              onClick={() => handleDiscoverSocial()}
+              disabled={discoveringSocial}
+              className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors disabled:opacity-50"
+              title="Auto-detect Facebook, Instagram and LinkedIn from the website"
+              data-testid="button-discover-social"
+            >
+              {discoveringSocial
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <Search className="h-3 w-3" />}
+              {discoveringSocial ? 'Discovering…' : 'Discover socials'}
+            </button>
+          )}
         </div>
         <div className="space-y-1">
           <EditablePresenceRow

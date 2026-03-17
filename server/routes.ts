@@ -720,6 +720,103 @@ Be specific and actionable. Focus on retention and growth.`;
     }
   });
 
+  // Auto-discover social media links from a website homepage
+  app.post("/api/leads/discover-social", async (req, res) => {
+    try {
+      const { websiteUrl } = req.body as { websiteUrl: string };
+      if (!websiteUrl?.trim()) return res.status(400).json({ error: 'No website URL provided' });
+
+      const normalised = websiteUrl.trim().startsWith('http') ? websiteUrl.trim() : `https://${websiteUrl.trim()}`;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+
+      let html = '';
+      try {
+        const response = await fetch(normalised, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-AU,en;q=0.9',
+          },
+        });
+        clearTimeout(timeout);
+        if (response.ok) html = await response.text();
+      } catch {
+        clearTimeout(timeout);
+        // Try http fallback if https fails
+        try {
+          const fallback = normalised.replace(/^https:\/\//, 'http://');
+          const r2 = await fetch(fallback, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (r2.ok) html = await r2.text();
+        } catch { /* ignore */ }
+      }
+
+      if (!html) return res.json({ facebookUrl: null, instagramUrl: null, linkedinUrl: null });
+
+      // Extract all href values from <a> tags
+      const hrefRegex = /href=["']([^"']+)["']/gi;
+      const hrefs: string[] = [];
+      let match;
+      while ((match = hrefRegex.exec(html)) !== null) {
+        hrefs.push(match[1]);
+      }
+
+      // Social media pattern matching — exclude sharing/login/generic pages
+      const FACEBOOK_SKIP = /sharer|share|login|signup|sign-up|dialog|intent|watch|groups\/|events\/|hashtag|photo|video|plugins|pages\/create|business\/|ads\/|help\//i;
+      const INSTAGRAM_SKIP = /explore|reel|story|p\/|tv\/|hashtag|accounts\/login/i;
+      const LINKEDIN_SKIP = /share|login|signup|uas\/login|authwall|feed\/|jobs\/|learning\/|recruiter/i;
+
+      const isValidFacebook = (url: string) => {
+        try {
+          const u = new URL(url);
+          if (!/(facebook\.com|fb\.com)$/.test(u.hostname)) return false;
+          if (FACEBOOK_SKIP.test(u.pathname)) return false;
+          const parts = u.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+          return parts.length === 1 && parts[0].length > 1;
+        } catch { return false; }
+      };
+
+      const isValidInstagram = (url: string) => {
+        try {
+          const u = new URL(url);
+          if (!u.hostname.includes('instagram.com')) return false;
+          if (INSTAGRAM_SKIP.test(u.pathname)) return false;
+          const parts = u.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+          return parts.length === 1 && parts[0].length > 1;
+        } catch { return false; }
+      };
+
+      const isValidLinkedIn = (url: string) => {
+        try {
+          const u = new URL(url);
+          if (!u.hostname.includes('linkedin.com')) return false;
+          if (LINKEDIN_SKIP.test(u.pathname)) return false;
+          return /\/(company|in|school)\//.test(u.pathname);
+        } catch { return false; }
+      };
+
+      const cleanUrl = (url: string, base: string) => {
+        try {
+          return new URL(url, base).href.split('?')[0].replace(/\/$/, '');
+        } catch { return url; }
+      };
+
+      const facebookUrl = hrefs.map(h => cleanUrl(h, normalised)).find(isValidFacebook) || null;
+      const instagramUrl = hrefs.map(h => cleanUrl(h, normalised)).find(isValidInstagram) || null;
+      const linkedinUrl = hrefs.map(h => cleanUrl(h, normalised)).find(isValidLinkedIn) || null;
+
+      res.json({ facebookUrl, instagramUrl, linkedinUrl });
+    } catch (error) {
+      console.error('Error discovering social links:', error);
+      res.status(500).json({ error: 'Failed to discover social links' });
+    }
+  });
+
   // Parse a freetext "next step" into a structured task suggestion
   app.post("/api/leads/ai/parse-next-step", async (req, res) => {
     try {
