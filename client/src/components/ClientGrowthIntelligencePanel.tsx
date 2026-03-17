@@ -1,13 +1,11 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle,
   Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
-  Loader2, Link2, X, ExternalLink, Radio, Play, MessageSquare, ChevronDown,
-  ThumbsUp, Building2, Unlink, Target, ScanSearch, Upload, FileText, Sparkles,
-  FileEdit, Send, Map,
+  Loader2, Link2, X, ExternalLink, Play, MessageSquare, ChevronDown,
+  ThumbsUp, Building2, Unlink, Target, Radio, Image as ImageIcon,
 } from 'lucide-react';
-import { parseKeywordFile } from '@/lib/parseKeywordFile';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +19,6 @@ import {
 import ClientOnboardingHandover from '@/components/ClientOnboardingHandover';
 import GBPPlaybookPanel from '@/components/GBPPlaybookPanel';
 import GBPMapsEnginePanel from '@/components/GBPMapsEnginePanel';
-import ScanMapPicker, { type MapPickerResult } from '@/components/ScanMapPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateClientInFirestore } from '@/lib/firestoreService';
 import { useDispatch } from 'react-redux';
@@ -171,21 +168,13 @@ function parseKeywordsFromSummary(summary: string): Array<{ keyword: string; vol
   return results.slice(0, 25);
 }
 
-// ── 3-pack status helpers ─────────────────────────────────────────────────────
-function threePackStatus(arp: number | null): { label: string; color: string; dot: string } {
-  if (arp === null) return { label: 'Not scanned', color: 'text-muted-foreground', dot: 'bg-muted-foreground/40' };
-  if (arp <= 3) return { label: 'In 3-pack', color: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' };
-  if (arp <= 7) return { label: 'Near top 3', color: 'text-lime-600 dark:text-lime-400', dot: 'bg-lime-500' };
-  if (arp <= 15) return { label: 'Outside top 10', color: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-400' };
-  return { label: 'Not ranking', color: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' };
-}
 
-function threePackAction(keyword: string, arp: number | null): string {
-  if (arp === null) return `Run a scan for "${keyword}" to see current local rank`;
-  if (arp <= 3) return `Maintain position — post regular GBP updates for "${keyword}"`;
-  if (arp <= 7) return `Boost "${keyword}" with more reviews + keyword in GBP description`;
-  if (arp <= 15) return `Build local citations and GBP posts targeting "${keyword}"`;
-  return `Low authority for "${keyword}" — complete GBP profile, photos, and reviews`;
+// ── Local Falcon date helper ─────────────────────────────────────────────────
+function fmtLFDate(d: string) {
+  if (!d) return '';
+  const parts = d.split('-');
+  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  return d;
 }
 
 function LocalPresenceSection({ client }: { client: Client }) {
@@ -201,144 +190,10 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const [showRunScan, setShowRunScan] = useState(false);
   const [scanKeyword, setScanKeyword] = useState('');
   const [scanGridSize, setScanGridSize] = useState('5');
-  const [scanArea, setScanArea] = useState('');
-  const [showMapPicker, setShowMapPicker] = useState(false);
-  const [mapPickerResult, setMapPickerResult] = useState<MapPickerResult | null>(null);
-  const [showAllKeywords, setShowAllKeywords] = useState(false);
-  const [keywordUploading, setKeywordUploading] = useState(false);
-  const keywordFileRef = useRef<HTMLInputElement>(null);
-  const [scanAreas, setScanAreas] = useState<Array<{ area: string; keywords: string[]; priority: string; tip: string }> | null>(null);
-  const [scanAreasLoading, setScanAreasLoading] = useState(false);
-  const [rankingPlan, setRankingPlan] = useState<{ summary: string; areas: Array<{ area: string; currentStatus: string; priority: string; actions: string[]; timeframe: string }> } | null>(null);
-  const [rankingPlanLoading, setRankingPlanLoading] = useState(false);
-  type PostDraftState = { text: string; drafting: boolean; publishing: boolean; published: boolean };
-  const [postDrafts, setPostDrafts] = useState<Record<string, PostDraftState>>({});
+  const [selectedReport, setSelectedReport] = useState<LFReport | null>(null);
 
   const hasLinked = !!client.localFalconPlaceId;
-
-  const handleSuggestScanAreas = async () => {
-    if (!parsedKeywords.length) return;
-    setScanAreasLoading(true);
-    setScanAreas(null);
-    try {
-      const resp = await fetch('/api/clients/ai/suggest-scan-areas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keywords: parsedKeywords.map(k => k.keyword),
-          businessName: client.localFalconLocation?.name || client.name,
-          businessAddress: client.localFalconLocation?.address || '',
-        }),
-      });
-      if (!resp.ok) throw new Error('Request failed');
-      const data = await resp.json();
-      setScanAreas(data.areas || []);
-    } catch (err: any) {
-      toast({ title: 'Could not generate suggestions', description: err.message, variant: 'destructive' });
-    } finally {
-      setScanAreasLoading(false);
-    }
-  };
-
-  const handleGenerateRankingPlan = async () => {
-    if (!keywordRankings.length) return;
-    setRankingPlanLoading(true);
-    setRankingPlan(null);
-    try {
-      const scanned = keywordRankings.filter(k => k.arp !== null).map(k => ({ keyword: k.keyword, arp: k.arp, solv: k.solv }));
-      const unscanned = keywordRankings.filter(k => k.arp === null).map(k => k.keyword);
-      const resp = await fetch('/api/clients/ai/area-ranking-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName: client.localFalconLocation?.name || client.name,
-          businessAddress: client.localFalconLocation?.address || '',
-          scannedKeywords: scanned,
-          unscannedKeywords: unscanned,
-        }),
-      });
-      if (!resp.ok) throw new Error('Request failed');
-      const data = await resp.json();
-      setRankingPlan(data);
-    } catch (err: any) {
-      toast({ title: 'Could not generate plan', description: err.message, variant: 'destructive' });
-    } finally {
-      setRankingPlanLoading(false);
-    }
-  };
-
-  const setPostDraft = (key: string, patch: Partial<PostDraftState>) =>
-    setPostDrafts(prev => ({ ...prev, [key]: { text: '', drafting: false, publishing: false, published: false, ...prev[key], ...patch } }));
-
-  const handleDraftPost = async (key: string, action: string, area: string, currentStatus: string) => {
-    setPostDraft(key, { drafting: true, published: false });
-    try {
-      const resp = await fetch('/api/clients/ai/draft-gbp-post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          area,
-          currentStatus,
-          businessName: client.localFalconLocation?.name || client.name,
-        }),
-      });
-      if (!resp.ok) throw new Error('Draft failed');
-      const { text } = await resp.json();
-      setPostDraft(key, { text, drafting: false });
-    } catch (err: any) {
-      toast({ title: 'Could not draft post', description: err.message, variant: 'destructive' });
-      setPostDraft(key, { drafting: false });
-    }
-  };
-
-  const handlePublishPost = async (key: string) => {
-    const draft = postDrafts[key];
-    if (!draft?.text) return;
-    if (!client.gbpLocationName) {
-      toast({ title: 'No GBP location linked', description: 'Link a GBP location to this client first.', variant: 'destructive' });
-      return;
-    }
-    setPostDraft(key, { publishing: true });
-    try {
-      const resp = await fetch('/api/gbp/publish-post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId: client.orgId, locationName: client.gbpLocationName, text: draft.text }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error || 'Publish failed');
-      }
-      setPostDraft(key, { publishing: false, published: true });
-      toast({ title: 'Post published!', description: 'Your Google Business Profile post is now live.' });
-    } catch (err: any) {
-      toast({ title: 'Publish failed', description: err.message, variant: 'destructive' });
-      setPostDraft(key, { publishing: false });
-    }
-  };
-
-  const handleKeywordFileUpload = async (file: File) => {
-    setKeywordUploading(true);
-    try {
-      const summary = await parseKeywordFile(file);
-      const updatedOnboarding = { ...(client.clientOnboarding || {}), keywordSummary: summary };
-      await updateClientInFirestore(orgId, client.id, { clientOnboarding: updatedOnboarding }, authReady);
-      dispatch(updateClient({ ...client, clientOnboarding: updatedOnboarding }));
-      toast({ title: 'Keywords uploaded', description: `${summary.match(/\d+ total/)?.[0] || 'Keywords'} imported from ${file.name}` });
-    } catch (err: any) {
-      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setKeywordUploading(false);
-      if (keywordFileRef.current) keywordFileRef.current.value = '';
-    }
-  };
-
-  // Parse keywords from onboarding
-  const parsedKeywords = useMemo(
-    () => parseKeywordsFromSummary(client.clientOnboarding?.keywordSummary || ''),
-    [client.clientOnboarding?.keywordSummary]
-  );
+  const loc = client.localFalconLocation;
 
   // Fetch LF locations for picker
   const { data: locationsData, isLoading: locationsLoading } = useQuery<{ data: { locations: LFLocation[] } }>({
@@ -353,25 +208,15 @@ function LocalPresenceSection({ client }: { client: Client }) {
   });
 
   const locations = locationsData?.data?.locations || [];
-  const hasNoLFLocations = !locationsLoading && locations.length === 0;
+  const filteredLocations = locationSearch
+    ? locations.filter(l => l.name.toLowerCase().includes(locationSearch.toLowerCase()) || l.address.toLowerCase().includes(locationSearch.toLowerCase()))
+    : locations;
 
-  // Google Places search fallback — used when LF account has no configured locations
-  const { data: placesData, isLoading: placesLoading } = useQuery<{ places: LFLocation[] }>({
-    queryKey: ['/api/local-falcon/search-place', locationSearch],
-    queryFn: async () => {
-      const resp = await fetch(`/api/local-falcon/search-place?query=${encodeURIComponent(locationSearch)}`);
-      if (!resp.ok) throw new Error('Failed to search places');
-      return resp.json();
-    },
-    enabled: showPicker && hasNoLFLocations && locationSearch.trim().length >= 2,
-    staleTime: 30_000,
-  });
-
-  // Fetch all scan reports for linked location (fetch more to match keywords)
+  // Fetch scan reports for linked location
   const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports } = useQuery<{ data: { reports: LFReport[]; count: number } }>({
     queryKey: ['/api/local-falcon/reports', client.localFalconPlaceId],
     queryFn: async () => {
-      const resp = await fetch(`/api/local-falcon/reports?placeId=${encodeURIComponent(client.localFalconPlaceId!)}&limit=100`);
+      const resp = await fetch(`/api/local-falcon/reports?placeId=${encodeURIComponent(client.localFalconPlaceId!)}&limit=50`);
       if (!resp.ok) throw new Error('Failed to fetch reports');
       return resp.json();
     },
@@ -381,18 +226,19 @@ function LocalPresenceSection({ client }: { client: Client }) {
 
   // Link a location to this client
   const linkMutation = useMutation({
-    mutationFn: async (loc: LFLocation) => {
+    mutationFn: async (l: LFLocation) => {
       if (!orgId) throw new Error('No org');
       await updateClientInFirestore(orgId, client.id, {
-        localFalconPlaceId: loc.place_id,
-        localFalconLocation: { name: loc.name, address: loc.address, lat: loc.lat, lng: loc.lng },
+        localFalconPlaceId: l.place_id,
+        localFalconLocation: { name: l.name, address: l.address, lat: l.lat, lng: l.lng },
       }, authReady);
     },
-    onSuccess: (_, loc) => {
-      dispatch(updateClient({ ...client, localFalconPlaceId: loc.place_id, localFalconLocation: { name: loc.name, address: loc.address, lat: loc.lat, lng: loc.lng } }));
+    onSuccess: (_, l) => {
+      dispatch(updateClient({ ...client, localFalconPlaceId: l.place_id, localFalconLocation: { name: l.name, address: l.address, lat: l.lat, lng: l.lng } }));
       setShowPicker(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/local-falcon/reports', loc.place_id] });
-      toast({ title: 'Location linked', description: `${loc.name} linked to this client.` });
+      setLocationSearch('');
+      queryClient.invalidateQueries({ queryKey: ['/api/local-falcon/reports', l.place_id] });
+      toast({ title: 'Location linked', description: `${l.name} linked to this client.` });
     },
     onError: () => toast({ title: 'Error', description: 'Failed to link location', variant: 'destructive' }),
   });
@@ -410,41 +256,19 @@ function LocalPresenceSection({ client }: { client: Client }) {
     onError: () => toast({ title: 'Error', description: 'Failed to unlink location', variant: 'destructive' }),
   });
 
-  // Run a new scan
+  // Run a new scan — uses the business's own coordinates
   const runScanMutation = useMutation({
     mutationFn: async () => {
-      const loc = client.localFalconLocation;
       if (!loc || !client.localFalconPlaceId) throw new Error('No location linked');
       if (!scanKeyword.trim()) throw new Error('Keyword required');
-
-      // Use map picker coordinates if available, otherwise geocode the text area
-      let centerLat = loc.lat;
-      let centerLng = loc.lng;
-      if (mapPickerResult) {
-        centerLat = mapPickerResult.lat;
-        centerLng = mapPickerResult.lng;
-      } else if (scanArea.trim()) {
-        try {
-          const geoResp = await fetch(`/api/local-falcon/search-place?query=${encodeURIComponent(scanArea.trim() + ', Australia')}`);
-          if (geoResp.ok) {
-            const geoData = await geoResp.json();
-            const firstPlace = geoData.places?.[0];
-            if (firstPlace?.lat && firstPlace?.lng) {
-              centerLat = firstPlace.lat;
-              centerLng = firstPlace.lng;
-            }
-          }
-        } catch { /* fall back to business location */ }
-      }
-
       const resp = await fetch('/api/local-falcon/run-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           placeId: client.localFalconPlaceId,
           keyword: scanKeyword.trim(),
-          lat: centerLat,
-          lng: centerLng,
+          lat: loc.lat,
+          lng: loc.lng,
           gridSize: scanGridSize,
           radius: '3',
           measurement: 'km',
@@ -460,8 +284,6 @@ function LocalPresenceSection({ client }: { client: Client }) {
     onSuccess: () => {
       setShowRunScan(false);
       setScanKeyword('');
-      setScanArea('');
-      setMapPickerResult(null);
       refetchReports();
       toast({ title: 'Scan complete', description: 'New scan results are ready.' });
     },
@@ -469,55 +291,24 @@ function LocalPresenceSection({ client }: { client: Client }) {
   });
 
   const reports = reportsData?.data?.reports || [];
-
-  const filteredLocations = locationSearch
-    ? locations.filter(l => l.name.toLowerCase().includes(locationSearch.toLowerCase()) || l.address.toLowerCase().includes(locationSearch.toLowerCase()))
-    : locations;
-
-  // Match each keyword to its latest scan
-  const keywordRankings = useMemo(() => {
-    return parsedKeywords.map(kw => {
-      const matches = reports
-        .filter(r => r.keyword.toLowerCase().trim() === kw.keyword.toLowerCase().trim())
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const latest = matches[0];
-      return {
-        ...kw,
-        arp: latest ? parseFloat(latest.arp) : null,
-        solv: latest ? parseFloat(latest.solv) : null,
-        scanDate: latest?.date || null,
-        reportUrl: latest?.public_url || null,
-        heatmap: latest?.heatmap || latest?.image || null,
-      };
-    });
-  }, [parsedKeywords, reports]);
-
-  // Overall metrics from most recent scan
   const latestReport = reports[0];
   const latestArp = latestReport ? parseFloat(latestReport.arp) : null;
   const latestSolv = latestReport ? parseFloat(latestReport.solv) : null;
 
-  // Keywords needing action (for priority actions section)
-  const actionKeywords = keywordRankings.filter(k => k.arp === null || k.arp > 3).slice(0, 5);
-  const inThreePack = keywordRankings.filter(k => k.arp !== null && k.arp <= 3).length;
-  const scannedCount = keywordRankings.filter(k => k.arp !== null).length;
+  const inThreePack = useMemo(() => {
+    const byKw = new Map<string, number>();
+    reports.forEach(r => {
+      const arp = parseFloat(r.arp);
+      const existing = byKw.get(r.keyword);
+      if (existing === undefined || arp < existing) byKw.set(r.keyword, arp);
+    });
+    return [...byKw.values()].filter(v => v <= 3).length;
+  }, [reports]);
 
-  const displayKeywords = showAllKeywords ? keywordRankings : keywordRankings.slice(0, 8);
-
-  // Suburb chips for scan area selector — pulled from GBP playbook service areas + client onboarding target locations
-  const areaChips = useMemo(() => {
-    const chips = new Set<string>();
-    (client.gbpPlaybook?.serviceAreaSuburbs || []).forEach(s => s && chips.add(s.trim()));
-    const targets = client.clientOnboarding?.targetLocations || '';
-    targets.split(/[,\n]/).map(s => s.trim()).filter(Boolean).forEach(s => chips.add(s));
-    return Array.from(chips).slice(0, 20);
-  }, [client.gbpPlaybook?.serviceAreaSuburbs, client.clientOnboarding?.targetLocations]);
-
-  const loc = client.localFalconLocation;
   return (
     <>
     <div className="border rounded-lg overflow-hidden mb-3" data-testid="local-gbp-section">
-      {/* ── Section header ── */}
+      {/* Section header */}
       <button
         className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
         onClick={() => setIsExpanded(p => !p)}
@@ -526,9 +317,6 @@ function LocalPresenceSection({ client }: { client: Client }) {
         <div className="flex items-center gap-2">
           <Target className="h-4 w-4 text-violet-500" />
           <p className="text-sm font-medium">Local GBP Rankings</p>
-          {parsedKeywords.length > 0 && (
-            <Badge variant="outline" className="text-[10px]">{parsedKeywords.length} keywords</Badge>
-          )}
           {inThreePack > 0 && (
             <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200">
               {inThreePack} in 3-pack
@@ -545,131 +333,70 @@ function LocalPresenceSection({ client }: { client: Client }) {
 
       {isExpanded && (
         <div className="border-t space-y-0">
-
-          {/* ── Tabs: Rankings | 3-Pack Playbook ── */}
+          {/* Tabs */}
           <div className="flex border-b">
-            <button
-              onClick={() => setActiveTab('rankings')}
-              className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'rankings' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`}
-              data-testid="tab-gbp-rankings"
-            >
-              Rank Tracking
-            </button>
+            <button onClick={() => setActiveTab('rankings')} className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'rankings' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`} data-testid="tab-gbp-rankings">Rank Tracking</button>
             {client.gbpLocationName && (
-              <button
-                onClick={() => setActiveTab('maps-engine')}
-                className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'maps-engine' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`}
-                data-testid="tab-gbp-maps-engine"
-              >
-                Maps Engine
-              </button>
+              <button onClick={() => setActiveTab('maps-engine')} className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'maps-engine' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`} data-testid="tab-gbp-maps-engine">Maps Engine</button>
             )}
-            <button
-              onClick={() => setActiveTab('playbook')}
-              className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'playbook' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`}
-              data-testid="tab-gbp-playbook"
-            >
-              3-Pack Playbook
-            </button>
+            <button onClick={() => setActiveTab('playbook')} className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'playbook' ? 'border-b-2 border-violet-500 text-violet-600 dark:text-violet-400' : 'text-muted-foreground hover:text-foreground'}`} data-testid="tab-gbp-playbook">3-Pack Playbook</button>
           </div>
 
-          {/* ── Maps Engine Tab ── */}
-          {activeTab === 'maps-engine' && (
-            <div className="p-3">
-              <GBPMapsEnginePanel client={client} />
-            </div>
-          )}
+          {/* Maps Engine Tab */}
+          {activeTab === 'maps-engine' && <div className="p-3"><GBPMapsEnginePanel client={client} /></div>}
 
-          {/* ── 3-Pack Playbook Tab ── */}
+          {/* 3-Pack Playbook Tab */}
           {activeTab === 'playbook' && (
             <div className="p-3">
-              <GBPPlaybookPanel
-                client={client}
-                parsedKeywords={parsedKeywords}
-                onPlaybookUpdate={(_patch) => { /* optimistic update handled inside panel */ }}
-              />
+              <GBPPlaybookPanel client={client} parsedKeywords={[]} onPlaybookUpdate={() => {}} />
             </div>
           )}
 
-          {/* ── Rankings Tab content ── */}
+          {/* Rank Tracking Tab */}
           {activeTab === 'rankings' && <>
 
-          {/* ── Location picker ── */}
+          {/* Location picker */}
           {showPicker && (
             <div className="p-3 border-b bg-muted/10 space-y-2">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-medium">
-                  {hasNoLFLocations ? 'Search business by name' : 'Select tracked location'}
-                </p>
+                <p className="text-xs font-medium">Select Local Falcon location</p>
                 <button onClick={() => { setShowPicker(false); setLocationSearch(''); }} className="text-muted-foreground hover:text-foreground">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
               <Input
-                placeholder={hasNoLFLocations ? 'Type business name to search…' : 'Search locations…'}
+                placeholder="Search locations…"
                 value={locationSearch}
                 onChange={e => setLocationSearch(e.target.value)}
                 className="h-8 text-xs"
                 data-testid="input-location-search"
                 autoFocus
               />
-
-              {/* LF has locations → filter and show them */}
-              {!hasNoLFLocations && (
-                locationsLoading ? (
-                  <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-                ) : filteredLocations.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-3">No locations match your search</p>
-                ) : (
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {filteredLocations.map(loc => (
-                      <button key={loc.id} className="w-full text-left p-2 rounded border hover:bg-muted/30 transition-colors" onClick={() => linkMutation.mutate(loc)} disabled={linkMutation.isPending} data-testid={`location-option-${loc.id}`}>
-                        <p className="text-xs font-medium">{loc.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{loc.address}</p>
-                        {(loc.rating && loc.rating !== '0.000') && <p className="text-[11px] text-amber-600">★ {parseFloat(loc.rating).toFixed(1)} · {loc.reviews} reviews</p>}
-                      </button>
-                    ))}
-                  </div>
-                )
-              )}
-
-              {/* LF has no locations → Google Places search mode */}
-              {hasNoLFLocations && (
-                locationSearch.trim().length < 2 ? (
-                  <div className="py-2 space-y-2">
-                    <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                      Type the client's business name above to search, then select a result to link it.
-                    </p>
-                    <div className="flex gap-2 justify-center">
-                      <button
-                        onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/local-falcon/locations'] })}
-                        className="inline-flex items-center gap-1.5 text-[11px] border rounded px-3 py-1.5 hover:bg-muted/30 transition-colors"
-                      >
-                        <RefreshCw className="h-3 w-3" /> Refresh
-                      </button>
-                    </div>
-                  </div>
-                ) : placesLoading ? (
-                  <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-                ) : (placesData?.places || []).length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-3">No businesses found — try a different name</p>
-                ) : (
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                    <p className="text-[11px] text-muted-foreground px-1">Google search results — select to link:</p>
-                    {(placesData?.places || []).map(loc => (
-                      <button key={loc.id} className="w-full text-left p-2 rounded border hover:bg-muted/30 transition-colors" onClick={() => linkMutation.mutate(loc)} disabled={linkMutation.isPending} data-testid={`place-option-${loc.id}`}>
-                        <p className="text-xs font-medium">{loc.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{loc.address}</p>
-                        {loc.rating && loc.rating !== '0' && <p className="text-[11px] text-amber-600">★ {parseFloat(loc.rating).toFixed(1)} · {loc.reviews} reviews</p>}
-                      </button>
-                    ))}
-                  </div>
-                )
+              {locationsLoading ? (
+                <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+              ) : filteredLocations.length === 0 ? (
+                <div className="py-3 space-y-2 text-center">
+                  <p className="text-xs text-muted-foreground">No saved locations found in your Local Falcon account.</p>
+                  <p className="text-[11px] text-muted-foreground">Add this business at <a href="https://localfalcon.com" target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline">localfalcon.com</a> first, then refresh.</p>
+                  <button onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/local-falcon/locations'] })} className="inline-flex items-center gap-1.5 text-[11px] border rounded px-3 py-1.5 hover:bg-muted/30 transition-colors">
+                    <RefreshCw className="h-3 w-3" /> Refresh
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {filteredLocations.map(l => (
+                    <button key={l.id} className="w-full text-left p-2 rounded border hover:bg-muted/30 transition-colors" onClick={() => linkMutation.mutate(l)} disabled={linkMutation.isPending} data-testid={`location-option-${l.id}`}>
+                      <p className="text-xs font-medium">{l.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{l.address}</p>
+                      {(l.rating && l.rating !== '0.000') && <p className="text-[11px] text-amber-600">★ {parseFloat(l.rating).toFixed(1)} · {l.reviews} reviews</p>}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           )}
 
-          {/* ── Not linked state ── */}
+          {/* Not linked state */}
           {!hasLinked && !showPicker && (
             <div className="p-4 text-center space-y-2.5">
               <div className="mx-auto w-10 h-10 rounded-full bg-violet-50 dark:bg-violet-950/30 flex items-center justify-center">
@@ -677,7 +404,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
               </div>
               <div>
                 <p className="text-sm font-medium">No location linked</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Link a location to track keyword rankings in the 3-pack</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Link a saved Local Falcon location to view rank grids</p>
               </div>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowPicker(true)} data-testid="btn-link-location">
                 <Link2 className="h-3.5 w-3.5" /> Link Location
@@ -685,38 +412,33 @@ function LocalPresenceSection({ client }: { client: Client }) {
             </div>
           )}
 
-          {/* ── Linked location: main content ── */}
+          {/* Linked state */}
           {hasLinked && !showPicker && (
             <>
               {/* Location bar */}
               <div className="flex items-center justify-between px-3 py-2 bg-muted/20 border-b">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <MapPin className="h-3 w-3 text-violet-500 shrink-0" />
-                  <p className="text-xs font-medium truncate">{client.localFalconLocation?.name || 'Linked Location'}</p>
-                  {client.localFalconLocation?.address && (
-                    <span className="text-[11px] text-muted-foreground truncate hidden sm:inline">· {client.localFalconLocation.address}</span>
-                  )}
+                  <p className="text-xs font-medium truncate">{loc?.name || 'Linked Location'}</p>
+                  {loc?.address && <span className="text-[11px] text-muted-foreground truncate hidden sm:inline">· {loc.address}</span>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-2">
                   <button onClick={() => setShowPicker(true)} className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50" data-testid="btn-change-location">Change</button>
-                  <button onClick={() => unlinkMutation.mutate()} disabled={unlinkMutation.isPending} className="text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-muted/50" data-testid="btn-unlink-location">
-                    <X className="h-3 w-3" />
-                  </button>
+                  <button onClick={() => unlinkMutation.mutate()} disabled={unlinkMutation.isPending} className="text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-muted/50" data-testid="btn-unlink-location"><X className="h-3 w-3" /></button>
                 </div>
               </div>
 
-              {/* Overall metrics row */}
               {reportsLoading ? (
                 <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
               ) : (
                 <>
+                  {/* Metrics row */}
                   {latestReport && (
-                    <div className="grid grid-cols-4 divide-x border-b">
+                    <div className="grid grid-cols-3 divide-x border-b">
                       {[
-                        { label: 'Avg Rank', value: latestArp !== null ? latestArp.toFixed(1) : '—', color: arpColor(latestArp) },
+                        { label: 'Avg Rank', value: latestArp !== null ? `#${latestArp.toFixed(1)}` : '—', color: arpColor(latestArp) },
                         { label: 'SoLV', value: latestSolv !== null ? `${latestSolv.toFixed(0)}%` : '—', color: 'text-violet-600 dark:text-violet-400' },
-                        { label: 'In 3-Pack', value: `${inThreePack}/${parsedKeywords.length || '—'}`, color: inThreePack > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground' },
-                        { label: 'Scanned', value: parsedKeywords.length ? `${scannedCount}/${parsedKeywords.length}` : reports.length.toString(), color: 'text-foreground' },
+                        { label: 'Scans', value: reports.length.toString(), color: 'text-foreground' },
                       ].map(m => (
                         <div key={m.label} className="py-2 px-2 text-center">
                           <p className="text-[10px] text-muted-foreground mb-0.5">{m.label}</p>
@@ -726,516 +448,90 @@ function LocalPresenceSection({ client }: { client: Client }) {
                     </div>
                   )}
 
-                  {/* ── Keyword Rankings Table ── */}
-                  {parsedKeywords.length > 0 ? (
-                    <div>
-                      {/* Table header */}
-                      <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/10">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Keyword Rankings</p>
-                        <div className="flex items-center gap-1">
-                          <input
-                            ref={keywordFileRef}
-                            type="file"
-                            accept=".csv,.xlsx,.xls"
-                            className="hidden"
-                            onChange={e => { const f = e.target.files?.[0]; if (f) handleKeywordFileUpload(f); }}
-                            data-testid="input-keyword-file-replace"
-                          />
-                          <button
-                            onClick={() => keywordFileRef.current?.click()}
-                            disabled={keywordUploading}
-                            className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50 flex items-center gap-1"
-                            data-testid="btn-replace-keywords"
-                            title="Replace keywords from file"
-                          >
-                            {keywordUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                          </button>
-                          <button onClick={() => refetchReports()} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/50" data-testid="btn-refresh-reports">
-                            <RefreshCw className="h-3 w-3" />
-                          </button>
-                          <Button size="sm" variant="outline" className="h-6 text-[11px] px-2 gap-1" onClick={() => { setShowRunScan(v => !v); setScanKeyword(''); }} data-testid="btn-show-run-scan">
-                            <Radio className="h-3 w-3" /> New Scan
+                  {/* Scan History header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/10">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Scan History</p>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => refetchReports()} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/50" data-testid="btn-refresh-reports"><RefreshCw className="h-3 w-3" /></button>
+                      <Button size="sm" variant="outline" className="h-6 text-[11px] px-2 gap-1" onClick={() => setShowRunScan(v => !v)} data-testid="btn-show-run-scan">
+                        <Radio className="h-3 w-3" /> New Scan
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* New scan form */}
+                  {showRunScan && (
+                    <div className="p-3 bg-muted/10 border-b space-y-2">
+                      <Input placeholder="Keyword (e.g. crane truck hire brisbane)" value={scanKeyword} onChange={e => setScanKeyword(e.target.value)} className="h-8 text-xs" data-testid="input-scan-keyword" />
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <p className="text-[10px] text-muted-foreground mb-1">Grid Size</p>
+                          <select value={scanGridSize} onChange={e => setScanGridSize(e.target.value)} className="w-full h-8 text-xs rounded border bg-background px-2" data-testid="select-grid-size">
+                            {GRID_SIZES.map(s => <option key={s} value={s}>{s}×{s}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex items-end gap-1 flex-1">
+                          <Button size="sm" className="flex-1 h-8 gap-1" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
+                            {runScanMutation.isPending ? <><Loader2 className="h-3 w-3 animate-spin" /> Scanning…</> : <><Radio className="h-3 w-3" /> Run Scan</>}
                           </Button>
+                          <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
                         </div>
                       </div>
+                      <p className="text-[10px] text-muted-foreground">Scans from the business address. Larger grids use more scan credits.</p>
+                    </div>
+                  )}
 
-                      {/* Scan form */}
-                      {showRunScan && (
-                        <div className="p-3 bg-muted/10 border-b space-y-2">
-                          <Input placeholder="Keyword (e.g. crane truck hire brisbane)" value={scanKeyword} onChange={e => setScanKeyword(e.target.value)} className="h-8 text-xs" data-testid="input-scan-keyword" />
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Grid Size</p>
-                              <select value={scanGridSize} onChange={e => setScanGridSize(e.target.value)} className="w-full h-8 text-xs rounded border bg-background px-2" data-testid="select-grid-size">
-                                {GRID_SIZES.map(s => <option key={s} value={s}>{s}×{s}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Target Area</p>
-                              {mapPickerResult ? (
-                                <div className="flex items-center gap-1 h-8 px-2 rounded border bg-primary/5 border-primary/30">
-                                  <MapPin className="h-3 w-3 text-primary shrink-0" />
-                                  <span className="text-xs font-medium text-primary flex-1 truncate">{mapPickerResult.name}</span>
-                                  <button onClick={() => { setMapPickerResult(null); setScanArea(''); }} className="text-muted-foreground hover:text-foreground shrink-0"><X className="h-3 w-3" /></button>
-                                </div>
-                              ) : (
-                                <div className="flex gap-1">
-                                  <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => { setScanArea(e.target.value); setMapPickerResult(null); }} className="h-8 text-xs flex-1 min-w-0" data-testid="input-scan-area" />
-                                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowMapPicker(true)} title="Pick on map" data-testid="btn-open-map-picker"><Map className="h-3.5 w-3.5" /></Button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {!mapPickerResult && areaChips.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {areaChips.map(chip => (
-                                <button key={chip} onClick={() => setScanArea(chip)} className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${scanArea === chip ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted/50 border-border text-muted-foreground hover:text-foreground'}`} data-testid={`chip-area-${chip}`}>{chip}</button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
-                            <MapPin className="h-3 w-3 shrink-0" />
-                            <span>
-                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(suburb selection)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
-                              {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
-                            </span>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
-                              {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); setMapPickerResult(null); }} disabled={runScanMutation.isPending}>Cancel</Button>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">Larger grids use more scan credits.</p>
-                        </div>
-                      )}
-
-                      {/* Keyword rows */}
-                      <div className="divide-y">
-                        {displayKeywords.map((kw, i) => {
-                          const status = threePackStatus(kw.arp);
-                          return (
-                            <div key={i} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/20 transition-colors group">
-                              {/* ARP badge */}
-                              <span className={`inline-flex items-center justify-center h-6 w-7 rounded text-[11px] font-bold shrink-0 ${kw.arp !== null ? arpBg(kw.arp) : 'bg-muted/60 text-muted-foreground'}`}>
-                                {kw.arp !== null ? (kw.arp <= 20 ? `#${kw.arp.toFixed(0)}` : '20+') : '—'}
+                  {/* Scan history cards */}
+                  {reports.length === 0 ? (
+                    <div className="px-3 py-6 text-center">
+                      <p className="text-xs text-muted-foreground">No scans yet — run your first scan to see local rankings</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {reports.map(r => {
+                        const arp = parseFloat(r.arp);
+                        const solv = parseFloat(r.solv);
+                        const gridImg = r.heatmap || r.image || '';
+                        return (
+                          <div key={r.id} className="px-3 py-2.5 hover:bg-muted/10 transition-colors">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className={`inline-flex items-center justify-center h-6 w-7 rounded text-[11px] font-bold shrink-0 ${arpBg(arp)}`}>
+                                {isNaN(arp) ? '?' : arp <= 20 ? `#${arp.toFixed(0)}` : '20+'}
                               </span>
-                              {/* Keyword info */}
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{kw.keyword}</p>
-                                <div className="flex items-center gap-2">
-                                  <span className={`flex items-center gap-1 text-[11px] ${status.color}`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${status.dot}`} />
-                                    {status.label}
-                                  </span>
-                                  {kw.volume && <span className="text-[11px] text-muted-foreground">{kw.volume >= 1000 ? `${(kw.volume / 1000).toFixed(1)}K` : kw.volume} vol</span>}
-                                  {kw.scanDate && <span className="text-[11px] text-muted-foreground hidden group-hover:inline">{kw.scanDate}</span>}
-                                </div>
+                                <p className="text-xs font-medium truncate">{r.keyword}</p>
+                                <p className="text-[11px] text-muted-foreground">{fmtLFDate(r.date)} · {isNaN(solv) ? '—' : `${solv.toFixed(0)}% SoLV`} · {r.grid_size}×{r.grid_size} grid</p>
                               </div>
-                              {/* Actions */}
                               <div className="flex items-center gap-1 shrink-0">
-                                {kw.reportUrl && (
-                                  <a href={kw.reportUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/50" title="View heatmap report">
+                                {gridImg && (
+                                  <button
+                                    onClick={() => setSelectedReport(r)}
+                                    className="text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 p-1 rounded hover:bg-muted/50"
+                                    title="View heatmap grid"
+                                    data-testid={`btn-view-heatmap-${r.id}`}
+                                  >
+                                    <ImageIcon className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {r.public_url && (
+                                  <a href={r.public_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/50" title="View full report">
                                     <ExternalLink className="h-3 w-3" />
                                   </a>
                                 )}
-                                <button
-                                  onClick={() => { setScanKeyword(kw.keyword); setShowRunScan(true); }}
-                                  className="text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 p-1 rounded hover:bg-muted/50 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title={`Scan for "${kw.keyword}"`}
-                                  data-testid={`btn-scan-keyword-${i}`}
-                                >
-                                  <ScanSearch className="h-3 w-3" />
-                                </button>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Show more / Show less */}
-                      {keywordRankings.length > 8 && (
-                        <button onClick={() => setShowAllKeywords(v => !v)} className="w-full text-center py-2 text-[11px] text-muted-foreground hover:text-foreground border-t hover:bg-muted/20 transition-colors">
-                          {showAllKeywords ? `Show less` : `Show all ${keywordRankings.length} keywords`}
-                        </button>
-                      )}
-
-                      {/* Scan history for scanned-but-not-in-keyword-list */}
-                      {scannedCount === 0 && reports.length > 0 && (
-                        <div className="px-3 py-2 border-t">
-                          <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wide font-medium">Scan History</p>
-                          <div className="space-y-1">
-                            {reports.slice(0, 5).map(r => {
-                              const arp = parseFloat(r.arp);
-                              return (
-                                <div key={r.id} className="flex items-center gap-2 py-1 text-[11px]">
-                                  <span className={`inline-flex items-center justify-center h-5 w-6 rounded text-[10px] font-bold shrink-0 ${arpBg(arp)}`}>{isNaN(arp) ? '?' : arp.toFixed(0)}</span>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="truncate font-medium">{r.keyword}</p>
-                                    <p className="text-muted-foreground">{r.date} · {parseFloat(r.solv).toFixed(0)}% SoLV</p>
-                                  </div>
-                                  {r.public_url && <a href={r.public_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a>}
-                                </div>
-                              );
-                            })}
+                            {gridImg && (
+                              <button
+                                onClick={() => setSelectedReport(r)}
+                                className="w-full rounded overflow-hidden border hover:opacity-90 transition-opacity"
+                                data-testid={`btn-heatmap-thumb-${r.id}`}
+                              >
+                                <img src={gridImg} alt={`${r.keyword} heatmap`} className="w-full h-auto" loading="lazy" />
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      )}
-
-                      {/* No scans yet */}
-                      {reports.length === 0 && (
-                        <div className="px-3 py-4 text-center">
-                          <p className="text-xs text-muted-foreground">No scans yet — run your first scan to see local rankings</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    /* No keywords uploaded yet */
-                    <div className="p-4 space-y-3">
-                      <div className="text-center space-y-3">
-                        <div className="mx-auto w-10 h-10 rounded-full bg-violet-50 dark:bg-violet-950/30 flex items-center justify-center">
-                          <FileText className="h-5 w-5 text-violet-400" />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium">No keywords uploaded yet</p>
-                          <p className="text-[11px] text-muted-foreground">Upload your Ahrefs or keyword export to track rankings for your target keywords.</p>
-                        </div>
-                        <input
-                          ref={keywordFileRef}
-                          type="file"
-                          accept=".csv,.xlsx,.xls"
-                          className="hidden"
-                          onChange={e => { const f = e.target.files?.[0]; if (f) handleKeywordFileUpload(f); }}
-                          data-testid="input-keyword-file"
-                        />
-                        <Button
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => keywordFileRef.current?.click()}
-                          disabled={keywordUploading}
-                          data-testid="btn-upload-keywords"
-                        >
-                          {keywordUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                          {keywordUploading ? 'Importing…' : 'Upload Keyword File'}
-                        </Button>
-                        <p className="text-[10px] text-muted-foreground">Ahrefs, Google Keyword Planner, or any .csv / .xlsx export</p>
-                      </div>
-                      {/* Still show scan history + run scan if available */}
-                      {reports.length > 0 && (
-                        <div className="space-y-1 border-t pt-3">
-                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Scan History</p>
-                          {reports.slice(0, 5).map(r => {
-                            const arp = parseFloat(r.arp);
-                            return (
-                              <div key={r.id} className="flex items-center gap-2 py-1 text-[11px]">
-                                <span className={`inline-flex items-center justify-center h-5 w-6 rounded text-[10px] font-bold shrink-0 ${arpBg(arp)}`}>{isNaN(arp) ? '?' : arp.toFixed(0)}</span>
-                                <div className="flex-1 min-w-0">
-                                  <p className="truncate font-medium">{r.keyword}</p>
-                                  <p className="text-muted-foreground">{r.date} · {parseFloat(r.solv).toFixed(0)}% SoLV</p>
-                                </div>
-                                {r.public_url && <a href={r.public_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <Button size="sm" variant="outline" className="w-full gap-1.5 h-8" onClick={() => setShowRunScan(v => !v)} data-testid="btn-show-run-scan">
-                        <Radio className="h-3.5 w-3.5" /> Run a Scan
-                      </Button>
-                      {showRunScan && (
-                        <div className="border rounded-lg p-3 space-y-2 bg-muted/10">
-                          <Input placeholder="Keyword (e.g. crane truck hire brisbane)" value={scanKeyword} onChange={e => setScanKeyword(e.target.value)} className="h-8 text-xs" data-testid="input-scan-keyword" />
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Grid Size</p>
-                              <select value={scanGridSize} onChange={e => setScanGridSize(e.target.value)} className="w-full h-8 text-xs rounded border bg-background px-2" data-testid="select-grid-size">
-                                {GRID_SIZES.map(s => <option key={s} value={s}>{s}×{s}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Target Area</p>
-                              {mapPickerResult ? (
-                                <div className="flex items-center gap-1 h-8 px-2 rounded border bg-primary/5 border-primary/30">
-                                  <MapPin className="h-3 w-3 text-primary shrink-0" />
-                                  <span className="text-xs font-medium text-primary flex-1 truncate">{mapPickerResult.name}</span>
-                                  <button onClick={() => { setMapPickerResult(null); setScanArea(''); }} className="text-muted-foreground hover:text-foreground shrink-0"><X className="h-3 w-3" /></button>
-                                </div>
-                              ) : (
-                                <div className="flex gap-1">
-                                  <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => { setScanArea(e.target.value); setMapPickerResult(null); }} className="h-8 text-xs flex-1 min-w-0" data-testid="input-scan-area" />
-                                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowMapPicker(true)} title="Pick on map" data-testid="btn-open-map-picker"><Map className="h-3.5 w-3.5" /></Button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {!mapPickerResult && areaChips.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {areaChips.map(chip => (
-                                <button key={chip} onClick={() => setScanArea(chip)} className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${scanArea === chip ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted/50 border-border text-muted-foreground hover:text-foreground'}`} data-testid={`chip-area-${chip}`}>{chip}</button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
-                            <MapPin className="h-3 w-3 shrink-0" />
-                            <span>
-                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(suburb selection)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
-                              {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
-                            </span>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
-                              {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); setMapPickerResult(null); }} disabled={runScanMutation.isPending}>Cancel</Button>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">Larger grids use more scan credits.</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ── Priority 3-Pack Actions ── */}
-                  {actionKeywords.length > 0 && parsedKeywords.length > 0 && (
-                    <div className="border-t px-3 py-2.5 bg-amber-50/50 dark:bg-amber-950/10">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1">
-                        <Zap className="h-3 w-3" /> 3-Pack Action Plan
-                      </p>
-                      <div className="space-y-1.5">
-                        {actionKeywords.map((kw, i) => (
-                          <div key={i} className="flex items-center gap-2 text-[11px]">
-                            <span className="shrink-0 flex items-center justify-center h-4 w-4 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 font-bold text-[10px]">{i + 1}</span>
-                            <p className="text-muted-foreground flex-1 min-w-0 truncate">{threePackAction(kw.keyword, kw.arp)}</p>
-                            <button
-                              onClick={() => { setScanKeyword(kw.keyword); setShowRunScan(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                              className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded transition-colors"
-                              data-testid={`btn-action-scan-${i}`}
-                            >
-                              <ScanSearch className="h-2.5 w-2.5" /> Scan
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Suggested Scan Areas ── */}
-                  {parsedKeywords.length > 0 && (
-                    <div className="border-t px-3 py-2.5">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                          <MapPin className="h-3 w-3" /> Suggested Areas to Scan
-                        </p>
-                        <button
-                          onClick={handleSuggestScanAreas}
-                          disabled={scanAreasLoading}
-                          className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50"
-                          data-testid="btn-suggest-scan-areas"
-                        >
-                          {scanAreasLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Analysing…</> : scanAreas ? <><RefreshCw className="h-3 w-3" /> Refresh</> : <><Sparkles className="h-3 w-3" /> Suggest areas</>}
-                        </button>
-                      </div>
-
-                      {!scanAreas && !scanAreasLoading && (
-                        <p className="text-[11px] text-muted-foreground">AI analyses your keywords to identify which locations to prioritise for GBP ranking scans.</p>
-                      )}
-
-                      {scanAreasLoading && (
-                        <div className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analysing keyword geography…
-                        </div>
-                      )}
-
-                      {scanAreas && scanAreas.length === 0 && (
-                        <p className="text-[11px] text-muted-foreground">No location-specific keywords found. Your keywords may be broad/generic — try adding suburb or city-specific keywords.</p>
-                      )}
-
-                      {scanAreas && scanAreas.length > 0 && (
-                        <div className="space-y-2">
-                          {scanAreas.map((area, i) => {
-                            const priorityStyle = area.priority === 'high'
-                              ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
-                              : area.priority === 'medium'
-                              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
-                              : 'bg-muted/30 border-border';
-                            const priorityBadge = area.priority === 'high'
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                              : area.priority === 'medium'
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                              : 'bg-muted text-muted-foreground';
-                            return (
-                              <div key={i} className={`rounded-lg border p-2.5 space-y-1.5 ${priorityStyle}`}>
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="text-xs font-semibold truncate">{area.area}</p>
-                                  <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded capitalize ${priorityBadge}`}>{area.priority}</span>
-                                </div>
-                                {area.tip && <p className="text-[11px] text-muted-foreground leading-relaxed">{area.tip}</p>}
-                                <div className="flex flex-wrap gap-1">
-                                  {(area.keywords || []).map((kw, ki) => (
-                                    <button
-                                      key={ki}
-                                      onClick={() => { setScanKeyword(kw); setShowRunScan(true); }}
-                                      className="inline-flex items-center gap-1 text-[10px] border rounded px-1.5 py-0.5 hover:bg-muted/50 transition-colors bg-background/70"
-                                      data-testid={`btn-area-keyword-${i}-${ki}`}
-                                    >
-                                      <ScanSearch className="h-2.5 w-2.5 text-muted-foreground" /> {kw}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ── Ranking Improvement Plan ── */}
-                  {parsedKeywords.length > 0 && (
-                    <div className="border-t px-3 py-2.5">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                          <Zap className="h-3 w-3 text-violet-500" /> Ranking Improvement Plan
-                        </p>
-                        <button
-                          onClick={handleGenerateRankingPlan}
-                          disabled={rankingPlanLoading}
-                          className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50"
-                          data-testid="btn-generate-ranking-plan"
-                        >
-                          {rankingPlanLoading
-                            ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</>
-                            : rankingPlan
-                            ? <><RefreshCw className="h-3 w-3" /> Regenerate</>
-                            : <><Sparkles className="h-3 w-3" /> Generate plan</>}
-                        </button>
-                      </div>
-
-                      {!rankingPlan && !rankingPlanLoading && (
-                        <p className="text-[11px] text-muted-foreground">
-                          {keywordRankings.some(k => k.arp !== null)
-                            ? 'AI analyses your scan results and builds a specific GBP action plan to push more keywords into the 3-pack.'
-                            : 'Run scans for your keywords first, then generate a plan based on the actual ranking data.'}
-                        </p>
-                      )}
-
-                      {rankingPlanLoading && (
-                        <div className="flex items-center gap-2 py-3 text-[11px] text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
-                          Analysing ranking data and building your GBP plan…
-                        </div>
-                      )}
-
-                      {rankingPlan && (
-                        <div className="space-y-3">
-                          {rankingPlan.summary && (
-                            <div className="px-2.5 py-2 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800">
-                              <p className="text-[11px] text-violet-800 dark:text-violet-300 leading-relaxed">{rankingPlan.summary}</p>
-                            </div>
-                          )}
-                          {(rankingPlan.areas || []).map((area, i) => {
-                            const priorityStyle = area.priority === 'high'
-                              ? 'border-red-200 dark:border-red-800'
-                              : area.priority === 'medium'
-                              ? 'border-amber-200 dark:border-amber-800'
-                              : 'border-border';
-                            const priorityBadge = area.priority === 'high'
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                              : area.priority === 'medium'
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                              : 'bg-muted text-muted-foreground';
-                            return (
-                              <div key={i} className={`rounded-lg border p-2.5 space-y-2 ${priorityStyle}`}>
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-semibold">{area.area}</p>
-                                    {area.currentStatus && (
-                                      <p className="text-[11px] text-muted-foreground mt-0.5">{area.currentStatus}</p>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded capitalize ${priorityBadge}`}>{area.priority}</span>
-                                    {area.timeframe && (
-                                      <span className="text-[10px] text-muted-foreground border rounded px-1.5 py-0.5">{area.timeframe}</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <ul className="space-y-2">
-                                  {(area.actions || []).map((action, ai) => {
-                                    const postKey = `${i}-${ai}`;
-                                    const draft = postDrafts[postKey];
-                                    const isPostAction = /google post|gbp post|post.*keyword|weekly post/i.test(action);
-                                    return (
-                                      <li key={ai} className="space-y-1.5">
-                                        <div className="flex items-start gap-1.5 text-[11px]">
-                                          <span className="shrink-0 mt-0.5 h-3.5 w-3.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center text-[9px] font-bold">{ai + 1}</span>
-                                          <div className="flex-1 min-w-0">
-                                            <span className="text-foreground/80 leading-relaxed">{action}</span>
-                                            {/* Draft Post button — shown for all post-type actions OR always */}
-                                            <div className="mt-1">
-                                              {!draft?.text ? (
-                                                <button
-                                                  onClick={() => handleDraftPost(postKey, action, area.area, area.currentStatus)}
-                                                  disabled={draft?.drafting}
-                                                  className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 border border-violet-300 dark:border-violet-700 rounded px-1.5 py-0.5 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 transition-colors"
-                                                  data-testid={`btn-draft-post-${postKey}`}
-                                                >
-                                                  {draft?.drafting
-                                                    ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Drafting…</>
-                                                    : <><FileEdit className="h-2.5 w-2.5" /> Draft GBP post</>}
-                                                </button>
-                                              ) : (
-                                                <div className="space-y-1.5 mt-1">
-                                                  <textarea
-                                                    value={draft.text}
-                                                    onChange={e => setPostDraft(postKey, { text: e.target.value })}
-                                                    rows={3}
-                                                    maxLength={1500}
-                                                    className="w-full text-[11px] rounded border border-border bg-muted/40 px-2 py-1.5 leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-violet-400"
-                                                    data-testid={`textarea-post-draft-${postKey}`}
-                                                  />
-                                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                                    <span className="text-[10px] text-muted-foreground">{draft.text.length}/1500</span>
-                                                    <div className="flex-1" />
-                                                    <button
-                                                      onClick={() => handleDraftPost(postKey, action, area.area, area.currentStatus)}
-                                                      disabled={draft.drafting}
-                                                      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50"
-                                                      data-testid={`btn-redraft-post-${postKey}`}
-                                                    >
-                                                      {draft.drafting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <RefreshCw className="h-2.5 w-2.5" />} Redraft
-                                                    </button>
-                                                    {draft.published ? (
-                                                      <span className="inline-flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
-                                                        <CheckCircle2 className="h-3 w-3" /> Published
-                                                      </span>
-                                                    ) : (
-                                                      <button
-                                                        onClick={() => handlePublishPost(postKey)}
-                                                        disabled={draft.publishing || !client.gbpLocationName}
-                                                        title={!client.gbpLocationName ? 'Link a GBP location to this client first' : ''}
-                                                        className="inline-flex items-center gap-1 text-[10px] font-medium bg-green-600 hover:bg-green-700 text-white rounded px-2 py-0.5 disabled:opacity-50 transition-colors"
-                                                        data-testid={`btn-publish-post-${postKey}`}
-                                                      >
-                                                        {draft.publishing
-                                                          ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Publishing…</>
-                                                          : <><Send className="h-2.5 w-2.5" /> Publish to GBP</>}
-                                                      </button>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
                   )}
                 </>
@@ -1246,20 +542,37 @@ function LocalPresenceSection({ client }: { client: Client }) {
         </div>
       )}
     </div>
-    {showMapPicker && loc && (
-      <ScanMapPicker
-        defaultLat={loc.lat}
-        defaultLng={loc.lng}
-        gridSize={scanGridSize}
-        areaChips={areaChips}
-        initialArea={scanArea}
-        onConfirm={(result) => { setMapPickerResult(result); setScanArea(result.name); setShowMapPicker(false); }}
-        onClose={() => setShowMapPicker(false)}
-      />
+
+    {/* Heatmap full-screen modal */}
+    {selectedReport && (
+      <div
+        className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+        onClick={() => setSelectedReport(null)}
+        data-testid="heatmap-modal"
+      >
+        <div className="relative max-w-2xl w-full bg-white dark:bg-zinc-900 rounded-xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-3 border-b">
+            <div>
+              <p className="text-sm font-semibold">{selectedReport.keyword}</p>
+              <p className="text-xs text-muted-foreground">{fmtLFDate(selectedReport.date)} · ARP #{parseFloat(selectedReport.arp).toFixed(1)} · {parseFloat(selectedReport.solv).toFixed(0)}% SoLV · {selectedReport.grid_size}×{selectedReport.grid_size} grid</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedReport.public_url && (
+                <a href={selectedReport.public_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-violet-600 hover:underline flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3" /> Full report
+                </a>
+              )}
+              <button onClick={() => setSelectedReport(null)} className="text-muted-foreground hover:text-foreground p-1 rounded" data-testid="btn-close-heatmap-modal"><X className="h-4 w-4" /></button>
+            </div>
+          </div>
+          <img src={selectedReport.heatmap || selectedReport.image} alt="Heatmap grid" className="w-full" />
+        </div>
+      </div>
     )}
     </>
   );
 }
+
 
 interface GBPReview {
   reviewId: string;
