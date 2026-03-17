@@ -4839,7 +4839,7 @@ Respond with JSON only, no commentary:
 }`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         max_completion_tokens: 1500,
         response_format: { type: "json_object" },
@@ -5247,7 +5247,7 @@ Generate follow-up content in this exact JSON format:
 }`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         max_completion_tokens: 1500,
         response_format: { type: "json_object" },
@@ -5672,7 +5672,7 @@ Respond with JSON:
 }`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         max_completion_tokens: 2000,
         response_format: { type: "json_object" },
@@ -6054,7 +6054,7 @@ Respond with JSON only:
 }`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         max_completion_tokens: 3500,
         response_format: { type: "json_object" },
@@ -6313,9 +6313,9 @@ Respond with this EXACT JSON structure (fill every field with specific, real-dat
 }`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 3000,
+        max_tokens: 3000,
         response_format: { type: "json_object" },
       });
 
