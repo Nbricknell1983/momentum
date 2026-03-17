@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { MessageCircle, PhoneOff, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap } from 'lucide-react';
+import { MessageCircle, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap, Phone, Mail, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -294,6 +294,38 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
             </p>
           </div>
         </div>
+
+        {(lead.contactName || lead.phone || lead.email) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs border rounded px-2 py-1.5 bg-background/60" data-testid="contact-details-row">
+            {lead.contactName && (
+              <span className="flex items-center gap-1 text-foreground font-medium" data-testid="text-contact-name">
+                <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                {lead.contactName}
+              </span>
+            )}
+            {lead.phone && (
+              <a
+                href={`tel:${lead.phone}`}
+                className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                data-testid="link-contact-phone"
+              >
+                <Phone className="h-3 w-3 shrink-0" />
+                {lead.phone}
+              </a>
+            )}
+            {lead.email && (
+              <a
+                href={`mailto:${lead.email}`}
+                className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline truncate max-w-[180px]"
+                title={lead.email}
+                data-testid="link-contact-email"
+              >
+                <Mail className="h-3 w-3 shrink-0" />
+                {lead.email}
+              </a>
+            )}
+          </div>
+        )}
 
         {lead.nextConversationStep && (
           <div className="flex items-start gap-1.5 text-xs bg-background/80 rounded px-2 py-1.5 border" data-testid="text-next-step">
