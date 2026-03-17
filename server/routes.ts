@@ -1362,6 +1362,48 @@ Focus on practical, achievable actions for a local service business. Tailor reco
     }
   });
 
+  // Draft a GBP post from a ranking action using AI
+  app.post("/api/clients/ai/draft-gbp-post", async (req, res) => {
+    try {
+      const { action, area, businessName, currentStatus } = req.body;
+      if (!action) return res.status(400).json({ error: 'action required' });
+      const prompt = `You are a Google Business Profile expert writing a short post for a local business.\n\nBusiness: "${businessName || 'this business'}"\nTarget area: "${area || 'local area'}"\nCurrent ranking status: "${currentStatus || 'not provided'}"\nStrategy action to implement: "${action}"\n\nWrite a concise, engaging Google Business Profile post (under 300 characters) that naturally incorporates the target keyword(s) for the area. The post should sound authentic, not spammy. It should highlight a service, recent project, or local expertise relevant to that area.\n\nReturn ONLY the post text with no quotes, no preamble, no hashtags.`;
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 200,
+      });
+      const text = (completion.choices[0].message.content || '').trim().replace(/^"|"$/g, '');
+      res.json({ text });
+    } catch (err: any) {
+      console.error('[draft-gbp-post]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Publish a Local Post to GBP
+  app.post("/api/gbp/publish-post", async (req, res) => {
+    try {
+      const { orgId, locationName, text } = req.body;
+      if (!orgId || !locationName || !text) return res.status(400).json({ error: 'orgId, locationName, text required' });
+      const token = await getGBPAccessToken(orgId);
+      const r = await fetch(
+        `https://mybusiness.googleapis.com/v4/${locationName}/localPosts`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ languageCode: 'en', summary: text, topicType: 'STANDARD' }),
+        }
+      );
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || 'Failed to publish post');
+      res.json({ success: true, post: data });
+    } catch (err: any) {
+      console.error('[gbp/publish-post]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/clients/ai/area-ranking-plan", async (req, res) => {
     try {
       const { businessName, businessAddress, scannedKeywords, unscannedKeywords } = req.body;

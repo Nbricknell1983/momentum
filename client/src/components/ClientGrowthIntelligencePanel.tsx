@@ -5,6 +5,7 @@ import {
   Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
   Loader2, Link2, X, ExternalLink, Radio, Play, MessageSquare, ChevronDown,
   ThumbsUp, Building2, Unlink, Target, ScanSearch, Upload, FileText, Sparkles,
+  FileEdit, Send,
 } from 'lucide-react';
 import { parseKeywordFile } from '@/lib/parseKeywordFile';
 import { Badge } from '@/components/ui/badge';
@@ -205,6 +206,8 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const [scanAreasLoading, setScanAreasLoading] = useState(false);
   const [rankingPlan, setRankingPlan] = useState<{ summary: string; areas: Array<{ area: string; currentStatus: string; priority: string; actions: string[]; timeframe: string }> } | null>(null);
   const [rankingPlanLoading, setRankingPlanLoading] = useState(false);
+  type PostDraftState = { text: string; drafting: boolean; publishing: boolean; published: boolean };
+  const [postDrafts, setPostDrafts] = useState<Record<string, PostDraftState>>({});
 
   const hasLinked = !!client.localFalconPlaceId;
 
@@ -256,6 +259,57 @@ function LocalPresenceSection({ client }: { client: Client }) {
       toast({ title: 'Could not generate plan', description: err.message, variant: 'destructive' });
     } finally {
       setRankingPlanLoading(false);
+    }
+  };
+
+  const setPostDraft = (key: string, patch: Partial<PostDraftState>) =>
+    setPostDrafts(prev => ({ ...prev, [key]: { text: '', drafting: false, publishing: false, published: false, ...prev[key], ...patch } }));
+
+  const handleDraftPost = async (key: string, action: string, area: string, currentStatus: string) => {
+    setPostDraft(key, { drafting: true, published: false });
+    try {
+      const resp = await fetch('/api/clients/ai/draft-gbp-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          area,
+          currentStatus,
+          businessName: client.localFalconLocation?.name || client.name,
+        }),
+      });
+      if (!resp.ok) throw new Error('Draft failed');
+      const { text } = await resp.json();
+      setPostDraft(key, { text, drafting: false });
+    } catch (err: any) {
+      toast({ title: 'Could not draft post', description: err.message, variant: 'destructive' });
+      setPostDraft(key, { drafting: false });
+    }
+  };
+
+  const handlePublishPost = async (key: string) => {
+    const draft = postDrafts[key];
+    if (!draft?.text) return;
+    if (!client.gbpLocationName) {
+      toast({ title: 'No GBP location linked', description: 'Link a GBP location to this client first.', variant: 'destructive' });
+      return;
+    }
+    setPostDraft(key, { publishing: true });
+    try {
+      const resp = await fetch('/api/gbp/publish-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId: client.orgId, locationName: client.gbpLocationName, text: draft.text }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Publish failed');
+      }
+      setPostDraft(key, { publishing: false, published: true });
+      toast({ title: 'Post published!', description: 'Your Google Business Profile post is now live.' });
+    } catch (err: any) {
+      toast({ title: 'Publish failed', description: err.message, variant: 'destructive' });
+      setPostDraft(key, { publishing: false });
     }
   };
 
@@ -993,13 +1047,77 @@ function LocalPresenceSection({ client }: { client: Client }) {
                                     )}
                                   </div>
                                 </div>
-                                <ul className="space-y-1">
-                                  {(area.actions || []).map((action, ai) => (
-                                    <li key={ai} className="flex items-start gap-1.5 text-[11px]">
-                                      <span className="shrink-0 mt-0.5 h-3.5 w-3.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center text-[9px] font-bold">{ai + 1}</span>
-                                      <span className="text-foreground/80 leading-relaxed">{action}</span>
-                                    </li>
-                                  ))}
+                                <ul className="space-y-2">
+                                  {(area.actions || []).map((action, ai) => {
+                                    const postKey = `${i}-${ai}`;
+                                    const draft = postDrafts[postKey];
+                                    const isPostAction = /google post|gbp post|post.*keyword|weekly post/i.test(action);
+                                    return (
+                                      <li key={ai} className="space-y-1.5">
+                                        <div className="flex items-start gap-1.5 text-[11px]">
+                                          <span className="shrink-0 mt-0.5 h-3.5 w-3.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center text-[9px] font-bold">{ai + 1}</span>
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-foreground/80 leading-relaxed">{action}</span>
+                                            {/* Draft Post button — shown for all post-type actions OR always */}
+                                            <div className="mt-1">
+                                              {!draft?.text ? (
+                                                <button
+                                                  onClick={() => handleDraftPost(postKey, action, area.area, area.currentStatus)}
+                                                  disabled={draft?.drafting}
+                                                  className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 border border-violet-300 dark:border-violet-700 rounded px-1.5 py-0.5 hover:bg-violet-50 dark:hover:bg-violet-950/30 disabled:opacity-50 transition-colors"
+                                                  data-testid={`btn-draft-post-${postKey}`}
+                                                >
+                                                  {draft?.drafting
+                                                    ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Drafting…</>
+                                                    : <><FileEdit className="h-2.5 w-2.5" /> Draft GBP post</>}
+                                                </button>
+                                              ) : (
+                                                <div className="space-y-1.5 mt-1">
+                                                  <textarea
+                                                    value={draft.text}
+                                                    onChange={e => setPostDraft(postKey, { text: e.target.value })}
+                                                    rows={3}
+                                                    maxLength={1500}
+                                                    className="w-full text-[11px] rounded border border-border bg-muted/40 px-2 py-1.5 leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                                    data-testid={`textarea-post-draft-${postKey}`}
+                                                  />
+                                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className="text-[10px] text-muted-foreground">{draft.text.length}/1500</span>
+                                                    <div className="flex-1" />
+                                                    <button
+                                                      onClick={() => handleDraftPost(postKey, action, area.area, area.currentStatus)}
+                                                      disabled={draft.drafting}
+                                                      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                                                      data-testid={`btn-redraft-post-${postKey}`}
+                                                    >
+                                                      {draft.drafting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <RefreshCw className="h-2.5 w-2.5" />} Redraft
+                                                    </button>
+                                                    {draft.published ? (
+                                                      <span className="inline-flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
+                                                        <CheckCircle2 className="h-3 w-3" /> Published
+                                                      </span>
+                                                    ) : (
+                                                      <button
+                                                        onClick={() => handlePublishPost(postKey)}
+                                                        disabled={draft.publishing || !client.gbpLocationName}
+                                                        title={!client.gbpLocationName ? 'Link a GBP location to this client first' : ''}
+                                                        className="inline-flex items-center gap-1 text-[10px] font-medium bg-green-600 hover:bg-green-700 text-white rounded px-2 py-0.5 disabled:opacity-50 transition-colors"
+                                                        data-testid={`btn-publish-post-${postKey}`}
+                                                      >
+                                                        {draft.publishing
+                                                          ? <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Publishing…</>
+                                                          : <><Send className="h-2.5 w-2.5" /> Publish to GBP</>}
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               </div>
                             );
