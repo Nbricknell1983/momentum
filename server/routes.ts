@@ -6157,9 +6157,11 @@ Forecast: ${strategyDiagnosis.growthPotential?.forecastBand ? JSON.stringify(str
         return parts.length > 0 ? `\n=== CONVERSATION & DEAL INTELLIGENCE ===\n${parts.join('\n')}\nIMPORTANT: The strategy narrative must frame recommendations around the client's stated goals and deal stage. Do not write generic strategy — write for THIS client's specific situation.\n` : '';
       })();
 
-      // Ahrefs keyword context
-      const strat12AhrefsContext = ahrefsData?.topKeywords?.length
-        ? `\n=== KEYWORD MARKET OPPORTUNITY ===\n${ahrefsData.topKeywords.slice(0, 15).map((k: any) => `  ${k.keyword}: ${k.volume}/mo searches, difficulty ${k.difficulty}/100, CPC $${k.cpc}`).join('\n')}\n`
+      // Ahrefs keyword context — include ALL uploaded keywords, compute real totals
+      const allKeywords: Array<any> = ahrefsData?.topKeywords || [];
+      const totalKwVolume = allKeywords.reduce((sum: number, k: any) => sum + (parseInt(k.volume) || 0), 0);
+      const strat12AhrefsContext = allKeywords.length > 0
+        ? `\n=== UPLOADED KEYWORD DATA (${allKeywords.length} keywords — USE THESE EXACT KEYWORDS, do not invent new ones) ===\nTotal combined monthly search volume: ${totalKwVolume.toLocaleString()}\n${allKeywords.map((k: any, i: number) => `  ${i + 1}. ${k.keyword}: ${k.volume}/mo, difficulty ${k.difficulty}/100, CPC $${k.cpc}, rank ${k.position > 0 ? '#' + k.position : 'not ranking'}`).join('\n')}\n`
         : '';
 
       const crawled: Array<any> = crawledPages || [];
@@ -6229,8 +6231,9 @@ Social: ${socialProfiles || 'None detected'}
 ${strat12SIContext}${strat12ConvContext}${strat12AhrefsContext}${diagContext}${sitemapContext}${competitorContext}
 
 === STRATEGY GENERATION RULES ===
-- Every keyword, gap, and recommendation must relate to the actual industry and location
-- Keyword monthly search estimates must be realistic for the market (local Australian search volumes)
+- KEYWORD RULE: If uploaded keyword data is provided above, you MUST use those EXACT keywords in the marketOpportunity.keywords array. Do NOT invent new keywords — use the real data.
+- VOLUME RULE: totalMonthlySearches MUST equal the sum of all uploaded keyword volumes (provided above). Use the exact number — do not estimate.
+- Every gap and recommendation must relate to the actual industry and location
 - Do NOT fabricate competitor data — only reference competitors if names are provided
 - Monthly roadmap must be specific to what this business actually needs
 - Lead projections must be conservative and confidence-band based
@@ -6248,7 +6251,7 @@ Respond with this EXACT JSON structure (fill every field with specific, real-dat
     "primaryChannels": ["Google Search (SEO)", "Google Maps", "etc — relevant to industry"]
   },
   "marketOpportunity": {
-    "totalMonthlySearches": 1200,
+    "totalMonthlySearches": ${totalKwVolume > 0 ? totalKwVolume : 1200},
     "currentCapture": "Estimated % they currently capture based on readiness score",
     "potentialCapture": "If key gaps fixed — realistic % and lead estimate",
     "keyInsight": "1 punchy sentence the rep can say on the call about the opportunity",
@@ -6321,6 +6324,21 @@ Respond with this EXACT JSON structure (fill every field with specific, real-dat
 
       const content = response.choices[0]?.message?.content || "{}";
       const result = JSON.parse(content);
+
+      // Override keyword data with real uploaded values — never let AI fabricate these
+      if (allKeywords.length > 0 && result.marketOpportunity) {
+        result.marketOpportunity.totalMonthlySearches = totalKwVolume;
+        result.marketOpportunity.keywords = allKeywords.map((k: any) => ({
+          keyword: k.keyword,
+          monthlySearches: String(k.volume),
+          currentRank: k.position > 0 ? `#${k.position}` : 'not ranking',
+          opportunity: (k.difficulty || 0) < 30 ? 'high' : (k.difficulty || 0) < 60 ? 'medium' : 'low',
+          intent: 'commercial',
+          difficulty: k.difficulty,
+          cpc: k.cpc,
+        }));
+      }
+
       res.json(result);
     } catch (err: any) {
       console.error("[twelve-month-strategy]", err);

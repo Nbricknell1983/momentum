@@ -279,7 +279,7 @@ export default function StrategyReportPage() {
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4 mb-10">
               {[
-                { label: 'Est. Monthly Searches', value: mo.totalMonthlySearches?.toLocaleString?.() || '—' },
+                { label: 'Est. Monthly Searches', value: mo.totalMonthlySearches != null ? Number(mo.totalMonthlySearches).toLocaleString() : '—' },
                 { label: 'Current Capture', value: mo.currentCapture || '—' },
                 { label: 'Potential Capture', value: mo.potentialCapture || '—' },
               ].map((stat, i) => (
@@ -292,27 +292,31 @@ export default function StrategyReportPage() {
 
             {/* Keyword table */}
             <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr] bg-[#0d1123] text-white text-xs font-bold uppercase tracking-wider">
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] bg-[#0d1123] text-white text-xs font-bold uppercase tracking-wider">
                 <div className="px-4 py-3">Keyword</div>
                 <div className="px-4 py-3 text-center">Monthly Searches</div>
                 <div className="px-4 py-3 text-center">Current Rank</div>
+                <div className="px-4 py-3 text-center">KD</div>
                 <div className="px-4 py-3 text-center">Opportunity</div>
               </div>
-              {mo.keywords.slice(0, 10).map((kw: any, i: number) => {
+              {mo.keywords.map((kw: any, i: number) => {
                 const oppColor = kw.opportunity === 'high'
                   ? 'bg-green-100 text-green-700'
                   : kw.opportunity === 'medium'
                   ? 'bg-amber-100 text-amber-700'
                   : 'bg-gray-100 text-gray-500';
+                const kd = kw.difficulty != null ? Number(kw.difficulty) : null;
+                const kdColor = kd != null ? (kd < 30 ? 'text-green-600' : kd < 60 ? 'text-amber-600' : 'text-red-500') : 'text-gray-400';
                 return (
                   <div
                     key={i}
-                    className={`grid grid-cols-[2fr_1fr_1fr_1fr] text-sm border-b border-gray-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                    className={`grid grid-cols-[2fr_1fr_1fr_1fr_1fr] text-sm border-b border-gray-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                   >
-                    <div className="px-4 py-3.5 font-medium text-gray-900">{kw.keyword}</div>
-                    <div className="px-4 py-3.5 text-center font-semibold text-blue-600">{kw.monthlySearches}</div>
-                    <div className="px-4 py-3.5 text-center text-gray-500">{kw.currentRank}</div>
-                    <div className="px-4 py-3.5 text-center">
+                    <div className="px-4 py-3 font-medium text-gray-900">{kw.keyword}</div>
+                    <div className="px-4 py-3 text-center font-semibold text-blue-600">{Number(kw.monthlySearches).toLocaleString()}</div>
+                    <div className="px-4 py-3 text-center text-gray-500">{kw.currentRank}</div>
+                    <div className={`px-4 py-3 text-center font-semibold ${kdColor}`}>{kd != null ? kd : '—'}</div>
+                    <div className="px-4 py-3 text-center">
                       <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${oppColor}`}>
                         {kw.opportunity}
                       </span>
@@ -321,6 +325,9 @@ export default function StrategyReportPage() {
                 );
               })}
             </div>
+            {mo.keywords.length > 10 && (
+              <p className="text-xs text-gray-400 text-right mt-2">{mo.keywords.length} keywords shown</p>
+            )}
           </div>
         </section>
       )}
