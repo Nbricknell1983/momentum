@@ -1486,6 +1486,10 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectLoading, setSelectLoading] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [urlMode, setUrlMode] = useState(false);
+  const [pastedMapsUrl, setPastedMapsUrl] = useState('');
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
   // Auto-loaded suggestions (shown inline without entering search mode)
   const [suggestions, setSuggestions] = useState<GBPSearchResult[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
@@ -1496,7 +1500,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const hasGBP = !!lead.sourceData?.googlePlaceId;
   const reviewCount = lead.sourceData?.googleReviewCount;
   const rating = lead.sourceData?.googleRating;
-  const mapsUrl = lead.sourceData?.googleMapsUrl;
+  const gbpMapsUrl = lead.sourceData?.googleMapsUrl;
   const gbpAddress = lead.sourceData?.googleAddress || (hasGBP ? lead.address : undefined);
 
   // Auto-search on mount when no GBP linked and lead has a company name
@@ -1534,6 +1538,9 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     setResults([]);
     setQuery('');
     setSearchError(null);
+    setUrlMode(false);
+    setPastedMapsUrl('');
+    setUrlError(null);
   };
 
   const handleSearch = async () => {
@@ -1581,58 +1588,123 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     if (e.key === 'Escape') closeSearch();
   };
 
+  const handleUrlLink = async () => {
+    if (!pastedMapsUrl.trim()) return;
+    setUrlLoading(true);
+    setUrlError(null);
+    try {
+      const params = new URLSearchParams({ url: pastedMapsUrl.trim() });
+      if (query.trim()) params.set('name', query.trim());
+      const res = await fetch(`/api/google-places/from-url?${params}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resolve link');
+      await handleSelect(data.placeId);
+    } catch (e: any) {
+      setUrlError(e.message || 'Could not link that URL. Try again.');
+    } finally {
+      setUrlLoading(false);
+    }
+  };
+
   if (searching) {
     return (
       <div className="space-y-1.5 py-0.5">
-        <div className="flex items-center gap-1.5">
-          <span className="shrink-0 text-amber-600"><MapPin className="h-3.5 w-3.5" /></span>
-          <Input
-            ref={inputRef}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Business name + suburb…"
-            className="h-6 text-xs px-1.5 flex-1"
-            disabled={searchLoading}
-          />
-          <Button
-            size="sm"
-            className="h-6 px-2 text-xs shrink-0"
-            onClick={handleSearch}
-            disabled={searchLoading || !query.trim()}
-          >
-            {searchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-          </Button>
-          <button onClick={closeSearch} className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted">
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-        {searchError && (
-          <p className="text-[10px] text-destructive pl-5">{searchError}</p>
-        )}
-        {results.length > 0 && (
-          <div className="border rounded bg-background shadow-sm overflow-hidden ml-5">
-            {results.map(r => (
-              <button
-                key={r.placeId}
-                onClick={() => handleSelect(r.placeId)}
-                disabled={!!selectLoading}
-                className="w-full text-left px-2 py-1.5 hover:bg-muted/60 border-b last:border-b-0 transition-colors disabled:opacity-60"
+        {!urlMode ? (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span className="shrink-0 text-amber-600"><MapPin className="h-3.5 w-3.5" /></span>
+              <Input
+                ref={inputRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Business name + suburb…"
+                className="h-6 text-xs px-1.5 flex-1"
+                disabled={searchLoading}
+              />
+              <Button
+                size="sm"
+                className="h-6 px-2 text-xs shrink-0"
+                onClick={handleSearch}
+                disabled={searchLoading || !query.trim()}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium truncate">{r.name}</span>
-                  {selectLoading === r.placeId
-                    ? <Loader2 className="h-3 w-3 animate-spin shrink-0 text-violet-600" />
-                    : r.rating != null && (
-                      <span className="text-[10px] text-muted-foreground shrink-0">
-                        {r.rating}★ · {r.reviewCount}
-                      </span>
-                    )}
-                </div>
-                <p className="text-[10px] text-muted-foreground truncate">{r.address}</p>
+                {searchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+              </Button>
+              <button onClick={closeSearch} className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted">
+                <X className="h-3 w-3" />
               </button>
-            ))}
-          </div>
+            </div>
+            {searchError && (
+              <p className="text-[10px] text-destructive pl-5">{searchError}</p>
+            )}
+            {results.length > 0 && (
+              <div className="border rounded bg-background shadow-sm overflow-hidden ml-5">
+                {results.map(r => (
+                  <button
+                    key={r.placeId}
+                    onClick={() => handleSelect(r.placeId)}
+                    disabled={!!selectLoading}
+                    className="w-full text-left px-2 py-1.5 hover:bg-muted/60 border-b last:border-b-0 transition-colors disabled:opacity-60"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium truncate">{r.name}</span>
+                      {selectLoading === r.placeId
+                        ? <Loader2 className="h-3 w-3 animate-spin shrink-0 text-violet-600" />
+                        : r.rating != null && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {r.rating}★ · {r.reviewCount}
+                          </span>
+                        )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground truncate">{r.address}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="pl-5">
+              <button
+                onClick={() => { setUrlMode(true); setPastedMapsUrl(''); setUrlError(null); }}
+                className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline"
+              >
+                Can't find it? Paste a Google Maps link instead →
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span className="shrink-0 text-amber-600"><MapPin className="h-3.5 w-3.5" /></span>
+              <Input
+                autoFocus
+                value={pastedMapsUrl}
+                onChange={e => setPastedMapsUrl(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleUrlLink(); if (e.key === 'Escape') setUrlMode(false); }}
+                placeholder="Paste Google Maps link or Place ID…"
+                className="h-6 text-xs px-1.5 flex-1"
+                disabled={urlLoading}
+              />
+              <Button
+                size="sm"
+                className="h-6 px-2 text-xs shrink-0"
+                onClick={handleUrlLink}
+                disabled={urlLoading || !pastedMapsUrl.trim()}
+              >
+                {urlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Link'}
+              </Button>
+              <button onClick={() => setUrlMode(false)} className="shrink-0 p-0.5 rounded text-muted-foreground hover:bg-muted">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            {urlError && <p className="text-[10px] text-destructive pl-5">{urlError}</p>}
+            <p className="text-[10px] text-muted-foreground pl-5">
+              Open Google Maps → find the business → copy the URL from your browser and paste it here.
+            </p>
+            <div className="pl-5">
+              <button onClick={() => setUrlMode(false)} className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline">
+                ← Back to search
+              </button>
+            </div>
+          </>
         )}
       </div>
     );
@@ -1650,8 +1722,8 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
         <span className="text-muted-foreground text-xs w-[76px] shrink-0">Google Business</span>
         <span className={`truncate text-xs flex-1 ${hasGBP ? 'text-foreground' : 'text-muted-foreground italic'}`}>
           {hasGBP ? (
-            mapsUrl ? (
-              <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="hover:underline inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            gbpMapsUrl ? (
+              <a href={gbpMapsUrl} target="_blank" rel="noopener noreferrer" className="hover:underline inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
                 Profile linked <ExternalLink className="h-2.5 w-2.5" />
               </a>
             ) : 'Profile linked'

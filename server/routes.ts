@@ -2466,6 +2466,107 @@ Return valid JSON:
     }
   });
 
+  // Resolve a Google Maps URL or ChIJ Place ID to a Place record
+  app.get("/api/google-places/from-url", async (req, res) => {
+    try {
+      const { url: rawUrl, name: nameHint } = req.query;
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "Google Places API key not configured." });
+      if (!rawUrl || typeof rawUrl !== 'string') return res.status(400).json({ error: "url is required" });
+
+      const FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.nationalPhoneNumber,places.websiteUri';
+
+      // Case 1: user pasted a ChIJ Place ID directly
+      const placeIdMatch = rawUrl.match(/ChIJ[A-Za-z0-9_-]{20,}/);
+      if (placeIdMatch) {
+        const placeId = `places/${placeIdMatch[0]}`;
+        const r = await fetch(`https://places.googleapis.com/v1/${placeId}`, {
+          headers: {
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,rating,userRatingCount,businessStatus',
+          },
+        });
+        const d = await r.json();
+        if (!r.ok) return res.status(400).json({ error: 'Could not find that Place ID. Double-check and try again.' });
+        return res.json({
+          placeId: d.id,
+          name: d.displayName?.text || '',
+          address: d.formattedAddress || '',
+          rating: d.rating ?? null,
+          reviewCount: d.userRatingCount ?? 0,
+          phone: d.nationalPhoneNumber || null,
+          website: d.websiteUri || null,
+        });
+      }
+
+      // Case 2: Google Maps URL — prefer !3d{lat}!4d{lng} (actual business location) over @lat,lng (map center)
+      const preciseMatch = rawUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+      const centerMatch = rawUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      const coordMatch = preciseMatch || centerMatch;
+      if (!coordMatch) {
+        return res.status(400).json({ error: 'Could not read coordinates from that URL. Make sure you copy the full Google Maps link for the business listing.' });
+      }
+      const lat = parseFloat(coordMatch[1]);
+      const lng = parseFloat(coordMatch[2]);
+      console.log(`[GBP URL] Coordinates (${preciseMatch ? 'precise' : 'center'}): ${lat}, ${lng} — name hint: "${nameHint}"`);
+
+      // Search by name + tight location bias (200m)
+      const textQuery = typeof nameHint === 'string' && nameHint.trim() ? nameHint.trim() : 'business';
+      const body = {
+        textQuery,
+        maxResultCount: 5,
+        languageCode: 'en-AU',
+        locationBias: {
+          circle: {
+            center: { latitude: lat, longitude: lng },
+            radius: 500, // 500m — tight enough to be specific, wide enough for GPS drift
+          },
+        },
+      };
+      const r = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': FIELD_MASK,
+        },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error?.message || 'Google Places API error');
+      const places = (d.places || []).filter((p: any) => p.businessStatus !== 'CLOSED_PERMANENTLY');
+      if (places.length === 0) {
+        // Fallback: try nearby search without text filter
+        const nb = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': FIELD_MASK,
+          },
+          body: JSON.stringify({
+            maxResultCount: 5,
+            locationRestriction: {
+              circle: { center: { latitude: lat, longitude: lng }, radius: 500 },
+            },
+          }),
+        });
+        const nd = await nb.json();
+        const nearby = (nd.places || []).filter((p: any) => p.businessStatus !== 'CLOSED_PERMANENTLY');
+        if (nearby.length === 0) {
+          return res.status(404).json({ error: 'No business found at that location. Try zooming into the exact business marker on Google Maps before copying the link.' });
+        }
+        const p = nearby[0];
+        return res.json({ placeId: p.id, name: p.displayName?.text || '', address: p.formattedAddress || '', rating: p.rating ?? null, reviewCount: p.userRatingCount ?? 0, phone: p.nationalPhoneNumber || null, website: p.websiteUri || null });
+      }
+      const p = places[0];
+      res.json({ placeId: p.id, name: p.displayName?.text || '', address: p.formattedAddress || '', rating: p.rating ?? null, reviewCount: p.userRatingCount ?? 0, phone: p.nationalPhoneNumber || null, website: p.websiteUri || null });
+    } catch (error) {
+      console.error("Error resolving Google Maps URL:", error);
+      res.status(500).json({ error: "Failed to resolve that link. Please try again." });
+    }
+  });
+
   // Search for a business by name (for GBP lookup in Deal Intelligence Panel)
   app.get("/api/google-places/find", async (req, res) => {
     try {
@@ -2481,23 +2582,36 @@ Return valid JSON:
 
       const FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.nationalPhoneNumber,places.websiteUri';
 
-      // Centre of Australia — used as default location bias so Australian businesses rank first
-      const AU_CENTER = { latitude: -25.2744, longitude: 133.7751 };
-      const AU_RADIUS = 2800000; // ~2800km covers all of Australia
+      // Major AU city centres with coordinates for 50km circle bias
+      const AU_CITIES = [
+        { name: 'Brisbane',  lat: -27.4698, lng: 153.0251 },
+        { name: 'Sydney',    lat: -33.8688, lng: 151.2093 },
+        { name: 'Melbourne', lat: -37.8136, lng: 144.9631 },
+        { name: 'Perth',     lat: -31.9505, lng: 115.8605 },
+        { name: 'Adelaide',  lat: -34.9285, lng: 138.6007 },
+        { name: 'Gold Coast',lat: -28.0167, lng: 153.4000 },
+        { name: 'Canberra',  lat: -35.2809, lng: 149.1300 },
+        { name: 'Darwin',    lat: -12.4634, lng: 130.8456 },
+        { name: 'Hobart',    lat: -42.8821, lng: 147.3272 },
+      ];
+      const MAX_CIRCLE_RADIUS = 50000; // Places API v1 hard limit
 
-      const doSearch = async (textQuery: string, biasCentre?: { latitude: number; longitude: number }, biasRadius?: number) => {
+      const doSearchV1 = async (textQuery: string, cityBias?: { lat: number; lng: number }) => {
         const body: Record<string, any> = {
           textQuery,
           maxResultCount: 10,
           languageCode: 'en-AU',
           regionCode: 'AU',
-          locationBias: {
-            circle: {
-              center: biasCentre || AU_CENTER,
-              radius: biasRadius || AU_RADIUS,
-            },
-          },
         };
+        if (cityBias) {
+          body.locationBias = {
+            circle: {
+              center: { latitude: cityBias.lat, longitude: cityBias.lng },
+              radius: MAX_CIRCLE_RADIUS,
+            },
+          };
+        }
+        console.log(`[GBP Find] v1 search: "${textQuery}" bias=${cityBias ? `${cityBias.lat},${cityBias.lng}` : 'none'}`);
         const r = await fetch('https://places.googleapis.com/v1/places:searchText', {
           method: 'POST',
           headers: {
@@ -2527,44 +2641,47 @@ Return valid JSON:
       const websiteHint = typeof (req.query as any).website === 'string' ? (req.query as any).website.trim() : '';
       const phoneHint = typeof (req.query as any).phone === 'string' ? (req.query as any).phone.trim() : '';
 
-      // Strategy 1: exact query with location hint + AU bias
+      // S1: exact query with location hint, no city bias (region=AU helps ranking)
       const primaryQuery = locationHint ? `${baseQuery} ${locationHint}` : baseQuery;
-      let places = await doSearch(primaryQuery);
+      let places = await doSearchV1(primaryQuery);
 
-      // Strategy 2: append "Australia" + AU bias
+      // S2: sweep every major AU city with 50km circle bias — catches service-area businesses
       if (places.length === 0) {
-        places = await doSearch(`${baseQuery} Australia`);
+        for (const city of AU_CITIES) {
+          places = await doSearchV1(baseQuery, city);
+          if (places.length > 0) {
+            console.log(`[GBP Find] Found in city bias: ${city.name}`);
+            break;
+          }
+        }
       }
 
-      // Strategy 3: try with phone number if provided
+      // S3: phone number search (unique identifier — great for service-area businesses)
       if (places.length === 0 && phoneHint) {
-        places = await doSearch(phoneHint);
+        places = await doSearchV1(phoneHint);
       }
 
-      // Strategy 4: try with just first 3 significant words + Australia
+      // S4: website domain
+      if (places.length === 0 && websiteHint) {
+        const domain = websiteHint.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '');
+        places = await doSearchV1(domain);
+      }
+
+      // S5: first 3 words with each city bias
       if (places.length === 0) {
         const shortName = baseQuery.split(' ').slice(0, 3).join(' ');
         if (shortName !== baseQuery) {
-          places = await doSearch(`${shortName} Australia`);
+          for (const city of AU_CITIES.slice(0, 3)) {
+            places = await doSearchV1(shortName, city);
+            if (places.length > 0) break;
+          }
         }
       }
 
-      // Strategy 5: try website URL if provided (Google indexes these well)
-      if (places.length === 0 && websiteHint) {
-        const domain = websiteHint.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '');
-        places = await doSearch(domain);
-      }
-
-      // Strategy 6: state-by-state fallbacks
-      if (places.length === 0) {
-        for (const state of ['Queensland', 'New South Wales', 'Victoria', 'Western Australia']) {
-          places = await doSearch(`${baseQuery} ${state}`);
-          if (places.length > 0) break;
-        }
-      }
+      console.log(`[GBP Find] Final: ${places.length} results`);
 
       const results = places
-        .filter((p: any) => p.businessStatus !== 'CLOSED_PERMANENTLY')
+        .filter((p: any) => p.business_status !== 'CLOSED_PERMANENTLY')
         .map(toResult);
 
       res.json({ results });
