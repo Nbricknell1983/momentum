@@ -143,7 +143,6 @@ interface LFReport {
 }
 
 const GRID_SIZES = ['3', '5', '7', '9', '11', '13'];
-const RADII = ['1', '2', '3', '5', '8', '10', '15', '20'];
 
 // ── Parse keywords from the onboarding keyword summary text ───────────────────
 function parseKeywordsFromSummary(summary: string): Array<{ keyword: string; volume: number | null; difficulty: number | null }> {
@@ -199,8 +198,8 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const [locationSearch, setLocationSearch] = useState('');
   const [showRunScan, setShowRunScan] = useState(false);
   const [scanKeyword, setScanKeyword] = useState('');
-  const [scanGridSize, setScanGridSize] = useState('7');
-  const [scanRadius, setScanRadius] = useState('3');
+  const [scanGridSize, setScanGridSize] = useState('5');
+  const [scanArea, setScanArea] = useState('');
   const [showAllKeywords, setShowAllKeywords] = useState(false);
   const [keywordUploading, setKeywordUploading] = useState(false);
   const keywordFileRef = useRef<HTMLInputElement>(null);
@@ -413,16 +412,34 @@ function LocalPresenceSection({ client }: { client: Client }) {
       const loc = client.localFalconLocation;
       if (!loc || !client.localFalconPlaceId) throw new Error('No location linked');
       if (!scanKeyword.trim()) throw new Error('Keyword required');
+
+      // Geocode selected area to get scan center coordinates
+      let centerLat = loc.lat;
+      let centerLng = loc.lng;
+      if (scanArea.trim()) {
+        try {
+          const geoResp = await fetch(`/api/local-falcon/search-place?query=${encodeURIComponent(scanArea.trim() + ', Australia')}`);
+          if (geoResp.ok) {
+            const geoData = await geoResp.json();
+            const firstPlace = geoData.places?.[0];
+            if (firstPlace?.lat && firstPlace?.lng) {
+              centerLat = firstPlace.lat;
+              centerLng = firstPlace.lng;
+            }
+          }
+        } catch { /* fall back to business location */ }
+      }
+
       const resp = await fetch('/api/local-falcon/run-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           placeId: client.localFalconPlaceId,
           keyword: scanKeyword.trim(),
-          lat: loc.lat,
-          lng: loc.lng,
+          lat: centerLat,
+          lng: centerLng,
           gridSize: scanGridSize,
-          radius: scanRadius,
+          radius: '3',
           measurement: 'km',
           businessName: loc.name || client.name,
         }),
@@ -436,6 +453,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
     onSuccess: () => {
       setShowRunScan(false);
       setScanKeyword('');
+      setScanArea('');
       refetchReports();
       toast({ title: 'Scan complete', description: 'New scan results are ready.' });
     },
@@ -477,6 +495,15 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const scannedCount = keywordRankings.filter(k => k.arp !== null).length;
 
   const displayKeywords = showAllKeywords ? keywordRankings : keywordRankings.slice(0, 8);
+
+  // Suburb chips for scan area selector — pulled from GBP playbook service areas + client onboarding target locations
+  const areaChips = useMemo(() => {
+    const chips = new Set<string>();
+    (client.gbpPlaybook?.serviceAreaSuburbs || []).forEach(s => s && chips.add(s.trim()));
+    const targets = client.clientOnboarding?.targetLocations || '';
+    targets.split(/[,\n]/).map(s => s.trim()).filter(Boolean).forEach(s => chips.add(s));
+    return Array.from(chips).slice(0, 20);
+  }, [client.gbpPlaybook?.serviceAreaSuburbs, client.clientOnboarding?.targetLocations]);
 
   return (
     <div className="border rounded-lg overflow-hidden mb-3" data-testid="local-gbp-section">
@@ -709,7 +736,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                       {/* Scan form */}
                       {showRunScan && (
                         <div className="p-3 bg-muted/10 border-b space-y-2">
-                          <Input placeholder="Keyword (e.g. plumber brisbane)" value={scanKeyword} onChange={e => setScanKeyword(e.target.value)} className="h-8 text-xs" data-testid="input-scan-keyword" />
+                          <Input placeholder="Keyword (e.g. crane truck hire brisbane)" value={scanKeyword} onChange={e => setScanKeyword(e.target.value)} className="h-8 text-xs" data-testid="input-scan-keyword" />
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <p className="text-[10px] text-muted-foreground mb-1">Grid Size</p>
@@ -718,31 +745,31 @@ function LocalPresenceSection({ client }: { client: Client }) {
                               </select>
                             </div>
                             <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Radius from centre (km)</p>
-                              <select value={scanRadius} onChange={e => setScanRadius(e.target.value)} className="w-full h-8 text-xs rounded border bg-background px-2" data-testid="select-scan-radius">
-                                {RADII.map(r => <option key={r} value={r}>{r} km</option>)}
-                              </select>
+                              <p className="text-[10px] text-muted-foreground mb-1">Target Area (suburb)</p>
+                              <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => setScanArea(e.target.value)} className="h-8 text-xs" data-testid="input-scan-area" />
                             </div>
                           </div>
-                          {/* Coverage summary */}
-                          {(() => {
-                            const r = parseFloat(scanRadius); const g = parseInt(scanGridSize);
-                            const diameter = r * 2; const spacing = parseFloat((diameter / (g - 1)).toFixed(1));
-                            const points = g * g;
-                            return (
-                              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
-                                <MapPin className="h-3 w-3 shrink-0" />
-                                <span>Covers <strong>{diameter}km × {diameter}km</strong> · {points} check points · {spacing}km apart</span>
-                              </div>
-                            );
-                          })()}
+                          {areaChips.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {areaChips.map(chip => (
+                                <button key={chip} onClick={() => setScanArea(chip)} className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${scanArea === chip ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted/50 border-border text-muted-foreground hover:text-foreground'}`} data-testid={`chip-area-${chip}`}>{chip}</button>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span>
+                              {scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
+                              {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
+                            </span>
+                          </div>
                           <div className="flex gap-2">
                             <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
                               {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
                             </Button>
-                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
+                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
                           </div>
-                          <p className="text-[10px] text-muted-foreground">Larger grids & radii use more scan credits.</p>
+                          <p className="text-[10px] text-muted-foreground">Larger grids use more scan credits.</p>
                         </div>
                       )}
 
@@ -880,7 +907,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                       </Button>
                       {showRunScan && (
                         <div className="border rounded-lg p-3 space-y-2 bg-muted/10">
-                          <Input placeholder="Keyword (e.g. plumber near me)" value={scanKeyword} onChange={e => setScanKeyword(e.target.value)} className="h-8 text-xs" data-testid="input-scan-keyword" />
+                          <Input placeholder="Keyword (e.g. crane truck hire brisbane)" value={scanKeyword} onChange={e => setScanKeyword(e.target.value)} className="h-8 text-xs" data-testid="input-scan-keyword" />
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <p className="text-[10px] text-muted-foreground mb-1">Grid Size</p>
@@ -889,29 +916,31 @@ function LocalPresenceSection({ client }: { client: Client }) {
                               </select>
                             </div>
                             <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Radius from centre (km)</p>
-                              <select value={scanRadius} onChange={e => setScanRadius(e.target.value)} className="w-full h-8 text-xs rounded border bg-background px-2" data-testid="select-scan-radius">
-                                {RADII.map(r => <option key={r} value={r}>{r} km</option>)}
-                              </select>
+                              <p className="text-[10px] text-muted-foreground mb-1">Target Area (suburb)</p>
+                              <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => setScanArea(e.target.value)} className="h-8 text-xs" data-testid="input-scan-area" />
                             </div>
                           </div>
-                          {(() => {
-                            const r = parseFloat(scanRadius); const g = parseInt(scanGridSize);
-                            const diameter = r * 2; const spacing = parseFloat((diameter / (g - 1)).toFixed(1));
-                            const points = g * g;
-                            return (
-                              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
-                                <MapPin className="h-3 w-3 shrink-0" />
-                                <span>Covers <strong>{diameter}km × {diameter}km</strong> · {points} check points · {spacing}km apart</span>
-                              </div>
-                            );
-                          })()}
+                          {areaChips.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {areaChips.map(chip => (
+                                <button key={chip} onClick={() => setScanArea(chip)} className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${scanArea === chip ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted/50 border-border text-muted-foreground hover:text-foreground'}`} data-testid={`chip-area-${chip}`}>{chip}</button>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span>
+                              {scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
+                              {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
+                            </span>
+                          </div>
                           <div className="flex gap-2">
                             <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
                               {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
                             </Button>
-                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
+                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
                           </div>
+                          <p className="text-[10px] text-muted-foreground">Larger grids use more scan credits.</p>
                         </div>
                       )}
                     </div>
