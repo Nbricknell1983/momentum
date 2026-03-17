@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { MessageCircle, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap, Phone, Mail, User, Mic, MicOff, Loader2, Wand2, Sparkles, CalendarPlus, X, CheckCircle2 } from 'lucide-react';
+import { MessageCircle, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap, Phone, Mail, User, Mic, MicOff, Loader2, Wand2, Sparkles, CalendarPlus, X, CheckCircle2, RefreshCw, Copy, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -164,6 +164,53 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
   } | null>(null);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
+  // AI suggestion state for Log Attempt dialog
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    framework: string;
+    frameworkReason: string;
+    message?: string;
+    subject?: string;
+    body?: string;
+    openingLine?: string;
+    firstQuestion?: string;
+  } | null>(null);
+  const [isGeneratingSuggestion, setIsGeneratingSuggestion] = useState(false);
+
+  const generateAttemptSuggestion = async (ch: ConversationChannel) => {
+    if (!lead.companyName) return;
+    setAiSuggestion(null);
+    setIsGeneratingSuggestion(true);
+    try {
+      const recentForAI = recentLogs.slice(0, 6).map(l => ({
+        type: l.type,
+        channel: l.channel,
+        outcome: l.outcome,
+        notes: l.notes,
+      }));
+      const r = await fetch('/api/leads/ai/suggest-attempt-followup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: ch,
+          companyName: lead.companyName,
+          contactName: lead.contactName,
+          stage: lead.stage,
+          conversationStage: lead.conversationStage,
+          notes: lead.notes,
+          recentLogs: recentForAI,
+          attemptCount: lead.attemptCount || 0,
+        }),
+      });
+      if (!r.ok) throw new Error('Failed');
+      const data = await r.json();
+      setAiSuggestion(data);
+    } catch (e) {
+      console.error('[CI] suggestion failed', e);
+    } finally {
+      setIsGeneratingSuggestion(false);
+    }
+  };
+
   // Dictation state for Notes field
   const [recording, setRecording] = useState(false);
   const [dictFinalText, setDictFinalText] = useState('');
@@ -261,8 +308,19 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
     setOutcome('');
     setNotes('');
     setNextStep('');
+    setAiSuggestion(null);
     resetDictation();
     setShowLogDialog(true);
+    if (type === 'attempt') {
+      generateAttemptSuggestion('call');
+    }
+  };
+
+  const handleChannelChange = (ch: ConversationChannel) => {
+    setChannel(ch);
+    if (logType === 'attempt') {
+      generateAttemptSuggestion(ch);
+    }
   };
 
   const handleSubmitLog = async () => {
@@ -587,7 +645,7 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
       </div>
 
       <Dialog open={showLogDialog} onOpenChange={setShowLogDialog}>
-        <DialogContent className="sm:max-w-md" data-testid="dialog-log-conversation">
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col" data-testid="dialog-log-conversation">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {logType === 'conversation' ? (
@@ -598,10 +656,11 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
             </DialogTitle>
           </DialogHeader>
 
+          <div className="overflow-y-auto flex-1 pr-1">
           <div className="space-y-4">
             <div className="space-y-2">
               <Label className="text-xs">Channel</Label>
-              <Select value={channel} onValueChange={(v) => setChannel(v as ConversationChannel)}>
+              <Select value={channel} onValueChange={(v) => handleChannelChange(v as ConversationChannel)}>
                 <SelectTrigger data-testid="select-channel">
                   <SelectValue />
                 </SelectTrigger>
@@ -612,6 +671,165 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
                 </SelectContent>
               </Select>
             </div>
+
+            {/* AI Suggestion Card — shown in attempt mode */}
+            {logType === 'attempt' && (
+              <div className="rounded-lg border border-violet-200 dark:border-violet-800/50 bg-violet-50/60 dark:bg-violet-950/20 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-violet-200/60 dark:border-violet-800/30">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                    <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wider">
+                      AI {channel === 'call' ? 'Call Opener' : channel === 'sms' ? 'SMS Suggestion' : channel === 'email' ? 'Email Draft' : 'Message Suggestion'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => generateAttemptSuggestion(channel)}
+                    disabled={isGeneratingSuggestion}
+                    className="text-violet-500 hover:text-violet-700 dark:hover:text-violet-300 disabled:opacity-40"
+                    title="Regenerate"
+                    data-testid="button-regenerate-ai-suggestion"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isGeneratingSuggestion ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                <div className="p-3 space-y-2.5">
+                  {isGeneratingSuggestion && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+                      Crafting a {aiSuggestion ? 'new ' : ''}suggestion…
+                    </div>
+                  )}
+
+                  {!isGeneratingSuggestion && aiSuggestion && (
+                    <>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-300 text-violet-700 dark:text-violet-300 dark:border-violet-700">
+                          {aiSuggestion.framework}
+                        </Badge>
+                        <span className="text-[11px] text-muted-foreground leading-tight">{aiSuggestion.frameworkReason}</span>
+                      </div>
+
+                      {/* Call opener */}
+                      {channel === 'call' && (aiSuggestion.openingLine || aiSuggestion.firstQuestion) && (
+                        <div className="space-y-1.5">
+                          {aiSuggestion.openingLine && (
+                            <div className="space-y-0.5">
+                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Opening Line</p>
+                              <p className="text-sm leading-snug bg-background/70 rounded px-2.5 py-1.5 border border-violet-100 dark:border-violet-900/40">{aiSuggestion.openingLine}</p>
+                            </div>
+                          )}
+                          {aiSuggestion.firstQuestion && (
+                            <div className="space-y-0.5">
+                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">First Question</p>
+                              <p className="text-sm leading-snug bg-background/70 rounded px-2.5 py-1.5 border border-violet-100 dark:border-violet-900/40">{aiSuggestion.firstQuestion}</p>
+                            </div>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[11px] px-2 gap-1 border-violet-200 dark:border-violet-800"
+                            onClick={() => {
+                              const txt = [aiSuggestion.openingLine, aiSuggestion.firstQuestion].filter(Boolean).join('\n\n');
+                              navigator.clipboard.writeText(txt);
+                              toast({ title: 'Copied', description: 'Call script copied to clipboard' });
+                            }}
+                            data-testid="button-copy-call-script"
+                          >
+                            <Copy className="h-3 w-3" /> Copy Script
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* SMS */}
+                      {channel === 'sms' && aiSuggestion.message && (
+                        <div className="space-y-1.5">
+                          <p className="text-sm leading-snug bg-background/70 rounded px-2.5 py-1.5 border border-violet-100 dark:border-violet-900/40">{aiSuggestion.message}</p>
+                          <p className="text-[10px] text-muted-foreground">{aiSuggestion.message.length} chars</p>
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[11px] px-2 gap-1 border-violet-200 dark:border-violet-800"
+                              onClick={() => { navigator.clipboard.writeText(aiSuggestion.message!); toast({ title: 'Copied' }); }}
+                              data-testid="button-copy-sms"
+                            >
+                              <Copy className="h-3 w-3" /> Copy
+                            </Button>
+                            {lead.phone && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[11px] px-2 gap-1 border-violet-200 dark:border-violet-800"
+                                onClick={() => window.open(`sms:${lead.phone}?body=${encodeURIComponent(aiSuggestion.message!)}`, '_self')}
+                                data-testid="button-open-sms"
+                              >
+                                <ExternalLink className="h-3 w-3" /> Open in Messages
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Email */}
+                      {channel === 'email' && (aiSuggestion.subject || aiSuggestion.body) && (
+                        <div className="space-y-1.5">
+                          {aiSuggestion.subject && (
+                            <div className="space-y-0.5">
+                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Subject</p>
+                              <p className="text-sm font-medium bg-background/70 rounded px-2.5 py-1.5 border border-violet-100 dark:border-violet-900/40">{aiSuggestion.subject}</p>
+                            </div>
+                          )}
+                          {aiSuggestion.body && (
+                            <div className="space-y-0.5">
+                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Body</p>
+                              <p className="text-sm leading-relaxed bg-background/70 rounded px-2.5 py-1.5 border border-violet-100 dark:border-violet-900/40 whitespace-pre-wrap">{aiSuggestion.body}</p>
+                            </div>
+                          )}
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[11px] px-2 gap-1 border-violet-200 dark:border-violet-800"
+                              onClick={() => { navigator.clipboard.writeText(`Subject: ${aiSuggestion.subject}\n\n${aiSuggestion.body}`); toast({ title: 'Copied' }); }}
+                              data-testid="button-copy-email"
+                            >
+                              <Copy className="h-3 w-3" /> Copy
+                            </Button>
+                            {lead.email && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[11px] px-2 gap-1 border-violet-200 dark:border-violet-800"
+                                onClick={() => window.open(`mailto:${lead.email}?subject=${encodeURIComponent(aiSuggestion.subject || '')}&body=${encodeURIComponent(aiSuggestion.body || '')}`, '_self')}
+                                data-testid="button-open-email"
+                              >
+                                <ExternalLink className="h-3 w-3" /> Open in Email
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Other channels (meeting, dropin, video) */}
+                      {!['call', 'sms', 'email'].includes(channel) && aiSuggestion.message && (
+                        <div className="space-y-1.5">
+                          <p className="text-sm leading-snug bg-background/70 rounded px-2.5 py-1.5 border border-violet-100 dark:border-violet-900/40">{aiSuggestion.message}</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[11px] px-2 gap-1 border-violet-200 dark:border-violet-800"
+                            onClick={() => { navigator.clipboard.writeText(aiSuggestion.message!); toast({ title: 'Copied' }); }}
+                          >
+                            <Copy className="h-3 w-3" /> Copy
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label className="text-xs">What happened?</Label>
@@ -716,6 +934,7 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
                 data-testid="input-next-step"
               />
             </div>
+          </div>
           </div>
 
           <DialogFooter>

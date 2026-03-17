@@ -3567,6 +3567,121 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
   });
 
   // ===============================
+  // AI: ATTEMPT FOLLOW-UP SUGGESTION
+  // ===============================
+  app.post("/api/leads/ai/suggest-attempt-followup", async (req, res) => {
+    try {
+      const {
+        channel,
+        companyName,
+        contactName,
+        stage,
+        conversationStage,
+        notes,
+        recentLogs = [],
+        attemptCount = 0,
+      } = req.body;
+
+      if (!channel || !companyName) {
+        return res.status(400).json({ error: "channel and companyName are required" });
+      }
+
+      // Pick the best framework based on context
+      let framework = 'NEPQ';
+      let frameworkReason = 'Discovery and problem-awareness questions';
+
+      const hasObjection = recentLogs.some((l: any) => l.outcome === 'objection' || (l.notes || '').toLowerCase().includes('objection'));
+      const isEarly = !conversationStage || conversationStage === 'not_started' || conversationStage === 'attempted';
+      const manyAttempts = attemptCount >= 3;
+
+      if (hasObjection) {
+        framework = 'Split the Difference';
+        frameworkReason = 'Objection detected — use tactical empathy and calibrated questions';
+      } else if (manyAttempts || isEarly) {
+        framework = 'SWISH';
+        frameworkReason = 'Multiple attempts with no connection — pattern interrupt required';
+      } else if (conversationStage === 'discovery' || conversationStage === 'qualified') {
+        framework = 'NEPQ';
+        frameworkReason = 'In discovery — use consequence and implication questions';
+      }
+
+      const recentSummary = recentLogs
+        .slice(0, 5)
+        .map((l: any) => `- ${l.type === 'attempt' ? 'Attempt' : 'Conversation'} via ${l.channel}${l.outcome ? ` (${l.outcome})` : ''}${l.notes ? `: ${l.notes}` : ''}`)
+        .join('\n');
+
+      const channelLabel: Record<string, string> = {
+        call: 'phone call script (opening line + first question)',
+        sms: 'SMS text message',
+        email: 'email with subject and body',
+        meeting: 'meeting request message',
+        dropin: 'drop-in conversation opener',
+        video: 'video call invite message',
+      };
+
+      const systemPrompt = `You are an elite sales coach and copywriter who blends three world-class frameworks:
+
+FRAMEWORKS:
+1. **SWISH** (Situation → What do you want → Insight → Solution → How): Reframe resistance with pattern interrupts. Acknowledge the situation, uncover their real goal, share a counter-intuitive insight, offer a reframe, then invite action.
+2. **NEPQ (New Economy Power Questions)** by Jeremy Miner: Never push, always pull. Use situation questions, problem-awareness questions, consequence questions, and solution-awareness questions that make the prospect feel understood and want to move forward.
+3. **Split the Difference** (Chris Voss): Deploy tactical empathy, labelling ("It sounds like…"), calibrated questions ("How am I supposed to…?"), mirrors (repeat last words), and accusation audits to neutralise objections and create safety.
+
+RULES:
+- Be human, warm, and curiosity-driven — never robotic or salesy
+- Use only ONE framework per message, chosen for maximum effect
+- ${channel === 'sms' ? 'SMS: Max 160 characters (hard limit). One sentence, one CTA.' : ''}
+- ${channel === 'email' ? 'Email: 3-5 sentences max. Clear subject line. End with ONE soft question.' : ''}
+- ${channel === 'call' ? 'Call script: Provide a short opening line (max 2 sentences) plus ONE powerful first question. The goal is to get them talking, not to pitch.' : ''}
+- Reference the company name and any known context
+- Always end with a question or soft invitation — never a statement
+- Use Australian English (colour, favour, authorise)
+- Never mention competitor names
+- Dates in DD-MM-YYYY format
+
+OUTPUT FORMAT (strict JSON):
+${channel === 'email'
+  ? '{ "subject": "...", "body": "..." }'
+  : channel === 'call'
+    ? '{ "openingLine": "...", "firstQuestion": "..." }'
+    : '{ "message": "..." }'}`;
+
+      const userPrompt = `Generate a ${channelLabel[channel] || channel} for this lead:
+
+LEAD: ${companyName}${contactName ? ` (Contact: ${contactName})` : ''}
+PIPELINE STAGE: ${stage || 'Unknown'}
+CONVERSATION STAGE: ${conversationStage || 'Not started'}
+ATTEMPTS: ${attemptCount}
+NOTES: ${notes || 'None'}
+
+RECENT ACTIVITY:
+${recentSummary || 'No prior contact'}
+
+USE FRAMEWORK: ${framework} — ${frameworkReason}
+
+Generate the ${channel === 'email' ? 'email' : channel === 'call' ? 'call opener' : 'message'} now.`;
+
+      const aiRes = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.75,
+        response_format: { type: "json_object" },
+      });
+
+      const content = aiRes.choices[0]?.message?.content;
+      if (!content) throw new Error("No AI response");
+      const generated = JSON.parse(content);
+
+      res.json({ framework, frameworkReason, ...generated });
+    } catch (err) {
+      console.error("[suggest-attempt-followup]", err);
+      res.status(500).json({ error: "Failed to generate suggestion" });
+    }
+  });
+
+  // ===============================
   // ADMIN: USER & TEAM MANAGEMENT
   // ===============================
 
