@@ -7435,6 +7435,62 @@ Return JSON:
     }
   });
 
+  // Auto-detect best matching GBP location for a business name across all accounts
+  app.get('/api/gbp/auto-detect', async (req, res) => {
+    try {
+      const { orgId, businessName } = req.query as Record<string, string>;
+      if (!orgId || !businessName) return res.status(400).json({ error: 'orgId and businessName required' });
+      const token = await getGBPAccessToken(orgId);
+
+      // 1. Fetch accounts
+      const acctResp = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const acctData = await acctResp.json();
+      if (!acctResp.ok) throw new Error(acctData.error?.message || 'Failed to fetch accounts');
+      const accounts: { name: string }[] = acctData.accounts || [];
+
+      const needle = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      // 2. Fetch locations for each account and find best match
+      for (const acct of accounts) {
+        const locResp = await fetch(
+          `https://mybusinessbusinessinformation.googleapis.com/v1/${acct.name}/locations?readMask=name,title,phoneNumbers,websiteUri,metadata&pageSize=100`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const locData = await locResp.json();
+        const locations: { name: string; title: string; metadata?: { mapsUri?: string } }[] = locData.locations || [];
+
+        // Exact match first, then fuzzy
+        let match = locations.find(l => l.title.toLowerCase().replace(/[^a-z0-9]/g, '') === needle);
+        if (!match) match = locations.find(l => l.title.toLowerCase().replace(/[^a-z0-9]/g, '').includes(needle));
+        if (!match) match = locations.find(l => needle.includes(l.title.toLowerCase().replace(/[^a-z0-9]/g, '')));
+
+        if (match) {
+          return res.json({ found: true, locationName: match.name, title: match.title, mapsUri: match.metadata?.mapsUri });
+        }
+      }
+
+      // 3. If no match, return first location as suggestion
+      for (const acct of accounts) {
+        const locResp = await fetch(
+          `https://mybusinessbusinessinformation.googleapis.com/v1/${acct.name}/locations?readMask=name,title,metadata&pageSize=5`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const locData = await locResp.json();
+        const locations: { name: string; title: string; metadata?: { mapsUri?: string } }[] = locData.locations || [];
+        if (locations.length > 0) {
+          return res.json({ found: false, suggestion: { locationName: locations[0].name, title: locations[0].title }, allLocations: locations.map(l => ({ locationName: l.name, title: l.title })) });
+        }
+      }
+
+      res.json({ found: false });
+    } catch (err: any) {
+      console.error('[gbp/auto-detect]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // List GBP locations for an account
   app.get('/api/gbp/locations', async (req, res) => {
     try {

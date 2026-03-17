@@ -1,12 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Zap, ChevronDown, ChevronRight, Sparkles, Loader2, Copy, Check,
   Send, Globe, Star, MapPin, Camera, Building2, CheckSquare,
   Square, ClipboardList, FileText, BarChart3, AlertCircle, CheckCircle2,
-  Target, TrendingUp, Lightbulb, Tag, RefreshCw, ArrowRight, XCircle, Info,
+  Target, TrendingUp, Lightbulb, Tag, RefreshCw, ArrowRight, XCircle, Info, Link2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Client, GBPPlaybook, GBPKeywordPlan, GBPKeywordCluster } from '@/lib/types';
+import { useDispatch } from 'react-redux';
+import { updateClient } from '@/store/index';
 
 interface Props {
   client: Client;
@@ -100,12 +102,30 @@ function CurrentTag({ value, label }: { value: string; label: string }) {
 
 export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpdate }: Props) {
   const { toast } = useToast();
+  const dispatch = useDispatch();
   const playbook: GBPPlaybook = client.gbpPlaybook || {};
   const keywords = parsedKeywords.map(k => k.keyword);
   const hasGBPLinked = !!client.gbpLocationName;
 
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // GBP org connection status
+  const [gbpConnected, setGbpConnected] = useState<boolean | null>(null);
+  // Auto-detect state
+  interface AutoDetectResult { found: boolean; locationName?: string; title?: string; suggestion?: { locationName: string; title: string }; allLocations?: { locationName: string; title: string }[] }
+  const [autoDetecting, setAutoDetecting] = useState(false);
+  const [autoDetectResult, setAutoDetectResult] = useState<AutoDetectResult | null>(null);
+  const [linking, setLinking] = useState(false);
+
+  // Check GBP org connection on mount
+  useEffect(() => {
+    if (!client.orgId) return;
+    fetch(`/api/gbp/status?orgId=${encodeURIComponent(client.orgId)}`)
+      .then(r => r.json())
+      .then(d => setGbpConnected(!!d.connected))
+      .catch(() => setGbpConnected(false));
+  }, [client.orgId]);
 
   // GBP Live Snapshot (from GBP OAuth)
   const [snapshot, setSnapshot] = useState<GBPSnapshot | null>(null);
@@ -205,6 +225,47 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
       toast({ title: 'Sync failed', description: err.message, variant: 'destructive' });
     } finally {
       setSnapshotLoading(false);
+    }
+  };
+
+  // ── Auto-detect & link GBP location ─────────────────────────────────────
+  const handleAutoDetect = async () => {
+    setAutoDetecting(true);
+    setAutoDetectResult(null);
+    try {
+      const params = new URLSearchParams({ orgId: client.orgId, businessName: client.businessName });
+      const resp = await fetch(`/api/gbp/auto-detect?${params}`);
+      if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Auto-detect failed'); }
+      const result: AutoDetectResult = await resp.json();
+      setAutoDetectResult(result);
+      if (!result.found && !result.suggestion) {
+        toast({ title: 'No GBP locations found', description: 'No GBP locations found on your account. Check Settings → Integrations.', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Detection failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setAutoDetecting(false);
+    }
+  };
+
+  const handleLinkLocation = async (locationName: string, title: string) => {
+    setLinking(true);
+    try {
+      const resp = await fetch(`/api/clients/${client.id}/gbp-location`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId: client.orgId, gbpLocationName: locationName }),
+      });
+      if (!resp.ok) throw new Error('Failed to link location');
+      dispatch(updateClient({ ...client, gbpLocationName: locationName }));
+      setAutoDetectResult(null);
+      toast({ title: 'GBP location linked!', description: `${title} linked. Syncing now…` });
+      // Auto-run sync immediately after linking
+      setTimeout(() => handleSyncGBP(), 300);
+    } catch (err: any) {
+      toast({ title: 'Link failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setLinking(false);
     }
   };
 
@@ -479,7 +540,18 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
             {!snapshot && placesData?.found && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded-full font-medium">From Google</span>}
           </div>
           <div className="flex items-center gap-2">
-            {!hasGBPLinked && (
+            {!hasGBPLinked && gbpConnected && (
+              <button
+                onClick={handleAutoDetect}
+                disabled={autoDetecting || linking}
+                className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline disabled:opacity-50"
+                data-testid="btn-auto-detect-gbp"
+                title="Find and link your GBP location automatically"
+              >
+                {autoDetecting ? <><Loader2 className="h-3 w-3 animate-spin" /> Detecting…</> : <><Link2 className="h-3 w-3" /> Find & Link GBP</>}
+              </button>
+            )}
+            {!hasGBPLinked && !gbpConnected && (
               <button
                 onClick={handlePlacesLookup}
                 disabled={placesLoading}
@@ -495,30 +567,65 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
               disabled={snapshotLoading || !hasGBPLinked}
               className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
               data-testid="btn-sync-gbp"
-              title={!hasGBPLinked ? 'Requires GBP OAuth connection in Settings → Integrations' : ''}
+              title={!hasGBPLinked ? 'Requires GBP location to be linked first' : ''}
             >
               {snapshotLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Syncing…</> : <><RefreshCw className="h-3 w-3" /> {snapshot ? 'Re-sync' : 'Sync from GBP'}</>}
             </button>
           </div>
         </div>
 
-        {!snapshot && !placesData && !snapshotLoading && !placesLoading && (
+        {/* Auto-detect result — confirm or pick manually */}
+        {!hasGBPLinked && autoDetectResult && (
+          <div className="mt-1.5 rounded-lg border overflow-hidden">
+            {autoDetectResult.found ? (
+              <div className="p-2 bg-emerald-50 dark:bg-emerald-950/20 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 truncate">{autoDetectResult.title}</p>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Found on your GBP account</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleLinkLocation(autoDetectResult.locationName!, autoDetectResult.title!)}
+                  disabled={linking}
+                  className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded px-2 py-1 disabled:opacity-50"
+                  data-testid="btn-confirm-link-gbp"
+                >
+                  {linking ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Link2 className="h-3 w-3" /> Link & Sync</>}
+                </button>
+              </div>
+            ) : autoDetectResult.allLocations?.length ? (
+              <div>
+                <p className="text-[10px] text-muted-foreground px-2 py-1.5 border-b bg-muted/20">No exact match — pick from your GBP locations:</p>
+                <div className="divide-y max-h-32 overflow-y-auto">
+                  {autoDetectResult.allLocations.map(loc => (
+                    <button
+                      key={loc.locationName}
+                      onClick={() => handleLinkLocation(loc.locationName, loc.title)}
+                      disabled={linking}
+                      className="w-full text-left px-2.5 py-2 text-xs hover:bg-muted/50 flex items-center justify-between gap-2 disabled:opacity-50"
+                    >
+                      <span className="font-medium truncate">{loc.title}</span>
+                      <span className="text-[10px] text-primary shrink-0">Link →</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {!snapshot && !placesData && !snapshotLoading && !placesLoading && !autoDetectResult && (
           <div className="space-y-1.5">
             <p className="text-[11px] text-muted-foreground">
               {hasGBPLinked
                 ? 'Pull your client\'s live GBP data to see exactly what\'s there, what\'s missing, and what to fix first.'
-                : 'Click "Lookup from Google" to pull rating, reviews & category. For full data (description, services, service area), connect GBP in Settings → Integrations.'
+                : gbpConnected
+                  ? 'GBP is connected — click "Find & Link GBP" to automatically detect and link this client\'s listing, then sync all data.'
+                  : 'Click "Lookup from Google" to pull rating, reviews & category. Connect GBP in Settings → Integrations for full data.'
               }
             </p>
-            {!hasGBPLinked && (
-              <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-2">
-                <p className="text-[11px] text-blue-800 dark:text-blue-300 font-medium mb-0.5">Two levels of data available:</p>
-                <ul className="text-[10px] text-blue-700 dark:text-blue-400 space-y-0.5">
-                  <li>• <span className="font-medium">Google lookup (now)</span> — rating, reviews, category, website</li>
-                  <li>• <span className="font-medium">GBP connection (Settings)</span> — adds description, services, service area</li>
-                </ul>
-              </div>
-            )}
           </div>
         )}
 
