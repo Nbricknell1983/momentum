@@ -678,6 +678,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         googleReviewCount: data.reviewCount ?? lead.sourceData?.googleReviewCount,
         googleTypes: data.types || lead.sourceData?.googleTypes,
         googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${data.placeId || placeId.trim()}`,
+        googleAddress: data.address || lead.sourceData?.googleAddress,
         category: data.primaryType || lead.sourceData?.category,
       };
       const leadUpdates: Partial<Lead> = {
@@ -1255,6 +1256,7 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const reviewCount = lead.sourceData?.googleReviewCount;
   const rating = lead.sourceData?.googleRating;
   const mapsUrl = lead.sourceData?.googleMapsUrl;
+  const gbpAddress = lead.sourceData?.googleAddress || (hasGBP ? lead.address : undefined);
 
   // Auto-search on mount when no GBP linked and lead has a company name
   useEffect(() => {
@@ -1396,6 +1398,16 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
         </span>
         <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
       </div>
+
+      {/* GBP address line */}
+      {hasGBP && gbpAddress && (
+        <div className="flex items-center gap-2 pl-5 -mt-0.5 pb-0.5">
+          <span className="text-muted-foreground text-xs w-[76px] shrink-0" />
+          <span className="text-[10px] text-muted-foreground truncate" data-testid="text-gbp-address">
+            {gbpAddress}
+          </span>
+        </div>
+      )}
 
       {/* Auto-loaded suggestions panel */}
       {!hasGBP && !suggestDismissed && suggestions.length > 0 && (
