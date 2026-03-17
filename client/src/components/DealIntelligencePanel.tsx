@@ -679,6 +679,8 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         googleTypes: data.types || lead.sourceData?.googleTypes,
         googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${data.placeId || placeId.trim()}`,
         googleAddress: data.address || lead.sourceData?.googleAddress,
+        googlePhone: data.phone || lead.sourceData?.googlePhone,
+        googleWebsite: data.website || lead.sourceData?.googleWebsite,
         category: data.primaryType || lead.sourceData?.category,
       };
       const leadUpdates: Partial<Lead> = {
@@ -886,6 +888,8 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
           />
           <SitemapRow lead={lead} onFetch={handleSitemapFetch} onCrawl={handleCrawlPages} />
         </div>
+
+        <LocalVisibilitySignals lead={lead} />
 
         {/* Website screenshot preview */}
         {lead.website && (() => {
@@ -2490,6 +2494,151 @@ function CurrentMarketingRow({
               <span>{activities.length} channel{activities.length > 1 ? 's' : ''}</span>
               <span className="font-semibold text-orange-600 dark:text-orange-400">~${Math.round(totalMonthly).toLocaleString()}/mo total</span>
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LocalVisibilitySignals({ lead }: { lead: Lead }) {
+  const [open, setOpen] = useState(true);
+  const sd = lead.sourceData;
+  if (!sd?.googlePlaceId) return null;
+
+  const normPhone = (s?: string | null) => (s || '').replace(/\D/g, '');
+  const normDomain = (url?: string | null) => {
+    if (!url) return '';
+    try { return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase(); }
+    catch { return (url || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]; }
+  };
+  const normText = (s?: string | null) => (s || '').toLowerCase();
+  const textIncludes = (haystack?: string | null, needle?: string | null) => {
+    if (!haystack || !needle || needle.length < 3) return false;
+    return normText(haystack).includes(normText(needle));
+  };
+  const extractPostcode = (addr?: string | null) => (addr || '').match(/\b\d{4}\b/)?.[0] || '';
+  const extractFirstSuburbWord = (addr?: string | null) => {
+    const parts = (addr || '').split(',');
+    const suburbPart = parts.length >= 2 ? parts[1] : parts[0];
+    return (suburbPart || '').trim().split(/\s+/).find(w => w.length > 3 && !/^\d/.test(w))?.toLowerCase() || '';
+  };
+
+  // GBP alignment
+  const gbpDomain = normDomain(sd.googleWebsite);
+  const leadDomain = normDomain(lead.website);
+  const websiteMatch = gbpDomain && leadDomain ? gbpDomain === leadDomain : null;
+
+  const gbpPhoneDigits = normPhone(sd.googlePhone);
+  const leadPhoneDigits = normPhone(lead.phone);
+  const phoneMatch = gbpPhoneDigits && leadPhoneDigits ? gbpPhoneDigits === leadPhoneDigits : null;
+
+  const gbpPostcode = extractPostcode(sd.googleAddress);
+  const leadPostcode = extractPostcode(lead.address);
+  const gbpSuburbWord = extractFirstSuburbWord(sd.googleAddress);
+  const leadSuburbWord = extractFirstSuburbWord(lead.address);
+  const addressMatch = sd.googleAddress && lead.address
+    ? (gbpPostcode && leadPostcode && gbpPostcode === leadPostcode) || (gbpSuburbWord && leadSuburbWord && gbpSuburbWord === leadSuburbWord)
+    : null;
+
+  const gbpCat = (sd.category || '').toLowerCase();
+  const leadInd = (lead.industry || '').toLowerCase();
+  const categoryMatch = gbpCat && leadInd
+    ? gbpCat.includes(leadInd.split(/\s+/)[0]) || leadInd.includes(gbpCat.split(/\s+/)[0])
+    : null;
+
+  // NAP on website (crawled pages)
+  const crawledPages = lead.crawledPages || [];
+  const hasCrawl = crawledPages.length > 0;
+  const allText = crawledPages.map(p => [p.bodyText, p.title, p.metaDescription, p.h1].filter(Boolean).join(' ')).join(' ');
+
+  const phoneOnSite = hasCrawl && gbpPhoneDigits.length >= 8
+    ? normPhone(allText).includes(gbpPhoneDigits.slice(-8))
+    : null;
+  const nameWords = (lead.companyName || '').split(/\s+/).filter(w => w.length > 3);
+  const nameOnSite = hasCrawl && nameWords.length > 0
+    ? textIncludes(allText, nameWords[0])
+    : null;
+  const suburbOnSite = hasCrawl && gbpSuburbWord.length > 2
+    ? textIncludes(allText, gbpSuburbWord)
+    : null;
+
+  type Signal = { label: string; status: 'ok' | 'warn' | 'error' | 'na'; detail?: string };
+  const sig = (label: string, match: boolean | null, okDetail?: string, failDetail?: string, warnNotNull = false): Signal => {
+    if (match === null) return { label, status: 'na', detail: 'No data' };
+    if (match) return { label, status: 'ok', detail: okDetail };
+    return { label, status: warnNotNull ? 'warn' : 'error', detail: failDetail };
+  };
+
+  const gbpSignals: Signal[] = [
+    sig('Website URL', websiteMatch, '', gbpDomain ? `GBP: ${gbpDomain}` : 'GBP has no website', true),
+    sig('Phone', phoneMatch, lead.phone || '', sd.googlePhone ? `GBP: ${sd.googlePhone}` : 'Not on GBP'),
+    sig('Address', addressMatch, '', sd.googleAddress ? `GBP: ${sd.googleAddress.split(',').slice(0, 2).join(',')}` : undefined, true),
+    sig('Category', categoryMatch, sd.category || '', sd.category ? `GBP: ${sd.category}` : undefined, true),
+  ];
+
+  const napSignals: Signal[] = hasCrawl ? [
+    sig('Phone on site', phoneOnSite, '', 'Not detected on website'),
+    sig('Business name', nameOnSite, '', 'Not found in page content', true),
+    sig('Local suburb', suburbOnSite, gbpSuburbWord, 'Not mentioned on website', true),
+  ] : [];
+
+  const allSigs = [...gbpSignals, ...napSignals];
+  const okCount = allSigs.filter(s => s.status === 'ok').length;
+  const applicable = allSigs.filter(s => s.status !== 'na').length;
+  const scoreColor = applicable === 0 ? 'text-muted-foreground' : okCount === applicable ? 'text-green-600' : okCount >= applicable * 0.6 ? 'text-amber-600' : 'text-red-600';
+
+  const StatusIcon = ({ s }: { s: Signal['status'] }) => {
+    if (s === 'ok') return <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0 mt-px" />;
+    if (s === 'warn') return <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 mt-px" />;
+    if (s === 'error') return <X className="h-3 w-3 text-red-500 shrink-0 mt-px" />;
+    return <div className="h-3 w-3 rounded-full border border-muted-foreground/30 shrink-0 mt-px" />;
+  };
+
+  return (
+    <div className="mt-2.5 rounded-md border bg-muted/20 overflow-hidden" data-testid="local-visibility-signals">
+      <button
+        className="w-full flex items-center justify-between px-2.5 py-2 hover:bg-muted/40 transition-colors"
+        onClick={() => setOpen(o => !o)}
+        data-testid="button-toggle-local-visibility"
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <MapPin className="h-3 w-3 text-green-600" /> Local Visibility Signals
+        </span>
+        <span className="flex items-center gap-2">
+          {applicable > 0 && <span className={`text-[11px] font-semibold ${scoreColor}`}>{okCount}/{applicable} OK</span>}
+          {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+        </span>
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2.5 space-y-3">
+          <div>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 pt-1">GBP Alignment</p>
+            <div className="space-y-1.5">
+              {gbpSignals.map((s, i) => (
+                <div key={i} className="flex items-start gap-1.5 text-[11px]">
+                  <StatusIcon s={s.status} />
+                  <span className="text-foreground/80 font-medium w-20 shrink-0">{s.label}</span>
+                  {s.detail ? <span className="text-muted-foreground truncate">{s.detail}</span> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+          {hasCrawl ? (
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">NAP on Website</p>
+              <div className="space-y-1.5">
+                {napSignals.map((s, i) => (
+                  <div key={i} className="flex items-start gap-1.5 text-[11px]">
+                    <StatusIcon s={s.status} />
+                    <span className="text-foreground/80 font-medium w-20 shrink-0">{s.label}</span>
+                    {s.detail ? <span className="text-muted-foreground truncate">{s.detail}</span> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground italic">Crawl the website to check NAP consistency on-page</p>
           )}
         </div>
       )}
