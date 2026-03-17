@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle,
   Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
   Loader2, Link2, X, ExternalLink, Radio, Play, MessageSquare, ChevronDown,
-  ThumbsUp, Building2, Unlink, Target, ScanSearch,
+  ThumbsUp, Building2, Unlink, Target, ScanSearch, Upload, FileText,
 } from 'lucide-react';
+import { parseKeywordFile } from '@/lib/parseKeywordFile';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -198,8 +199,26 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const [scanGridSize, setScanGridSize] = useState('7');
   const [scanRadius, setScanRadius] = useState('3');
   const [showAllKeywords, setShowAllKeywords] = useState(false);
+  const [keywordUploading, setKeywordUploading] = useState(false);
+  const keywordFileRef = useRef<HTMLInputElement>(null);
 
   const hasLinked = !!client.localFalconPlaceId;
+
+  const handleKeywordFileUpload = async (file: File) => {
+    setKeywordUploading(true);
+    try {
+      const summary = await parseKeywordFile(file);
+      const updatedOnboarding = { ...(client.clientOnboarding || {}), keywordSummary: summary };
+      await updateClientInFirestore(orgId, client.id, { clientOnboarding: updatedOnboarding }, authReady);
+      dispatch(updateClient({ ...client, clientOnboarding: updatedOnboarding }));
+      toast({ title: 'Keywords uploaded', description: `${summary.match(/\d+ total/)?.[0] || 'Keywords'} imported from ${file.name}` });
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setKeywordUploading(false);
+      if (keywordFileRef.current) keywordFileRef.current.value = '';
+    }
+  };
 
   // Parse keywords from onboarding
   const parsedKeywords = useMemo(
@@ -517,6 +536,23 @@ function LocalPresenceSection({ client }: { client: Client }) {
                       <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/10">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Keyword Rankings</p>
                         <div className="flex items-center gap-1">
+                          <input
+                            ref={keywordFileRef}
+                            type="file"
+                            accept=".csv,.xlsx,.xls"
+                            className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) handleKeywordFileUpload(f); }}
+                            data-testid="input-keyword-file-replace"
+                          />
+                          <button
+                            onClick={() => keywordFileRef.current?.click()}
+                            disabled={keywordUploading}
+                            className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted/50 flex items-center gap-1"
+                            data-testid="btn-replace-keywords"
+                            title="Replace keywords from file"
+                          >
+                            {keywordUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                          </button>
                           <button onClick={() => refetchReports()} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/50" data-testid="btn-refresh-reports">
                             <RefreshCw className="h-3 w-3" />
                           </button>
@@ -636,9 +672,33 @@ function LocalPresenceSection({ client }: { client: Client }) {
                   ) : (
                     /* No keywords uploaded yet */
                     <div className="p-4 space-y-3">
-                      <div className="text-center space-y-1.5">
-                        <p className="text-xs font-medium">No keywords uploaded yet</p>
-                        <p className="text-[11px] text-muted-foreground">Upload an Ahrefs or Google Keyword Planner CSV in the AI Onboarding tab to track keyword rankings here.</p>
+                      <div className="text-center space-y-3">
+                        <div className="mx-auto w-10 h-10 rounded-full bg-violet-50 dark:bg-violet-950/30 flex items-center justify-center">
+                          <FileText className="h-5 w-5 text-violet-400" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium">No keywords uploaded yet</p>
+                          <p className="text-[11px] text-muted-foreground">Upload your Ahrefs or keyword export to track rankings for your target keywords.</p>
+                        </div>
+                        <input
+                          ref={keywordFileRef}
+                          type="file"
+                          accept=".csv,.xlsx,.xls"
+                          className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleKeywordFileUpload(f); }}
+                          data-testid="input-keyword-file"
+                        />
+                        <Button
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => keywordFileRef.current?.click()}
+                          disabled={keywordUploading}
+                          data-testid="btn-upload-keywords"
+                        >
+                          {keywordUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                          {keywordUploading ? 'Importing…' : 'Upload Keyword File'}
+                        </Button>
+                        <p className="text-[10px] text-muted-foreground">Ahrefs, Google Keyword Planner, or any .csv / .xlsx export</p>
                       </div>
                       {/* Still show scan history + run scan if available */}
                       {reports.length > 0 && (
