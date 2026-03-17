@@ -1339,6 +1339,29 @@ Focus on practical, achievable actions for a local service business. Tailor reco
   // Client Attention AI Recommendations
   // ============================================
 
+  app.post("/api/clients/ai/suggest-scan-areas", async (req, res) => {
+    try {
+      const { keywords, businessName, businessAddress } = req.body;
+      if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+        return res.status(400).json({ error: "keywords array required" });
+      }
+      const keywordList = keywords.slice(0, 50).map((k: string) => `- ${k}`).join('\n');
+      const prompt = `You are a local SEO expert. A business called "${businessName || 'this business'}" located at "${businessAddress || 'their location'}" has the following target keywords:\n\n${keywordList}\n\nAnalyse these keywords and identify the specific geographic areas/locations they are targeting (e.g. suburbs, cities, "near me"). Group the keywords by area and return a JSON object with this exact structure:\n{\n  "areas": [\n    {\n      "area": "Area name (e.g. Brisbane CBD, Gold Coast, Near Me)",\n      "keywords": ["keyword1", "keyword2"],\n      "priority": "high" | "medium" | "low",\n      "tip": "One sentence explaining why this area matters for GBP visibility"\n    }\n  ]\n}\n\nRules:\n- Only include areas that are explicitly or implicitly referenced in the keywords\n- "Near Me" is always high priority if any keywords contain "near me"\n- Sort by priority (high first)\n- Maximum 8 areas\n- Only return the JSON, no other text`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 1000,
+      });
+      const result = JSON.parse(completion.choices[0].message.content || '{"areas":[]}');
+      res.json(result);
+    } catch (err: any) {
+      console.error('[suggest-scan-areas]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/clients/ai/attention-recommendations", async (req, res) => {
     try {
       const { clients } = req.body;

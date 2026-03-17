@@ -4,7 +4,7 @@ import {
   TrendingUp, TrendingDown, Minus, CheckCircle2, AlertTriangle, XCircle,
   Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
   Loader2, Link2, X, ExternalLink, Radio, Play, MessageSquare, ChevronDown,
-  ThumbsUp, Building2, Unlink, Target, ScanSearch, Upload, FileText,
+  ThumbsUp, Building2, Unlink, Target, ScanSearch, Upload, FileText, Sparkles,
 } from 'lucide-react';
 import { parseKeywordFile } from '@/lib/parseKeywordFile';
 import { Badge } from '@/components/ui/badge';
@@ -201,8 +201,34 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const [showAllKeywords, setShowAllKeywords] = useState(false);
   const [keywordUploading, setKeywordUploading] = useState(false);
   const keywordFileRef = useRef<HTMLInputElement>(null);
+  const [scanAreas, setScanAreas] = useState<Array<{ area: string; keywords: string[]; priority: string; tip: string }> | null>(null);
+  const [scanAreasLoading, setScanAreasLoading] = useState(false);
 
   const hasLinked = !!client.localFalconPlaceId;
+
+  const handleSuggestScanAreas = async () => {
+    if (!parsedKeywords.length) return;
+    setScanAreasLoading(true);
+    setScanAreas(null);
+    try {
+      const resp = await fetch('/api/clients/ai/suggest-scan-areas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keywords: parsedKeywords.map(k => k.keyword),
+          businessName: client.localFalconLocation?.name || client.name,
+          businessAddress: client.localFalconLocation?.address || '',
+        }),
+      });
+      if (!resp.ok) throw new Error('Request failed');
+      const data = await resp.json();
+      setScanAreas(data.areas || []);
+    } catch (err: any) {
+      toast({ title: 'Could not generate suggestions', description: err.message, variant: 'destructive' });
+    } finally {
+      setScanAreasLoading(false);
+    }
+  };
 
   const handleKeywordFileUpload = async (file: File) => {
     setKeywordUploading(true);
@@ -794,6 +820,77 @@ function LocalPresenceSection({ client }: { client: Client }) {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* ── Suggested Scan Areas ── */}
+                  {parsedKeywords.length > 0 && (
+                    <div className="border-t px-3 py-2.5">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3" /> Suggested Areas to Scan
+                        </p>
+                        <button
+                          onClick={handleSuggestScanAreas}
+                          disabled={scanAreasLoading}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50"
+                          data-testid="btn-suggest-scan-areas"
+                        >
+                          {scanAreasLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Analysing…</> : scanAreas ? <><RefreshCw className="h-3 w-3" /> Refresh</> : <><Sparkles className="h-3 w-3" /> Suggest areas</>}
+                        </button>
+                      </div>
+
+                      {!scanAreas && !scanAreasLoading && (
+                        <p className="text-[11px] text-muted-foreground">AI analyses your keywords to identify which locations to prioritise for GBP ranking scans.</p>
+                      )}
+
+                      {scanAreasLoading && (
+                        <div className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analysing keyword geography…
+                        </div>
+                      )}
+
+                      {scanAreas && scanAreas.length === 0 && (
+                        <p className="text-[11px] text-muted-foreground">No location-specific keywords found. Your keywords may be broad/generic — try adding suburb or city-specific keywords.</p>
+                      )}
+
+                      {scanAreas && scanAreas.length > 0 && (
+                        <div className="space-y-2">
+                          {scanAreas.map((area, i) => {
+                            const priorityStyle = area.priority === 'high'
+                              ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
+                              : area.priority === 'medium'
+                              ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
+                              : 'bg-muted/30 border-border';
+                            const priorityBadge = area.priority === 'high'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              : area.priority === 'medium'
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                              : 'bg-muted text-muted-foreground';
+                            return (
+                              <div key={i} className={`rounded-lg border p-2.5 space-y-1.5 ${priorityStyle}`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold truncate">{area.area}</p>
+                                  <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded capitalize ${priorityBadge}`}>{area.priority}</span>
+                                </div>
+                                {area.tip && <p className="text-[11px] text-muted-foreground leading-relaxed">{area.tip}</p>}
+                                <div className="flex flex-wrap gap-1">
+                                  {(area.keywords || []).map((kw, ki) => (
+                                    <button
+                                      key={ki}
+                                      onClick={() => { setScanKeyword(kw); setShowRunScan(true); }}
+                                      className="inline-flex items-center gap-1 text-[10px] border rounded px-1.5 py-0.5 hover:bg-muted/50 transition-colors bg-background/70"
+                                      data-testid={`btn-area-keyword-${i}-${ki}`}
+                                    >
+                                      <ScanSearch className="h-2.5 w-2.5 text-muted-foreground" /> {kw}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
