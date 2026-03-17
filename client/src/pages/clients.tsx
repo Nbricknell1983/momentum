@@ -326,6 +326,22 @@ export default function ClientsPage() {
     setAiMessageModalOpen(true);
   };
 
+  const handleClientEmailSent = async ({ cc, subject }: { cc?: string; subject?: string }) => {
+    if (!orgId || !authReady || !aiMessageClient || !userId) return;
+    try {
+      const notes = [subject ? `Subject: ${subject}` : '', cc ? `CC: ${cc}` : ''].filter(Boolean).join(' | ');
+      await logClientAction(orgId, {
+        userId,
+        clientId: aiMessageClient.id,
+        type: 'email',
+        clientName: aiMessageClient.businessName,
+        notes: notes || undefined,
+      }, authReady);
+    } catch (err) {
+      console.error('[Clients] Failed to log email activity', err);
+    }
+  };
+
   const [activeClientTab, setActiveClientTab] = useState<string>('details');
   const [activeStrategySubTab, setActiveStrategySubTab] = useState<string>('overview');
 
@@ -6991,6 +7007,7 @@ export default function ClientsPage() {
             contactName: aiMessageClient.primaryContactName,
             notes: aiMessageClient.notes
           }}
+          onSent={handleClientEmailSent}
         />
       )}
 

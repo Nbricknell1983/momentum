@@ -226,6 +226,23 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
     setAiMessageModalOpen(true);
   };
 
+  const handleEmailSent = async ({ cc, subject }: { cc?: string; subject?: string }) => {
+    if (!orgId || !authReady) return;
+    try {
+      const notes = [subject ? `Subject: ${subject}` : '', cc ? `CC: ${cc}` : ''].filter(Boolean).join(' | ');
+      const { activity: savedActivity } = await logPipelineAction(orgId, {
+        userId: user?.uid || lead.userId,
+        leadId: lead.id,
+        type: 'email',
+        leadName: lead.companyName || lead.contactName,
+        notes: notes || undefined,
+      }, authReady);
+      dispatch(addActivity(savedActivity));
+    } catch (err) {
+      console.error('[LeadCard] Failed to log email activity', err);
+    }
+  };
+
   const handleSetNextContactDate = async (date: Date, source: 'ai' | 'manual' = 'manual', reason?: string) => {
     if (!orgId || !authReady) return;
     
@@ -1352,6 +1369,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
         channel={aiMessageChannel}
         lead={lead}
         activityHistory={leadActivityHistory}
+        onSent={handleEmailSent}
       />
 
       {/* Outreach Scripts Dialog */}

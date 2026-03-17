@@ -23,6 +23,7 @@ interface AIMessageModalProps {
     notes?: string;
   };
   activityHistory?: string[];
+  onSent?: (data: { cc?: string; subject?: string }) => void;
 }
 
 interface GeneratedMessage {
@@ -43,7 +44,8 @@ export function AIMessageModal({
   channel, 
   lead, 
   client,
-  activityHistory = []
+  activityHistory = [],
+  onSent,
 }: AIMessageModalProps) {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -51,6 +53,7 @@ export function AIMessageModal({
   const [editedMessage, setEditedMessage] = useState('');
   const [editedSubject, setEditedSubject] = useState('');
   const [userContext, setUserContext] = useState('');
+  const [ccEmail, setCcEmail] = useState('');
 
   const entity = lead || client;
   const entityName = lead?.companyName || client?.businessName || 'Unknown';
@@ -68,6 +71,7 @@ export function AIMessageModal({
       setEditedMessage('');
       setEditedSubject('');
       setUserContext('');
+      setCcEmail('');
       generateMessage();
     }
   }, [open, entityId, channel]);
@@ -145,7 +149,9 @@ export function AIMessageModal({
     } else if (channel === 'email' && entityEmail) {
       const encodedSubject = encodeURIComponent(editedSubject);
       const encodedBody = encodeURIComponent(editedMessage);
-      window.open(`mailto:${entityEmail}?subject=${encodedSubject}&body=${encodedBody}`, '_self');
+      const ccPart = ccEmail.trim() ? `&cc=${encodeURIComponent(ccEmail.trim())}` : '';
+      window.open(`mailto:${entityEmail}?subject=${encodedSubject}${ccPart}&body=${encodedBody}`, '_self');
+      onSent?.({ cc: ccEmail.trim() || undefined, subject: editedSubject });
     }
     onOpenChange(false);
   };
@@ -200,6 +206,14 @@ export function AIMessageModal({
                     onChange={(e) => setEditedSubject(e.target.value)}
                     placeholder="Email subject..."
                     data-testid="input-email-subject"
+                  />
+                  <Label className="text-xs">CC (optional)</Label>
+                  <Input
+                    type="email"
+                    value={ccEmail}
+                    onChange={(e) => setCcEmail(e.target.value)}
+                    placeholder="cc@example.com"
+                    data-testid="input-email-cc"
                   />
                 </div>
               )}
