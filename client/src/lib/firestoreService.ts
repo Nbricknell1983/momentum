@@ -605,13 +605,13 @@ export async function fetchActivities(orgId: string, leadId: string, authReady: 
   
   try {
     const activitiesRef = collection(db, 'orgs', orgId, 'activities');
-    const q = query(activitiesRef, where('leadId', '==', leadId), orderBy('createdAt', 'desc'));
+    const q = query(activitiesRef, where('leadId', '==', leadId));
     const snapshot = await getDocs(q);
     const activities = snapshot.docs.map(doc => ({
       id: doc.id,
       ...convertTimestampToDate(doc.data()),
     })) as Activity[];
-    
+    activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     logFirestoreOperation('READ', path, orgId, true);
     return activities;
   } catch (error: any) {
@@ -891,17 +891,13 @@ export async function fetchClientActivities(
   
   try {
     const activitiesRef = collection(db, 'orgs', orgId, 'activities');
-    const q = query(
-      activitiesRef, 
-      where('clientId', '==', clientId),
-      orderBy('createdAt', 'desc')
-    );
+    const q = query(activitiesRef, where('clientId', '==', clientId));
     const snapshot = await getDocs(q);
     const activities = snapshot.docs.map(doc => ({
       id: doc.id,
       ...convertTimestampToDate(doc.data()),
     })) as Activity[];
-    
+    activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     logFirestoreOperation('READ', path, orgId, true);
     return activities;
   } catch (error: any) {
@@ -926,16 +922,13 @@ export async function fetchClientTasks(
   
   try {
     const tasksRef = collection(db, 'orgs', orgId, 'tasks');
-    const q = query(
-      tasksRef, 
-      where('clientId', '==', clientId),
-      orderBy('dueAt', 'asc')
-    );
+    const q = query(tasksRef, where('clientId', '==', clientId));
     const snapshot = await getDocs(q);
     const tasks = snapshot.docs.map(doc => ({
       id: doc.id,
       ...convertTimestampToDate(doc.data()),
     })) as Task[];
+    tasks.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
     
     logFirestoreOperation('READ', path, orgId, true);
     return tasks;
@@ -1000,17 +993,13 @@ export async function fetchNBAQueue(orgId: string, authReady: boolean = false): 
   
   try {
     const queueRef = collection(db, 'orgs', orgId, 'actionQueue');
-    const q = query(
-      queueRef, 
-      where('status', '==', 'open'),
-      orderBy('priorityScore', 'desc'),
-      limit(50)
-    );
+    const q = query(queueRef, where('status', '==', 'open'), limit(50));
     const snapshot = await getDocs(q);
     const actions = snapshot.docs.map(doc => ({
       id: doc.id,
       ...convertTimestampToDate(doc.data()),
     })) as NBAAction[];
+    actions.sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
     
     logFirestoreOperation('READ', path, orgId, true);
     return actions;

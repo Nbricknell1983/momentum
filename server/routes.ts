@@ -7462,7 +7462,13 @@ Return JSON:
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
     });
-    if (!resp.ok) throw new Error(`Local Falcon API error: ${resp.status}`);
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.error(`[localFalconPost] ${path} → ${resp.status}:`, errText);
+      let detail = '';
+      try { detail = JSON.parse(errText)?.message || JSON.parse(errText)?.error || errText; } catch { detail = errText; }
+      throw new Error(`Local Falcon API error: ${resp.status}${detail ? ' — ' + detail : ''}`);
+    }
     return resp.json();
   }
 
@@ -7556,10 +7562,9 @@ Return JSON:
         keyword,
         lat,
         lng,
-        grid_size: gridSize,
-        radius,
+        grid_size: parseInt(String(gridSize), 10) || 7,
+        radius: parseFloat(String(radius)) || 3,
         measurement,
-        platform: 'google',
       });
       res.json(data);
     } catch (err: any) {
