@@ -203,6 +203,8 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const keywordFileRef = useRef<HTMLInputElement>(null);
   const [scanAreas, setScanAreas] = useState<Array<{ area: string; keywords: string[]; priority: string; tip: string }> | null>(null);
   const [scanAreasLoading, setScanAreasLoading] = useState(false);
+  const [rankingPlan, setRankingPlan] = useState<{ summary: string; areas: Array<{ area: string; currentStatus: string; priority: string; actions: string[]; timeframe: string }> } | null>(null);
+  const [rankingPlanLoading, setRankingPlanLoading] = useState(false);
 
   const hasLinked = !!client.localFalconPlaceId;
 
@@ -227,6 +229,33 @@ function LocalPresenceSection({ client }: { client: Client }) {
       toast({ title: 'Could not generate suggestions', description: err.message, variant: 'destructive' });
     } finally {
       setScanAreasLoading(false);
+    }
+  };
+
+  const handleGenerateRankingPlan = async () => {
+    if (!keywordRankings.length) return;
+    setRankingPlanLoading(true);
+    setRankingPlan(null);
+    try {
+      const scanned = keywordRankings.filter(k => k.arp !== null).map(k => ({ keyword: k.keyword, arp: k.arp, solv: k.solv }));
+      const unscanned = keywordRankings.filter(k => k.arp === null).map(k => k.keyword);
+      const resp = await fetch('/api/clients/ai/area-ranking-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: client.localFalconLocation?.name || client.name,
+          businessAddress: client.localFalconLocation?.address || '',
+          scannedKeywords: scanned,
+          unscannedKeywords: unscanned,
+        }),
+      });
+      if (!resp.ok) throw new Error('Request failed');
+      const data = await resp.json();
+      setRankingPlan(data);
+    } catch (err: any) {
+      toast({ title: 'Could not generate plan', description: err.message, variant: 'destructive' });
+    } finally {
+      setRankingPlanLoading(false);
     }
   };
 
@@ -886,6 +915,92 @@ function LocalPresenceSection({ client }: { client: Client }) {
                                     </button>
                                   ))}
                                 </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Ranking Improvement Plan ── */}
+                  {parsedKeywords.length > 0 && (
+                    <div className="border-t px-3 py-2.5">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                          <Zap className="h-3 w-3 text-violet-500" /> Ranking Improvement Plan
+                        </p>
+                        <button
+                          onClick={handleGenerateRankingPlan}
+                          disabled={rankingPlanLoading}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-50"
+                          data-testid="btn-generate-ranking-plan"
+                        >
+                          {rankingPlanLoading
+                            ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</>
+                            : rankingPlan
+                            ? <><RefreshCw className="h-3 w-3" /> Regenerate</>
+                            : <><Sparkles className="h-3 w-3" /> Generate plan</>}
+                        </button>
+                      </div>
+
+                      {!rankingPlan && !rankingPlanLoading && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {keywordRankings.some(k => k.arp !== null)
+                            ? 'AI analyses your scan results and builds a specific GBP action plan to push more keywords into the 3-pack.'
+                            : 'Run scans for your keywords first, then generate a plan based on the actual ranking data.'}
+                        </p>
+                      )}
+
+                      {rankingPlanLoading && (
+                        <div className="flex items-center gap-2 py-3 text-[11px] text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+                          Analysing ranking data and building your GBP plan…
+                        </div>
+                      )}
+
+                      {rankingPlan && (
+                        <div className="space-y-3">
+                          {rankingPlan.summary && (
+                            <div className="px-2.5 py-2 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800">
+                              <p className="text-[11px] text-violet-800 dark:text-violet-300 leading-relaxed">{rankingPlan.summary}</p>
+                            </div>
+                          )}
+                          {(rankingPlan.areas || []).map((area, i) => {
+                            const priorityStyle = area.priority === 'high'
+                              ? 'border-red-200 dark:border-red-800'
+                              : area.priority === 'medium'
+                              ? 'border-amber-200 dark:border-amber-800'
+                              : 'border-border';
+                            const priorityBadge = area.priority === 'high'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              : area.priority === 'medium'
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                              : 'bg-muted text-muted-foreground';
+                            return (
+                              <div key={i} className={`rounded-lg border p-2.5 space-y-2 ${priorityStyle}`}>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold">{area.area}</p>
+                                    {area.currentStatus && (
+                                      <p className="text-[11px] text-muted-foreground mt-0.5">{area.currentStatus}</p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded capitalize ${priorityBadge}`}>{area.priority}</span>
+                                    {area.timeframe && (
+                                      <span className="text-[10px] text-muted-foreground border rounded px-1.5 py-0.5">{area.timeframe}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <ul className="space-y-1">
+                                  {(area.actions || []).map((action, ai) => (
+                                    <li key={ai} className="flex items-start gap-1.5 text-[11px]">
+                                      <span className="shrink-0 mt-0.5 h-3.5 w-3.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center text-[9px] font-bold">{ai + 1}</span>
+                                      <span className="text-foreground/80 leading-relaxed">{action}</span>
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
                             );
                           })}

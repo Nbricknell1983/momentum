@@ -1362,6 +1362,34 @@ Focus on practical, achievable actions for a local service business. Tailor reco
     }
   });
 
+  app.post("/api/clients/ai/area-ranking-plan", async (req, res) => {
+    try {
+      const { businessName, businessAddress, scannedKeywords, unscannedKeywords } = req.body;
+      if (!scannedKeywords?.length && !unscannedKeywords?.length) {
+        return res.status(400).json({ error: "No keyword data provided" });
+      }
+
+      const scannedRows = (scannedKeywords || []).map((k: any) =>
+        `- "${k.keyword}": Avg Rank #${k.arp !== null ? parseFloat(k.arp).toFixed(1) : '?'}, SoLV ${k.solv !== null ? parseFloat(k.solv).toFixed(0) + '%' : '?'}`
+      ).join('\n');
+      const unscannedRows = (unscannedKeywords || []).slice(0, 20).map((k: string) => `- "${k}" (not yet scanned)`).join('\n');
+
+      const prompt = `You are a local GBP (Google Business Profile) SEO expert. A business called "${businessName || 'this business'}" at "${businessAddress || 'their location'}" has these GBP ranking results:\n\n${scannedRows || 'No scans yet.'}${unscannedRows ? '\n\nUnscanned target keywords:\n' + unscannedRows : ''}\n\nBased on these results, create a specific GBP ranking improvement plan. Group actions by geographic area/location found in the keywords. For each area return specific, actionable GBP optimisation steps.\n\nReturn a JSON object with this exact structure:\n{\n  "summary": "2-sentence overall assessment of current visibility",\n  "areas": [\n    {\n      "area": "Area name",\n      "currentStatus": "e.g. Ranking avg #8.2 — outside 3-pack",\n      "priority": "high" | "medium" | "low",\n      "actions": [\n        "Specific action 1 (e.g. Add a weekly Google Post using \'crane hire Brisbane\' in the first sentence)",\n        "Specific action 2"\n      ],\n      "timeframe": "e.g. 2-4 weeks to see movement"\n    }\n  ]\n}\n\nRules:\n- Actions must be specific to GBP (posts, photos, Q&A, categories, reviews, service areas, descriptions)\n- Reference the actual keywords and rank positions in your advice\n- High priority = keywords outside top 3 with high search volume or "near me"\n- Max 6 areas, max 4 actions per area\n- Only return valid JSON`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 1500,
+      });
+      const result = JSON.parse(completion.choices[0].message.content || '{"areas":[]}');
+      res.json(result);
+    } catch (err: any) {
+      console.error('[area-ranking-plan]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/clients/ai/attention-recommendations", async (req, res) => {
     try {
       const { clients } = req.body;
