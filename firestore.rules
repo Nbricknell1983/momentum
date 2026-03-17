@@ -97,6 +97,18 @@ service cloud.firestore {
         allow read, write: if isOrgMember(orgId);
       }
       
+      match /actionRecommendations/{recId} {
+        allow read, write: if isOrgMember(orgId);
+      }
+      
+      match /pairingCodes/{codeId} {
+        allow read, write: if isOrgMember(orgId);
+      }
+      
+      match /dailyPlanSnapshots/{snapId} {
+        allow read, write: if isOrgMember(orgId);
+      }
+      
       match /userSettings/{settingsUserId} {
         allow read, write: if isAuthenticated() && request.auth.uid == settingsUserId;
       }
@@ -108,6 +120,16 @@ service cloud.firestore {
     
     match /users/{userId}/settings/{settingId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    match /reports/{reportId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    match /strategyReports/{reportId} {
+      allow read: if true;
+      allow write: if false;
     }
     
     match /{document=**} {
