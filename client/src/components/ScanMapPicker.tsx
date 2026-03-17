@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, Check, Loader2, Search, Lasso } from 'lucide-react';
+import { X, Check, Loader2, Search, Lasso, MapPin } from 'lucide-react';
 
 export interface MapPickerResult {
   lat: number;
@@ -15,6 +15,7 @@ export interface MapPickerResult {
 interface SuburbFeature {
   key: string;
   name: string;
+  label?: string; // e.g. "Queensland, Australia"
   geojson: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
   centroid: [number, number]; // [lng, lat]
 }
@@ -31,27 +32,49 @@ interface ScanMapPickerProps {
 
 // ── Nominatim via server proxy ────────────────────────────────────────────────
 
+const PLACE_TYPES = ['suburb', 'locality', 'town', 'village', 'hamlet', 'quarter', 'neighbourhood', 'residential', 'city', 'administrative'];
+
+function nominatimToFeature(item: any): SuburbFeature | null {
+  if (!item.geojson || (item.geojson.type !== 'Polygon' && item.geojson.type !== 'MultiPolygon')) return null;
+  const name = item.display_name.split(',')[0].trim();
+  const state = item.display_name.split(',').slice(1, 3).map((s: string) => s.trim()).join(', ');
+  return {
+    key: name.toLowerCase(),
+    name,
+    label: state || undefined,
+    geojson: { type: 'Feature', properties: { name }, geometry: item.geojson },
+    centroid: [parseFloat(item.lon), parseFloat(item.lat)],
+  };
+}
+
+async function fetchSuggestions(query: string): Promise<SuburbFeature[]> {
+  if (!query.trim()) return [];
+  try {
+    const r = await fetch(`/api/nominatim/search?q=${encodeURIComponent(query.trim())}&polygon_geojson=1&limit=8&addressdetails=1`);
+    if (!r.ok) return [];
+    const data: any[] = await r.json();
+    if (!Array.isArray(data)) return [];
+    const results: SuburbFeature[] = [];
+    const seen = new Set<string>();
+    // Prefer suburb/locality types first
+    const sorted = [
+      ...data.filter(f => PLACE_TYPES.includes(f.type)),
+      ...data.filter(f => !PLACE_TYPES.includes(f.type)),
+    ];
+    for (const item of sorted) {
+      const f = nominatimToFeature(item);
+      if (f && !seen.has(f.key)) { seen.add(f.key); results.push(f); }
+      if (results.length >= 6) break;
+    }
+    return results;
+  } catch { return []; }
+}
+
 async function searchSuburb(query: string): Promise<SuburbFeature | null> {
   if (!query.trim()) return null;
   try {
-    const url = `/api/nominatim/search?q=${encodeURIComponent(query.trim())}&polygon_geojson=1&limit=10&addressdetails=1`;
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    const data: any[] = await r.json();
-    if (!Array.isArray(data) || !data.length) return null;
-    const TYPES = ['suburb', 'locality', 'town', 'village', 'hamlet', 'quarter', 'neighbourhood', 'residential', 'city', 'administrative'];
-    const best =
-      data.find(f => TYPES.includes(f.type) && (f.geojson?.type === 'Polygon' || f.geojson?.type === 'MultiPolygon')) ||
-      data.find(f => f.geojson?.type === 'Polygon' || f.geojson?.type === 'MultiPolygon') ||
-      null;
-    if (!best) return null;
-    const name = best.display_name.split(',')[0].trim();
-    return {
-      key: name.toLowerCase(),
-      name,
-      geojson: { type: 'Feature', properties: { name }, geometry: best.geojson },
-      centroid: [parseFloat(best.lon), parseFloat(best.lat)],
-    };
+    const results = await fetchSuggestions(query);
+    return results[0] ?? null;
   } catch (e) {
     console.error('[ScanMap] searchSuburb error:', e);
     return null;
@@ -117,8 +140,13 @@ export default function ScanMapPicker({ defaultLat, defaultLng, areaChips, initi
   const [busy,      setBusy]          = useState(false);
   const [status,    setStatus]        = useState('');
   const [drawMode,  setDrawMode]      = useState(false);
-  const [search,    setSearch]        = useState('');
-  const [searching, setSearching]     = useState(false);
+  const [search,      setSearch]        = useState('');
+  const [searching,   setSearching]     = useState(false);
+  const [suggestions, setSuggestions]   = useState<SuburbFeature[]>([]);
+  const [sugLoading,  setSugLoading]    = useState(false);
+  const [showSug,     setShowSug]       = useState(false);
+  const debounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Sync selected to ref
   const setSelected = useCallback((next: SuburbFeature[]) => {
@@ -178,14 +206,46 @@ export default function ScanMapPicker({ defaultLat, defaultLng, areaChips, initi
     await addSuburb(query);
   }, [addSuburb, removeSuburb]);
 
+  // ── Autocomplete: debounced suggestions ───────────────────────────────────
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = search.trim();
+    if (q.length < 2) { setSuggestions([]); setShowSug(false); return; }
+    setSugLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      const results = await fetchSuggestions(q);
+      setSuggestions(results);
+      setSugLoading(false);
+      setShowSug(results.length > 0);
+    }, 320);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
+
+  const pickSuggestion = useCallback((f: SuburbFeature) => {
+    setSearch('');
+    setSuggestions([]);
+    setShowSug(false);
+    const cur = selectedRef.current;
+    if (cur.find(s => s.key === f.key)) return;
+    const next = [...cur, f];
+    setSelected(next);
+    redraw(next);
+    // Fly map to selected suburb
+    if (mapRef.current) {
+      mapRef.current.flyTo([f.centroid[1], f.centroid[0]], 13, { duration: 0.8 });
+    }
+  }, [setSelected, redraw]);
+
   // ── search box submit ──────────────────────────────────────────────────────
   const handleSearch = useCallback(async () => {
     if (!search.trim()) return;
+    // If suggestions are showing, pick the first one directly
+    if (suggestions.length > 0) { pickSuggestion(suggestions[0]); return; }
     setSearching(true);
     await addSuburb(search.trim());
     setSearch('');
     setSearching(false);
-  }, [search, addSuburb]);
+  }, [search, suggestions, addSuburb, pickSuggestion]);
 
   // ── lasso ──────────────────────────────────────────────────────────────────
   const processLasso = useCallback(async (path: [number, number][]) => {
@@ -378,17 +438,51 @@ export default function ScanMapPicker({ defaultLat, defaultLng, areaChips, initi
 
         {/* Search + chips row */}
         <div className="px-4 py-2 border-b shrink-0 space-y-2 bg-muted/10">
-          {/* Search box */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="Type a suburb name… e.g. Wynnum"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              className="h-8 text-sm flex-1"
-              disabled={busy}
-              data-testid="input-suburb-search"
-            />
+          {/* Search box with autocomplete */}
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                ref={searchInputRef}
+                placeholder="Type a suburb name… e.g. Wynnum"
+                value={search}
+                onChange={e => { setSearch(e.target.value); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); handleSearch(); }
+                  if (e.key === 'Escape') { setShowSug(false); }
+                }}
+                onFocus={() => { if (suggestions.length > 0) setShowSug(true); }}
+                onBlur={() => setTimeout(() => setShowSug(false), 150)}
+                className="h-8 text-sm w-full pr-7"
+                disabled={busy}
+                autoComplete="off"
+                data-testid="input-suburb-search"
+              />
+              {sugLoading && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground absolute right-2 top-2" />
+              )}
+
+              {/* Dropdown */}
+              {showSug && suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-0.5 z-50 bg-background border rounded-lg shadow-xl overflow-hidden">
+                  {suggestions.map((s, i) => {
+                    const isAdded = selected.some(x => x.key === s.key);
+                    return (
+                      <button
+                        key={s.key}
+                        onMouseDown={e => { e.preventDefault(); pickSuggestion(s); }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60 transition-colors ${isAdded ? 'opacity-50 cursor-default' : ''}`}
+                        data-testid={`suggestion-${i}`}
+                      >
+                        <MapPin className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                        <span className="flex-1 font-medium">{s.name}</span>
+                        {s.label && <span className="text-[11px] text-muted-foreground shrink-0 truncate max-w-[140px]">{s.label}</span>}
+                        {isAdded && <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <Button size="sm" className="h-8 gap-1.5 shrink-0" onClick={handleSearch} disabled={busy || !search.trim()} data-testid="btn-suburb-search">
               {searching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               Add
