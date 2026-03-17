@@ -802,6 +802,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           mrr: lead?.mrr || null,
           adSpend: adSpendData,
           ahrefsData: lead?.ahrefsData || null,
+          strategyIntelligence: lead?.strategyIntelligence || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to generate strategy analysis');
@@ -908,6 +909,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           dealStage: lead?.stage || null,
           ahrefsData: lead?.ahrefsData || null,
           adSpend: adSpendData,
+          strategyIntelligence: lead?.strategyIntelligence || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to analyse competitor gap');
@@ -956,6 +958,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           mrr: lead?.mrr || null,
           adSpend: lead?.marketingActivity?.[0] || null,
           ahrefsData: lead?.ahrefsData || null,
+          strategyIntelligence: lead?.strategyIntelligence || null,
         }),
       });
       if (!res.ok) throw new Error('Strategy generation failed');
@@ -1427,6 +1430,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           mrr: lead?.mrr || null,
           adSpend: lead?.marketingActivity?.[0] || null,
           ahrefsData: lead?.ahrefsData || null,
+          strategyIntelligence: lead?.strategyIntelligence || null,
         }),
       });
       if (!stratRes.ok) throw new Error('Strategy generation failed');

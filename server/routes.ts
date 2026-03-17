@@ -640,6 +640,86 @@ Be specific and actionable. Focus on retention and growth.`;
     }
   });
 
+  // Strategy Intelligence — AI suggest field for leads
+  app.post("/api/leads/ai/suggest-field", async (req, res) => {
+    try {
+      const { fieldLabel, fieldHint, context } = req.body as {
+        fieldLabel: string;
+        fieldHint?: string;
+        context: Record<string, string>;
+      };
+
+      const contextLines: string[] = [];
+      if (context.companyName) contextLines.push(`Business Name: ${context.companyName}`);
+      if (context.industry) contextLines.push(`Industry: ${context.industry}`);
+      if (context.website) contextLines.push(`Website: ${context.website}`);
+      if (context.location) contextLines.push(`Location: ${context.location}`);
+      if (context.dealStage) contextLines.push(`Deal Stage: ${context.dealStage}`);
+      if (context.businessOverview) contextLines.push(`Business Overview: ${context.businessOverview}`);
+      if (context.coreServices) contextLines.push(`Core Services: ${context.coreServices}`);
+      if (context.targetLocations) contextLines.push(`Target Locations: ${context.targetLocations}`);
+      if (context.growthObjective) contextLines.push(`Growth Objective: ${context.growthObjective}`);
+      if (context.conversationNotes) contextLines.push(`Conversation Notes: ${context.conversationNotes}`);
+      if (context.conversationInsights) contextLines.push(`AI Conversation Insights: ${context.conversationInsights}`);
+      if (context.dealSummary) contextLines.push(`AI Deal Summary: ${context.dealSummary}`);
+      if (context.websiteContent) contextLines.push(`Website Content (crawled): ${context.websiteContent.slice(0, 600)}`);
+
+      if (!contextLines.length) {
+        return res.status(400).json({ error: 'No context provided' });
+      }
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are filling in a Strategy Intelligence discovery form for a digital marketing agency's CRM. Based on the business context provided (from conversations, website crawls, deal notes, and AI summaries), generate a specific, accurate suggestion for one field. Only infer what is clearly supported by the context — do not speculate or invent. Be concise and practical. For list fields like services or locations, use one item per line. Return only the field content, no labels, no preamble.`,
+          },
+          {
+            role: 'user',
+            content: `BUSINESS CONTEXT:\n${contextLines.join('\n')}\n\nFIELD TO FILL: "${fieldLabel}"${fieldHint ? `\nField guidance: ${fieldHint}` : ''}\n\nWrite the content for this field only.`,
+          },
+        ],
+        temperature: 0.4,
+        max_tokens: 300,
+      });
+
+      const suggestion = response.choices[0]?.message?.content?.trim() || '';
+      res.json({ suggestion });
+    } catch (error) {
+      console.error('Error suggesting field:', error);
+      res.status(500).json({ error: 'Failed to suggest field' });
+    }
+  });
+
+  // Strategy Intelligence — tidy dictation for leads
+  app.post("/api/leads/ai/tidy-dictation", async (req, res) => {
+    try {
+      const { text, fieldLabel } = req.body as { text: string; fieldLabel?: string };
+      if (!text?.trim()) return res.status(400).json({ error: 'No text provided' });
+
+      const context = fieldLabel ? ` The field is labelled "${fieldLabel}".` : '';
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You clean up speech-to-text dictation for a sales CRM used by digital marketing agencies.${context} Fix grammar and punctuation, remove filler words (um, uh, like, you know), correct obvious speech recognition errors, remove repetition, and make the text clear and readable as professional business notes. Preserve all factual content, numbers, names, and meaning. Return only the cleaned text with no introduction, preamble, or explanation.`,
+          },
+          { role: 'user', content: text.trim() },
+        ],
+        temperature: 0.3,
+        max_tokens: 500,
+      });
+
+      const tidied = response.choices[0]?.message?.content?.trim() || text;
+      res.json({ tidied });
+    } catch (error) {
+      console.error('Error tidying dictation:', error);
+      res.status(500).json({ error: 'Failed to tidy dictation' });
+    }
+  });
+
   // AI Onboarding & Team Handover — generate all outputs
   app.post("/api/clients/ai/onboarding-generate", async (req, res) => {
     try {
@@ -4584,7 +4664,7 @@ Rules:
         serpData, xrayData,
         crawledPages, crawledCompetitors,
         strategyDiagnosis, sitemapPages,
-        conversationNotes, dealStage, ahrefsData,
+        conversationNotes, dealStage, ahrefsData, strategyIntelligence,
       } = req.body;
       if (!businessName) {
         return res.status(400).json({ error: "Business name is required" });
@@ -4656,6 +4736,22 @@ Rules:
         ? `Total sitemap pages: ${pages.length}\nURLs: ${pages.slice(0, 20).map((p: any) => { try { return new URL(p.url).pathname; } catch { return p.url; } }).join(', ')}\n`
         : '';
 
+      // Build Strategy Intelligence context for competitor gap
+      const gapSIContext = (() => {
+        if (!strategyIntelligence) return '';
+        const si = strategyIntelligence as Record<string, string>;
+        const parts: string[] = [];
+        if (si.businessOverview?.trim()) parts.push(`Business Overview: ${si.businessOverview}`);
+        if (si.idealCustomer?.trim()) parts.push(`Ideal Customer: ${si.idealCustomer}`);
+        if (si.coreServices?.trim()) parts.push(`Core Revenue Services:\n${si.coreServices}`);
+        if (si.targetLocations?.trim()) parts.push(`Target Locations:\n${si.targetLocations}`);
+        if (si.growthObjective?.trim()) parts.push(`Growth Objective: ${si.growthObjective}`);
+        if (si.discoveryNotes?.trim()) parts.push(`Discovery Notes: ${si.discoveryNotes}`);
+        return parts.length > 0
+          ? `\n=== STRATEGY INTELLIGENCE (owner's stated goals — use to focus the gap analysis on what matters to THEM) ===\n${parts.join('\n')}\n`
+          : '';
+      })();
+
       const prompt = `You are a senior competitive intelligence analyst specialising in digital visibility for Australian businesses. You are analysing the competitive landscape for ${businessName} — a ${industry || 'local'} business in ${location || 'Australia'}.
 
 Your job is to produce a deep competitive gap analysis using REAL crawled website content from both the prospect and their competitors. Do not estimate — use the actual data provided.
@@ -4668,6 +4764,7 @@ Website: ${websiteUrl || 'Not provided'}
 Deal Stage: ${dealStage || 'Discovery'}
 Website pages in sitemap: ${sitemapSummary || 'Unknown'}
 
+${gapSIContext}
 ${diagContext}
 ${ahrefsContext}
 ${convContext}
@@ -4843,7 +4940,7 @@ Rules:
         sitemapPages, hasGBP, gbpLink, reviewCount, rating,
         facebookUrl, instagramUrl, linkedinUrl, crawledPages, crawledCompetitors,
         conversationNotes, conversationInsights, objections,
-        dealStage, mrr, adSpend, ahrefsData,
+        dealStage, mrr, adSpend, ahrefsData, strategyIntelligence,
       } = req.body;
 
       if (!businessName) return res.status(400).json({ error: "Business name is required" });
@@ -4947,18 +5044,33 @@ Rules:
         ? `\n=== KEYWORD MARKET DATA (top search opportunities) ===\n${ahrefsData.topKeywords.slice(0, 15).map((k: any) => `  ${k.keyword}: ${k.volume}/mo volume, difficulty ${k.difficulty}/100, CPC $${k.cpc}`).join('\n')}\n`
         : '';
 
+      // Build Strategy Intelligence context
+      const siContext = (() => {
+        if (!strategyIntelligence) return '';
+        const si = strategyIntelligence as Record<string, string>;
+        const parts: string[] = [];
+        if (si.businessOverview?.trim()) parts.push(`Business Overview: ${si.businessOverview}`);
+        if (si.idealCustomer?.trim()) parts.push(`Ideal Customer: ${si.idealCustomer}`);
+        if (si.coreServices?.trim()) parts.push(`Core Revenue Services: ${si.coreServices}`);
+        if (si.targetLocations?.trim()) parts.push(`Target Locations: ${si.targetLocations}`);
+        if (si.growthObjective?.trim()) parts.push(`Growth Objective: ${si.growthObjective}`);
+        if (si.discoveryNotes?.trim()) parts.push(`Discovery Notes: ${si.discoveryNotes}`);
+        return parts.length > 0 ? `\n=== STRATEGY INTELLIGENCE (direct from discovery conversation) ===\n${parts.join('\n')}\nIMPORTANT: This is what the business owner has told the sales rep directly. Every analysis section must be framed around these stated goals and target customers.\n` : '';
+      })();
+
       const prompt = `You are a senior digital visibility strategist with deep expertise in local business SEO and digital marketing. You are producing an evidence-based strategy diagnosis for a sales rep preparing to advise ${businessName} on their digital growth.
 
 CRITICAL INSTRUCTION: Every insight must follow Evidence → Interpretation → Strategic Implication → Recommended Move.
 Avoid generic phrases like "improve SEO", "optimise keywords", "build backlinks". Use specific evidence from the data.
 
 Your diagnosis must incorporate ALL available data:
-1. Website structure and crawled content (actual page copy, headings, schema)
-2. Competitor website content (actual crawled data — not estimates)
-3. Conversation intelligence (what the client has said their goals are)
-4. Deal intelligence (stage and context)
-5. Keyword market data (real search volumes)
-6. Google Business Profile signals
+1. Strategy Intelligence (stated goals, ideal customers, target locations — this is the MOST important context)
+2. Website structure and crawled content (actual page copy, headings, schema)
+3. Competitor website content (actual crawled data — not estimates)
+4. Conversation intelligence (what the client has said their goals are)
+5. Deal intelligence (stage and context)
+6. Keyword market data (real search volumes)
+7. Google Business Profile signals
 
 === BUSINESS PROFILE ===
 Business: ${businessName}
@@ -4968,7 +5080,7 @@ Website: ${websiteUrl || 'Not provided'}
 Google Business Profile: ${hasGBP ? `Yes — ${gbpLink}` : 'Not found'}
 Google Reviews: ${reviewCount != null ? `${reviewCount} reviews, ${rating}★ average` : 'Unknown'}
 Social Profiles: ${socialPlatforms.length > 0 ? socialPlatforms.join(', ') : 'None detected'}
-${convIntelContext}${dealIntelContext}${ahrefsContext}
+${siContext}${convIntelContext}${dealIntelContext}${ahrefsContext}
 === WEBSITE STRUCTURE (from sitemap) ===
 Total indexed pages: ${pages.length || 0}
 Page classification:
@@ -5123,7 +5235,7 @@ Respond with JSON only:
         businessName, websiteUrl, industry, location,
         strategyDiagnosis, sitemapPages, crawledPages, crawledCompetitors: crawledCompetitorsInput, reviewCount, rating, gbpLink,
         facebookUrl, instagramUrl, linkedinUrl, competitors,
-        conversationNotes, conversationInsights, objections, dealStage, mrr, adSpend, ahrefsData,
+        conversationNotes, conversationInsights, objections, dealStage, mrr, adSpend, ahrefsData, strategyIntelligence,
       } = req.body;
 
       if (!businessName) return res.status(400).json({ error: "Business name is required" });
@@ -5172,6 +5284,22 @@ ${strategyDiagnosis.priorities?.map((p: any) => `${p.rank}. ${p.action}: ${p.des
 Growth Potential: ${strategyDiagnosis.growthPotential?.summary}
 Forecast: ${strategyDiagnosis.growthPotential?.forecastBand ? JSON.stringify(strategyDiagnosis.growthPotential.forecastBand) : 'Not calculated'}
 ` : '';
+
+      // Build Strategy Intelligence context
+      const strat12SIContext = (() => {
+        if (!strategyIntelligence) return '';
+        const si = strategyIntelligence as Record<string, string>;
+        const parts: string[] = [];
+        if (si.businessOverview?.trim()) parts.push(`Business Overview: ${si.businessOverview}`);
+        if (si.idealCustomer?.trim()) parts.push(`Ideal Customer: ${si.idealCustomer}`);
+        if (si.coreServices?.trim()) parts.push(`Core Revenue Services:\n${si.coreServices}`);
+        if (si.targetLocations?.trim()) parts.push(`Target Locations:\n${si.targetLocations}`);
+        if (si.growthObjective?.trim()) parts.push(`Growth Objective: ${si.growthObjective}`);
+        if (si.discoveryNotes?.trim()) parts.push(`Discovery Notes: ${si.discoveryNotes}`);
+        return parts.length > 0
+          ? `\n=== STRATEGY INTELLIGENCE (owner's stated goals — use as the primary frame for the entire strategy) ===\n${parts.join('\n')}\n`
+          : '';
+      })();
 
       // Build conversation + deal intelligence context
       const strat12ConvContext = (() => {
@@ -5255,7 +5383,7 @@ Website: ${websiteUrl || 'Not provided'}
 Google Business Profile: ${gbpLink ? 'Yes — ' + gbpLink : 'Not found'}
 Google Reviews: ${reviewCount != null ? reviewCount + ' reviews, ' + rating + '★' : 'Unknown'}
 Social: ${socialProfiles || 'None detected'}
-${strat12ConvContext}${strat12AhrefsContext}${diagContext}${sitemapContext}${competitorContext}
+${strat12SIContext}${strat12ConvContext}${strat12AhrefsContext}${diagContext}${sitemapContext}${competitorContext}
 
 === STRATEGY GENERATION RULES ===
 - Every keyword, gap, and recommendation must relate to the actual industry and location

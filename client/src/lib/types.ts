@@ -241,6 +241,16 @@ export interface LeadSourceData {
   callScript?: string;
 }
 
+export interface StrategyIntelligence {
+  businessOverview?: string;
+  idealCustomer?: string;
+  coreServices?: string;
+  targetLocations?: string;
+  growthObjective?: string;
+  discoveryNotes?: string;
+  updatedAt?: Date;
+}
+
 export interface Lead {
   id: string;
   userId: string;
@@ -309,6 +319,7 @@ export interface Lead {
   crawledAt?: Date;
   competitorDomains?: string[];
   competitorData?: Record<string, CompetitorSiteData>;
+  strategyIntelligence?: StrategyIntelligence;
 }
 
 export interface AhrefsKeyword {

@@ -11,6 +11,7 @@ import {
   MarketingActivity,
   AhrefsMetrics,
   AhrefsKeyword,
+  StrategyIntelligence,
   STAGE_LABELS,
 } from '@/lib/types';
 import {
@@ -45,12 +46,20 @@ import {
   Trash2,
   BarChart3,
   RefreshCw,
+  Sparkles,
+  Mic,
+  MicOff,
+  Target,
+  Wand2,
+  Building2,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin, SiSalesforce } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format, differenceInDays, isPast, isToday } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -242,6 +251,238 @@ const URGENCY_COLORS = {
   medium: 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300',
   low: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300',
 };
+
+// ─── Strategy Intelligence Card ──────────────────────────────────────────────
+
+const SR_SUPPORTED = typeof window !== 'undefined' && !!(
+  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+);
+
+const STRATEGY_FIELDS: { key: keyof StrategyIntelligence; label: string; placeholder: string; hint: string; rows: number }[] = [
+  { key: 'businessOverview', label: 'Business Overview', placeholder: 'Residential builder specialising in custom homes and renovations in South Brisbane.', hint: 'What type of business is this and what do they primarily do?', rows: 3 },
+  { key: 'idealCustomer', label: 'Ideal Customer', placeholder: 'Homeowners and developers looking for custom home builds and renovations.', hint: 'Who is the ideal client they want more of?', rows: 2 },
+  { key: 'coreServices', label: 'Core Revenue Services', placeholder: 'Custom homes\nRenovations\nExtensions', hint: 'What services generate the most revenue or are the main focus?', rows: 3 },
+  { key: 'targetLocations', label: 'Target Locations', placeholder: 'Eight Mile Plains\nSunnybank\nMount Gravatt', hint: 'Which locations do they want to generate work from?', rows: 3 },
+  { key: 'growthObjective', label: 'Growth Objective', placeholder: 'Increase enquiries for custom home builds in South Brisbane.', hint: 'What would success look like for this business?', rows: 2 },
+  { key: 'discoveryNotes', label: 'Discovery Notes', placeholder: 'Most work comes from architects but the owner wants more direct homeowner enquiries.', hint: 'Any insights from conversations that may influence the strategy.', rows: 3 },
+];
+
+function SITextArea({ value, onChange, placeholder, rows, fieldLabel, tidyEndpoint }: {
+  value: string; onChange: (v: string) => void; placeholder: string; rows: number; fieldLabel: string; tidyEndpoint: string;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [finalText, setFinalText] = useState('');
+  const [interimText, setInterimText] = useState('');
+  const [tidying, setTidying] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const startRecording = () => {
+    const SRClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SRClass) return;
+    const rec = new SRClass();
+    rec.continuous = true; rec.interimResults = true; rec.lang = 'en-AU';
+    let accumulated = '';
+    rec.onresult = (e: any) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) accumulated += (accumulated ? ' ' : '') + t.trim();
+        else interim += t;
+      }
+      setFinalText(accumulated); setInterimText(interim);
+    };
+    rec.onend = () => { setRecording(false); setInterimText(''); };
+    rec.onerror = () => { setRecording(false); setInterimText(''); };
+    recognitionRef.current = rec; rec.start();
+    setRecording(true); setFinalText(''); setInterimText('');
+  };
+
+  const stopRecording = () => { recognitionRef.current?.stop(); setRecording(false); setInterimText(''); };
+
+  const saveAndTidy = async () => {
+    const raw = finalText.trim();
+    if (!raw) { setFinalText(''); return; }
+    stopRecording(); setTidying(true);
+    try {
+      const combined = value ? `${value.trim()}\n\n${raw}` : raw;
+      const res = await fetch(tidyEndpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: combined, fieldLabel }),
+      });
+      const json = await res.json();
+      onChange(json.tidied || combined);
+    } catch { onChange(value ? `${value.trim()}\n\n${raw}` : raw); }
+    setFinalText(''); setTidying(false);
+  };
+
+  const displayValue = recording
+    ? [value, finalText, interimText].filter(Boolean).join('\n\n')
+    : value;
+
+  return (
+    <div className="relative">
+      <Textarea
+        value={displayValue}
+        onChange={e => { if (!recording) onChange(e.target.value); }}
+        placeholder={placeholder}
+        rows={rows}
+        className={`text-xs resize-none pr-8 ${recording ? 'ring-2 ring-red-400 dark:ring-red-600' : ''}`}
+        readOnly={recording}
+      />
+      {SR_SUPPORTED && (
+        <div className="absolute bottom-2 right-2 flex gap-1">
+          {recording ? (
+            finalText ? (
+              <button type="button" onClick={saveAndTidy} disabled={tidying} title="Save & tidy dictation"
+                className="p-1 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:opacity-80">
+                {tidying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              </button>
+            ) : null
+          ) : null}
+          <button type="button"
+            onClick={recording ? stopRecording : startRecording}
+            title={recording ? 'Stop recording' : 'Start voice dictation'}
+            className={`p-1 rounded transition-colors ${recording ? 'bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 animate-pulse' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}>
+            {recording ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StrategyIntelligenceCard({ lead }: { lead: Lead }) {
+  const dispatch = useDispatch();
+  const { orgId, authReady } = useAuth();
+  const { toast } = useToast();
+  const activities = useSelector((state: RootState) => state.app.activities);
+  const [open, setOpen] = useState(false);
+  const [fields, setFields] = useState<StrategyIntelligence>(lead.strategyIntelligence || {});
+  const [suggesting, setSuggesting] = useState<Partial<Record<keyof StrategyIntelligence, boolean>>>({});
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync from lead prop when it changes externally
+  useEffect(() => { setFields(lead.strategyIntelligence || {}); }, [lead.strategyIntelligence]);
+
+  const filledCount = STRATEGY_FIELDS.filter(f => fields[f.key]?.trim()).length;
+  const hasAny = filledCount > 0;
+
+  const persist = useCallback((updated: StrategyIntelligence) => {
+    if (!orgId || !authReady) return;
+    const updates: Partial<Lead> = { strategyIntelligence: { ...updated, updatedAt: new Date() } as any, updatedAt: new Date() };
+    dispatch(patchLead({ id: lead.id, updates }));
+    updateLeadInFirestore(orgId, lead.id, updates, authReady).catch(console.error);
+  }, [dispatch, lead.id, orgId, authReady]);
+
+  const handleChange = useCallback((key: keyof StrategyIntelligence, val: string) => {
+    setFields(prev => {
+      const next = { ...prev, [key]: val };
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => persist(next), 800);
+      return next;
+    });
+  }, [persist]);
+
+  const handleSuggest = useCallback(async (fieldKey: keyof StrategyIntelligence, fieldLabel: string, fieldHint: string) => {
+    setSuggesting(p => ({ ...p, [fieldKey]: true }));
+    try {
+      const dealSummary = generateDealSummary(lead, activities);
+      const websiteContent = lead.crawledPages?.map(p => p.bodyText || '').filter(Boolean).slice(0, 3).join(' ') || '';
+      const context: Record<string, string> = {
+        companyName: lead.companyName,
+        industry: lead.industry || '',
+        website: lead.website || '',
+        location: (lead.sourceData as any)?.city || (lead.address || ''),
+        dealStage: lead.stage,
+        businessOverview: fields.businessOverview || '',
+        idealCustomer: fields.idealCustomer || '',
+        coreServices: fields.coreServices || '',
+        targetLocations: fields.targetLocations || '',
+        growthObjective: fields.growthObjective || '',
+        conversationNotes: lead.notes || '',
+        conversationInsights: lead.aiConversationInsights ? JSON.stringify(lead.aiConversationInsights).slice(0, 500) : '',
+        dealSummary,
+        websiteContent,
+      };
+      const res = await fetch('/api/leads/ai/suggest-field', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fieldLabel, fieldHint, context }),
+      });
+      if (!res.ok) throw new Error('Suggest failed');
+      const { suggestion } = await res.json();
+      if (suggestion) handleChange(fieldKey, suggestion);
+    } catch {
+      toast({ title: 'Suggestion failed', description: 'Could not generate a suggestion', variant: 'destructive' });
+    }
+    setSuggesting(p => ({ ...p, [fieldKey]: false }));
+  }, [lead, activities, fields, handleChange, toast]);
+
+  return (
+    <div className="rounded-lg border bg-card overflow-hidden" data-testid="card-strategy-intelligence">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
+      >
+        <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Strategy Intelligence</span>
+          {!open && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {hasAny ? `${filledCount} of ${STRATEGY_FIELDS.length} fields filled` : 'Business discovery inputs for AI strategy'}
+            </p>
+          )}
+        </div>
+        {hasAny && !open && (
+          <Badge variant="secondary" className="text-[9px] bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border-0 shrink-0">
+            {filledCount}/{STRATEGY_FIELDS.length}
+          </Badge>
+        )}
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+      </button>
+
+      {open && (
+        <div className="border-t px-3 pt-3 pb-4 space-y-4">
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            These inputs are used by the AI to generate a personalised Digital Growth Strategy. Fill in what you know — use <span className="font-medium text-violet-600 dark:text-violet-400">AI suggest</span> to auto-fill from your conversation notes and website data.
+          </p>
+          {STRATEGY_FIELDS.map(field => (
+            <div key={field.key} className="space-y-1.5" data-testid={`si-field-${field.key}`}>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium text-muted-foreground">{field.label}</Label>
+                <button
+                  type="button"
+                  disabled={!!suggesting[field.key]}
+                  onClick={() => handleSuggest(field.key, field.label, field.hint)}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 disabled:opacity-50 transition-colors"
+                  data-testid={`button-si-suggest-${field.key}`}
+                >
+                  {suggesting[field.key] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  {suggesting[field.key] ? 'Suggesting…' : 'AI suggest'}
+                </button>
+              </div>
+              <SITextArea
+                value={fields[field.key] || ''}
+                onChange={val => handleChange(field.key, val)}
+                placeholder={field.placeholder}
+                rows={field.rows}
+                fieldLabel={field.label}
+                tidyEndpoint="/api/leads/ai/tidy-dictation"
+              />
+            </div>
+          ))}
+
+          {hasAny && (
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Check className="h-2.5 w-2.5 text-green-500" />
+              Auto-saved — will be included in AI Growth Strategy
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DealIntelligencePanel({ lead }: DealIntelligencePanelProps) {
   const activities = useSelector((state: RootState) => state.app.activities);
@@ -578,6 +819,8 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
           <p className="text-sm text-muted-foreground italic">Not enough information yet. Log a conversation or generate call prep to build a richer summary.</p>
         )}
       </div>
+
+      <StrategyIntelligenceCard lead={lead} />
 
       <div className="rounded-lg border bg-card p-3" data-testid="card-online-presence">
         <div className="flex items-center gap-1.5 mb-2">
