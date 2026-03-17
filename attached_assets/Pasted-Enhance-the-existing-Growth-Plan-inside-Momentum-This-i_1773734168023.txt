@@ -1,0 +1,937 @@
+Enhance the existing Growth Plan inside Momentum.
+
+This is not a new product build.
+This is not a new standalone module.
+This is not an SEO report generator.
+
+This is an upgrade to the existing Growth Plan so it becomes a premium AI-led Digital Visibility Strategy / Digital Growth Plan experience.
+
+The Growth Plan already exists.
+The goal is to make it materially smarter, more strategic, more persuasive, and more visually powerful by using the data already available inside Momentum and online.
+
+==================================================
+CORE OBJECTIVE
+==================================================
+
+Improve the existing Growth Plan so it automatically uses:
+
+- Conversation Intelligence
+- Deal Intelligence
+- CRM lead/client data
+- Website structure data
+- Sitemap and page analysis
+- Keyword market data
+- Competitor analysis
+- Google Business / local signals
+- Ad spend context
+- Existing valid AI outputs
+
+to generate a significantly stronger Digital Visibility Strategy.
+
+The upgraded Growth Plan should help answer:
+
+- How visible is this business to customers searching for what they do?
+- Where does market demand exist?
+- What is limiting discoverability?
+- What are competitors doing better?
+- What are competitors not doing?
+- What buyer questions are not being answered clearly?
+- What should happen next to improve visibility and generate more enquiries?
+
+==================================================
+IMPORTANT POSITIONING
+==================================================
+
+Do not frame this as:
+- an SEO audit
+- an SEO report
+- a keyword report
+- a technical website audit
+
+Frame it as:
+- a Digital Visibility Strategy
+- a Digital Growth Plan
+- a market visibility roadmap
+- a buyer discovery strategy
+
+The system should explain how visible the business is to the right customers online and what needs to happen to improve that.
+
+==================================================
+WHAT IS WRONG WITH THE CURRENT GROWTH PLAN
+==================================================
+
+The current Growth Plan:
+- feels too generic
+- feels too templated
+- is too calculator-heavy
+- relies too much on manual inputs
+- does not use enough available client and deal context
+- does not clearly identify the biggest bottleneck to growth
+- does not feel strategic enough
+- does not feel premium enough
+- does not use AI deeply enough
+- does not visually sell the strategy strongly enough
+- can drift into sounding like an SEO audit
+
+We already have useful foundations in the existing Growth Plan, especially in some Local / GBP thinking.
+Do not throw away what is working.
+Extend and improve it safely.
+
+==================================================
+PRIMARY PRODUCT PRINCIPLE
+==================================================
+
+Use ChatGPT-quality reasoning in the background to generate the strategy.
+
+But do not make the user feel like they are using ChatGPT.
+
+This must not feel like:
+- a prompt box
+- a chatbot
+- a raw AI text dump
+- a wall of generated text
+
+It must feel like:
+- a premium AI strategy experience
+- a consulting-style digital visibility presentation
+- a structured strategic growth plan
+- a beautiful, persuasive, insight-led UI
+
+Behind the scenes:
+- the system assembles structured evidence
+- the AI generates structured reasoning
+
+On the front end:
+- Momentum presents that reasoning beautifully
+
+==================================================
+CRITICAL DATA SOURCES TO USE
+==================================================
+
+The upgraded Growth Plan must use data from all relevant existing Momentum areas, especially:
+
+1. Conversation Intelligence
+- meeting notes
+- conversation summaries
+- sales notes
+- transcripts if available
+- objections
+- goals stated by the client
+- pain points stated by the client
+- needs discussed
+- priorities discussed
+
+2. Deal Intelligence
+- stage
+- conversation stage
+- deal health
+- engagement level
+- follow-up state
+- timeline urgency
+- MRR / commercial context
+- opportunity context
+- pipeline context
+
+3. CRM / Lead / Client Data
+- company name
+- service category
+- location
+- service territory
+- contact details
+- internal notes
+- linked systems / external references
+
+4. Online Presence Data
+- website
+- social channels
+- Google source data
+- Google Business signals
+- review rating and volume
+- paid advertising context
+- sitemap and crawl data
+
+5. Website Structure Data
+- page titles
+- H1s
+- schema
+- URL structure
+- page count
+- page categories
+- internal hierarchy
+- legacy branding issues
+- page distribution
+
+6. Market / Keyword Data
+- keywords
+- search demand
+- CPC
+- difficulty
+- clustered opportunities
+- suburb/service combinations
+
+7. Competitor Data
+- competitor websites
+- competitor sitemap size
+- content depth
+- service coverage
+- location coverage
+- schema patterns
+- authority patterns where available
+
+8. Authority / Local Signals
+- backlinks
+- referring domains
+- domain rating
+- citations
+- review profile
+- GBP alignment
+- trust signals
+
+==================================================
+HOW THE GROWTH PLAN MUST THINK
+==================================================
+
+The AI must behave like a strategic analyst, not a marketing copywriter.
+
+All insights must follow this logic:
+
+Evidence
+→ Interpretation
+→ Strategic implication
+→ Recommended move
+
+Do not allow generic filler such as:
+- improve SEO
+- optimise keywords
+- build backlinks
+- create more content
+- enhance online presence
+
+Instead write evidence-based strategy such as:
+- the site has 17 pages but 9 are portfolio pages, so search engines receive stronger craftsmanship signals than service-intent signals
+- suburb-level demand exists, but the website currently has generic area coverage only
+- buyers are likely searching for specialised scenarios, but the website does not clearly communicate those services
+
+The AI must reason from evidence, not generic industry clichés.
+
+==================================================
+FIXED FRAMEWORK, DYNAMIC CONTENT
+==================================================
+
+The Growth Plan must use a fixed strategic framework so the UI, PDF, and public URL remain consistent.
+
+Do not let the AI invent random section structure per client.
+
+The framework stays fixed.
+The insight inside each section is dynamic and client-specific.
+
+Use this section order as the Strategy Narrative Arc:
+
+1. One Sentence Strategy
+2. Strategy Confidence Indicator
+3. Digital Visibility Triangle
+4. Search Engine View
+5. Digital Visibility Score
+6. Market Opportunity
+7. Discovery Path Simulator
+8. Buyer Reality Gap
+9. Intent Gap Engine
+10. Strategic White Space
+11. Market Capture Map
+12. Live Strategy Simulator
+13. Momentum Moment
+14. Growth Roadmap
+15. Cost of Inaction Simulator
+16. Insight Snapshots
+
+This framework should be implemented as an enhancement to the existing Growth Plan, not a disconnected new experience.
+
+==================================================
+CONSULTING-STYLE UI PATTERN
+==================================================
+
+Upgrade the existing Growth Plan UI so it feels like a premium consulting strategy, not a software dashboard.
+
+Each section should contain:
+
+1. Conclusion-led strategic headline
+2. Short executive explanation
+3. One primary visual
+4. Compact evidence strip
+5. Strategic implication
+6. Recommended move
+
+Avoid labels like:
+- SEO Analysis
+- Competitor Review
+- Website Audit
+- Local SEO
+
+Prefer headlines like:
+- Your website showcases quality, but under-signals discoverability
+- Competitors are meeting buyers earlier in the research journey
+- There is still ownable market space in specialised and suburb-level searches
+- Buyers can see the work, but may not get enough confidence around process and decision-making
+
+Use one visual per section.
+Do not clutter the page with too many widgets.
+
+==================================================
+SECTION REQUIREMENTS
+==================================================
+
+1. ONE SENTENCE STRATEGY
+
+Generate one sentence at the top of every Growth Plan.
+
+This sentence should explain:
+- the visibility goal
+- the service focus
+- the location focus
+- the strategic direction
+
+Keep it under 30 words.
+Use business language, not technical marketing language.
+
+Example style:
+Position this business as a more discoverable provider for [service] across [location] by strengthening service clarity, local relevance, and high-intent buyer visibility.
+
+--------------------------------------------------
+
+2. STRATEGY CONFIDENCE INDICATOR
+
+Add a confidence indicator near the top of the strategy.
+
+Purpose:
+Explain how strong the opportunity appears based on the available data.
+
+Confidence levels:
+- Very High
+- High
+- Moderate
+- Low
+
+Derive this from:
+- market demand
+- competition strength
+- website readiness
+- authority signals
+- local discovery signals
+
+Include a short explanation of why the opportunity has this confidence level.
+
+--------------------------------------------------
+
+3. DIGITAL VISIBILITY TRIANGLE
+
+Add a visual model called the Digital Visibility Triangle.
+
+This explains the three forces that determine visibility:
+
+- Relevance
+- Authority
+- Trust
+
+Relevance:
+Does Google understand what the business does and where it does it?
+
+Authority:
+Does the wider web recognise the business as credible?
+
+Trust:
+Do buyers feel confident choosing the business?
+
+Use current client data to explain each side of the triangle.
+
+--------------------------------------------------
+
+4. SEARCH ENGINE VIEW
+
+Add a section called Search Engine View.
+
+Purpose:
+Show the difference between how humans see the website and how search engines interpret it.
+
+Display two panels:
+
+Left:
+What humans see
+- homepage or key landing page screenshot
+
+Right:
+What search engines see
+- tree diagram of page structure based on sitemap and crawl
+
+Classify pages into:
+- service pages
+- location pages
+- portfolio pages
+- informational pages
+- core pages
+- utility pages
+
+Highlight gaps such as:
+- limited service signals
+- limited location coverage
+- missing buyer-intent pages
+- portfolio-heavy structure
+- legacy brand signals
+
+Where practical, show current structure vs recommended structure.
+
+--------------------------------------------------
+
+5. DIGITAL VISIBILITY SCORE
+
+Add a Digital Visibility Score on a 0–100 scale.
+
+This score represents how easily a business can be discovered and trusted online.
+
+Suggested components:
+- Search Relevance
+- Market Coverage
+- Authority Signals
+- Local Discovery
+- Buyer Confidence
+
+Display this as a segmented ring chart.
+
+This is not an SEO score.
+It is a Digital Visibility Score.
+
+--------------------------------------------------
+
+6. MARKET OPPORTUNITY
+
+Show where demand exists in the market.
+
+Use:
+- keyword demand
+- clustered services
+- clustered suburbs
+- commercial relevance
+- competition signals
+
+Do not present this as a keyword table only.
+Present it as market demand and discovery opportunity.
+
+Explain:
+- where demand is strongest
+- which clusters matter most
+- which opportunities appear achievable
+
+--------------------------------------------------
+
+7. DISCOVERY PATH SIMULATOR
+
+Add a Discovery Path Simulator.
+
+Purpose:
+Show how a buyer moves from search to enquiry.
+
+Evaluate these five stages:
+1. Search Entry
+2. Visibility
+3. Website Experience
+4. Trust
+5. Enquiry
+
+Show where the path weakens for this business.
+
+Use a flow diagram or funnel.
+
+This should help the client understand how customers actually discover businesses online and where the current path breaks down.
+
+--------------------------------------------------
+
+8. BUYER REALITY GAP
+
+Add a Buyer Reality Gap section.
+
+Purpose:
+Compare what buyers expect when searching with what the current website actually communicates.
+
+Display:
+Buyer Expectation
+vs
+Current Digital Experience
+
+Use this to explain:
+- what buyers are likely looking for
+- what the website currently signals
+- what is missing
+- why that matters
+
+This should help the client realise the gap themselves.
+
+--------------------------------------------------
+
+9. INTENT GAP ENGINE
+
+Add an Intent Gap Engine.
+
+Purpose:
+Detect what buyers are searching for that the website does not clearly answer.
+
+Compare:
+1. Market Intent
+2. Website Communication
+
+Market intent categories can include:
+- Service intent
+- Location intent
+- Problem intent
+- Comparison intent
+- Decision intent
+
+Analyse whether the website clearly addresses each category.
+Show missing or weakly covered intent areas.
+
+Use an Intent Coverage Map where useful.
+
+--------------------------------------------------
+
+10. STRATEGIC WHITE SPACE
+
+Add a Strategic White Space section.
+
+Purpose:
+Identify what competitors are not doing.
+
+Do not only show competitor strengths.
+Also show:
+- unaddressed buyer questions
+- underdeveloped suburb/service combinations
+- underused content angles
+- positioning opportunities competitors are missing
+
+Frame this as:
+- Strategic White Space
+- Market Opportunities Competitors Are Missing
+- Underdeveloped Visibility Opportunities
+
+This is the “blue sky” strategic layer.
+
+--------------------------------------------------
+
+11. MARKET CAPTURE MAP
+
+Add a Market Capture Map.
+
+Purpose:
+Show:
+- total available demand
+- competitor territory
+- open opportunity
+- estimated current visibility capture
+
+Group keywords into buyer demand clusters.
+Present this visually as:
+- Captured Demand
+- Competitor Territory
+- Open Opportunity
+
+Explain the opportunity in business terms, not SEO terms.
+
+--------------------------------------------------
+
+12. LIVE STRATEGY SIMULATOR
+
+Add a Live Strategy Simulator to the public strategy page and optionally internal view.
+
+Purpose:
+Allow the rep or prospect to adjust a few variables live and explore what improved visibility could mean.
+
+Adjustable inputs:
+- monthly search demand
+- estimated visibility share
+- enquiry rate
+- sales conversion rate
+- average job/project value
+
+Recalculate live:
+- estimated visitors
+- estimated enquiries
+- estimated sales/projects
+- estimated revenue influenced
+
+This must be framed as directional scenario exploration, not a guaranteed forecast.
+
+--------------------------------------------------
+
+13. MOMENTUM MOMENT
+
+Add a Momentum Moment section just before the roadmap.
+
+Purpose:
+Create the psychological turning point in the strategy.
+
+This section should summarise:
+- the demand
+- the current visibility gap
+- the competitive opportunity
+
+Then use calibrated reflective questions inspired by NEPQ and Chris Voss.
+
+The section should help the client think:
+“If the opportunity exists, why are we not capturing more of it yet?”
+
+This should feel thoughtful, not salesy.
+
+Public URL treatment:
+Give this section distinctive visual emphasis and subtle animation.
+
+--------------------------------------------------
+
+14. GROWTH ROADMAP
+
+Add a three-phase Growth Roadmap.
+
+Use:
+- Phase 1 – Foundations
+- Phase 2 – Visibility Expansion
+- Phase 3 – Market Capture
+
+Each phase should include:
+- objective
+- why it matters
+- what shifts
+- expected impact
+- confidence / dependency notes where useful
+
+Do not reduce this to generic tactics only.
+It should feel strategic and client-specific.
+
+--------------------------------------------------
+
+15. COST OF INACTION SIMULATOR
+
+Add a Cost of Inaction Simulator.
+
+Purpose:
+Show what happens if the business does nothing.
+
+Estimate directionally:
+- missed search demand
+- missed enquiries
+- continued reliance on paid media
+- competitor advantage compounding over time
+
+In the public URL, allow scenario sliders where practical.
+
+Use thoughtful business language.
+Avoid fear-based hype.
+
+--------------------------------------------------
+
+16. INSIGHT SNAPSHOTS
+
+Add Insight Snapshots throughout the public strategy page.
+
+These are visually styled shareable cards that summarise major insights.
+
+They should appear after key sections such as:
+- Market Opportunity
+- Search Engine View
+- Strategic White Space
+- Cost of Inaction
+
+Each snapshot should contain:
+- short headline
+- key metric or observation
+- concise strategic explanation
+
+Include options to:
+- Copy Link
+- Download Image
+- Share
+
+Purpose:
+Help the strategy spread naturally among decision-makers.
+
+==================================================
+GOOGLE ADS / PAID VISIBILITY UPGRADE
+==================================================
+
+Improve the existing Google Ads section inside the Growth Plan.
+
+Do not make it feel like a break-even calculator based on guessed inputs.
+
+Instead:
+- position it as paid visibility within the broader Digital Visibility Strategy
+- show directional ranges
+- explain how paid media can bridge gaps while owned visibility improves
+- connect paid visibility to the business’s stated goals and lead needs
+
+Avoid false precision.
+Use confidence ranges where needed.
+
+==================================================
+ORGANIC / SEARCH DISCOVERABILITY UPGRADE
+==================================================
+
+Improve the existing SEO/organic section so it becomes part of the broader visibility story.
+
+It should analyse:
+- service clarity
+- location relevance
+- content depth
+- topical coverage
+- page distribution
+- schema
+- search intent alignment
+- competitor content depth
+- legacy brand issues
+- authority support
+
+It should answer:
+Does search understand what the business does, where it does it, and why it is relevant?
+
+==================================================
+LOCAL / GBP UPGRADE
+==================================================
+
+Preserve and improve the useful parts of the current Local / GBP section.
+
+Focus on:
+- category relevance
+- service completeness
+- review strength
+- profile completeness
+- suburb/location alignment
+- GBP-to-website alignment
+- local trust signals
+
+This must fit the broader Digital Visibility framework rather than sit as an isolated local SEO widget.
+
+==================================================
+USE CONVERSATION + DEAL INTELLIGENCE CORRECTLY
+==================================================
+
+The Growth Plan must use Conversation Intelligence and Deal Intelligence to shape the strategy.
+
+Examples:
+
+If the client said they want more consistent enquiries,
+the strategy should connect digital visibility issues directly to that goal.
+
+If the client is already spending on ads,
+the strategy should explain how stronger owned visibility could reduce over-reliance on paid demand over time.
+
+If the deal is early stage,
+lean more into diagnosis and opportunity.
+
+If the deal is later stage,
+lean more into roadmap and outcomes.
+
+The strategy must reflect the actual deal context, not just website data.
+
+==================================================
+AI REASONING LAYER
+==================================================
+
+Build this with a structured 3-layer architecture:
+
+1. Evidence Layer
+Store structured facts from conversation, deal, website, keyword, competitor, local, and authority data.
+
+2. Strategy Reasoning Layer
+Use AI to generate structured reasoning objects for each section.
+
+3. Presentation Layer
+Render internal view, PDF, public URL, simulator, and snapshots from the same approved structured strategy object.
+
+Do not implement this as:
+data → one raw prompt → one giant AI text blob → UI dump
+
+Use a Strategy Object Model.
+
+Each section should store structured fields such as:
+- headline
+- explanation
+- evidence
+- implication
+- recommendedMove
+- score if relevant
+- confidence if relevant
+- visual metadata if relevant
+
+==================================================
+HUMAN APPROVAL FLOW
+==================================================
+
+Add a lightweight approval flow.
+
+Recommended flow:
+- AI generates draft strategy
+- rep reviews/edit selected sections
+- rep approves
+- approved version powers PDF and public URL
+
+Do not overbuild a CMS.
+Keep it lightweight.
+
+==================================================
+STRATEGY MEMORY LAYER
+==================================================
+
+Add a background Strategy Memory Layer so the AI becomes smarter over time.
+
+Store structured insights from completed strategies by:
+- industry
+- geography
+- pattern type
+- common gaps
+- successful structures
+- recurring white space opportunities
+- buyer intent patterns
+
+Use this memory layer to improve future strategy generation silently in the background.
+
+==================================================
+PUBLIC URL EXPERIENCE
+==================================================
+
+Upgrade the public Growth Plan URL so it feels like a premium guided strategy presentation.
+
+Use a Strategy Reveal UI.
+
+The page should not dump all content at once.
+It should guide the viewer through the narrative arc with:
+- strong hero
+- “Start Strategy” entry point
+- section reveals
+- subtle motion
+- counters
+- scroll-based pacing
+- polished visuals
+- clear CTA flow
+
+Suggested flow:
+1. Hero
+2. Strategy overview
+3. Key visuals and insights revealed progressively
+4. Live simulator
+5. Momentum Moment
+6. Roadmap
+7. Cost of inaction
+8. CTA
+
+The page should feel premium and memorable, not gimmicky.
+
+==================================================
+PDF EXPERIENCE
+==================================================
+
+Upgrade the PDF so it feels like a high-end consulting-style strategy document.
+
+Requirements:
+- strong section headlines
+- minimal clutter
+- one primary visual per section where practical
+- clear narrative flow
+- concise executive language
+- print-ready
+- presentation-ready
+- no internal-only notes
+- no raw AI dumps
+
+==================================================
+COPY / TONE RULES
+==================================================
+
+The Growth Plan must sound like:
+- a strategic advisor
+- a market analyst
+- a digital visibility consultant
+
+It must not sound like:
+- an SEO audit
+- a generic agency
+- a chatbot
+- a dashboard export
+
+Use language like:
+- digital visibility
+- discoverability
+- market demand
+- buyer journey
+- competitive territory
+- authority signals
+- local discovery
+- buyer confidence
+
+Avoid:
+- generic SEO boilerplate
+- improve your SEO
+- enhance your online presence
+- empty marketing clichés
+
+==================================================
+DO NOT CHANGE / GUARDRAILS
+==================================================
+
+- Do not build a disconnected new product
+- Do not break existing lead/client workflows
+- Do not break auth, routing, or tenant resolution
+- Do not expose internal notes publicly
+- Do not create duplicate logic where reusable patterns already exist
+- Do not over-rely on guessed inputs
+- Do not generate fake certainty
+- Do not make the experience feel like a chatbot
+- Do not remove working Growth Plan sections without safe replacement
+- Do not use hypey sales language
+- Do not leak tenant data across public URLs or outputs
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+This upgrade is successful when:
+
+- the existing Growth Plan feels materially smarter
+- it uses conversation and deal intelligence properly
+- it uses more of the available client/site/market data already in Momentum
+- it feels specific to the business, not templated
+- it feels like a Digital Visibility Strategy, not an SEO report
+- AI is doing the heavy lifting in the background
+- the internal UI feels premium and consulting-led
+- the PDF feels stronger and more persuasive
+- the public URL feels more compelling, more interactive, and more sales-ready
+- structured strategy objects exist behind the scenes
+- the rep can review/approve before sharing
+- tenant safety is preserved
+- unrelated working functionality remains intact
+
+==================================================
+QA / REGRESSION CHECKLIST
+==================================================
+
+Test all of the following:
+
+- existing lead/client pages still load correctly
+- Growth Plan save/load still works
+- new AI outputs do not break old records
+- strategy generation handles partial data gracefully
+- Conversation Intelligence is incorporated correctly
+- Deal Intelligence is incorporated correctly
+- Local / GBP strengths remain intact
+- PDF export still works and uses approved content
+- public strategy URLs remain secure
+- no internal notes leak publicly
+- mobile layout remains strong
+- animations do not damage usability
+- live simulator calculations work correctly
+- outdated AI outputs are not reused blindly
+- no tenant data leakage
+- no regression in unrelated modules
+
+==================================================
+FINAL BUILD INSTRUCTION
+==================================================
+
+Enhance the existing Growth Plan inside Momentum so it becomes a significantly stronger AI-led Digital Visibility Strategy / Digital Growth Plan.
+
+Do this as a safe enhancement of the existing product, not a disconnected rebuild.
+
+Use structured evidence, structured AI reasoning, and premium presentation to create a strategy experience that feels more like a consulting deliverable than a marketing report.

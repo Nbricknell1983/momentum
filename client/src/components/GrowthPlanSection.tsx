@@ -1705,7 +1705,22 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           {urlLoading ? 'Building strategy page...' : 'Generate Prospect Strategy Page'}
         </Button>
         {generatedUrl && shareModal && (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
+            {/* Strategy preview */}
+            {shareModal.strategy?.oneSentenceStrategy && (
+              <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3 text-blue-500" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Strategy Direction</p>
+                  {shareModal.strategy?.strategyConfidence?.level && (
+                    <span className={`ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full ${shareModal.strategy.strategyConfidence.level === 'High' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400' : shareModal.strategy.strategyConfidence.level === 'Low' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'}`}>
+                      {shareModal.strategy.strategyConfidence.level} confidence
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-blue-800 dark:text-blue-200 leading-relaxed">{shareModal.strategy.oneSentenceStrategy}</p>
+              </div>
+            )}
             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Prospect strategy page — ready to share</p>
             <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/40">
               <p className="text-xs text-muted-foreground truncate flex-1">{generatedUrl}</p>
