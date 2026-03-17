@@ -5,7 +5,7 @@ import {
   Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
   Loader2, Link2, X, ExternalLink, Radio, Play, MessageSquare, ChevronDown,
   ThumbsUp, Building2, Unlink, Target, ScanSearch, Upload, FileText, Sparkles,
-  FileEdit, Send,
+  FileEdit, Send, Map,
 } from 'lucide-react';
 import { parseKeywordFile } from '@/lib/parseKeywordFile';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ import {
 } from '@/lib/types';
 import ClientOnboardingHandover from '@/components/ClientOnboardingHandover';
 import GBPPlaybookPanel from '@/components/GBPPlaybookPanel';
+import ScanMapPicker, { type MapPickerResult } from '@/components/ScanMapPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateClientInFirestore } from '@/lib/firestoreService';
 import { useDispatch } from 'react-redux';
@@ -200,6 +201,8 @@ function LocalPresenceSection({ client }: { client: Client }) {
   const [scanKeyword, setScanKeyword] = useState('');
   const [scanGridSize, setScanGridSize] = useState('5');
   const [scanArea, setScanArea] = useState('');
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [mapPickerResult, setMapPickerResult] = useState<MapPickerResult | null>(null);
   const [showAllKeywords, setShowAllKeywords] = useState(false);
   const [keywordUploading, setKeywordUploading] = useState(false);
   const keywordFileRef = useRef<HTMLInputElement>(null);
@@ -413,10 +416,13 @@ function LocalPresenceSection({ client }: { client: Client }) {
       if (!loc || !client.localFalconPlaceId) throw new Error('No location linked');
       if (!scanKeyword.trim()) throw new Error('Keyword required');
 
-      // Geocode selected area to get scan center coordinates
+      // Use map picker coordinates if available, otherwise geocode the text area
       let centerLat = loc.lat;
       let centerLng = loc.lng;
-      if (scanArea.trim()) {
+      if (mapPickerResult) {
+        centerLat = mapPickerResult.lat;
+        centerLng = mapPickerResult.lng;
+      } else if (scanArea.trim()) {
         try {
           const geoResp = await fetch(`/api/local-falcon/search-place?query=${encodeURIComponent(scanArea.trim() + ', Australia')}`);
           if (geoResp.ok) {
@@ -454,6 +460,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
       setShowRunScan(false);
       setScanKeyword('');
       setScanArea('');
+      setMapPickerResult(null);
       refetchReports();
       toast({ title: 'Scan complete', description: 'New scan results are ready.' });
     },
@@ -505,7 +512,9 @@ function LocalPresenceSection({ client }: { client: Client }) {
     return Array.from(chips).slice(0, 20);
   }, [client.gbpPlaybook?.serviceAreaSuburbs, client.clientOnboarding?.targetLocations]);
 
+  const loc = client.localFalconLocation;
   return (
+    <>
     <div className="border rounded-lg overflow-hidden mb-3" data-testid="local-gbp-section">
       {/* ── Section header ── */}
       <button
@@ -745,11 +754,22 @@ function LocalPresenceSection({ client }: { client: Client }) {
                               </select>
                             </div>
                             <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Target Area (suburb)</p>
-                              <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => setScanArea(e.target.value)} className="h-8 text-xs" data-testid="input-scan-area" />
+                              <p className="text-[10px] text-muted-foreground mb-1">Target Area</p>
+                              {mapPickerResult ? (
+                                <div className="flex items-center gap-1 h-8 px-2 rounded border bg-primary/5 border-primary/30">
+                                  <MapPin className="h-3 w-3 text-primary shrink-0" />
+                                  <span className="text-xs font-medium text-primary flex-1 truncate">{mapPickerResult.name}</span>
+                                  <button onClick={() => { setMapPickerResult(null); setScanArea(''); }} className="text-muted-foreground hover:text-foreground shrink-0"><X className="h-3 w-3" /></button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1">
+                                  <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => { setScanArea(e.target.value); setMapPickerResult(null); }} className="h-8 text-xs flex-1 min-w-0" data-testid="input-scan-area" />
+                                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowMapPicker(true)} title="Pick on map" data-testid="btn-open-map-picker"><Map className="h-3.5 w-3.5" /></Button>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          {areaChips.length > 0 && (
+                          {!mapPickerResult && areaChips.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {areaChips.map(chip => (
                                 <button key={chip} onClick={() => setScanArea(chip)} className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${scanArea === chip ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted/50 border-border text-muted-foreground hover:text-foreground'}`} data-testid={`chip-area-${chip}`}>{chip}</button>
@@ -759,7 +779,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                           <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
                             <MapPin className="h-3 w-3 shrink-0" />
                             <span>
-                              {scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
+                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(map pin)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
                               {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
                             </span>
                           </div>
@@ -767,7 +787,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                             <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
                               {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
                             </Button>
-                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
+                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); setMapPickerResult(null); }} disabled={runScanMutation.isPending}>Cancel</Button>
                           </div>
                           <p className="text-[10px] text-muted-foreground">Larger grids use more scan credits.</p>
                         </div>
@@ -916,11 +936,22 @@ function LocalPresenceSection({ client }: { client: Client }) {
                               </select>
                             </div>
                             <div>
-                              <p className="text-[10px] text-muted-foreground mb-1">Target Area (suburb)</p>
-                              <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => setScanArea(e.target.value)} className="h-8 text-xs" data-testid="input-scan-area" />
+                              <p className="text-[10px] text-muted-foreground mb-1">Target Area</p>
+                              {mapPickerResult ? (
+                                <div className="flex items-center gap-1 h-8 px-2 rounded border bg-primary/5 border-primary/30">
+                                  <MapPin className="h-3 w-3 text-primary shrink-0" />
+                                  <span className="text-xs font-medium text-primary flex-1 truncate">{mapPickerResult.name}</span>
+                                  <button onClick={() => { setMapPickerResult(null); setScanArea(''); }} className="text-muted-foreground hover:text-foreground shrink-0"><X className="h-3 w-3" /></button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1">
+                                  <Input placeholder="e.g. Strathpine QLD" value={scanArea} onChange={e => { setScanArea(e.target.value); setMapPickerResult(null); }} className="h-8 text-xs flex-1 min-w-0" data-testid="input-scan-area" />
+                                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" onClick={() => setShowMapPicker(true)} title="Pick on map" data-testid="btn-open-map-picker"><Map className="h-3.5 w-3.5" /></Button>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          {areaChips.length > 0 && (
+                          {!mapPickerResult && areaChips.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {areaChips.map(chip => (
                                 <button key={chip} onClick={() => setScanArea(chip)} className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${scanArea === chip ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted/50 border-border text-muted-foreground hover:text-foreground'}`} data-testid={`chip-area-${chip}`}>{chip}</button>
@@ -930,7 +961,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                           <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
                             <MapPin className="h-3 w-3 shrink-0" />
                             <span>
-                              {scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
+                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(map pin)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
                               {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
                             </span>
                           </div>
@@ -938,7 +969,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                             <Button size="sm" className="flex-1 h-8 gap-1.5" onClick={() => runScanMutation.mutate()} disabled={runScanMutation.isPending || !scanKeyword.trim()} data-testid="btn-run-scan">
                               {runScanMutation.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</> : <><Radio className="h-3.5 w-3.5" /> Run Scan</>}
                             </Button>
-                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
+                            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); setScanArea(''); setMapPickerResult(null); }} disabled={runScanMutation.isPending}>Cancel</Button>
                           </div>
                           <p className="text-[10px] text-muted-foreground">Larger grids use more scan credits.</p>
                         </div>
@@ -1198,6 +1229,18 @@ function LocalPresenceSection({ client }: { client: Client }) {
         </div>
       )}
     </div>
+    {showMapPicker && loc && (
+      <ScanMapPicker
+        defaultLat={loc.lat}
+        defaultLng={loc.lng}
+        gridSize={scanGridSize}
+        areaChips={areaChips}
+        initialArea={scanArea}
+        onConfirm={(result) => { setMapPickerResult(result); setScanArea(result.name); setShowMapPicker(false); }}
+        onClose={() => setShowMapPicker(false)}
+      />
+    )}
+    </>
   );
 }
 
