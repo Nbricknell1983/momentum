@@ -7589,6 +7589,54 @@ Return JSON:
   });
 
   // ============================================
+  // Nominatim Proxy (suburb search + reverse geocode)
+  // ============================================
+
+  const NOMINATIM_HEADERS = {
+    'User-Agent': 'MomentumAgent/1.0 (momentum@battlescore.com.au)',
+    'Accept-Language': 'en',
+  };
+
+  app.get('/api/nominatim/search', async (req, res) => {
+    try {
+      const { q, polygon_geojson, limit, addressdetails } = req.query as Record<string, string>;
+      if (!q) return res.status(400).json({ error: 'q required' });
+      const query = q.toLowerCase().includes('australia') ? q : `${q}, Australia`;
+      const url = new URL('https://nominatim.openstreetmap.org/search');
+      url.searchParams.set('q', query);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('polygon_geojson', polygon_geojson || '1');
+      url.searchParams.set('limit', limit || '10');
+      url.searchParams.set('addressdetails', addressdetails || '1');
+      const r = await fetch(url.toString(), { headers: NOMINATIM_HEADERS });
+      if (!r.ok) return res.status(r.status).json({ error: 'Nominatim error' });
+      res.json(await r.json());
+    } catch (err: any) {
+      console.error('[nominatim/search]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/nominatim/reverse', async (req, res) => {
+    try {
+      const { lat, lon, zoom } = req.query as Record<string, string>;
+      if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required' });
+      const url = new URL('https://nominatim.openstreetmap.org/reverse');
+      url.searchParams.set('lat', lat);
+      url.searchParams.set('lon', lon);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('zoom', zoom || '13');
+      url.searchParams.set('addressdetails', '1');
+      const r = await fetch(url.toString(), { headers: NOMINATIM_HEADERS });
+      if (!r.ok) return res.status(r.status).json({ error: 'Nominatim error' });
+      res.json(await r.json());
+    } catch (err: any) {
+      console.error('[nominatim/reverse]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================
   // Local Falcon — GBP Rank Tracking
   // ============================================
 

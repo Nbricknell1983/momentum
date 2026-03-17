@@ -29,17 +29,16 @@ interface ScanMapPickerProps {
   onClose: () => void;
 }
 
-// ── Nominatim ─────────────────────────────────────────────────────────────────
+// ── Nominatim via server proxy ────────────────────────────────────────────────
 
 async function searchSuburb(query: string): Promise<SuburbFeature | null> {
   if (!query.trim()) return null;
   try {
-    const q = query.trim().toLowerCase().includes('australia') ? query.trim() : `${query.trim()}, Australia`;
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&polygon_geojson=1&format=json&limit=10&addressdetails=1`;
-    const r = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'MomentumAgent/1.0' } });
+    const url = `/api/nominatim/search?q=${encodeURIComponent(query.trim())}&polygon_geojson=1&limit=10&addressdetails=1`;
+    const r = await fetch(url);
     if (!r.ok) return null;
     const data: any[] = await r.json();
-    if (!data.length) return null;
+    if (!Array.isArray(data) || !data.length) return null;
     const TYPES = ['suburb', 'locality', 'town', 'village', 'hamlet', 'quarter', 'neighbourhood', 'residential', 'city', 'administrative'];
     const best =
       data.find(f => TYPES.includes(f.type) && (f.geojson?.type === 'Polygon' || f.geojson?.type === 'MultiPolygon')) ||
@@ -61,10 +60,7 @@ async function searchSuburb(query: string): Promise<SuburbFeature | null> {
 
 async function reverseToSuburb(lat: number, lng: number): Promise<string> {
   try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=13&addressdetails=1`,
-      { headers: { 'Accept-Language': 'en', 'User-Agent': 'MomentumAgent/1.0' } }
-    );
+    const r = await fetch(`/api/nominatim/reverse?lat=${lat}&lon=${lng}&zoom=13`);
     if (!r.ok) return '';
     const d = await r.json();
     return d.address?.suburb || d.address?.neighbourhood || d.address?.town || d.address?.village || d.address?.city_district || '';
