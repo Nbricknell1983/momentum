@@ -3708,54 +3708,229 @@ Generate the ${channel === 'email' ? 'email' : channel === 'call' ? 'call opener
       const industry = lead.industry || sd.category || 'Business';
       const location = lead.address || si.targetLocations || '';
 
-      const prompt = `You are a world-class web designer and digital marketing strategist specialising in high-converting local business websites. Create a beautiful, complete, self-contained HTML website mockup for this business showing what their IDEAL website should look like.
+      // Pick industry-specific background photo keyword for loremflickr
+      const industryLower = industry.toLowerCase();
+      let photoKeyword = 'business,office';
+      if (industryLower.includes('construct') || industryLower.includes('builder') || industryLower.includes('building')) photoKeyword = 'construction,builders';
+      else if (industryLower.includes('plumb')) photoKeyword = 'plumbing,pipes';
+      else if (industryLower.includes('electr')) photoKeyword = 'electrician,electrical';
+      else if (industryLower.includes('landscap') || industryLower.includes('garden')) photoKeyword = 'landscaping,garden';
+      else if (industryLower.includes('roof')) photoKeyword = 'roofing,roof';
+      else if (industryLower.includes('paint')) photoKeyword = 'painting,decorator';
+      else if (industryLower.includes('clean')) photoKeyword = 'cleaning,commercial';
+      else if (industryLower.includes('concreet') || industryLower.includes('concrete')) photoKeyword = 'concrete,construction';
+      else if (industryLower.includes('hvac') || industryLower.includes('air con') || industryLower.includes('refriger')) photoKeyword = 'airconditioning,hvac';
+      else if (industryLower.includes('tile') || industryLower.includes('flooring')) photoKeyword = 'tiling,flooring';
+      else if (industryLower.includes('tree') || industryLower.includes('arb')) photoKeyword = 'arborist,tree';
+      else if (industryLower.includes('pool')) photoKeyword = 'swimming pool,pool';
+      else if (industryLower.includes('truck') || industryLower.includes('transport') || industryLower.includes('freight')) photoKeyword = 'truck,transport';
+      else if (industryLower.includes('mechanic') || industryLower.includes('auto') || industryLower.includes('car')) photoKeyword = 'mechanic,garage';
+      else if (industryLower.includes('restaurant') || industryLower.includes('cafe') || industryLower.includes('food')) photoKeyword = 'restaurant,food';
+      else if (industryLower.includes('dental') || industryLower.includes('medical') || industryLower.includes('health')) photoKeyword = 'dental,clinic';
+      else if (industryLower.includes('real estate') || industryLower.includes('property')) photoKeyword = 'real estate,property';
+      else if (industryLower.includes('solar')) photoKeyword = 'solar,panels';
 
-BUSINESS DATA:
-- Company: ${lead.companyName}
-- Industry: ${industry}
-- Location: ${location}
-- Phone: ${lead.phone || 'Not provided'}
-- Email: ${lead.email || 'Not provided'}
-- Current Website: ${lead.website || 'None'}
-- Google Reviews: ${reviewStr}
-- Business Overview: ${si.businessOverview || 'Not provided'}
-- Ideal Customer: ${si.idealCustomer || 'Not provided'}
-- Core Services: ${si.coreServices || 'Not provided'}
-- Target Locations/Suburbs: ${si.targetLocations || location}
-- Growth Objective: ${si.growthObjective || 'Not provided'}
-- Discovery Notes: ${si.discoveryNotes || 'None'}
+      // Pick brand colors based on industry
+      let brandPrimary = '#1e3a5f', brandAccent = '#f97316', brandLight = '#fff7ed';
+      if (industryLower.includes('landscap') || industryLower.includes('garden') || industryLower.includes('tree')) { brandPrimary = '#14532d'; brandAccent = '#22c55e'; brandLight = '#f0fdf4'; }
+      else if (industryLower.includes('pool')) { brandPrimary = '#0c4a6e'; brandAccent = '#0ea5e9'; brandLight = '#f0f9ff'; }
+      else if (industryLower.includes('solar')) { brandPrimary = '#1a1a2e'; brandAccent = '#f59e0b'; brandLight = '#fffbeb'; }
+      else if (industryLower.includes('clean')) { brandPrimary = '#1e40af'; brandAccent = '#3b82f6'; brandLight = '#eff6ff'; }
+      else if (industryLower.includes('restaurant') || industryLower.includes('cafe') || industryLower.includes('food')) { brandPrimary = '#7c2d12'; brandAccent = '#f97316'; brandLight = '#fff7ed'; }
+      else if (industryLower.includes('dental') || industryLower.includes('medical') || industryLower.includes('health')) { brandPrimary = '#0f4c81'; brandAccent = '#0ea5e9'; brandLight = '#f0f9ff'; }
 
-CURRENT WEBSITE CONTENT (crawled):
-${crawlSummary || 'No crawl data available — design from business data above'}
+      const reviewCount = sd.googleReviewCount || 0;
+      const reviewRating = sd.googleRating ? sd.googleRating.toFixed(1) : '5.0';
+      const stars = '★'.repeat(Math.round(sd.googleRating || 5));
+      const photoUrl = `https://loremflickr.com/1920/1080/${photoKeyword}`;
 
-DESIGN REQUIREMENTS:
-1. Generate a COMPLETE, self-contained, single-page HTML file with ALL CSS embedded via <style> tags (no external CSS files). Use Google Fonts via <link> only.
-2. The design must be modern, professional, mobile-friendly in appearance, and conversion-focused for local businesses
-3. Choose an industry-appropriate color scheme (e.g., dark blue/gold for builders/trades, green for landscaping, navy/white for professional services)
-4. REQUIRED SECTIONS:
-   a) Sticky header/nav with logo (text), navigation links, and phone number CTA button
-   b) Hero section: strong headline with their service + location, compelling sub-headline, two CTA buttons (Call Now + Get Free Quote), hero background with a gradient or solid color
-   c) Services section: 3-4 service cards with icons (use Unicode/emoji), short description, and "Learn More" links
-   d) Why Choose Us: 3 trust pillars with icons relevant to their industry
-   e) Social proof: review stars + count (use their actual Google review data), 2-3 testimonial cards
-   f) Service areas: suburb/location chips showing target areas
-   g) Contact CTA banner: full-width section with phone, email, and a "Get Free Quote" button
-   h) Footer: company name, ABN (if available), phone, email, copyright
-5. Use the company's REAL name, phone, email, location, and services throughout
-6. Headlines must be SEO-optimised for their primary service + location
-7. All links should be # (mockup only)
-8. Make it look like a real, high-quality website a prospect would be impressed by
+      // Parse city from location
+      const cityMatch = location.match(/([A-Z][a-zA-Z\s]+?)(?:\s+(?:QLD|NSW|VIC|SA|WA|ACT|NT|TAS)\s+\d{4}|,|\s*$)/);
+      const city = cityMatch ? cityMatch[1].trim() : (location.split(',')[0] || 'Australia');
 
-ALSO identify 6-8 specific gaps that their CURRENT website likely has based on the industry and available data.
+      const prompt = `You are an elite Australian web developer and conversion rate optimisation expert. Your task is to build a STUNNING, pixel-perfect, high-converting local business website that would impress a prospect during a sales meeting.
 
-Return ONLY valid JSON in this exact format (no markdown, no extra text):
-{"html":"complete self-contained HTML as a single escaped string","gaps":["gap 1","gap 2","gap 3"]}`;
+STUDY THE FOLLOWING DESIGN PATTERN — replicate this exact visual style:
+- Full-screen hero section with a real background photo (blurred/darkened overlay at 60% opacity)
+- TWO-COLUMN hero layout: LEFT side = trust badge, massive bold headline, body text, primary CTA button, 3 bullet trust points, Google review badge; RIGHT side = glassmorphism quote request form card
+- Bold, high-contrast typography — headline 54–68px, font-weight 900
+- Industry-specific color scheme (PRIMARY: ${brandPrimary}, ACCENT: ${brandAccent})
+- Sticky header with company logo/name on left, nav links in centre, large phone CTA button on right in accent color
+- Below hero: services grid with emoji icons, Why Choose Us section, testimonials, service areas, full-width contact CTA, footer
+
+═══════════════════════════════
+BUSINESS DATA (use EVERY field)
+═══════════════════════════════
+Company Name: ${lead.companyName}
+Industry: ${industry}
+City / Primary Location: ${city}
+Full Address: ${location}
+Phone: ${lead.phone || '1300 XXX XXX'}
+Email: ${lead.email || 'info@' + (lead.companyName || 'company').toLowerCase().replace(/[^a-z0-9]/g, '') + '.com.au'}
+Google Reviews: ${reviewCount > 0 ? `${reviewCount} reviews — ${reviewRating}/5 ★` : 'Growing review base'}
+Business Overview: ${si.businessOverview || industry + ' specialists serving ' + city + ' and surrounds'}
+Ideal Customer: ${si.idealCustomer || 'Local homeowners and businesses'}
+Core Services: ${si.coreServices || industry + ' services'}
+Target Suburbs: ${si.targetLocations || city + ' and surrounding suburbs'}
+Growth Goal: ${si.growthObjective || 'Generate more qualified leads online'}
+Discovery Notes: ${si.discoveryNotes || ''}
+
+═══════════════════════════════
+MANDATORY HTML ARCHITECTURE
+═══════════════════════════════
+
+Use this EXACT structure:
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Service] in [City] | [Company Name]</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    /* --- CSS VARIABLES --- */
+    :root {
+      --primary: ${brandPrimary};
+      --accent: ${brandAccent};
+      --light: ${brandLight};
+      --dark: #0f0f0f;
+      --white: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --radius: 8px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.12);
+    }
+    /* --- RESET --- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', system-ui, sans-serif; color: var(--text); line-height: 1.6; }
+    
+    /* --- HEADER (sticky) --- */
+    /* Make it: background white, box-shadow on scroll, height ~70px, flex justify-between */
+    /* Logo: company name in var(--primary), font-weight 800, font-size 20px */
+    /* Nav links: hidden on small screens, flex gap-8 on desktop */
+    /* CTA: background var(--accent), color white, border-radius var(--radius), padding 10px 20px, font-weight 700, font-size 15px, includes phone number */
+    
+    /* --- HERO (full-screen with photo background) --- */
+    /* background-image: linear-gradient(rgba(0,0,0,0.62), rgba(0,0,0,0.55)), url('${photoUrl}'); */
+    /* background-size: cover; background-position: center; background-attachment: fixed; */
+    /* min-height: 100vh; display: flex; align-items: center; */
+    /* Inner: max-width 1200px, margin 0 auto, padding 80px 40px, display grid, grid-template-columns: 1fr 420px, gap 60px */
+    
+    /* --- HERO LEFT COLUMN --- */
+    /* Trust badge: display inline-block, background var(--accent), color white, font-size 11px, font-weight 700, letter-spacing 0.12em, text-transform uppercase, padding 6px 14px, border-radius 20px, margin-bottom 24px */
+    /* Headline: font-size clamp(42px, 5vw, 64px), font-weight 900, color white, line-height 1.08, margin-bottom 20px */
+    /* Accent span in headline: color var(--accent) */
+    /* Sub-headline: font-size 18px, color rgba(255,255,255,0.85), margin-bottom 32px, max-width 540px */
+    /* Primary CTA button: background var(--accent), color white, font-size 16px, font-weight 800, padding 16px 36px, border-radius var(--radius), text-transform uppercase, letter-spacing 0.05em, border none, cursor pointer, display inline-block, text-decoration none, box-shadow 0 4px 15px rgba(0,0,0,0.3) */
+    /* Bullet points: margin-top 32px, list-style none, display flex, flex-direction column, gap 12px */
+    /* Each bullet: display flex, align-items center, gap 12px, color rgba(255,255,255,0.9), font-size 15px */
+    /* Bullet icon: ▶ in var(--accent), font-size 10px */
+    /* Google badge: margin-top 28px, display flex, align-items center, gap 10px, background rgba(255,255,255,0.12), backdrop-filter blur(8px), border-radius 40px, padding 8px 16px, width fit-content */
+    /* Google G icon: colored circle with G text, font-size 18px, font-weight 900 */
+    /* Stars: color #fbbf24, font-size 16px */
+    /* Review text: color white, font-size 13px */
+    
+    /* --- HERO RIGHT: GLASS FORM CARD --- */
+    /* background: rgba(255,255,255,0.12); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); */
+    /* border: 1px solid rgba(255,255,255,0.25); border-radius: 16px; padding: 36px 32px; */
+    /* Form heading: color white, font-size 22px, font-weight 700, margin-bottom 24px */
+    /* Form inputs: width 100%, padding 12px 16px, border-radius var(--radius), border: 1px solid rgba(255,255,255,0.3), background rgba(255,255,255,0.9), font-size 14px, margin-bottom 12px, color var(--text) */
+    /* Form labels: display block, color rgba(255,255,255,0.9), font-size 13px, font-weight 600, margin-bottom 4px */
+    /* Submit button: width 100%, background var(--accent), color white, font-size 16px, font-weight 800, padding 14px, border none, border-radius var(--radius), cursor pointer, text-transform uppercase, letter-spacing 0.05em */
+    
+    /* --- SERVICES SECTION --- */
+    /* padding 80px 40px, background var(--light) */
+    /* Section title: text-align center, font-size 36px, font-weight 800, color var(--primary), margin-bottom 12px */
+    /* Subtitle: text-align center, color var(--muted), font-size 17px, margin-bottom 48px */
+    /* Grid: display grid, grid-template-columns repeat(3, 1fr), gap 28px, max-width 1200px, margin 0 auto */
+    /* Card: background white, border-radius 12px, padding 32px 28px, box-shadow var(--shadow), border-top 4px solid var(--accent) */
+    /* Icon: font-size 40px, margin-bottom 16px */
+    /* Card title: font-size 19px, font-weight 700, color var(--primary), margin-bottom 10px */
+    /* Card text: color var(--muted), font-size 14px, line-height 1.7 */
+    
+    /* --- WHY CHOOSE US --- */
+    /* padding 80px 40px, background white */
+    /* Inner: max-width 1100px, margin 0 auto, display grid, grid-template-columns 1fr 1fr, gap 60px, align-items center */
+    /* Left: section heading + pillars list */
+    /* Each pillar: display flex, gap 20px, margin-bottom 32px */
+    /* Pillar icon circle: 52px x 52px, background var(--light), border-radius 50%, display flex, align-items center, justify-content center, font-size 22px, flex-shrink 0 */
+    /* Right: large number stat blocks (e.g. 500+ Jobs, 10+ Years) */
+    
+    /* --- REVIEWS / TESTIMONIALS --- */
+    /* padding 80px 40px, background var(--primary), color white */
+    /* Grid: 3 cards, background rgba(255,255,255,0.08), border-radius 12px, padding 28px */
+    /* Stars: color #fbbf24 */
+    /* Quote text: font-size 15px, line-height 1.7, color rgba(255,255,255,0.88) */
+    /* Reviewer: font-weight 700, color white, margin-top 16px */
+    
+    /* --- SERVICE AREAS --- */
+    /* padding 60px 40px, background var(--light) */
+    /* Area chips: display flex, flex-wrap wrap, gap 10px, justify-content center */
+    /* Each chip: background white, border 2px solid var(--accent), color var(--primary), border-radius 20px, padding 6px 18px, font-size 14px, font-weight 600 */
+    
+    /* --- CONTACT CTA BANNER --- */
+    /* background var(--accent), padding 80px 40px, text-align center */
+    /* Heading: font-size 38px, font-weight 900, color white, margin-bottom 16px */
+    /* Sub: color rgba(255,255,255,0.9), font-size 17px, margin-bottom 36px */
+    /* Buttons: inline-flex gap 16px */
+    /* Phone button: background white, color var(--accent), font-weight 800, padding 16px 40px, border-radius var(--radius), text-decoration none, font-size 18px */
+    /* Quote button: background transparent, color white, border 2px solid white, font-weight 700, padding 16px 36px, border-radius var(--radius), text-decoration none, font-size 16px */
+    
+    /* --- FOOTER --- */
+    /* background var(--dark), color rgba(255,255,255,0.6), padding 40px, text-align center, font-size 14px */
+    /* Company name in white, font-weight 700 */
+    
+  </style>
+</head>
+<body>
+  <!-- HEADER -->
+  <!-- HERO (full-screen, 2-column: trust badge + massive headline + bullets + review badge LEFT | glass form card RIGHT) -->
+  <!-- SERVICES (3–4 cards, emoji icons, bordered top in accent color) -->
+  <!-- WHY CHOOSE US (left text + right stats) -->
+  <!-- TESTIMONIALS (3 cards on dark background) -->
+  <!-- SERVICE AREAS (suburb chips) -->
+  <!-- CONTACT CTA (full-width accent background) -->
+  <!-- FOOTER -->
+</body>
+</html>
+
+═══════════════════════════════
+CONTENT GUIDELINES
+═══════════════════════════════
+- Headline must name their primary service + "${city}" e.g. "Expert [Service] in ${city}"
+- Accent ONE or TWO words in the headline with <span style="color:var(--accent)">
+- Sub-headline: compelling 1–2 sentences about speed, reliability, and local expertise
+- Services: create 3 realistic services from their core service data, write 2-sentence descriptions for each
+- Trust points (3 bullets below headline): key selling points e.g. "Same-Day Response Available", "Fully Licensed & Insured", "Local ${city} Specialists"
+- Testimonials: write 3 realistic 5-star testimonials from local ${city} customers mentioning a specific job
+- Service areas: extract 6–10 specific suburbs from target locations data, or invent realistic local suburbs for ${city}
+- Stats (Why Choose Us right column): use plausible numbers like "500+ Happy Customers", "10+ Years Experience", "100% Satisfaction Guarantee"
+- Form fields: Name, Phone Number, Service Needed, When Do You Need It? — with a bright "Get My Free Quote" submit button
+${reviewCount > 0 ? `- Google badge: show "${reviewCount} Reviews" with "${stars}" stars and rating "${reviewRating}/5" — use a coloured G logo` : '- Google badge: show "5.0 ★★★★★ (Growing)" to encourage them to get reviews'}
+
+═══════════════════════════════
+CRITICAL REQUIREMENTS
+═══════════════════════════════
+1. ALL links href="#" (mockup)
+2. background-image for hero MUST use: url('${photoUrl}') with dark overlay 
+3. Glass card MUST have backdrop-filter: blur(16px) on the right-column form
+4. Make it BEAUTIFUL — this is a sales tool to show the prospect what they could have
+5. No placeholder text (Lorem ipsum). All copy must be real and relevant to their business
+6. The HTML must be 100% complete and self-contained — no external CSS files
+
+Also identify 6–8 specific gaps their CURRENT website likely has. Be specific to their industry.
+
+Return ONLY valid JSON (no markdown fences):
+{"html":"complete HTML string here","gaps":["specific gap 1","specific gap 2"]}`;
 
       const aiRes = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        max_tokens: 4000,
+        max_tokens: 6000,
         temperature: 0.7,
       });
 

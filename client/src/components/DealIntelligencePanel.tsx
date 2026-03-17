@@ -1182,7 +1182,6 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                   title="Recommended Website Mockup"
                   className="border-0 pointer-events-none"
                   style={{ width: '200%', height: '200%', transform: 'scale(0.5)', transformOrigin: 'top left' }}
-                  sandbox=""
                   data-testid="iframe-mock-website"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-violet-900/20 transition-colors flex items-center justify-center">
@@ -1239,7 +1238,6 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
                 title="Recommended Website Full View"
                 className="w-full border-0"
                 style={{ height: '100vh', minHeight: '600px' }}
-                sandbox=""
                 data-testid="iframe-mock-website-modal"
               />
             </div>
