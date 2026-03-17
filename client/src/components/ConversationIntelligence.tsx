@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { MessageCircle, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap, Phone, Mail, User } from 'lucide-react';
+import { MessageCircle, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap, Phone, Mail, User, Mic, MicOff, Loader2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -154,6 +154,87 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentLogs, setRecentLogs] = useState<ConversationLog[]>([]);
 
+  // Dictation state for Notes field
+  const [recording, setRecording] = useState(false);
+  const [dictFinalText, setDictFinalText] = useState('');
+  const [dictInterimText, setDictInterimText] = useState('');
+  const [dictTidying, setDictTidying] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const srSupported = typeof window !== 'undefined' && !!(
+    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  );
+
+  const startDictation = () => {
+    const SRClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SRClass) return;
+    const rec = new SRClass();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-AU';
+    let accumulated = '';
+    rec.onresult = (e: any) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          accumulated += (accumulated ? ' ' : '') + t.trim();
+        } else {
+          interim += t;
+        }
+      }
+      setDictFinalText(accumulated);
+      setDictInterimText(interim);
+    };
+    rec.onend = () => { setRecording(false); setDictInterimText(''); };
+    rec.onerror = () => { setRecording(false); setDictInterimText(''); };
+    recognitionRef.current = rec;
+    rec.start();
+    setRecording(true);
+    setDictFinalText('');
+    setDictInterimText('');
+  };
+
+  const stopDictation = () => {
+    recognitionRef.current?.stop();
+    setRecording(false);
+    setDictInterimText('');
+  };
+
+  const saveDictation = async () => {
+    const raw = dictFinalText.trim();
+    if (!raw) { setDictFinalText(''); return; }
+    stopDictation();
+    setDictTidying(true);
+    try {
+      const combined = notes ? `${notes.trim()}\n\n${raw}` : raw;
+      const res = await fetch('/api/leads/ai/tidy-dictation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: combined, fieldLabel: 'Conversation Notes' }),
+      });
+      const json = await res.json();
+      setNotes(json.tidied || combined);
+    } catch {
+      setNotes(notes ? `${notes.trim()}\n\n${raw}` : raw);
+    } finally {
+      setDictTidying(false);
+      setDictFinalText('');
+    }
+  };
+
+  const discardDictation = () => {
+    stopDictation();
+    setDictFinalText('');
+    setDictInterimText('');
+  };
+
+  const resetDictation = () => {
+    stopDictation();
+    setDictFinalText('');
+    setDictInterimText('');
+    setDictTidying(false);
+  };
+
   const currentStage = lead.conversationStage || 'not_started';
   const momentum = getMomentumImpact(lead);
   const insight = getConversationInsight(lead, recentLogs);
@@ -170,6 +251,7 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
     setOutcome('');
     setNotes('');
     setNextStep('');
+    resetDictation();
     setShowLogDialog(true);
   };
 
@@ -434,13 +516,69 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
 
             <div className="space-y-2">
               <Label className="text-xs">Notes (optional)</Label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="What was discussed..."
-                rows={3}
-                data-testid="textarea-conversation-notes"
-              />
+              <div className="space-y-1.5">
+                <div className="relative group">
+                  <Textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder={recording ? 'Listening…' : 'What was discussed...'}
+                    rows={3}
+                    className={`text-sm resize-none pr-9 transition-all ${recording ? 'ring-2 ring-red-400 border-red-300' : ''}`}
+                    data-testid="textarea-conversation-notes"
+                  />
+                  {srSupported && (
+                    <button
+                      type="button"
+                      onClick={recording ? stopDictation : startDictation}
+                      title={recording ? 'Stop dictation' : 'Start dictation'}
+                      data-testid="mic-conversation-notes"
+                      className={`absolute top-2 right-2 p-1.5 rounded-md transition-all ${
+                        recording
+                          ? 'bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400 animate-pulse'
+                          : 'opacity-0 group-hover:opacity-100 bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      {recording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                    </button>
+                  )}
+                </div>
+
+                {(dictFinalText || dictInterimText) && (
+                  <div className="rounded-lg border border-red-200 bg-red-50/60 dark:bg-red-950/20 dark:border-red-900/40 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      {recording
+                        ? <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-red-600 uppercase tracking-wider"><Mic className="h-3 w-3 animate-pulse" /> Recording</span>
+                        : <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Transcript captured — ready to save</span>
+                      }
+                    </div>
+                    <p className="text-sm leading-relaxed">
+                      <span className="text-foreground">{dictFinalText}</span>
+                      {dictInterimText && <span className="text-muted-foreground italic"> {dictInterimText}</span>}
+                    </p>
+                    {!recording && dictFinalText && (
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+                          onClick={saveDictation}
+                          disabled={dictTidying}
+                          data-testid="save-dictation-notes"
+                        >
+                          {dictTidying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                          {dictTidying ? 'Tidying…' : 'Save & Tidy with AI'}
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={discardDictation}>
+                          Discard
+                        </Button>
+                      </div>
+                    )}
+                    {dictTidying && (
+                      <p className="text-[11px] text-muted-foreground">AI is cleaning up the transcript…</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
