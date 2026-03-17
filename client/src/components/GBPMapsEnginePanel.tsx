@@ -63,6 +63,13 @@ interface ScoreFactor {
   hint: string;
 }
 
+interface GBPSnapshot {
+  category: string | null;
+  description: string | null;
+  services: string[];
+  serviceAreaRegions: string[];
+}
+
 interface ScoreBreakdown {
   total: number;
   prominence: number; prominenceMax: number; prominenceFactors: ScoreFactor[];
@@ -76,8 +83,15 @@ function calcScore(
   client: Client,
   reviews: Review[],
   insights: Insights | null,
+  snapshot: GBPSnapshot | null,
 ): ScoreBreakdown {
   const playbook = client.gbpPlaybook;
+
+  // Live GBP snapshot takes priority over local playbook cache
+  const categoryPrimary = snapshot?.category ?? playbook?.categoryPrimary ?? null;
+  const description = snapshot?.description ?? playbook?.description ?? '';
+  const services = snapshot?.services ?? playbook?.services ?? [];
+  const serviceAreaSuburbs = snapshot?.serviceAreaRegions ?? playbook?.serviceAreaSuburbs ?? [];
 
   // ── Prominence (50) ───────────────────────────────────────────────────────
   const recentReviews = reviews.filter(r => daysSince(r.createTime) <= 30).length;
@@ -85,7 +99,7 @@ function calcScore(
   const repliedCount = reviews.filter(r => r.reviewReply).length;
   const responseRate = totalReviews > 0 ? (repliedCount / totalReviews) * 100 : 0;
   const totalInteractions = insights?.totalInteractions ?? 0;
-  const suburbCount = (playbook?.serviceAreaSuburbs || []).length;
+  const suburbCount = serviceAreaSuburbs.length;
 
   let reviewVelocityScore = 0;
   if (recentReviews >= 10) reviewVelocityScore = 15;
@@ -137,9 +151,9 @@ function calcScore(
   ];
 
   // ── Relevance (25) ────────────────────────────────────────────────────────
-  const hasPrimaryCategory = !!(playbook?.categoryPrimary);
-  const descLen = (playbook?.description || '').length;
-  const serviceCount = (playbook?.services || []).length;
+  const hasPrimaryCategory = !!categoryPrimary;
+  const descLen = description.length;
+  const serviceCount = services.length;
 
   const categoryScore = hasPrimaryCategory ? 8 : 0;
   let descScore = 0;
@@ -158,7 +172,7 @@ function calcScore(
     {
       name: 'Primary Category',
       score: categoryScore, max: 8,
-      detail: hasPrimaryCategory ? `Set to: ${playbook!.categoryPrimary}` : 'No primary category set',
+      detail: hasPrimaryCategory ? `Set to: ${categoryPrimary}` : 'No primary category set',
       hint: hasPrimaryCategory ? 'Good — category is configured' : 'Go to 3-Pack Playbook → Category & Services and set your primary GBP category',
     },
     {
@@ -536,12 +550,24 @@ export default function GBPMapsEnginePanel({ client }: Props) {
     staleTime: 300_000,
   });
 
+  // ── Live GBP snapshot (category, description, services, service areas) ────
+  const { data: gbpSnapshot, refetch: refetchSnapshot } = useQuery<GBPSnapshot>({
+    queryKey: ['/api/gbp/location-snapshot', orgId, locationName],
+    queryFn: async () => {
+      const r = await fetch(`/api/gbp/location-snapshot?orgId=${encodeURIComponent(orgId!)}&locationName=${encodeURIComponent(locationName!)}`);
+      if (!r.ok) throw new Error('snapshot fetch failed');
+      return r.json();
+    },
+    enabled: !!orgId && isLinked,
+    staleTime: 600_000,
+  });
+
   // ── Sync ──────────────────────────────────────────────────────────────────
   async function handleSync() {
     if (!orgId || !locationName) return;
     setSyncing(true);
     try {
-      await Promise.all([refetchReviews(), refetchInsights()]);
+      await Promise.all([refetchReviews(), refetchInsights(), refetchSnapshot()]);
       toast({ title: 'Synced', description: 'Maps Engine data refreshed.' });
     } catch {
       toast({ title: 'Sync failed', variant: 'destructive' });
@@ -568,7 +594,7 @@ export default function GBPMapsEnginePanel({ client }: Props) {
 
   // ── Score ─────────────────────────────────────────────────────────────────
   const reviews = useMemo(() => reviewsData?.reviews || [], [reviewsData]);
-  const score = useMemo(() => calcScore(client, reviews, insights ?? null), [client, reviews, insights]);
+  const score = useMemo(() => calcScore(client, reviews, insights ?? null, gbpSnapshot ?? null), [client, reviews, insights, gbpSnapshot]);
   const status = statusLabel(score.total);
 
   // ── Last synced display ───────────────────────────────────────────────────
