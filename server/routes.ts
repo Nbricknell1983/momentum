@@ -3580,6 +3580,11 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
         notes,
         recentLogs = [],
         attemptCount = 0,
+        // Rich context fields
+        industry,
+        address,
+        strategyIntelligence,
+        digitalPresence,
       } = req.body;
 
       if (!channel || !companyName) {
@@ -3610,6 +3615,45 @@ Generate a personalized ${channel} using the ${frameworkToUse} framework.`;
         .map((l: any) => `- ${l.type === 'attempt' ? 'Attempt' : 'Conversation'} via ${l.channel}${l.outcome ? ` (${l.outcome})` : ''}${l.notes ? `: ${l.notes}` : ''}`)
         .join('\n');
 
+      // Build digital presence intelligence block
+      const dp = digitalPresence || {};
+      const si = strategyIntelligence || {};
+      const presenceLines: string[] = [];
+
+      if (dp.website) presenceLines.push(`Website: ${dp.website}`);
+      else presenceLines.push(`Website: NONE — no website detected`);
+
+      if (dp.googleReviewCount > 0) {
+        presenceLines.push(`Google Reviews: ${dp.googleReviewCount} reviews at ${dp.googleRating}/5 stars`);
+      } else {
+        presenceLines.push(`Google Reviews: NONE — zero reviews on record (major trust gap)`);
+      }
+
+      if (dp.hasFacebook) presenceLines.push(`Facebook: Active (${dp.facebookUrl})`);
+      else presenceLines.push(`Facebook: NOT PRESENT`);
+
+      if (dp.hasInstagram) presenceLines.push(`Instagram: Active (${dp.instagramUrl})`);
+      else presenceLines.push(`Instagram: NOT PRESENT`);
+
+      if (dp.hasLinkedin) presenceLines.push(`LinkedIn: Active (${dp.linkedinUrl})`);
+      else presenceLines.push(`LinkedIn: NOT PRESENT`);
+
+      if (dp.adSpend) presenceLines.push(`Paid Ads: Running Google Ads (est. $${dp.adSpend}/mo spend)`);
+      else if (dp.adChannels) presenceLines.push(`Paid Ads: Active on ${dp.adChannels}`);
+      else presenceLines.push(`Paid Ads: NOT RUNNING — no paid advertising detected`);
+
+      if (dp.sitemapPageCount > 0) presenceLines.push(`Website pages: ${dp.sitemapPageCount} pages indexed`);
+
+      if (dp.crawlSummary) presenceLines.push(`\nWEBSITE CONTENT EXTRACT:\n${dp.crawlSummary}`);
+
+      const strategyContext: string[] = [];
+      if (si.businessOverview) strategyContext.push(`Business Overview: ${si.businessOverview}`);
+      if (si.idealCustomer) strategyContext.push(`Ideal Customer: ${si.idealCustomer}`);
+      if (si.coreServices) strategyContext.push(`Core Services: ${si.coreServices}`);
+      if (si.targetLocations) strategyContext.push(`Target Locations: ${si.targetLocations}`);
+      if (si.growthObjective) strategyContext.push(`Growth Objective: ${si.growthObjective}`);
+      if (si.discoveryNotes) strategyContext.push(`Discovery Notes: ${si.discoveryNotes}`);
+
       const channelLabel: Record<string, string> = {
         call: 'phone call script (opening line + first question)',
         sms: 'SMS text message',
@@ -3629,11 +3673,12 @@ FRAMEWORKS:
 RULES:
 - Be human, warm, and curiosity-driven — never robotic or salesy
 - Use only ONE framework per message, chosen for maximum effect
-- ${channel === 'sms' ? 'SMS: Max 160 characters (hard limit). One sentence, one CTA.' : ''}
-- ${channel === 'email' ? 'Email: 3-5 sentences max. Clear subject line. End with ONE soft question.' : ''}
-- ${channel === 'call' ? 'Call script: Provide a short opening line (max 2 sentences) plus ONE powerful first question. The goal is to get them talking, not to pitch.' : ''}
-- Reference the company name and any known context
-- Always end with a question or soft invitation — never a statement
+- ${channel === 'sms' ? 'SMS: Max 160 characters (hard limit). One punchy sentence referencing a SPECIFIC observation from their digital presence, plus ONE soft CTA.' : ''}
+- ${channel === 'email' ? 'Email: 3–5 sentences max. Subject line must reference a specific insight from their digital presence (e.g. their review count, website gap, no ads). Body must feel personally researched, not templated. End with ONE soft question.' : ''}
+- ${channel === 'call' ? 'Call script: Opening line must reference a SPECIFIC observation from their website or digital presence (not generic). First question should uncover a pain related to what you observed. Goal is to get them talking, not pitch.' : ''}
+- CRITICAL: Reference SPECIFIC details from their digital presence — their actual website, review count, social media presence, or content. Do NOT write generic messages. The prospect must feel you actually looked at their business.
+- Use the prospect's first name if available
+- Always end with a question or soft invitation — never a hard close
 - Use Australian English (colour, favour, authorise)
 - Never mention competitor names
 - Dates in DD-MM-YYYY format
@@ -3645,20 +3690,41 @@ ${channel === 'email'
     ? '{ "openingLine": "...", "firstQuestion": "..." }'
     : '{ "message": "..." }'}`;
 
-      const userPrompt = `Generate a ${channelLabel[channel] || channel} for this lead:
+      const userPrompt = `Generate a ${channelLabel[channel] || channel} for this lead. You MUST reference specific details from their digital presence to make the message feel genuinely researched.
 
-LEAD: ${companyName}${contactName ? ` (Contact: ${contactName})` : ''}
-PIPELINE STAGE: ${stage || 'Unknown'}
-CONVERSATION STAGE: ${conversationStage || 'Not started'}
-ATTEMPTS: ${attemptCount}
-NOTES: ${notes || 'None'}
+═══════════════════════════
+LEAD PROFILE
+═══════════════════════════
+Company: ${companyName}${contactName ? ` | Contact: ${contactName}` : ''}
+Industry: ${industry || 'Not specified'}
+Location: ${address || 'Not specified'}
+Pipeline Stage: ${stage || 'Unknown'}
+Conversation Stage: ${conversationStage || 'Not started'}
+Total Attempts: ${attemptCount}
+Internal Notes: ${notes || 'None'}
 
-RECENT ACTIVITY:
+═══════════════════════════
+DIGITAL PRESENCE INTELLIGENCE
+(What we found when we researched them online)
+═══════════════════════════
+${presenceLines.join('\n')}
+
+${strategyContext.length > 0 ? `═══════════════════════════
+STRATEGY INTELLIGENCE
+═══════════════════════════
+${strategyContext.join('\n')}` : ''}
+
+═══════════════════════════
+RECENT CONTACT HISTORY
+═══════════════════════════
 ${recentSummary || 'No prior contact'}
 
-USE FRAMEWORK: ${framework} — ${frameworkReason}
+═══════════════════════════
+FRAMEWORK TO USE
+═══════════════════════════
+${framework} — ${frameworkReason}
 
-Generate the ${channel === 'email' ? 'email' : channel === 'call' ? 'call opener' : 'message'} now.`;
+Now generate the ${channel === 'email' ? 'email' : channel === 'call' ? 'call opener' : 'message'}. Hook into something SPECIFIC from their digital presence — their website, their lack of reviews, their social media gaps, or their website content. Make it clear you actually looked at their business online.`;
 
       const aiRes = await openai.chat.completions.create({
         model: "gpt-4o-mini",

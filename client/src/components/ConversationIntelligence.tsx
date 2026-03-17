@@ -187,6 +187,30 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
         outcome: l.outcome,
         notes: l.notes,
       }));
+      // Build crawl summary from available pages
+      const crawlSummary = (lead.crawledPages || [])
+        .slice(0, 3)
+        .map((p: any) => `[${p.url}] ${(p.bodyText || '').slice(0, 300)}`)
+        .join('\n---\n');
+
+      // Build digital presence signals
+      const digitalPresence = {
+        website: lead.website || null,
+        hasFacebook: !!lead.facebookUrl,
+        hasInstagram: !!lead.instagramUrl,
+        hasLinkedin: !!lead.linkedinUrl,
+        facebookUrl: lead.facebookUrl || null,
+        instagramUrl: lead.instagramUrl || null,
+        linkedinUrl: lead.linkedinUrl || null,
+        googleReviewCount: (lead.sourceData as any)?.googleReviewCount || 0,
+        googleRating: (lead.sourceData as any)?.googleRating || null,
+        googleTypes: (lead.sourceData as any)?.googleTypes || [],
+        adSpend: lead.marketingActivity?.find((m: any) => m.channel === 'google_ads')?.spend || null,
+        adChannels: lead.marketingActivity?.filter((m: any) => m.spend && m.spend > 0).map((m: any) => m.channel).join(', ') || null,
+        sitemapPageCount: lead.sitemapPages?.length || 0,
+        crawlSummary: crawlSummary || null,
+      };
+
       const r = await fetch('/api/leads/ai/suggest-attempt-followup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -199,6 +223,13 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
           notes: lead.notes,
           recentLogs: recentForAI,
           attemptCount: lead.attemptCount || 0,
+          // Rich context
+          industry: lead.industry || null,
+          address: lead.address || null,
+          phone: lead.phone || null,
+          email: lead.email || null,
+          strategyIntelligence: lead.strategyIntelligence || null,
+          digitalPresence,
         }),
       });
       if (!r.ok) throw new Error('Failed');
