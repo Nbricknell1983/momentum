@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Button } from '@/components/ui/button';
 import { X, Check, Loader2, MousePointer2, Lasso } from 'lucide-react';
-
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
 
 export interface MapPickerResult {
   lat: number;
@@ -17,7 +15,7 @@ interface SuburbFeature {
   key: string;
   name: string;
   geojson: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
-  centroid: [number, number];
+  centroid: [number, number]; // [lng, lat]
 }
 
 interface ScanMapPickerProps {
@@ -40,9 +38,10 @@ async function fetchSuburbPolygon(query: string): Promise<SuburbFeature | null> 
     const data = await r.json();
     if (!Array.isArray(data) || !data.length) return null;
     const SUBURB_TYPES = ['suburb', 'locality', 'town', 'village', 'hamlet', 'quarter', 'neighbourhood', 'residential'];
-    const best = data.find((f: any) => SUBURB_TYPES.includes(f.type) && f.geojson)
-      || data.find((f: any) => f.geojson)
-      || null;
+    const best =
+      data.find((f: any) => SUBURB_TYPES.includes(f.type) && f.geojson) ||
+      data.find((f: any) => f.geojson) ||
+      null;
     if (!best?.geojson) return null;
     const name = best.display_name.split(',')[0].trim();
     return {
@@ -55,13 +54,12 @@ async function fetchSuburbPolygon(query: string): Promise<SuburbFeature | null> 
 }
 
 async function reverseGeocodeSuburb(lat: number, lng: number): Promise<string> {
-  const token = import.meta.env.VITE_MAPBOX_TOKEN;
   try {
-    const r = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=locality,neighborhood,place&country=AU&access_token=${token}`
-    );
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=13`;
+    const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    if (!r.ok) return '';
     const d = await r.json();
-    return d.features?.[0]?.text || '';
+    return d.address?.suburb || d.address?.town || d.address?.city_district || d.address?.village || d.address?.neighbourhood || '';
   } catch { return ''; }
 }
 
@@ -71,10 +69,6 @@ function computeCentroid(suburbs: SuburbFeature[]): [number, number] {
     suburbs.reduce((a, s) => a + s.centroid[0], 0) / suburbs.length,
     suburbs.reduce((a, s) => a + s.centroid[1], 0) / suburbs.length,
   ];
-}
-
-function buildFC(suburbs: SuburbFeature[]): GeoJSON.FeatureCollection {
-  return { type: 'FeatureCollection', features: suburbs.map(s => s.geojson) };
 }
 
 function pointInPolygon(px: number, py: number, poly: [number, number][]): boolean {
@@ -103,16 +97,23 @@ function samplePointsInLasso(lasso: [number, number][], gridSize = 10): [number,
   return pts;
 }
 
+function buildFC(suburbs: SuburbFeature[]): GeoJSON.FeatureCollection {
+  return { type: 'FeatureCollection', features: suburbs.map(s => s.geojson) };
+}
+
+const POLY_STYLE = { color: '#4F46E5', fillColor: '#4F46E5', fillOpacity: 0.25, weight: 2.5 };
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ScanMapPicker({
-  defaultLat, defaultLng, gridSize, areaChips, initialArea, onConfirm, onClose,
+  defaultLat, defaultLng, areaChips, initialArea, onConfirm, onClose,
 }: ScanMapPickerProps) {
-  // Three separate refs: outer wrapper (for sizing), mapbox div, lasso canvas
-  const outerRef = useRef<HTMLDivElement>(null);
   const mapDivRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
+
+  const mapRef = useRef<L.Map | null>(null);
+  const geoLayerRef = useRef<L.GeoJSON | null>(null);
 
   const selectedRef = useRef<SuburbFeature[]>([]);
   const loadingRef = useRef(false);
@@ -131,21 +132,17 @@ export default function ScanMapPicker({
     setSelectedState(next);
   }, []);
 
-  // Push data to Mapbox source — always safe to call
+  // Push new GeoJSON to the Leaflet layer
   const pushToMap = useCallback((suburbs: SuburbFeature[]) => {
-    const map = mapRef.current;
-    if (!map) return;
-    const apply = () => {
-      const src = map.getSource('suburbs') as mapboxgl.GeoJSONSource | undefined;
-      if (src) {
-        src.setData(buildFC(suburbs));
-      }
-    };
-    if (map.isStyleLoaded()) apply();
-    else map.once('load', apply);
+    const layer = geoLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (suburbs.length) {
+      layer.addData(buildFC(suburbs) as any);
+    }
   }, []);
 
-  // Toggle single suburb (click mode)
+  // Toggle a suburb on/off (click mode)
   const toggleSuburb = useCallback(async (query: string) => {
     if (loadingRef.current) return;
     const current = selectedRef.current;
@@ -174,7 +171,7 @@ export default function ScanMapPicker({
   const toggleRef = useRef(toggleSuburb);
   useEffect(() => { toggleRef.current = toggleSuburb; }, [toggleSuburb]);
 
-  // Lasso: collect ALL features then do ONE atomic update
+  // Lasso: collect ALL features first, then one atomic state + map update
   const processLasso = useCallback(async (path: [number, number][]) => {
     const map = mapRef.current;
     if (!map || path.length < 10) return;
@@ -183,12 +180,14 @@ export default function ScanMapPicker({
     setLoadingMsg('Scanning selection…');
     try {
       const samplePixels = samplePointsInLasso(path, 10);
+
+      // pixel coords → lat/lng via Leaflet
       const lngLats = samplePixels.map(([px, py]) => {
-        const ll = map.unproject([px, py] as [number, number]);
-        return { lat: ll.lat, lng: ll.lng };
+        const latlng = map.containerPointToLatLng([px, py]);
+        return { lat: latlng.lat, lng: latlng.lng };
       });
 
-      // Reverse geocode in batches of 8
+      // Reverse geocode in batches of 8 using Nominatim
       const names: string[] = [];
       const BATCH = 8;
       for (let i = 0; i < lngLats.length; i += BATCH) {
@@ -197,11 +196,11 @@ export default function ScanMapPicker({
           if (name && !names.includes(name)) names.push(name);
         }));
         setLoadingMsg(`Scanning… ${Math.min(i + BATCH, lngLats.length)}/${lngLats.length} points`);
-        if (i + BATCH < lngLats.length) await new Promise(r => setTimeout(r, 80));
+        if (i + BATCH < lngLats.length) await new Promise(r => setTimeout(r, 100));
       }
       if (!names.length) return;
 
-      // Fetch suburb polygons — collect all into local array (no shared state writes during fetch)
+      // Fetch suburb boundary polygons — collect all, no shared-state writes during fetch
       const fetched: SuburbFeature[] = [];
       const POLY = 5;
       for (let i = 0; i < names.length; i += POLY) {
@@ -212,7 +211,7 @@ export default function ScanMapPicker({
       }
       if (!fetched.length) return;
 
-      // ONE atomic state + map update
+      // One single atomic merge
       const existing = selectedRef.current;
       const next = [...existing, ...fetched.filter(f => !existing.find(e => e.key === f.key))];
       setSelected(next);
@@ -224,7 +223,7 @@ export default function ScanMapPicker({
     }
   }, [setSelected, pushToMap]);
 
-  // Canvas drawing
+  // Canvas lasso drawing
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -254,44 +253,53 @@ export default function ScanMapPicker({
     canvas.height = r.height;
   }, []);
 
-  // Map init — mapbox gets its own dedicated div (mapDivRef)
+  // Init Leaflet map
   useEffect(() => {
     if (!mapDivRef.current || mapRef.current) return;
-    const map = new mapboxgl.Map({
-      container: mapDivRef.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [defaultLng, defaultLat],
-      zoom: 11,
-    });
+
+    const map = L.map(mapDivRef.current, { zoomControl: true }).setView([defaultLat, defaultLng], 12);
     mapRef.current = map;
 
-    map.on('load', () => {
-      map.addSource('suburbs', { type: 'geojson', data: buildFC([]) });
-      map.addLayer({ id: 'suburbs-fill', type: 'fill', source: 'suburbs', paint: { 'fill-color': '#4F46E5', 'fill-opacity': 0.3 } });
-      map.addLayer({ id: 'suburbs-border', type: 'line', source: 'suburbs', paint: { 'line-color': '#4F46E5', 'line-width': 2.5 } });
-      map.addLayer({
-        id: 'suburbs-label', type: 'symbol', source: 'suburbs',
-        layout: { 'text-field': ['get', 'name'], 'text-size': 12, 'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'] },
-        paint: { 'text-color': '#1e1b4b', 'text-halo-color': '#fff', 'text-halo-width': 2 },
-      });
-      // Load initial area
-      if (initialArea?.trim()) {
-        fetchSuburbPolygon(initialArea).then(f => {
-          if (f) { const next = [f]; setSelected(next); pushToMap(next); map.flyTo({ center: f.centroid, zoom: 12 }); }
-        });
-      }
-    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
 
-    map.on('click', async (e) => {
+    const geoLayer = L.geoJSON(undefined, {
+      style: () => POLY_STYLE,
+      onEachFeature: (feature, layer) => {
+        const name = feature.properties?.name;
+        if (name) {
+          layer.bindTooltip(name, { permanent: true, direction: 'center', className: 'suburb-label' });
+        }
+      },
+    }).addTo(map);
+    geoLayerRef.current = geoLayer;
+
+    map.on('click', async (e: L.LeafletMouseEvent) => {
       if (drawModeRef.current) return;
-      const name = await reverseGeocodeSuburb(e.lngLat.lat, e.lngLat.lng);
+      const name = await reverseGeocodeSuburb(e.latlng.lat, e.latlng.lng);
       if (name) toggleRef.current(name);
     });
 
-    return () => { map.remove(); mapRef.current = null; };
+    // Load initial area
+    if (initialArea?.trim()) {
+      fetchSuburbPolygon(initialArea).then(f => {
+        if (f) {
+          const next = [f];
+          selectedRef.current = next;
+          setSelectedState(next);
+          geoLayer.clearLayers();
+          geoLayer.addData(buildFC(next) as any);
+          map.flyTo([f.centroid[1], f.centroid[0]], 13);
+        }
+      });
+    }
+
+    return () => { map.remove(); mapRef.current = null; geoLayerRef.current = null; };
   }, []);
 
-  // Canvas events
+  // Canvas mouse events for lasso
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -328,13 +336,20 @@ export default function ScanMapPicker({
     };
   }, [drawCanvas, processLasso]);
 
-  // Sync drawMode to ref + map interactions
+  // Sync draw mode → disable/enable Leaflet drag & scroll
   useEffect(() => {
     drawModeRef.current = drawMode;
     const map = mapRef.current;
     if (!map) return;
-    if (drawMode) { map.dragPan.disable(); map.scrollZoom.disable(); }
-    else { map.dragPan.enable(); map.scrollZoom.enable(); }
+    if (drawMode) {
+      map.dragging.disable();
+      map.scrollWheelZoom.disable();
+      map.doubleClickZoom.disable();
+    } else {
+      map.dragging.enable();
+      map.scrollWheelZoom.enable();
+      map.doubleClickZoom.enable();
+    }
   }, [drawMode]);
 
   useEffect(() => {
@@ -355,42 +370,57 @@ export default function ScanMapPicker({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-background rounded-xl shadow-2xl flex flex-col overflow-hidden" style={{ width: 'min(95vw, 1800px)', height: 'min(95vh, 1200px)' }}>
-
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className="bg-background rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ width: 'min(95vw, 1800px)', height: 'min(95vh, 1200px)' }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <div>
             <p className="text-sm font-semibold">Select Scan Suburbs</p>
             <p className="text-[11px] text-muted-foreground">
-              {drawMode ? 'Draw mode — click and drag to circle suburbs. Release to auto-select.' : 'Click a suburb to toggle it, or use Draw Mode to lasso-select an area.'}
+              {drawMode
+                ? 'Draw mode — click and drag to circle suburbs. Release to auto-select.'
+                : 'Click a suburb on the map, use the chips below, or switch to Draw Mode to lasso an area.'}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setDrawMode(d => !d)}
-              className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${drawMode ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:bg-muted'}`}
+              className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+                drawMode ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:bg-muted'
+              }`}
               data-testid="btn-draw-mode-toggle"
             >
               {drawMode ? <Lasso className="h-3.5 w-3.5" /> : <MousePointer2 className="h-3.5 w-3.5" />}
               {drawMode ? 'Draw Mode (on)' : 'Draw Mode'}
             </button>
-            <button onClick={onClose} className="p-1.5 rounded hover:bg-muted transition-colors" data-testid="btn-close-map-picker">
+            <button onClick={onClose} className="p-1.5 rounded hover:bg-muted" data-testid="btn-close-map-picker">
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* Chips */}
+        {/* Quick-add chips */}
         {areaChips.length > 0 && (
           <div className="px-4 py-2 border-b flex flex-wrap gap-1.5 shrink-0 bg-muted/20">
             <span className="text-[10px] text-muted-foreground self-center mr-1 shrink-0">Quick add:</span>
             {areaChips.map(chip => {
               const active = isChipSelected(chip);
               return (
-                <button key={chip} onClick={() => toggleSuburb(chip)} disabled={loading}
-                  className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-primary/10 hover:border-primary/50 border-border'}`}
-                  data-testid={`chip-map-area-${chip}`}>
+                <button
+                  key={chip}
+                  onClick={() => toggleSuburb(chip)}
+                  disabled={loading}
+                  className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
+                    active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-primary/10 hover:border-primary/50 border-border'
+                  }`}
+                  data-testid={`chip-map-area-${chip}`}
+                >
                   {chip}
                 </button>
               );
@@ -398,33 +428,39 @@ export default function ScanMapPicker({
           </div>
         )}
 
-        {/* Map area: outer wrapper → mapbox div + canvas overlay */}
+        {/* Map + lasso canvas */}
         <div ref={outerRef} className="relative flex-1 overflow-hidden" style={{ minHeight: 0 }}>
-          {/* Mapbox renders into this dedicated div — no React children */}
-          <div ref={mapDivRef} className="absolute inset-0" />
+          {/* Leaflet renders into this dedicated div */}
+          <div ref={mapDivRef} className="absolute inset-0" style={{ zIndex: 0 }} />
 
-          {/* Lasso canvas sits on top of the map */}
+          {/* Lasso canvas — sits on top of the map */}
           <canvas
             ref={canvasRef}
-            className="absolute inset-0 z-10"
-            style={{ pointerEvents: drawMode ? 'auto' : 'none', cursor: drawMode ? 'crosshair' : 'default' }}
+            className="absolute inset-0"
+            style={{
+              zIndex: 10,
+              pointerEvents: drawMode ? 'auto' : 'none',
+              cursor: drawMode ? 'crosshair' : 'default',
+            }}
           />
 
-          {/* Overlays (z-20 to float above both map + canvas) */}
+          {/* Overlays */}
           {loading && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm border rounded-full px-3 py-1.5 flex items-center gap-2 text-xs shadow-md z-20">
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm border rounded-full px-3 py-1.5 flex items-center gap-2 text-xs shadow-md" style={{ zIndex: 20 }}>
               <Loader2 className="h-3 w-3 animate-spin" />
               {loadingMsg || 'Loading…'}
             </div>
           )}
           {drawMode && !loading && (
-            <div className="absolute top-3 left-3 bg-primary text-primary-foreground rounded-lg px-3 py-1.5 text-xs font-medium shadow z-20 flex items-center gap-1.5">
+            <div className="absolute top-3 left-3 bg-primary text-primary-foreground rounded-lg px-3 py-1.5 text-xs font-medium shadow flex items-center gap-1.5" style={{ zIndex: 20 }}>
               <Lasso className="h-3.5 w-3.5" />
               Click &amp; drag to circle suburbs
             </div>
           )}
-          <div className="absolute bottom-8 left-3 bg-background/90 backdrop-blur-sm border rounded-lg px-3 py-1.5 text-[11px] shadow z-10">
-            <span className="font-semibold text-primary">Service Areas</span>{' · '}<span>{selected.length} of {Math.max(selected.length, areaChips.length)} selected</span>
+          <div className="absolute bottom-6 left-3 bg-background/90 backdrop-blur-sm border rounded-lg px-3 py-1.5 text-[11px] shadow" style={{ zIndex: 10 }}>
+            <span className="font-semibold text-primary">Service Areas</span>
+            {' · '}
+            <span>{selected.length} selected</span>
           </div>
         </div>
 
@@ -437,9 +473,19 @@ export default function ScanMapPicker({
               </p>
             ) : (
               selected.map(s => (
-                <span key={s.key} className="inline-flex items-center gap-1 text-[11px] bg-primary/10 text-primary border border-primary/20 rounded-full px-2.5 py-0.5">
+                <span
+                  key={s.key}
+                  className="inline-flex items-center gap-1 text-[11px] bg-primary/10 text-primary border border-primary/20 rounded-full px-2.5 py-0.5"
+                >
                   {s.name}
-                  <button onClick={() => { const next = selected.filter(x => x !== s); setSelected(next); pushToMap(next); }} className="hover:text-destructive ml-0.5">
+                  <button
+                    onClick={() => {
+                      const next = selected.filter(x => x !== s);
+                      setSelected(next);
+                      pushToMap(next);
+                    }}
+                    className="hover:text-destructive ml-0.5"
+                  >
                     <X className="h-2.5 w-2.5" />
                   </button>
                 </span>
@@ -447,12 +493,32 @@ export default function ScanMapPicker({
             )}
           </div>
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" className="gap-1.5 shrink-0" onClick={handleConfirm} disabled={loading || selected.length === 0} data-testid="btn-confirm-map-area">
+          <Button
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={handleConfirm}
+            disabled={loading || selected.length === 0}
+            data-testid="btn-confirm-map-area"
+          >
             <Check className="h-3.5 w-3.5" />
             Use These Areas ({selected.length})
           </Button>
         </div>
       </div>
+
+      <style>{`
+        .suburb-label {
+          background: rgba(255,255,255,0.85);
+          border: none;
+          box-shadow: none;
+          font-size: 11px;
+          font-weight: 600;
+          color: #1e1b4b;
+          padding: 1px 4px;
+          border-radius: 3px;
+          white-space: nowrap;
+        }
+      `}</style>
     </div>
   );
 }
