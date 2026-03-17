@@ -7588,6 +7588,56 @@ Return JSON:
     }
   });
 
+  // Google Places API fallback lookup — uses existing GOOGLE_PLACES_API_KEY
+  // Returns partial GBP snapshot (rating, reviews, category, website) without GBP OAuth
+  app.get('/api/gbp/places-lookup', async (req, res) => {
+    try {
+      const { businessName, address } = req.query as Record<string, string>;
+      if (!businessName) return res.status(400).json({ error: 'businessName required' });
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: 'GOOGLE_PLACES_API_KEY not configured' });
+
+      const query = address ? `${businessName} ${address}` : businessName;
+      const searchResp = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.displayName,places.rating,places.userRatingCount,places.types,places.websiteUri,places.nationalPhoneNumber,places.formattedAddress,places.primaryType',
+        },
+        body: JSON.stringify({ textQuery: query, languageCode: 'en', regionCode: 'AU', maxResultCount: 1 }),
+      });
+      if (!searchResp.ok) {
+        const e = await searchResp.json();
+        throw new Error(e.error?.message || 'Places API error');
+      }
+      const { places } = await searchResp.json();
+      if (!places || !places.length) return res.json({ found: false });
+
+      const p = places[0];
+      const primaryType = p.primaryType || (p.types?.[0] ?? null);
+      // Convert snake_case type to human-readable: "crane_service" → "Crane Service"
+      const categoryLabel = primaryType ? primaryType.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null;
+
+      res.json({
+        found: true,
+        title: p.displayName?.text || businessName,
+        category: categoryLabel,
+        rating: p.rating ?? null,
+        reviewCount: p.userRatingCount ?? null,
+        hasWebsite: !!p.websiteUri,
+        websiteUri: p.websiteUri || null,
+        hasPhone: !!p.nationalPhoneNumber,
+        phone: p.nationalPhoneNumber || null,
+        formattedAddress: p.formattedAddress || null,
+        source: 'google_places',
+      });
+    } catch (err: any) {
+      console.error('[gbp/places-lookup]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ============================================
   // Nominatim Proxy (suburb search + reverse geocode)
   // ============================================

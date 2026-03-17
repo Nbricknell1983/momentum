@@ -107,10 +107,26 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  // GBP Live Snapshot
+  // GBP Live Snapshot (from GBP OAuth)
   const [snapshot, setSnapshot] = useState<GBPSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
+
+  // Google Places fallback (no GBP OAuth needed)
+  interface PlacesData {
+    found: boolean;
+    title?: string;
+    category?: string | null;
+    rating?: number | null;
+    reviewCount?: number | null;
+    hasWebsite?: boolean;
+    websiteUri?: string | null;
+    hasPhone?: boolean;
+    phone?: string | null;
+    formattedAddress?: string | null;
+  }
+  const [placesData, setPlacesData] = useState<PlacesData | null>(null);
+  const [placesLoading, setPlacesLoading] = useState(false);
 
   // Audit
   const [auditLoading, setAuditLoading] = useState(false);
@@ -192,6 +208,28 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
     }
   };
 
+  // ── Google Places fallback lookup (no GBP OAuth needed) ──────────────────
+  const handlePlacesLookup = async () => {
+    setPlacesLoading(true);
+    try {
+      const params = new URLSearchParams({ businessName: client.businessName });
+      if (client.address) params.set('address', client.address);
+      const resp = await fetch(`/api/gbp/places-lookup?${params}`);
+      if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Lookup failed'); }
+      const data = await resp.json();
+      setPlacesData(data);
+      if (data.found) {
+        toast({ title: 'Google data loaded', description: `Found ${client.businessName} on Google — rating, reviews & category loaded.` });
+      } else {
+        toast({ title: 'Not found', description: 'Could not find this business on Google. Check the business name.', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Lookup failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setPlacesLoading(false);
+    }
+  };
+
   const handleKwPlan = async () => {
     if (parsedKeywords.length === 0) { toast({ title: 'No keywords', description: 'Upload a keyword file in SEO Inputs first.', variant: 'destructive' }); return; }
     setKwPlanLoading(true);
@@ -234,16 +272,16 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
           hasDescription: !!(snapshot?.description || descText),
           descriptionLength: snapshot?.descriptionLength || descText.length,
           servicesCount: snapshot ? snapshot.services.length : services.length,
-          reviewCount: snapshot?.reviewSummary?.totalCount || 0,
-          avgRating: snapshot?.reviewSummary?.avgRating || 0,
+          reviewCount: snapshot?.reviewSummary?.totalCount ?? placesData?.reviewCount ?? 0,
+          avgRating: snapshot?.reviewSummary?.avgRating ?? placesData?.rating ?? 0,
           hasCitations: Object.values(citations).some(Boolean),
           serviceAreaCount: snapshot ? snapshot.serviceAreaRegions.length : suburbs.length,
           hasPhotos: false,
           hasWeeklyPosts: false,
-          categorySet: !!(snapshot?.category || playbook.categoryPrimary),
+          categorySet: !!(snapshot?.category || placesData?.category || playbook.categoryPrimary),
           additionalCategoriesCount: snapshot?.additionalCategories?.length || 0,
-          hasWebsite: snapshot?.hasWebsite || false,
-          hasPhone: snapshot?.hasPhone || false,
+          hasWebsite: snapshot?.hasWebsite ?? placesData?.hasWebsite ?? false,
+          hasPhone: snapshot?.hasPhone ?? placesData?.hasPhone ?? false,
         }),
       });
       if (!resp.ok) throw new Error('Audit failed');
@@ -438,27 +476,97 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
             <RefreshCw className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-300">Live GBP Snapshot</p>
             {snapshot && <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-medium">Synced</span>}
+            {!snapshot && placesData?.found && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded-full font-medium">From Google</span>}
           </div>
-          <button
-            onClick={handleSyncGBP}
-            disabled={snapshotLoading || !hasGBPLinked}
-            className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
-            data-testid="btn-sync-gbp"
-            title={!hasGBPLinked ? 'Link a GBP location in the Rank Tracking tab first' : ''}
-          >
-            {snapshotLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Syncing…</> : <><RefreshCw className="h-3 w-3" /> {snapshot ? 'Re-sync' : 'Sync from GBP'}</>}
-          </button>
+          <div className="flex items-center gap-2">
+            {!hasGBPLinked && (
+              <button
+                onClick={handlePlacesLookup}
+                disabled={placesLoading}
+                className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                data-testid="btn-places-lookup"
+                title="Look up from Google using existing API key"
+              >
+                {placesLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Looking up…</> : <><Globe className="h-3 w-3" /> {placesData ? 'Re-lookup' : 'Lookup from Google'}</>}
+              </button>
+            )}
+            <button
+              onClick={handleSyncGBP}
+              disabled={snapshotLoading || !hasGBPLinked}
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
+              data-testid="btn-sync-gbp"
+              title={!hasGBPLinked ? 'Requires GBP OAuth connection in Settings → Integrations' : ''}
+            >
+              {snapshotLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Syncing…</> : <><RefreshCw className="h-3 w-3" /> {snapshot ? 'Re-sync' : 'Sync from GBP'}</>}
+            </button>
+          </div>
         </div>
 
-        {!snapshot && !snapshotLoading && (
-          <p className="text-[11px] text-muted-foreground">
-            {hasGBPLinked
-              ? 'Pull your client\'s live GBP data to see exactly what\'s there, what\'s missing, and what to fix first.'
-              : <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Link a GBP location in the Rank Tracking tab to enable gap analysis.</span>
-            }
-          </p>
+        {!snapshot && !placesData && !snapshotLoading && !placesLoading && (
+          <div className="space-y-1.5">
+            <p className="text-[11px] text-muted-foreground">
+              {hasGBPLinked
+                ? 'Pull your client\'s live GBP data to see exactly what\'s there, what\'s missing, and what to fix first.'
+                : 'Click "Lookup from Google" to pull rating, reviews & category. For full data (description, services, service area), connect GBP in Settings → Integrations.'
+              }
+            </p>
+            {!hasGBPLinked && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-2">
+                <p className="text-[11px] text-blue-800 dark:text-blue-300 font-medium mb-0.5">Two levels of data available:</p>
+                <ul className="text-[10px] text-blue-700 dark:text-blue-400 space-y-0.5">
+                  <li>• <span className="font-medium">Google lookup (now)</span> — rating, reviews, category, website</li>
+                  <li>• <span className="font-medium">GBP connection (Settings)</span> — adds description, services, service area</li>
+                </ul>
+              </div>
+            )}
+          </div>
         )}
 
+        {/* Places API partial data */}
+        {!snapshot && placesData?.found && (
+          <div className="space-y-2 mt-1">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Category:</span>
+                <span className={`font-medium truncate ${placesData.category ? 'text-foreground' : 'text-red-500'}`}>{placesData.category || 'Not found'}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <Star className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Reviews:</span>
+                <span className={`font-medium ${placesData.reviewCount != null ? (placesData.reviewCount >= 30 ? 'text-green-600' : 'text-amber-600') : 'text-red-500'}`}>
+                  {placesData.rating != null ? `${placesData.rating}★ (${placesData.reviewCount})` : 'No data'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Website:</span>
+                <span className={`font-medium ${placesData.hasWebsite ? 'text-green-600' : 'text-red-500'}`}>{placesData.hasWebsite ? 'Linked' : 'Missing'}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Description:</span>
+                <span className="font-medium text-amber-600">Connect GBP</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <ClipboardList className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Services:</span>
+                <span className="font-medium text-amber-600">Connect GBP</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Service area:</span>
+                <span className="font-medium text-amber-600">Connect GBP</span>
+              </div>
+            </div>
+            <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-2 py-1.5 flex items-start gap-1.5">
+              <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-amber-700 dark:text-amber-400">Description, services & service area require GBP connection. Go to <strong>Settings → Integrations</strong> to connect Google Business Profile.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Full GBP OAuth snapshot */}
         {snapshot && (
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
             <div className="flex items-center gap-1.5 text-[11px]">
@@ -526,7 +634,7 @@ export default function GBPPlaybookPanel({ client, parsedKeywords, onPlaybookUpd
 
         {!auditResult && !auditLoading && (
           <p className="text-[11px] text-violet-700/70 dark:text-violet-400/70">
-            {snapshot ? 'Sync complete — run AI audit to score your GBP across all 7 signals.' : 'Sync from GBP above, then run audit for an accurate score based on real data.'}
+            {snapshot ? 'Sync complete — run AI audit to score your GBP across all 7 signals.' : placesData?.found ? 'Google data loaded — run audit for a real score based on live data (partial).' : 'Lookup or sync GBP data above, then run audit for an accurate score based on real data.'}
           </p>
         )}
 
