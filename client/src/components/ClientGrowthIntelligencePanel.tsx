@@ -317,7 +317,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
     ? locations.filter(l => l.name.toLowerCase().includes(locationSearch.toLowerCase()) || l.address.toLowerCase().includes(locationSearch.toLowerCase()))
     : locations;
 
-  // Match each keyword to its latest Local Falcon scan
+  // Match each keyword to its latest scan
   const keywordRankings = useMemo(() => {
     return parsedKeywords.map(kw => {
       const matches = reports
@@ -383,7 +383,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
             <div className="p-3 border-b bg-muted/10 space-y-2">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs font-medium">
-                  {hasNoLFLocations ? 'Search business by name' : 'Select Local Falcon location'}
+                  {hasNoLFLocations ? 'Search business by name' : 'Select tracked location'}
                 </p>
                 <button onClick={() => { setShowPicker(false); setLocationSearch(''); }} className="text-muted-foreground hover:text-foreground">
                   <X className="h-3.5 w-3.5" />
@@ -422,17 +422,9 @@ function LocalPresenceSection({ client }: { client: Client }) {
                 locationSearch.trim().length < 2 ? (
                   <div className="py-2 space-y-2">
                     <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                      Type the client's business name above to search via Google, or add it to your Local Falcon account first.
+                      Type the client's business name above to search, then select a result to link it.
                     </p>
                     <div className="flex gap-2 justify-center">
-                      <a
-                        href="https://app.localfalcon.com/locations"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-[11px] border px-3 py-1.5 rounded hover:bg-muted/30 transition-colors"
-                      >
-                        <ExternalLink className="h-3 w-3" /> Add in Local Falcon
-                      </a>
                       <button
                         onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/local-falcon/locations'] })}
                         className="inline-flex items-center gap-1.5 text-[11px] border rounded px-3 py-1.5 hover:bg-muted/30 transition-colors"
@@ -469,7 +461,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
               </div>
               <div>
                 <p className="text-sm font-medium">No location linked</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Link a Local Falcon location to track keyword rankings in the 3-pack</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Link a location to track keyword rankings in the 3-pack</p>
               </div>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowPicker(true)} data-testid="btn-link-location">
                 <Link2 className="h-3.5 w-3.5" /> Link Location
@@ -558,7 +550,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                             </Button>
                             <Button size="sm" variant="ghost" className="h-8" onClick={() => { setShowRunScan(false); setScanKeyword(''); }} disabled={runScanMutation.isPending}>Cancel</Button>
                           </div>
-                          <p className="text-[10px] text-muted-foreground">Uses Local Falcon credits. Larger grids & radii cost more.</p>
+                          <p className="text-[10px] text-muted-foreground">Larger grids & radii use more scan credits.</p>
                         </div>
                       )}
 
@@ -1286,7 +1278,7 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
             </div>
           )}
 
-          {/* Local Presence — Local Falcon */}
+          {/* Local GBP Rankings */}
           <LocalPresenceSection client={client} />
 
           {/* GBP Reviews */}

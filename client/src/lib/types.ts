@@ -1685,7 +1685,7 @@ export interface Client {
   clientOnboarding?: ClientOnboarding;
   // Google Business Profile direct link (full resource name: accounts/{id}/locations/{id})
   gbpLocationName?: string;
-  // Local Falcon GBP rank tracking
+  // GBP rank tracking
   localFalconPlaceId?: string;
   localFalconLocation?: {
     name: string;
