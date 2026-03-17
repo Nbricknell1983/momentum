@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar, Check, ChevronsUpDown, Mail, MessageSquare, Copy, AlertTriangle } from 'lucide-react';
+import { Search, Building2, MapPin, Plus, Loader2, ExternalLink, AlertCircle, Star, Globe, Phone, Sparkles, Navigation, Calendar, Check, ChevronsUpDown, Mail, MessageSquare, Copy, AlertTriangle, Map } from 'lucide-react';
+import { MapPickerDialog } from '@/components/MapPickerDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -207,6 +208,13 @@ export default function ResearchPage() {
   const [searchedLocation, setSearchedLocation] = useState<string | null>(null);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [pinnedLocationLabel, setPinnedLocationLabel] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('research_map_pin');
+      return saved ? JSON.parse(saved).label : null;
+    } catch { return null; }
+  });
   const [domainAges, setDomainAges] = useState<Record<string, { loading: boolean; data?: any; error?: string }>>({});
   
   // Shared state
@@ -306,6 +314,14 @@ export default function ResearchPage() {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  };
+
+  // Map picker confirmation
+  const handleMapConfirm = (location: { lat: number; lng: number; label: string }) => {
+    setUserCoords({ lat: location.lat, lng: location.lng });
+    setGoogleLocation(location.label);
+    setPinnedLocationLabel(location.label);
+    toast({ title: 'Location pinned', description: location.label });
   };
 
   // Google Places Search
@@ -710,7 +726,7 @@ export default function ResearchPage() {
                     size="icon"
                     onClick={handleUseMyLocation}
                     disabled={isGettingLocation}
-                    title="Use my location"
+                    title="Use my current location"
                     data-testid="button-use-my-location"
                   >
                     {isGettingLocation ? (
@@ -718,6 +734,17 @@ export default function ResearchPage() {
                     ) : (
                       <Navigation className="h-4 w-4" />
                     )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={pinnedLocationLabel ? 'default' : 'outline'}
+                    size="icon"
+                    onClick={() => setMapPickerOpen(true)}
+                    title={pinnedLocationLabel ? `Pinned: ${pinnedLocationLabel}` : 'Pin a suburb on the map'}
+                    data-testid="button-open-map-picker"
+                    className={pinnedLocationLabel ? 'bg-violet-600 hover:bg-violet-700 text-white' : ''}
+                  >
+                    <Map className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -1438,6 +1465,23 @@ export default function ResearchPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <MapPickerDialog
+        open={mapPickerOpen}
+        onClose={() => {
+          setMapPickerOpen(false);
+          // Sync if user cleared the pin inside the dialog
+          try {
+            const saved = localStorage.getItem('research_map_pin');
+            if (!saved) {
+              setPinnedLocationLabel(null);
+              if (googleLocation === pinnedLocationLabel) setGoogleLocation('');
+              setUserCoords(null);
+            }
+          } catch {}
+        }}
+        onConfirm={handleMapConfirm}
+      />
     </div>
   );
 }
