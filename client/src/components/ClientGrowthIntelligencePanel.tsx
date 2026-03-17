@@ -779,7 +779,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                           <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
                             <MapPin className="h-3 w-3 shrink-0" />
                             <span>
-                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(map pin)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
+                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(suburb selection)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
                               {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
                             </span>
                           </div>
@@ -961,7 +961,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
                           <div className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300">
                             <MapPin className="h-3 w-3 shrink-0" />
                             <span>
-                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(map pin)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
+                              {mapPickerResult ? <>Scanning <strong>{mapPickerResult.name}</strong> <span className="opacity-60">(suburb selection)</span></> : scanArea.trim() ? <>Scanning <strong>{scanArea.trim()}</strong></> : <>Scanning from business address</>}
                               {' · '}{parseInt(scanGridSize)}×{parseInt(scanGridSize)} grid · {parseInt(scanGridSize) * parseInt(scanGridSize)} check points · 3km radius
                             </span>
                           </div>
