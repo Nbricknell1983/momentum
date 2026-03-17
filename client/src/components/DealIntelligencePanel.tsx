@@ -1504,18 +1504,21 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     if (hasGBP || autoSearched.current || !lead.companyName?.trim()) return;
     autoSearched.current = true;
     setSuggestLoading(true);
-    // Extract suburb/state from address as location hint (e.g. "Brisbane QLD" from "123 Main St, Brisbane QLD 4000")
-    const locationHint = lead.address
-      ? lead.address.split(',').slice(-2).join(',').trim().replace(/\s+\d{4}.*$/, '').trim()
+    // Extract suburb/state from address — fall back to sourceData.googleAddress
+    const rawAddress = lead.address || (lead.sourceData as any)?.googleAddress || '';
+    const locationHint = rawAddress
+      ? rawAddress.split(',').slice(-2).join(',').trim().replace(/\s+\d{4}.*$/, '').trim()
       : '';
     const params = new URLSearchParams({ query: lead.companyName.trim() });
     if (locationHint) params.set('location', locationHint);
+    if (lead.website) params.set('website', lead.website);
+    if (lead.phone) params.set('phone', lead.phone);
     fetch(`/api/google-places/find?${params}`)
       .then(r => r.json())
       .then(data => { if (data.results?.length) setSuggestions(data.results.slice(0, 3)); })
       .catch(() => {})
       .finally(() => setSuggestLoading(false));
-  }, [hasGBP, lead.companyName, lead.address]);
+  }, [hasGBP, lead.companyName, lead.address, lead.website, lead.phone]);
 
   const openSearch = () => {
     setQuery(lead.companyName || '');
