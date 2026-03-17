@@ -720,6 +720,65 @@ Be specific and actionable. Focus on retention and growth.`;
     }
   });
 
+  // Parse a freetext "next step" into a structured task suggestion
+  app.post("/api/leads/ai/parse-next-step", async (req, res) => {
+    try {
+      const { nextStep, leadName, companyName } = req.body as { nextStep: string; leadName?: string; companyName?: string };
+      if (!nextStep?.trim()) return res.status(400).json({ error: 'No next step provided' });
+
+      const today = new Date();
+      const todayStr = today.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a sales CRM assistant. Today is ${todayStr} (DD/MM/YYYY). Parse a sales rep's "next step" note into a structured task. Respond ONLY with valid JSON, no markdown, no explanation. The JSON must have these fields:
+- taskType: one of "follow_up" | "meeting" | "admin" | "prospecting" | "delivery"
+- title: a short task title (max 60 chars), include the lead name and/or company if provided
+- daysFromNow: integer number of days from today until the task is due. Use 0 for today, 1 for tomorrow, 7 for next week, 14 for two weeks, 30 for a month, etc. Parse natural language like "in two weeks", "next Friday", "end of month".
+- notes: a brief one-line note about what to do (optional, can be empty string)
+
+Rules:
+- "call" → taskType "follow_up"  
+- "email" or "send" → taskType "follow_up"
+- "meeting" or "meet" → taskType "meeting"
+- "proposal" or "quote" or "send" document → taskType "delivery"
+- default → taskType "follow_up"
+- If no time mentioned, default daysFromNow to 3`,
+          },
+          {
+            role: 'user',
+            content: `Next step: "${nextStep.trim()}"${companyName ? `\nCompany: ${companyName}` : ''}${leadName ? `\nContact: ${leadName}` : ''}`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 200,
+        response_format: { type: 'json_object' },
+      });
+
+      const raw = response.choices[0]?.message?.content?.trim() || '{}';
+      const parsed = JSON.parse(raw);
+
+      const daysFromNow = Math.max(0, Math.round(Number(parsed.daysFromNow) || 3));
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + daysFromNow);
+      dueDate.setHours(9, 0, 0, 0);
+
+      res.json({
+        taskType: parsed.taskType || 'follow_up',
+        title: parsed.title || nextStep.trim(),
+        notes: parsed.notes || '',
+        daysFromNow,
+        dueDate: dueDate.toISOString(),
+      });
+    } catch (error) {
+      console.error('Error parsing next step:', error);
+      res.status(500).json({ error: 'Failed to parse next step' });
+    }
+  });
+
   // AI Onboarding & Team Handover — generate all outputs
   app.post("/api/clients/ai/onboarding-generate", async (req, res) => {
     try {

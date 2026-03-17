@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { MessageCircle, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap, Phone, Mail, User, Mic, MicOff, Loader2, Wand2 } from 'lucide-react';
+import { MessageCircle, PhoneMissed, ArrowRight, Clock, TrendingUp, Zap, Phone, Mail, User, Mic, MicOff, Loader2, Wand2, Sparkles, CalendarPlus, X, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { updateLead, addActivity, RootState } from '@/store';
 import {
   Lead,
+  Task,
+  TaskType,
   ConversationStage,
   ConversationChannel,
   ConversationOutcome,
@@ -24,10 +26,10 @@ import {
   getConversationStageFromOutcome,
 } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { createConversationLog, fetchConversationLogs } from '@/lib/firestoreService';
+import { createConversationLog, fetchConversationLogs, createPlanTask } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format, addDays } from 'date-fns';
 
 interface ConversationIntelligenceProps {
   lead: Lead;
@@ -153,6 +155,14 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
   const [nextStep, setNextStep] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentLogs, setRecentLogs] = useState<ConversationLog[]>([]);
+  const [pendingTaskSuggestion, setPendingTaskSuggestion] = useState<{
+    taskType: TaskType;
+    title: string;
+    notes: string;
+    daysFromNow: number;
+    dueDate: string;
+  } | null>(null);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   // Dictation state for Notes field
   const [recording, setRecording] = useState(false);
@@ -327,7 +337,26 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
           : `Logged ${CONVERSATION_OUTCOME_LABELS[outcome as ConversationOutcome]}`,
       });
 
+      const capturedNextStep = nextStep;
       setShowLogDialog(false);
+
+      // AI: parse next step into a task suggestion (fire-and-forget, non-blocking)
+      if (capturedNextStep.trim()) {
+        fetch('/api/leads/ai/parse-next-step', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nextStep: capturedNextStep.trim(),
+            leadName: lead.contactName || lead.companyName,
+            companyName: lead.companyName,
+          }),
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data?.title) setPendingTaskSuggestion(data);
+          })
+          .catch(() => {});
+      }
     } catch (error) {
       console.error('Error logging conversation:', error);
       toast({ title: 'Error', description: 'Failed to log conversation', variant: 'destructive' });
@@ -337,6 +366,37 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
   };
 
   const outcomes = logType === 'attempt' ? ATTEMPT_OUTCOMES : CONVERSATION_OUTCOMES;
+
+  const acceptTaskSuggestion = async () => {
+    if (!pendingTaskSuggestion || !orgId || !user?.uid) return;
+    setIsCreatingTask(true);
+    try {
+      const dueDate = new Date(pendingTaskSuggestion.dueDate);
+      const planDateKey = format(dueDate, 'yyyy-MM-dd');
+      const planDate = format(dueDate, 'dd-MM-yyyy');
+      await createPlanTask(orgId, {
+        userId: user.uid,
+        leadId: lead.id,
+        title: pendingTaskSuggestion.title,
+        taskType: pendingTaskSuggestion.taskType,
+        notes: pendingTaskSuggestion.notes || undefined,
+        dueAt: dueDate,
+        planDate,
+        planDateKey,
+        status: 'pending',
+        createdAt: new Date(),
+      }, authReady);
+      toast({
+        title: 'Task created',
+        description: `${pendingTaskSuggestion.title} · due ${format(dueDate, 'dd MMM yyyy')}`,
+      });
+      setPendingTaskSuggestion(null);
+    } catch {
+      toast({ title: 'Error', description: 'Could not create task', variant: 'destructive' });
+    } finally {
+      setIsCreatingTask(false);
+    }
+  };
 
   return (
     <>
@@ -469,6 +529,59 @@ export default function ConversationIntelligence({ lead }: ConversationIntellige
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* AI Task Suggestion Card */}
+        {pendingTaskSuggestion && (
+          <div
+            className="mt-2 rounded-lg border border-violet-200 bg-violet-50/60 dark:border-violet-800/40 dark:bg-violet-950/20 px-3 py-2.5 space-y-2"
+            data-testid="card-task-suggestion"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2 min-w-0">
+                <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-0.5">AI Suggested Task</p>
+                  <p className="text-sm font-medium text-foreground leading-snug">{pendingTaskSuggestion.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <CalendarPlus className="h-3 w-3" />
+                    Due {format(new Date(pendingTaskSuggestion.dueDate), 'EEE dd MMM yyyy')}
+                    {pendingTaskSuggestion.daysFromNow === 0 ? ' (today)' : pendingTaskSuggestion.daysFromNow === 1 ? ' (tomorrow)' : ` (in ${pendingTaskSuggestion.daysFromNow} days)`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPendingTaskSuggestion(null)}
+                className="text-muted-foreground hover:text-foreground p-0.5 shrink-0"
+                data-testid="button-dismiss-task-suggestion"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 pt-0.5">
+              <Button
+                size="sm"
+                className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white flex-1"
+                onClick={acceptTaskSuggestion}
+                disabled={isCreatingTask}
+                data-testid="button-accept-task-suggestion"
+              >
+                {isCreatingTask
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <CheckCircle2 className="h-3 w-3" />}
+                {isCreatingTask ? 'Creating…' : 'Add to Tasks'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setPendingTaskSuggestion(null)}
+                data-testid="button-decline-task-suggestion"
+              >
+                Dismiss
+              </Button>
+            </div>
           </div>
         )}
       </div>
