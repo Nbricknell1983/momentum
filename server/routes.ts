@@ -7318,6 +7318,19 @@ Return JSON:
     return tokens.access_token;
   }
 
+  // Helper: GBP v4 API needs accounts/{id}/locations/{id}; Business Info API returns just locations/{id}.
+  async function resolveV4LocationName(locationName: string, token: string): Promise<string> {
+    if (locationName.startsWith('accounts/')) return locationName;
+    const acctResp = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const acctData = await acctResp.json();
+    const accounts: { name: string }[] = acctData.accounts || [];
+    if (accounts.length === 0) throw new Error('No GBP accounts found');
+    const locId = locationName.replace(/^locations\//, '');
+    return `${accounts[0].name}/locations/${locId}`;
+  }
+
   // Check whether GBP OAuth credentials are configured server-side
   app.get('/api/gbp/credentials-check', (req, res) => {
     const hasCredentials = !!(process.env.GOOGLE_GBP_CLIENT_ID && process.env.GOOGLE_GBP_CLIENT_SECRET);
@@ -7517,8 +7530,12 @@ Return JSON:
       const { orgId, locationName } = req.query as Record<string, string>;
       if (!orgId || !locationName) return res.status(400).json({ error: 'orgId and locationName required' });
       const token = await getGBPAccessToken(orgId);
+
+      // v4 API requires accounts/{accountId}/locations/{locationId} format
+      const fullLocationName = await resolveV4LocationName(locationName, token);
+
       const r = await fetch(
-        `https://mybusiness.googleapis.com/v4/${locationName}/reviews?pageSize=10&orderBy=updateTime%20desc`,
+        `https://mybusiness.googleapis.com/v4/${fullLocationName}/reviews?pageSize=50&orderBy=updateTime%20desc`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await r.json();
@@ -7547,7 +7564,7 @@ Return JSON:
         'BUSINESS_IMPRESSIONS_DESKTOP_SEARCH', 'BUSINESS_IMPRESSIONS_MOBILE_SEARCH',
         'BUSINESS_BOOKINGS',
       ];
-      const metricsParam = metrics.map(m => `dailyMetric=${m}`).join('&');
+      const metricsParam = metrics.map(m => `dailyMetrics=${m}`).join('&');
       const dateParam = `dailyRange.startDate.year=${start.getFullYear()}&dailyRange.startDate.month=${start.getMonth() + 1}&dailyRange.startDate.day=${start.getDate()}&dailyRange.endDate.year=${end.getFullYear()}&dailyRange.endDate.month=${end.getMonth() + 1}&dailyRange.endDate.day=${end.getDate()}`;
       const url = `https://businessprofileperformance.googleapis.com/v1/${locationName}:fetchMultiDailyMetricsTimeSeries?${metricsParam}&${dateParam}`;
 
@@ -7590,8 +7607,9 @@ Return JSON:
       const locationName = decodeURIComponent(req.params.locationName);
       if (!orgId || !reviewId || !comment) return res.status(400).json({ error: 'orgId, reviewId, comment required' });
       const token = await getGBPAccessToken(orgId);
+      const fullLocationName = await resolveV4LocationName(locationName, token);
       const r = await fetch(
-        `https://mybusiness.googleapis.com/v4/${locationName}/reviews/${reviewId}/reply`,
+        `https://mybusiness.googleapis.com/v4/${fullLocationName}/reviews/${reviewId}/reply`,
         {
           method: 'PUT',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
