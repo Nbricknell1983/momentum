@@ -7625,6 +7625,46 @@ Return JSON:
     }
   });
 
+  // AI-suggest a GBP review reply (SEO-optimised with local keywords)
+  app.post('/api/gbp/suggest-reply', async (req, res) => {
+    try {
+      const { reviewerName, starRating, reviewText, businessName, businessCategory, serviceAreaSummary } = req.body;
+      const stars = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 }[starRating as string] ?? 5;
+      const prompt = `You are an expert local SEO strategist. Write a professional, warm, and genuine Google Business Profile review reply for the business owner.
+
+Business: ${businessName || 'this business'}
+Category: ${businessCategory || 'local service business'}
+Service areas: ${serviceAreaSummary || 'local area'}
+Reviewer: ${reviewerName}
+Star rating: ${stars}/5
+Review text: "${reviewText || '(no comment left)'}"
+
+Guidelines:
+- Reply as the business owner in first person
+- Acknowledge the specific details mentioned in the review naturally (don't be generic)
+- Weave in 1-2 local SEO keywords naturally (e.g. "${businessCategory || 'service'} ${serviceAreaSummary || 'Brisbane'}" or similar location+service phrases) — they must sound natural, not forced
+- For 4-5 star reviews: thank them warmly, reference specifics, invite them back
+- For 1-3 star reviews: apologise sincerely, address the concern, offer to resolve it
+- Keep it 3-5 sentences — concise and professional
+- Do NOT use templated phrases like "We value your feedback" or "Thank you for your review"
+- End with an invitation to return or contact them
+
+Return ONLY the reply text. No quotes, no labels, no explanation.`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 300,
+        temperature: 0.7,
+      });
+      const suggestion = completion.choices[0]?.message?.content?.trim() || '';
+      res.json({ suggestion });
+    } catch (err: any) {
+      console.error('[gbp/suggest-reply]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Save GBP location link on a client
   app.patch('/api/clients/:clientId/gbp-location', async (req, res) => {
     try {

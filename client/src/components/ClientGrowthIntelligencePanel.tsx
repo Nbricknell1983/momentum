@@ -1294,6 +1294,7 @@ function GBPReviewsSection({ client }: { client: Client }) {
   const [showPicker, setShowPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [suggestingFor, setSuggestingFor] = useState<string | null>(null);
   const [pickerStep, setPickerStep] = useState<'account' | 'location'>('account');
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
 
@@ -1408,7 +1409,7 @@ function GBPReviewsSection({ client }: { client: Client }) {
     onError: () => toast({ title: 'Error', description: 'Failed to post reply', variant: 'destructive' }),
   });
 
-  const avgStars = reviewsData ? STAR_MAP[reviewsData.averageRating] ?? 0 : 0;
+  const avgStars = reviewsData ? Number(reviewsData.averageRating) || 0 : 0;
 
   return (
     <div className="border-t pt-4 mt-4">
@@ -1505,7 +1506,11 @@ function GBPReviewsSection({ client }: { client: Client }) {
                   <div className="flex items-center gap-2">
                     <span className="text-2xl font-bold">{avgStars.toFixed(1)}</span>
                     <div>
-                      <StarRating rating={reviewsData.averageRating} />
+                      <span className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map(i => (
+                          <Star key={i} className={`h-3.5 w-3.5 ${i <= Math.round(avgStars) ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
+                        ))}
+                      </span>
                       <p className="text-[11px] text-muted-foreground">{reviewsData.totalReviewCount} review{reviewsData.totalReviewCount !== 1 ? 's' : ''}</p>
                     </div>
                   </div>
@@ -1572,11 +1577,38 @@ function GBPReviewsSection({ client }: { client: Client }) {
                                 className="text-xs min-h-[60px] resize-none"
                                 data-testid="input-gbp-reply"
                               />
-                              <div className="flex gap-1.5">
+                              <div className="flex gap-1.5 flex-wrap">
                                 <Button size="sm" className="h-6 text-[11px] px-2" onClick={() => replyMutation.mutate({ reviewName: review.name, reply: replyText })} disabled={!replyText.trim() || replyMutation.isPending}>
                                   {replyMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Post Reply'}
                                 </Button>
-                                <Button size="sm" variant="ghost" className="h-6 text-[11px] px-2" onClick={() => { setReplyingTo(null); setReplyText(''); }}>Cancel</Button>
+                                <Button size="sm" variant="outline" className="h-6 text-[11px] px-2 gap-1 text-violet-600 border-violet-200 hover:bg-violet-50"
+                                  disabled={suggestingFor === review.reviewId}
+                                  data-testid={`button-ai-suggest-${review.reviewId}`}
+                                  onClick={async () => {
+                                    setSuggestingFor(review.reviewId);
+                                    try {
+                                      const r = await fetch('/api/gbp/suggest-reply', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          reviewerName: review.reviewer.displayName,
+                                          starRating: review.starRating,
+                                          reviewText: review.comment || '',
+                                          businessName: client.businessName,
+                                          businessCategory: client.gbpPlaybook?.categoryPrimary || client.industry || '',
+                                          serviceAreaSummary: (client.gbpPlaybook?.serviceAreaSuburbs || []).slice(0, 5).join(', ') || client.city || '',
+                                        }),
+                                      });
+                                      const data = await r.json();
+                                      if (data.suggestion) setReplyText(data.suggestion);
+                                    } catch { toast({ title: 'AI Suggest failed', variant: 'destructive' }); }
+                                    finally { setSuggestingFor(null); }
+                                  }}
+                                >
+                                  {suggestingFor === review.reviewId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                                  AI Suggest
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 text-[11px] px-2" onClick={() => { setReplyingTo(null); setReplyText(''); setSuggestingFor(null); }}>Cancel</Button>
                               </div>
                             </div>
                           ) : (

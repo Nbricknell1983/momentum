@@ -4,7 +4,7 @@ import {
   CheckCircle2, RefreshCw, X, Star,
   Phone, Globe, Navigation, Calendar, TrendingUp, AlertTriangle,
   Lightbulb, ChevronDown, BarChart3, Loader2,
-  ExternalLink, Shield, Activity,
+  ExternalLink, Shield, Activity, Sparkles, MessageSquare,
 } from 'lucide-react';
 import { Client } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +13,7 @@ import { updateClient } from '@/store/index';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -461,7 +462,172 @@ function BehaviourSignalsCard({ insights, loading }: { insights: Insights | null
 
 // ── Review List ───────────────────────────────────────────────────────────────
 
-function ReviewListTab({ reviews, loading }: { reviews: Review[]; loading: boolean }) {
+interface ReviewCardProps {
+  review: Review;
+  orgId: string;
+  client: Client;
+  gbpSnapshot: GBPSnapshot | null;
+  onReplied: () => void;
+}
+
+function ReviewCard({ review: r, orgId, client, gbpSnapshot, onReplied }: ReviewCardProps) {
+  const { toast } = useToast();
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
+
+  const stars = starToNum(r.starRating);
+  const date = new Date(r.createTime);
+  const dateStr = `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+
+  const replyMutation = useMutation({
+    mutationFn: async () => {
+      const reviewId = r.name.split('/').pop() || '';
+      const encoded = encodeURIComponent(r.name);
+      const resp = await fetch(`/api/gbp/reviews/${encoded}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, reviewId, comment: replyText }),
+      });
+      if (!resp.ok) throw new Error('Reply failed');
+    },
+    onSuccess: () => {
+      toast({ title: 'Reply posted', description: 'Your reply is now live on Google.' });
+      setReplyOpen(false);
+      setReplyText('');
+      onReplied();
+    },
+    onError: () => toast({ title: 'Failed to post reply', variant: 'destructive' }),
+  });
+
+  async function handleAISuggest() {
+    setSuggesting(true);
+    try {
+      const resp = await fetch('/api/gbp/suggest-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reviewerName: r.reviewer.displayName,
+          starRating: r.starRating,
+          reviewText: r.comment || '',
+          businessName: client.businessName,
+          businessCategory: gbpSnapshot?.category || client.gbpPlaybook?.categoryPrimary || client.industry || '',
+          serviceAreaSummary: (gbpSnapshot?.serviceAreaRegions || client.gbpPlaybook?.serviceAreaSuburbs || []).slice(0, 5).join(', ') || client.city || '',
+        }),
+      });
+      const data = await resp.json();
+      if (data.suggestion) {
+        setReplyText(data.suggestion);
+        setReplyOpen(true);
+      }
+    } catch {
+      toast({ title: 'AI Suggest failed', variant: 'destructive' });
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="p-3 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {r.reviewer.profilePhotoUrl ? (
+              <img src={r.reviewer.profilePhotoUrl} alt={r.reviewer.displayName} className="w-7 h-7 rounded-full object-cover" />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[11px] font-bold text-muted-foreground">
+                {r.reviewer.displayName?.[0] || '?'}
+              </div>
+            )}
+            <div>
+              <p className="text-xs font-medium">{r.reviewer.displayName}</p>
+              <p className="text-[10px] text-muted-foreground">{dateStr}</p>
+            </div>
+          </div>
+          <div className="flex">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star key={i} className={`h-3 w-3 ${i < stars ? 'text-amber-400 fill-amber-400' : 'text-muted/30'}`} />
+            ))}
+          </div>
+        </div>
+        {r.comment && <p className="text-xs text-muted-foreground leading-relaxed">{r.comment}</p>}
+      </div>
+
+      {/* Existing reply */}
+      {r.reviewReply ? (
+        <div className="bg-muted/20 border-t px-3 py-2">
+          <p className="text-[10px] font-medium text-muted-foreground mb-0.5 flex items-center gap-1">
+            <MessageSquare className="h-3 w-3" /> Owner reply
+          </p>
+          <p className="text-xs text-foreground leading-relaxed">{r.reviewReply.comment}</p>
+        </div>
+      ) : (
+        <div className="border-t">
+          {replyOpen ? (
+            <div className="p-2.5 space-y-2">
+              <Textarea
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder="Write your reply..."
+                className="text-xs min-h-[70px] resize-none"
+                data-testid={`input-reply-${r.reviewId}`}
+              />
+              <div className="flex gap-1.5 flex-wrap">
+                <Button size="sm" className="h-6 text-[11px] px-2"
+                  disabled={!replyText.trim() || replyMutation.isPending}
+                  onClick={() => replyMutation.mutate()}
+                  data-testid={`btn-post-reply-${r.reviewId}`}
+                >
+                  {replyMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Post Reply'}
+                </Button>
+                <Button size="sm" variant="outline" className="h-6 text-[11px] px-2 gap-1 text-violet-600 border-violet-200 hover:bg-violet-50"
+                  disabled={suggesting}
+                  onClick={handleAISuggest}
+                  data-testid={`btn-ai-suggest-${r.reviewId}`}
+                >
+                  {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  AI Suggest
+                </Button>
+                <Button size="sm" variant="ghost" className="h-6 text-[11px] px-2"
+                  onClick={() => { setReplyOpen(false); setReplyText(''); }}
+                >Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center border-t-0">
+              <button
+                className="flex-1 p-2 text-[11px] text-muted-foreground hover:bg-muted/30 flex items-center gap-1.5 transition-colors"
+                onClick={() => setReplyOpen(true)}
+                data-testid={`btn-open-reply-${r.reviewId}`}
+              >
+                <MessageSquare className="h-3 w-3" /> Reply
+              </button>
+              <div className="w-px h-4 bg-border" />
+              <button
+                className="flex-1 p-2 text-[11px] text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/30 flex items-center justify-center gap-1.5 transition-colors"
+                onClick={handleAISuggest}
+                disabled={suggesting}
+                data-testid={`btn-quick-ai-suggest-${r.reviewId}`}
+              >
+                {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                AI Suggest
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReviewListTab({ reviews, loading, orgId, client, gbpSnapshot, onReplied }: {
+  reviews: Review[];
+  loading: boolean;
+  orgId: string;
+  client: Client;
+  gbpSnapshot: GBPSnapshot | null;
+  onReplied: () => void;
+}) {
   if (loading) {
     return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
@@ -470,42 +636,16 @@ function ReviewListTab({ reviews, loading }: { reviews: Review[]; loading: boole
   }
   return (
     <div className="space-y-3">
-      {reviews.map(r => {
-        const stars = starToNum(r.starRating);
-        const date = new Date(r.createTime);
-        const dateStr = `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
-        return (
-          <div key={r.name} className="border rounded-lg p-3 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                {r.reviewer.profilePhotoUrl ? (
-                  <img src={r.reviewer.profilePhotoUrl} alt={r.reviewer.displayName} className="w-7 h-7 rounded-full object-cover" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[11px] font-bold text-muted-foreground">
-                    {r.reviewer.displayName?.[0] || '?'}
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs font-medium">{r.reviewer.displayName}</p>
-                  <p className="text-[10px] text-muted-foreground">{dateStr}</p>
-                </div>
-              </div>
-              <div className="flex">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} className={`h-3 w-3 ${i < stars ? 'text-amber-400 fill-amber-400' : 'text-muted/30'}`} />
-                ))}
-              </div>
-            </div>
-            {r.comment && <p className="text-xs text-muted-foreground leading-relaxed">{r.comment}</p>}
-            {r.reviewReply && (
-              <div className="bg-muted/20 rounded p-2 border-l-2 border-primary/30">
-                <p className="text-[10px] font-medium text-muted-foreground mb-0.5">Owner reply</p>
-                <p className="text-xs text-foreground leading-relaxed">{r.reviewReply.comment}</p>
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {reviews.map(r => (
+        <ReviewCard
+          key={r.name}
+          review={r}
+          orgId={orgId}
+          client={client}
+          gbpSnapshot={gbpSnapshot}
+          onReplied={onReplied}
+        />
+      ))}
     </div>
   );
 }
@@ -763,7 +903,14 @@ export default function GBPMapsEnginePanel({ client }: Props) {
                   <RefreshCw className="h-3 w-3" /> Refresh
                 </Button>
               </div>
-              <ReviewListTab reviews={reviews} loading={reviewsLoading} />
+              <ReviewListTab
+                reviews={reviews}
+                loading={reviewsLoading}
+                orgId={orgId || ''}
+                client={client}
+                gbpSnapshot={gbpSnapshot ?? null}
+                onReplied={() => refetchReviews()}
+              />
             </div>
           )}
 
