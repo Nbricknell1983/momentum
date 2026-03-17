@@ -1539,18 +1539,22 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     setSearchError(null);
     setResults([]);
     try {
-      // Include lead address as location hint if the query doesn't already have location context
-      const hasLocationInQuery = /\b(qld|nsw|vic|wa|sa|act|nt|tasmania|queensland|new south wales|victoria|australia)\b/i.test(query);
-      const locationHint = !hasLocationInQuery && lead.address
-        ? lead.address.split(',').slice(-2).join(',').trim().replace(/\s+\d{4}.*$/, '').trim()
+      // Extract location hint from lead address OR google address from sourceData
+      const hasLocationInQuery = /\b(qld|nsw|vic|wa|sa|act|nt|tasmania|queensland|new south wales|victoria|australia|\d{4})\b/i.test(query);
+      const rawAddress = lead.address || (lead.sourceData as any)?.googleAddress || '';
+      const locationHint = !hasLocationInQuery && rawAddress
+        ? rawAddress.split(',').slice(-2).join(',').trim().replace(/\s+\d{4}.*$/, '').trim()
         : '';
       const params = new URLSearchParams({ query: query.trim() });
       if (locationHint) params.set('location', locationHint);
+      // Pass website and phone as extra fallback hints for the backend
+      if (lead.website) params.set('website', lead.website);
+      if (lead.phone) params.set('phone', lead.phone);
       const res = await fetch(`/api/google-places/find?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Search failed');
       setResults(data.results || []);
-      if ((data.results || []).length === 0) setSearchError('No businesses found — try adding a suburb or state.');
+      if ((data.results || []).length === 0) setSearchError('No businesses found — try adding a suburb or postcode to your search.');
     } catch (e: any) {
       setSearchError(e.message || 'Search failed');
     } finally {

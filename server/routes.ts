@@ -2481,12 +2481,22 @@ Return valid JSON:
 
       const FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.nationalPhoneNumber,places.websiteUri';
 
-      const doSearch = async (textQuery: string) => {
+      // Centre of Australia — used as default location bias so Australian businesses rank first
+      const AU_CENTER = { latitude: -25.2744, longitude: 133.7751 };
+      const AU_RADIUS = 2800000; // ~2800km covers all of Australia
+
+      const doSearch = async (textQuery: string, biasCentre?: { latitude: number; longitude: number }, biasRadius?: number) => {
         const body: Record<string, any> = {
           textQuery,
           maxResultCount: 10,
           languageCode: 'en-AU',
           regionCode: 'AU',
+          locationBias: {
+            circle: {
+              center: biasCentre || AU_CENTER,
+              radius: biasRadius || AU_RADIUS,
+            },
+          },
         };
         const r = await fetch('https://places.googleapis.com/v1/places:searchText', {
           method: 'POST',
@@ -2513,20 +2523,44 @@ Return valid JSON:
       });
 
       const baseQuery = query.trim();
-      // Build the primary query — include location hint if provided
       const locationHint = typeof location === 'string' && location.trim() ? location.trim() : '';
-      const primaryQuery = locationHint ? `${baseQuery} ${locationHint}` : baseQuery;
+      const websiteHint = typeof (req.query as any).website === 'string' ? (req.query as any).website.trim() : '';
+      const phoneHint = typeof (req.query as any).phone === 'string' ? (req.query as any).phone.trim() : '';
 
+      // Strategy 1: exact query with location hint + AU bias
+      const primaryQuery = locationHint ? `${baseQuery} ${locationHint}` : baseQuery;
       let places = await doSearch(primaryQuery);
 
-      // If no results and no location was supplied, retry with "Australia" appended
-      if (places.length === 0 && !locationHint) {
+      // Strategy 2: append "Australia" + AU bias
+      if (places.length === 0) {
         places = await doSearch(`${baseQuery} Australia`);
       }
 
-      // If still nothing, try just appending QLD/NSW/VIC as broad fallbacks
-      if (places.length === 0 && !locationHint) {
-        places = await doSearch(`${baseQuery} Queensland Australia`);
+      // Strategy 3: try with phone number if provided
+      if (places.length === 0 && phoneHint) {
+        places = await doSearch(phoneHint);
+      }
+
+      // Strategy 4: try with just first 3 significant words + Australia
+      if (places.length === 0) {
+        const shortName = baseQuery.split(' ').slice(0, 3).join(' ');
+        if (shortName !== baseQuery) {
+          places = await doSearch(`${shortName} Australia`);
+        }
+      }
+
+      // Strategy 5: try website URL if provided (Google indexes these well)
+      if (places.length === 0 && websiteHint) {
+        const domain = websiteHint.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '');
+        places = await doSearch(domain);
+      }
+
+      // Strategy 6: state-by-state fallbacks
+      if (places.length === 0) {
+        for (const state of ['Queensland', 'New South Wales', 'Victoria', 'Western Australia']) {
+          places = await doSearch(`${baseQuery} ${state}`);
+          if (places.length > 0) break;
+        }
       }
 
       const results = places
