@@ -424,6 +424,7 @@ function LocalPresenceSection({ client }: { client: Client }) {
           gridSize: scanGridSize,
           radius: scanRadius,
           measurement: 'km',
+          businessName: loc.name || client.name,
         }),
       });
       if (!resp.ok) {
