@@ -431,10 +431,6 @@ export default function ScanMapPicker({
 
         {/* Map + canvas overlay */}
         <div ref={containerRef} className="relative flex-1" style={{ minHeight: 0 }}>
-          {/* Mapbox renders into this inner div — must be a direct child */}
-          <div id="map-inner" className="absolute inset-0" ref={(el) => {
-            // re-attach if needed (handled by mapboxgl container option)
-          }} />
 
           {/* Canvas lasso overlay */}
           <canvas
