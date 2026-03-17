@@ -153,7 +153,7 @@ export default function ScanMapPicker({ defaultLat, defaultLng, gridSize, areaCh
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-background rounded-xl shadow-2xl w-[960px] max-w-full flex flex-col overflow-hidden" style={{ maxHeight: 'min(92vh, 860px)' }}>
+      <div className="bg-background rounded-xl shadow-2xl flex flex-col overflow-hidden" style={{ width: 'min(95vw, 1800px)', height: 'min(95vh, 1200px)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <div>
@@ -184,7 +184,7 @@ export default function ScanMapPicker({ defaultLat, defaultLng, gridSize, areaCh
         )}
 
         {/* Map */}
-        <div className="relative flex-1" style={{ minHeight: 520 }}>
+        <div className="relative flex-1" style={{ minHeight: 0 }}>
           <div ref={containerRef} className="absolute inset-0" />
           {loading && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur-sm border rounded-full px-3 py-1.5 flex items-center gap-2 text-xs shadow-md">
