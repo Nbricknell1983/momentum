@@ -12,6 +12,7 @@ import {
   Search,
   BarChart3,
   Radio,
+  Zap,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -41,8 +42,9 @@ const navItems = [
 ];
 
 const managerNavItems = [
-  { title: 'Management', url: '/management', icon: BarChart3 },
-  { title: 'Bullpen',    url: '/bullpen',    icon: Radio },
+  { title: 'Management',     url: '/management',     icon: BarChart3 },
+  { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
+  { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
 ];
 
 export default function AppSidebar() {

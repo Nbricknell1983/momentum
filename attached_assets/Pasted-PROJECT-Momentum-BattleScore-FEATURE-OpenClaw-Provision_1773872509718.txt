@@ -1,0 +1,107 @@
+PROJECT: Momentum / BattleScore
+FEATURE: OpenClaw Provisioning Manager
+PRIORITY: High
+TYPE: Internal-only setup automation and sync tool
+
+OBJECTIVE:
+Build an internal setup/provisioning layer in Momentum that automatically prepares and manages the required OpenClaw configuration so manual dashboard entry is minimized.
+
+GOAL:
+Momentum should become the source of truth for:
+- Bullpen roles
+- skills/endpoints
+- role-to-skill mapping
+- base URL validation
+- setup completeness
+
+OpenClaw should be treated as the execution runtime, not the primary place where business logic is configured manually.
+
+REQUIREMENTS:
+
+1. CREATE INTERNAL “OPENCLAW SETUP” PAGE
+Show:
+- connection status
+- last successful sync
+- API key status (present/missing, never reveal full value)
+- base URL status
+- required skills status
+- required agents status
+- node status
+- config drift warnings
+
+2. AUTO-GENERATE REQUIRED SKILLS
+Based on supported Momentum endpoints, generate required OpenClaw skill definitions, including:
+- skill name
+- method
+- path
+- required headers
+- parameter placeholders if needed
+
+3. AUTO-GENERATE REQUIRED AGENTS
+Based on Bullpen roles, generate agent definitions and assign relevant skills.
+
+Initial mappings:
+- Sales Specialist
+- Strategy Specialist
+- SEO Specialist
+- Website Specialist
+- GBP Specialist
+- Google Ads Specialist
+- Client Growth Specialist
+- Operations Specialist
+
+4. PROVISION / SYNC ACTION
+Add a “Provision OpenClaw” or “Sync to OpenClaw” action that:
+- creates missing skills
+- creates missing agents
+- updates mismatched definitions
+- validates required headers
+- reports success/failure per item
+
+5. SAFE DEFAULTS
+Do NOT auto-enable high-risk communication capabilities by default.
+Keep these disabled or supervised until approvals/work-hour rules are live:
+- send-approved-sms
+- send-approved-email
+- cron-driven outbound automations
+
+6. MANUAL-ONLY FIELDS
+Keep these admin-confirm/manual:
+- master secret entry
+- production base URL confirmation
+- node runtime verification / registration if required by OpenClaw
+
+7. VALIDATION
+Add checks for:
+- missing API key
+- base URL mismatch
+- skill drift
+- missing agents
+- no running nodes
+- missing required headers
+
+8. BULLPEN ALIGNMENT
+Use Bullpen role definitions as the source of truth for agent creation.
+Do not create disconnected OpenClaw roles that drift away from Bullpen.
+
+9. UI / UX
+The setup page must be clear and operational, not technical for the sake of it.
+It should answer:
+- what is configured
+- what is missing
+- what can be auto-created
+- what still needs manual admin attention
+
+10. GUARDRAILS
+- internal only
+- do not expose OpenClaw setup to clients
+- preserve tenant isolation
+- keep Momentum as control plane
+- do not move business rules into OpenClaw manually if they belong in Momentum
+
+SUCCESS CRITERIA:
+- Momentum can generate most required OpenClaw setup automatically
+- manual setup effort is dramatically reduced
+- Bullpen roles stay aligned with OpenClaw agents
+- high-risk capabilities remain controlled
+- the system clearly shows what is working and what still needs admin action

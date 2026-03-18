@@ -9047,5 +9047,325 @@ Rules:
     }
   });
 
+  // ============================================
+  // OpenClaw Provisioning Manager
+  // ============================================
+
+  // Skill definitions — single source of truth
+  const OC_SKILLS = [
+    {
+      id: 'suspects-needing-followup',
+      name: 'suspects-needing-followup',
+      description: 'Retrieve leads that need follow-up based on stage and last contact date',
+      method: 'GET',
+      path: '/api/ai/suspects-needing-followup',
+      params: [{ name: 'orgId', type: 'string', required: true }],
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}' },
+      risk: 'low',
+    },
+    {
+      id: 'next-best-action',
+      name: 'next-best-action',
+      description: 'Get AI-recommended next best action for a specific lead',
+      method: 'GET',
+      path: '/api/ai/next-best-action',
+      params: [{ name: 'leadId', type: 'string', required: true }, { name: 'orgId', type: 'string', required: true }],
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}' },
+      risk: 'low',
+    },
+    {
+      id: 'draft-followup',
+      name: 'draft-followup',
+      description: 'Draft a personalised follow-up message for a lead (requires approval before send)',
+      method: 'POST',
+      path: '/api/ai/draft-followup',
+      body: { leadId: 'string', orgId: 'string', channel: 'sms|email', objective: 'string' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'low',
+    },
+    {
+      id: 'create-task',
+      name: 'create-task',
+      description: 'Create a follow-up task for a lead',
+      method: 'POST',
+      path: '/api/ai/create-task',
+      body: { leadId: 'string', orgId: 'string', taskType: 'string', dueDate: 'string?' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'low',
+    },
+    {
+      id: 'log-call-outcome',
+      name: 'log-call-outcome',
+      description: 'Log the outcome of a sales call and update the lead record',
+      method: 'POST',
+      path: '/api/ai/log-call-outcome',
+      body: { leadId: 'string', orgId: 'string', outcome: 'string', notes: 'string?', nextContactDate: 'string?' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'low',
+    },
+    {
+      id: 'move-lead-stage',
+      name: 'move-lead-stage',
+      description: 'Move a lead to a new pipeline stage (validates transitions)',
+      method: 'POST',
+      path: '/api/ai/move-lead-stage',
+      body: { leadId: 'string', orgId: 'string', newStage: 'string', reason: 'string?' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'medium',
+    },
+    {
+      id: 'request-appointment-slot',
+      name: 'request-appointment-slot',
+      description: 'Request an appointment slot for a lead',
+      method: 'POST',
+      path: '/api/ai/request-appointment-slot',
+      body: { leadId: 'string', orgId: 'string', preferredDate: 'string', notes: 'string?' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'low',
+    },
+    {
+      id: 'log-bullpen-comm',
+      name: 'log-bullpen-comm',
+      description: 'Log an action or status message to Bullpen Team Comms',
+      method: 'POST',
+      path: '/api/bullpen/comms',
+      body: { orgId: 'string', from: 'string', message: 'string' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'low',
+    },
+    {
+      id: 'send-approved-sms',
+      name: 'send-approved-sms',
+      description: 'Send an SMS that has been approved — HIGH RISK, disable until comms guardrails live',
+      method: 'POST',
+      path: '/api/ai/send-approved-sms',
+      body: { leadId: 'string', orgId: 'string', message: 'string', approvedBy: 'string' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'high',
+    },
+    {
+      id: 'send-approved-email',
+      name: 'send-approved-email',
+      description: 'Send an email that has been approved — HIGH RISK, disable until comms guardrails live',
+      method: 'POST',
+      path: '/api/ai/send-approved-email',
+      body: { leadId: 'string', orgId: 'string', subject: 'string', body: 'string', approvedBy: 'string' },
+      headers: { 'x-openclaw-key': '{{OPENCLAW_API_KEY}}', 'Content-Type': 'application/json' },
+      risk: 'high',
+    },
+  ];
+
+  // Agent definitions derived from Bullpen roles
+  const OC_AGENTS = [
+    {
+      id: 'sales',
+      name: 'Sales Specialist',
+      description: 'Outreach, follow-up, stage progression, objection handling, conversion from lead to meeting or proposal.',
+      skills: ['suspects-needing-followup', 'next-best-action', 'draft-followup', 'move-lead-stage', 'log-call-outcome', 'request-appointment-slot', 'log-bullpen-comm'],
+      tier: 'execution',
+    },
+    {
+      id: 'strategy',
+      name: 'Strategy Specialist',
+      description: 'Diagnosis, growth prescription, roadmap generation, strategic prioritization.',
+      skills: ['create-task', 'log-bullpen-comm'],
+      tier: 'leadership',
+    },
+    {
+      id: 'seo',
+      name: 'SEO Specialist',
+      description: 'Keyword targeting, intent coverage, content planning, visibility scoring.',
+      skills: ['create-task', 'log-bullpen-comm'],
+      tier: 'execution',
+    },
+    {
+      id: 'website',
+      name: 'Website Specialist',
+      description: 'Conversion clarity, sitemap structure, build readiness.',
+      skills: ['create-task', 'log-bullpen-comm'],
+      tier: 'execution',
+    },
+    {
+      id: 'gbp',
+      name: 'GBP Specialist',
+      description: 'Profile optimisation, review strategy, local map visibility.',
+      skills: ['create-task', 'log-bullpen-comm'],
+      tier: 'execution',
+    },
+    {
+      id: 'ads',
+      name: 'Google Ads Specialist',
+      description: 'Demand capture, campaign structure, budget ROI.',
+      skills: ['create-task', 'log-bullpen-comm'],
+      tier: 'execution',
+    },
+    {
+      id: 'growth',
+      name: 'Client Growth Specialist',
+      description: 'Retention, expansion, churn prevention, account intelligence.',
+      skills: ['create-task', 'log-bullpen-comm'],
+      tier: 'leadership',
+    },
+    {
+      id: 'ops',
+      name: 'Operations Specialist',
+      description: 'Orchestration, automation rules, job control, full system access.',
+      skills: OC_SKILLS.map(s => s.id),
+      tier: 'control',
+    },
+  ];
+
+  // Cron job definitions
+  const OC_CRON_JOBS = [
+    {
+      id: 'morning-suspects',
+      name: 'Morning Suspects Brief',
+      description: 'Scan pipeline for suspects needing follow-up and brief the Sales Specialist',
+      agentId: 'sales',
+      schedule: 'Every day at 8:00 AM',
+      risk: 'low',
+    },
+    {
+      id: 'next-best-action-scan',
+      name: 'NBA Scan',
+      description: 'Check overdue leads and surface next best actions',
+      agentId: 'sales',
+      schedule: 'Every weekday at 9:00 AM',
+      risk: 'low',
+    },
+  ];
+
+  // GET /api/openclaw/manifest — return the full skill/agent/cron definitions
+  app.get('/api/openclaw/manifest', async (req: any, res: any) => {
+    const appUrl = process.env.REPLIT_DOMAINS
+      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+      : 'http://localhost:5000';
+
+    res.json({
+      appUrl,
+      keyConfigured: !!process.env.OPENCLAW_API_KEY,
+      skills: OC_SKILLS,
+      agents: OC_AGENTS,
+      cronJobs: OC_CRON_JOBS,
+    });
+  });
+
+  // POST /api/openclaw/config — save base URL to Firestore
+  app.post('/api/openclaw/config', async (req: any, res: any) => {
+    const { orgId, baseUrl } = req.body;
+    if (!orgId || !baseUrl) return res.status(400).json({ error: 'orgId and baseUrl required' });
+    if (!firestore) return res.status(503).json({ error: 'Firestore unavailable' });
+    try {
+      await firestore.collection('orgs').doc(orgId).collection('settings').doc('openclawConfig').set(
+        { baseUrl, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/openclaw/config — load base URL from Firestore
+  app.get('/api/openclaw/config', async (req: any, res: any) => {
+    const { orgId } = req.query;
+    if (!orgId) return res.status(400).json({ error: 'orgId required' });
+    if (!firestore) return res.status(503).json({ error: 'Firestore unavailable' });
+    try {
+      const doc = await firestore.collection('orgs').doc(orgId as string).collection('settings').doc('openclawConfig').get();
+      res.json(doc.exists ? doc.data() : { baseUrl: '' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/openclaw/test-connection — ping OpenClaw base URL
+  app.post('/api/openclaw/test-connection', async (req: any, res: any) => {
+    const { baseUrl } = req.body;
+    if (!baseUrl) return res.status(400).json({ error: 'baseUrl required' });
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(baseUrl, { signal: controller.signal, method: 'GET' });
+      clearTimeout(timeout);
+      res.json({ connected: true, status: response.status });
+    } catch (err: any) {
+      res.json({ connected: false, error: err.message });
+    }
+  });
+
+  // POST /api/openclaw/provision — attempt to create skills + agents via OpenClaw REST API
+  app.post('/api/openclaw/provision', async (req: any, res: any) => {
+    const { orgId, baseUrl } = req.body;
+    if (!orgId || !baseUrl) return res.status(400).json({ error: 'orgId and baseUrl required' });
+
+    const apiKey = process.env.OPENCLAW_API_KEY || '';
+    const appUrl = process.env.REPLIT_DOMAINS
+      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+      : 'http://localhost:5000';
+
+    const report: { type: string; id: string; status: 'created' | 'exists' | 'failed'; message?: string }[] = [];
+
+    async function tryCreate(endpoint: string, body: any, label: string, id: string) {
+      try {
+        const r = await fetch(`${baseUrl}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'x-api-key': apiKey },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(8000),
+        });
+        const json = await r.json().catch(() => ({}));
+        if (r.status === 409 || json.already_exists || json.conflict) {
+          report.push({ type: label, id, status: 'exists', message: 'Already exists in OpenClaw' });
+        } else if (r.ok) {
+          report.push({ type: label, id, status: 'created' });
+        } else {
+          report.push({ type: label, id, status: 'failed', message: `HTTP ${r.status}: ${JSON.stringify(json)}` });
+        }
+      } catch (err: any) {
+        report.push({ type: label, id, status: 'failed', message: err.message });
+      }
+    }
+
+    // Provision low/medium risk skills (never auto-provision high-risk)
+    for (const skill of OC_SKILLS.filter(s => s.risk !== 'high')) {
+      const fullPath = `${appUrl}${skill.path}`;
+      await tryCreate('/api/v1/skills', {
+        name: skill.name,
+        description: skill.description,
+        method: skill.method,
+        url: fullPath,
+        headers: { 'x-openclaw-key': apiKey, 'Content-Type': 'application/json' },
+      }, 'skill', skill.id);
+    }
+
+    // Provision agents
+    for (const agent of OC_AGENTS) {
+      const safeSkills = agent.skills.filter(s => {
+        const skill = OC_SKILLS.find(sk => sk.id === s);
+        return skill && skill.risk !== 'high';
+      });
+      await tryCreate('/api/v1/agents', {
+        name: agent.name,
+        description: agent.description,
+        skills: safeSkills,
+        tier: agent.tier,
+      }, 'agent', agent.id);
+    }
+
+    // Save last sync time to Firestore
+    if (firestore) {
+      await firestore.collection('orgs').doc(orgId).collection('settings').doc('openclawConfig').set(
+        { lastSyncAt: new Date().toISOString(), lastSyncReport: report },
+        { merge: true }
+      ).catch(() => {});
+    }
+
+    const created = report.filter(r => r.status === 'created').length;
+    const failed = report.filter(r => r.status === 'failed').length;
+    const exists = report.filter(r => r.status === 'exists').length;
+    res.json({ report, created, failed, exists });
+  });
+
   return httpServer;
 }

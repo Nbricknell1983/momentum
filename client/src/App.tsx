@@ -23,6 +23,7 @@ import ClientPipelinePage from '@/pages/client-pipeline';
 import ResearchPage from '@/pages/research';
 import ManagementPage from '@/pages/management';
 import BullpenPage from '@/pages/bullpen';
+import OpenClawSetupPage from '@/pages/openclaw-setup';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -50,6 +51,7 @@ function ProtectedRoutes() {
       <Route path="/settings" component={SettingsPage} />
       <Route path="/management" component={ManagementPage} />
       <Route path="/bullpen" component={BullpenPage} />
+      <Route path="/openclaw-setup" component={OpenClawSetupPage} />
       <Route component={NotFound} />
     </Switch>
   );
