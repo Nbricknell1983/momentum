@@ -1,0 +1,88 @@
+I want to use OpenClaw as the quarterback for Momentum.
+
+OpenClaw is the orchestration layer only. It is not the CRM, not the database, and not the business-rules engine. Momentum must remain the system of record and the only authority allowed to talk to Twilio, email, calendar, Firestore, and any downstream integrations.
+
+Please implement a secure internal API/action layer inside Momentum that OpenClaw can call.
+
+Architecture:
+OpenClaw -> Momentum API/action layer -> approved downstream integrations
+
+Goal:
+I want OpenClaw to act like an AI sales operator for Momentum. It should be able to:
+- pull suspect and lead data
+- identify who needs follow-up
+- ask Momentum for the next best action
+- draft follow-up messages
+- create tasks
+- log call outcomes
+- move lead stages
+- request appointment slots
+- trigger approved sends
+
+But I do NOT want OpenClaw to have direct access to shell, browser, filesystem, Firestore admin credentials, Twilio secrets, or local machine tools. Momentum must be the controlled authority layer.
+
+Please build these endpoints first:
+
+GET /api/ai/suspects-needing-followup
+- returns suspects/leads that need action based on Momentum rules
+
+GET /api/ai/next-best-action
+- returns the highest-priority next action for a specific lead or a queue summary
+
+POST /api/ai/draft-followup
+- input: leadId, channel, objective
+- output: draft SMS/email/call opener in clean structured JSON
+
+POST /api/ai/create-task
+- input: leadId, taskType, notes, dueDate
+- output: created task record
+
+POST /api/ai/log-call-outcome
+- input: leadId, outcome, notes, nextStep, nextContactDate
+- output: updated lead/activity log
+
+POST /api/ai/move-lead-stage
+- input: leadId, newStage, reason
+- output: updated stage + validation result
+
+POST /api/ai/request-appointment-slot
+- input: leadId, preferredWindow, notes
+- output: appointment request object or available slots
+
+POST /api/ai/send-approved-sms
+- input: leadId, approvedMessage
+- sends only if all rules pass
+
+POST /api/ai/send-approved-email
+- input: leadId, subject, approvedBody
+- sends only if all rules pass
+
+Requirements:
+- all endpoints must require authentication
+- validate all payloads server-side
+- enforce all business rules inside Momentum, not inside OpenClaw
+- log every action to an audit trail
+- support simulation mode so no live customer-facing message is sent unless explicitly approved
+- return clean JSON responses designed for an external orchestrator
+- keep code modular so OpenClaw can later decide which endpoint to call next
+
+Business rules examples:
+- do not contact leads marked do-not-contact
+- do not send more than once in 24 hours unless manually overridden
+- require approval before outbound SMS/email
+- validate stage changes
+- respect next contact date logic
+- block invalid or incomplete actions
+- write all actions to activity history and audit logs
+
+Implementation notes:
+- use Momentum as the authority layer
+- downstream services like Twilio, email, calendar, Firestore should only be called by Momentum
+- do not build local-machine access
+- do not assume terminal, browser, or filesystem access for OpenClaw
+- build this so OpenClaw can safely act as the quarterback over Momentum
+
+I want this built in a way that supports the sales workflow:
+suspect list -> prioritisation -> follow-up draft -> task creation -> call outcome logging -> stage movement -> appointment setting
+
+Please scaffold the API structure, controllers/services, auth middleware, validation, simulation mode, and audit logging first.

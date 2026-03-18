@@ -5,6 +5,7 @@ import { insertLeadSchema, insertActivitySchema } from "@shared/schema";
 import OpenAI from "openai";
 import { firestore, bucket, isFirebaseAdminReady } from "./firebase";
 import { crawlWebsite } from "./strategyEngine";
+import { registerAiActionRoutes } from "./aiActionRoutes";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -18,7 +19,12 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
+  // ============================================
+  // OpenClaw AI Action Layer
+  // ============================================
+  registerAiActionRoutes(app);
+
   // ============================================
   // SEO Assets - Sitemap & Robots
   // ============================================
