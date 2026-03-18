@@ -1,0 +1,795 @@
+PROJECT: Momentum / BattleScore
+PRIORITY: PLATINUM / AGENCY-KILLER VERSION
+FEATURE SET: End-to-End AI Growth Operator + Execution Engine
+CONTEXT: Extend the existing Momentum platform shown in the current Pipeline, Nurture, Clients, Client Detail, AI Sales Engine, AI Client Growth Engine, Local GBP Rankings, and public Strategy URL screens. Do not replace working structures. Build on top of them.
+
+MISSION:
+Transform Momentum from a CRM + AI insights platform into a fully autonomous, self-improving AI Growth Operating System that can replace traditional digital marketing agencies end-to-end.
+
+The system must be able to:
+- diagnose a prospect or client
+- prescribe the right growth strategy
+- sell the solution
+- onboard the client
+- build and launch the website
+- execute SEO
+- manage Google Business Profile growth
+- manage Google Ads
+- monitor performance
+- learn from results
+- recommend and execute next actions
+- grow existing clients over time
+- eventually operate in assisted, supervised, or autonomous mode
+
+This is NOT an MVP.
+This is the platinum version.
+The architecture must support a category-defining product, not a half-step agency tool.
+
+NON-NEGOTIABLE PRIORITIES:
+1. Protect architecture and tenant isolation
+2. Extend existing working screens and workflows
+3. Avoid duplicate modules and conflicting logic
+4. Preserve current sales and client views while upgrading them
+5. Build a reusable shared orchestration + execution framework
+6. Ensure all actions are explainable, logged, and reversible where appropriate
+
+CURRENT PRODUCT CONTEXT TO RESPECT:
+Momentum already has:
+- Pipeline board for prospects
+- Lead/deal detail screens with:
+  - Conversation Intelligence
+  - Deal Intelligence
+  - Strategy Intelligence
+  - Online Presence
+  - AI Sales Engine:
+    - Win Before You Dial
+    - Control the Call
+    - Win the Follow-Up
+    - Growth Plan
+    - Multiply Your Pipeline
+- Nurture board
+- Clients board with stages such as:
+  - Onboarding
+  - Steady State
+  - Growth Plays
+  - Watchlist
+  - Churned
+- Client detail screens with:
+  - Client Health Score
+  - Service Performance
+  - Retention Signals
+  - Expansion Opportunities
+  - Local GBP Rankings
+  - Google Reviews
+  - AI Onboarding & Team Handover
+  - AI Client Growth Engine:
+    - Win Before You Dial
+    - Control the Call
+    - Win the Follow-Up
+    - Growth Plan
+    - Multiply Your Pipeline
+- Public strategy URLs that already render rich strategy pages from data, including:
+  - Growth readiness
+  - Relevance / authority / trust
+  - Search engine interpretation of the website
+  - Market demand
+  - Market capture map
+  - Discovery path / buyer journey breakdown
+  - Buyer reality gap
+  - Intent coverage
+  - Presence audit
+  - Growth roadmap
+  - Four growth pillars
+  - Live strategy simulator
+  - Cost of inaction
+  - 12-month projections and KPIs
+
+This existing system is the foundation.
+Do NOT throw it away.
+Do NOT rebuild from scratch.
+Do NOT create a separate disconnected AI product.
+Unify and extend the current architecture.
+
+HIGH-LEVEL PRODUCT GOAL:
+Create an AI-native Growth Operator that replaces core functions of:
+- sales reps
+- SEO agencies
+- Google Ads managers
+- web strategists
+- account managers
+- client growth consultants
+- follow-up / nurture staff
+- parts of onboarding and delivery coordination
+
+The experience should feel like:
+“Each business has its own AI growth operator running inside Momentum.”
+
+ARCHITECTURE MODEL:
+Build this as a layered system:
+
+LAYER 1 — EXPERIENCE LAYER
+Use and extend existing Momentum UI:
+- Pipeline
+- Lead / Deal detail
+- Nurture
+- Clients board
+- Client detail
+- Public Strategy URL
+- AI Sales Engine
+- AI Client Growth Engine
+
+LAYER 2 — ORCHESTRATION LAYER
+Implement a central orchestration framework that can later be powered by OpenClaw or equivalent agent orchestration patterns.
+Responsibilities:
+- classify requests and triggers
+- route work to the correct specialist engine/agent
+- maintain per-entity context
+- manage workflow sequencing
+- trigger actions and approvals
+- keep lead/deal/client/client-growth contexts clean
+
+LAYER 3 — BUSINESS RULES LAYER
+Inside Momentum, enforce:
+- tenant resolution
+- permissions
+- stage transitions
+- automation mode rules
+- approval workflows
+- next best action rules
+- scoring models
+- trigger conditions
+
+LAYER 4 — SPECIALIST ENGINES / AGENTS
+Implement modular engines:
+1. Sales Engine
+2. Diagnosis / Intelligence Engine
+3. Strategy Engine
+4. Website Engine
+5. SEO Engine
+6. GBP Engine
+7. Google Ads Engine
+8. Creative / Brand Engine
+9. Client Growth Engine
+10. Learning Engine
+11. Autopilot Engine
+
+LAYER 5 — EXECUTION CONNECTORS
+Prepare connectors or adapter interfaces for:
+- website generation / publishing
+- SEO page generation
+- Google Ads campaign creation and updates
+- Google Business Profile related workflows
+- email and SMS follow-up
+- file / PDF generation
+- analytics and performance ingestion
+- review workflows
+- CRM and task updates
+
+LAYER 6 — STATE / EVIDENCE / AUDIT LAYER
+All actions must be persisted and attributable.
+
+CORE PRODUCT JOURNEY TO IMPLEMENT:
+Use this as the master lifecycle:
+ATTRACT → DIAGNOSE → PRESCRIBE → COMMIT → ONBOARD → BUILD → LAUNCH → GROW → EXPAND
+
+Map it to current system:
+
+1. ATTRACT
+- lives in Pipeline / outreach / inbound capture
+- lead enters the system
+- initial intelligence scan runs
+
+2. DIAGNOSE
+- lives in lead/deal detail
+- system analyses website, GBP, pages, reviews, intent coverage, local signals, market demand
+- outputs clear diagnosis
+
+3. PRESCRIBE
+- lives in AI Sales Engine + public strategy URL
+- system produces recommended growth stack
+- includes commercial framing and cost of inaction
+
+4. COMMIT
+- lives in deal flow
+- proposal accepted
+- lead becomes client
+- chosen plan is stored
+
+5. ONBOARD
+- lives in client onboarding
+- collect required business data, assets, scope, channels, service areas, brand inputs
+
+6. BUILD
+- system starts website, SEO, GBP, ads, and supporting setup work
+
+7. LAUNCH
+- website and campaigns go live
+- tracking and status activate
+
+8. GROW
+- performance monitoring, intelligence score, AI actions, next best actions, growth engine
+
+9. EXPAND
+- upsells, additional channels, growth plays, risk recovery, market expansion
+
+DECISION TREE / GROWTH PRESCRIPTION ENGINE:
+Build a structured decision engine that determines the correct product mix dynamically based on the business state.
+
+Inputs:
+- website exists / no / weak
+- GBP exists / no / weak
+- reviews low / medium / strong
+- current leads none / inconsistent / strong
+- ads yes / no / poor
+- service areas
+- market opportunity
+- competitive difficulty
+- business stage startup / growing / established
+- urgency
+- affordability / investment appetite
+
+Decision logic:
+WEBSITE
+- if no website → website required
+- if weak website → rebuild or expansion required
+- if website exists but does not support service/location intent → structural rebuild or SEO expansion required
+
+GBP
+- if no GBP → setup/activation required
+- if weak GBP → optimisation required
+- if low reviews or weak local signals → review and GBP play required
+
+LEAD FLOW
+- if no leads or very inconsistent leads → prioritize Google Ads + core conversion fixes
+- if leads exist but organic visibility weak → prioritize SEO + GBP
+- if traffic exists but conversion weak → prioritize CRO / website conversion improvements
+
+MARKET OPPORTUNITY
+- low difficulty / clear demand → SEO-first opportunity
+- higher competition → blended SEO + Google Ads
+- high-value services and strong search demand → full-stack strategy
+
+BUSINESS STAGE
+- startup → foundations stack
+- growing → optimization stack
+- established → domination / market capture stack
+
+Output:
+- recommended product stack
+- priority order
+- rationale
+- expected impact
+- expected timeline
+- affordability options
+
+AFFORDABILITY / COMMERCIAL ENGINE:
+Do NOT use simplistic fixed packages only.
+Use a flexible commercial recommendation layer aligned to opportunity size and business stage.
+
+Support these investment modes:
+1. Starter
+2. Momentum
+3. Accelerated
+4. Performance / Hybrid
+
+Each option should show:
+- monthly investment
+- weekly equivalent
+- speed
+- expected outcomes
+- trade-offs
+- why this option fits the business
+
+The system should frame investment against:
+- market opportunity
+- likely enquiries
+- estimated customers
+- revenue impact
+- cost of inaction
+
+PUBLIC STRATEGY URL:
+Enhance and standardize the existing strategy URL so it becomes a premium, persuasive, interactive public growth plan generated from system data.
+
+It must remain aligned to what is already visible in the provided screenshots.
+Do not regress existing visual quality.
+
+The strategy URL should continue to support and improve:
+- executive summary / strategy direction
+- growth readiness score
+- relevance / authority / trust framework
+- search engine view of the website
+- service page / location page / portfolio page distribution
+- market opportunity
+- keyword table and competitiveness
+- market capture map
+- discovery path / buyer journey friction
+- buyer reality gap
+- intent coverage
+- current presence audit
+- momentum moment / commercial framing
+- three-phase roadmap
+- four growth pillars
+- live strategy simulator
+- cost of inaction
+- 12-month projections / KPI table
+- CTA: Book a Call
+
+Add requirement:
+The strategy URL is not just a report. It must become the front-end sales weapon and later the front-end execution dashboard handoff.
+
+AI SALES ENGINE:
+Keep existing structure and improve it.
+The right-side AI Sales Engine and AI Client Growth Engine are good foundations and must remain familiar.
+
+Required modules:
+- Win Before You Dial
+- Control the Call
+- Win the Follow-Up
+- Growth Plan
+- Multiply Your Pipeline
+
+Enhance these so they are fed by the diagnosis, prescription, and decision engine.
+
+Lead/Deal-side behavior:
+- generate call prep
+- surface risks/opportunities
+- explain what the rep should say
+- recommend channel (call/email/SMS)
+- produce objection handling
+- produce follow-up messaging
+- produce strategy narrative
+
+Use consultative frameworks inspired by:
+- NEPQ
+- Chris Voss style negotiation
+- strong commercial framing
+But keep outputs practical, concise, and conversational.
+
+Do not make the UI feel robotic or scripted.
+
+AI CLIENT GROWTH ENGINE:
+Use the same five-part structure on the client side, but reinterpret it for growth, retention, upsell, and expansion.
+
+Client-side behavior:
+- account intelligence
+- service/channel performance analysis
+- retention risk detection
+- expansion opportunities
+- review/GBP growth
+- Google Ads opportunities
+- website/SEO gaps
+- growth plan refresh
+- upsell logic tied to evidence
+
+WEBSITE ENGINE:
+This is a core disruption layer.
+The system must progress from strategy to build, not just recommend.
+
+Input sources:
+- strategy data
+- sitemap analysis
+- service and location opportunities
+- brand/business details
+- existing website content/pages
+- selected growth pillars
+
+Outputs:
+- sitemap plan
+- service pages
+- location pages
+- page briefs
+- H1/H2/content structure
+- FAQs
+- internal linking plan
+- CTA structure
+- recommended templates/components
+- publish-ready page payloads
+
+Rules:
+- conversion-first
+- service + location clarity
+- no thin duplicate spam
+- extend existing patterns rather than random content generation
+- maintain tenant separation
+- preserve human review options where needed
+
+SEO ENGINE:
+Must go beyond reporting.
+Required capabilities:
+- detect structural SEO gaps
+- determine next pages to build
+- recommend and log internal linking improvements
+- update title/H1/meta/content plans
+- track ranking targets
+- connect actions to projections
+- monitor keyword groups and location clusters
+- recommend and later support structured content rollout
+
+Must use the strategy data already generated from the public URL and internal diagnosis.
+
+GBP ENGINE:
+Use current Local GBP Rankings / Maps Engine views as the starting point and extend them into an active growth system.
+
+Required capabilities:
+- track maps authority score and contributors
+- surface what is holding the score back
+- recommend actions
+- connect review behavior, categories, services, geo signals, and content activity
+- support booking health checks
+- show progress over time
+- queue next actions
+
+Do not destroy the current GBP UI; strengthen it.
+
+GOOGLE ADS ENGINE:
+Must be built as an execution and monitoring engine, not just a placeholder.
+
+Capabilities:
+- campaign recommendations tied to strategy
+- draft campaign structure from diagnosis
+- draft keyword groups
+- draft ad copy
+- budget allocation logic
+- performance monitoring
+- opportunity/risk alerts
+- connect spend to outcomes where possible
+
+Must fit into the wider growth engine and not exist as an isolated Ads tab with no relationship to the rest of the system.
+
+EXECUTION ENGINE / GROWTH EXECUTION ENGINE:
+This is the critical missing layer.
+Add a new shared execution framework that sits underneath existing sales and client growth surfaces.
+
+Purpose:
+Turn recommendations into actions.
+
+Add to client detail:
+- Website Build Status
+- SEO Status
+- GBP Status
+- Ads Status
+- overall Execution Status
+
+Statuses:
+- Not Started
+- Ready
+- In Progress
+- Active
+- Needs Input
+- Blocked
+
+Add an “AI Actions” feed:
+Display:
+- action
+- reason
+- timestamp
+- affected engine
+- status
+- optionally outcome later
+
+Example actions:
+- Published 2 new service pages to improve service intent coverage
+- Added 5 suburb targets to the SEO rollout queue
+- Triggered review request cadence recommendation
+- Prepared Google Ads campaign draft based on high-opportunity keywords
+
+This feed must explain what the system is doing, not just dump technical logs.
+
+LEARNING ENGINE / CLOSED LOOP:
+Implement the core learning loop:
+ACTION → RESULT → ANALYSIS → INSIGHT → UPDATE
+
+Required behavior:
+- every major action is logged
+- outcomes are captured where possible
+- system compares prediction vs actual
+- insights are stored
+- future recommendations are influenced by learnings
+
+Separate:
+1. Tenant-level learning
+2. Aggregated anonymised pattern learning
+
+Never leak raw tenant data across clients.
+
+AI INTELLIGENCE SCORE:
+Create a visible, explainable score on the client side that makes system intelligence tangible.
+
+Core score pillars:
+- Understanding
+- Execution
+- Performance
+- Learning
+
+Requirements:
+- show score prominently in client view
+- explain why it changed
+- connect score changes to actions and outcomes
+- show next best actions
+- show trend over time
+
+CLIENT HEALTH / BUSINESS COMMAND CENTRE:
+Expand current client health concepts into a richer business intelligence layer.
+
+Panels should eventually support:
+- Revenue
+- Demand
+- Conversion
+- Operations / fulfilment readiness
+- Growth opportunities
+- Alerts
+- Next best actions
+
+Do not force a full rewrite if revenue/operations data is not yet available.
+Design for it now.
+
+AUTOMATION MODES:
+Implement a control system for how much the AI can do.
+
+Modes:
+1. Assisted
+2. Supervised
+3. Autonomous
+
+Allow configuration per client and per domain:
+- Sales
+- Marketing
+- Operations
+
+Rules:
+Assisted:
+- recommend only
+
+Supervised:
+- prepare and queue actions
+- require approval to execute
+
+Autonomous:
+- execute approved classes of actions automatically within rules
+
+Restricted actions:
+- destructive edits
+- billing
+- pricing changes
+- risky campaign launches without approval
+- anything outside defined guardrails
+
+Every action must respect:
+- tenant isolation
+- permissions
+- audit logging
+- reversibility where appropriate
+
+AI DAILY BRIEF / AUTOPILOT PREP:
+Design for the business-owner daily brief and future autopilot mode.
+
+Daily brief should eventually summarise:
+- what happened
+- what changed
+- what matters today
+- risks
+- opportunities
+- next best actions
+
+Autopilot should be goal-driven:
+TARGET → GAP → PLAN → EXECUTE → MEASURE → LEARN
+
+Do not fully implement everything now if too broad, but design the data model and execution framework so this is a natural next step rather than a rewrite.
+
+UI IMPLEMENTATION REQUIREMENTS:
+Do NOT create a bunch of disconnected new pages.
+Use the existing Lead / Deal / Client / Strategy surfaces.
+
+Required extensions:
+
+PIPELINE / LEAD VIEW
+- preserve current board
+- improve AI next action capability
+- better diagnosis visibility
+- better handoff from sales to prescription
+
+LEAD / DEAL DETAIL
+- keep current layout
+- strengthen diagnosis and strategy readiness
+- surface execution readiness
+- improve AI call prep and follow-up outputs
+
+NURTURE
+- connect nurture to AI follow-up logic and next touch recommendations
+- preserve current usability
+
+CLIENTS BOARD
+- preserve current board/list
+- add execution-state awareness
+- improve health/growth play logic
+- allow clearer prioritisation by risk, growth, and actionability
+
+CLIENT DETAIL
+- preserve the current left / middle / right structure
+- improve account intelligence
+- add execution statuses
+- add AI actions feed
+- strengthen growth plan and opportunities
+- better connect GBP, website, SEO, ads, and health
+
+PUBLIC STRATEGY URL
+- preserve the premium visual style and layout quality
+- improve clarity, business logic, simulator usefulness, and actionability
+- ensure it is truly generated from the underlying data and not just decorative
+
+AI COPY / MESSAGING PRINCIPLES:
+- outcome-focused
+- plain language
+- commercially strong
+- confidence-building
+- not generic agency fluff
+- not robotic
+- every recommendation tied to growth, leads, trust, or revenue
+- explain why the action matters
+
+Do not overload users with jargon.
+Always communicate like a sharp strategist who can also execute.
+
+DATA MODEL / COLLECTIONS:
+Extend safely. Do not break working collections.
+
+Add or extend support for the following conceptual objects:
+- diagnoses
+- prescriptions
+- strategyRuns
+- strategyPlans
+- executionJobs
+- executionEvents
+- aiActions
+- agentTasks
+- agentLogs
+- approvals
+- intelligenceScores
+- scoreHistory
+- learningEvents
+- insights
+- experiments
+- playbooks
+- patternLibrary
+- performanceSnapshots
+
+Every relevant record must include:
+- orgId
+- relevant entity id (lead, deal, client, strategy, etc.)
+- timestamps
+- status
+
+Do not create unnecessary duplication where existing collections already support the model.
+
+TRIGGERS / WORKFLOW REQUIREMENTS:
+1. Lead created
+- run initial intelligence scan
+- prepare diagnosis summary
+- feed AI Sales Engine
+
+2. Diagnosis completed
+- generate prescription
+- prepare strategy
+
+3. Strategy approved / proposal sent
+- update deal support outputs
+
+4. Deal marked won
+- create onboarding and execution jobs
+- prepare website/SEO/GBP/Ads start states
+
+5. Onboarding completed
+- unlock build execution
+
+6. Build / launch / grow states
+- feed execution statuses and AI actions
+
+7. Performance changes
+- update intelligence score
+- generate next best actions
+- surface growth opportunities
+
+MULTI-TENANT / SECURITY / ARCHITECTURE GUARDRAILS:
+This is a multi-tenant SaaS.
+Protect tenant isolation above everything.
+
+Must enforce:
+- org-scoped queries and writes
+- no shared mutable memory between tenants
+- no cross-tenant caching bugs
+- no globally mixed client data
+- no unsafe automation leakage
+- no accidental breakage of unrelated tenant categories or modules
+
+Impacted areas to watch carefully:
+- auth
+- tenant resolution
+- routing
+- Firestore rules
+- stage transitions
+- client creation from deal conversion
+- public strategy URL permissions / visibility
+- AI action execution
+- automation modes
+
+PHASED IMPLEMENTATION ORDER:
+Implement in the safest high-leverage order:
+
+PHASE 1 — SHARED FRAMEWORK
+- orchestration framework
+- diagnosis / prescription persistence
+- execution job model
+- ai actions feed
+- approvals
+- intelligence score scaffolding
+
+PHASE 2 — SALES + STRATEGY UPGRADE
+- enhance AI Sales Engine
+- improve public strategy URL generation
+- connect strategy data more tightly to prescriptions and opportunities
+
+PHASE 3 — EXECUTION STATUS + WEBSITE/SEO ENGINE
+- execution statuses in client view
+- website engine outputs
+- SEO engine outputs
+- action logging
+
+PHASE 4 — GBP + ADS ENGINE
+- strengthen local maps growth execution
+- ad execution/monitoring framework
+- client growth engine improvements
+
+PHASE 5 — LEARNING / PLAYBOOK / AUTOMATION MODES
+- insights
+- learning loop
+- assisted / supervised / autonomous controls
+
+PHASE 6 — AUTOPILOT / DAILY BRIEF / BENCHMARKING
+- future-facing extensions after the core is stable
+
+DO NOT TRY TO SHIP EVERYTHING IN ONE UNCONTROLLED PUSH.
+But DO build the foundation so the full platinum vision is achievable without rewrites.
+
+ACCEPTANCE CRITERIA:
+The upgraded system should:
+- keep current Momentum screens working
+- deepen the diagnosis and strategy quality
+- connect the public strategy URL directly to system data
+- allow a deal to move from sold to structured execution
+- visibly show website/SEO/GBP/Ads execution progress in the client record
+- show AI actions in a human-readable way
+- support approvals and automation modes
+- maintain tenant isolation
+- avoid duplicate modules and duplicate logic
+- make the product feel like an AI growth operator, not a CRM with a few AI widgets
+
+REGRESSION / QA REQUIREMENTS:
+Test thoroughly for:
+1. Tenant isolation across all new records and actions
+2. Pipeline / nurture / client views still functioning correctly
+3. No broken stage transitions
+4. No broken strategy URL rendering
+5. No duplicate action execution from repeated triggers
+6. Correct status updates across website/SEO/GBP/Ads
+7. Right-side AI engines still usable and improved
+8. No layout regressions on current lead/deal/client detail screens
+9. Mobile/responsive sanity checks for public strategy URL
+10. Approval and automation mode behavior working correctly
+11. No unrelated modules or public marketing pages broken
+
+FINAL PRODUCT POSITIONING:
+Build Momentum into a system that does not merely advise on growth.
+Build it into a system that:
+- understands the business
+- diagnoses the market
+- prescribes the right growth stack
+- sells the strategy
+- executes the work
+- measures performance
+- learns continuously
+- expands clients over time
+
+The end result should feel like:
+Each business has its own AI growth operator inside Momentum.
+
+This must be good enough to disrupt traditional digital marketing agencies, not imitate them.
