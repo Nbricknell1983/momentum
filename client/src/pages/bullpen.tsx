@@ -543,7 +543,7 @@ export default function BullpenPage() {
     openNBA, activities, activeLeads, overdueLeads, activeClients,
     clientsWithSEO, clientsWithWebsite, clientsWithGBP, clientsWithGBPAuth,
     clientsWithAds, clientsWithPrescription, aiActiveClients, autonomousClients,
-    redAmberClients, nurtureDue
+    redAmberClients
   ]);
 
   const activeRoles = roles.filter(r => r.status !== 'idle');
