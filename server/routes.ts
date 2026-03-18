@@ -8276,6 +8276,98 @@ OVERALL ASSESSMENT:
   });
 
   // ============================================================
+  // Phase 6 — Growth Operator Daily Brief + Autopilot Run
+  // ============================================================
+
+  app.post('/api/ai/growth-operator/daily-brief', async (req, res) => {
+    try {
+      const {
+        totalClients, clientsWithEngines, activePlays, stalledClients,
+        strongClients, autonomousClients, needsAttentionClients,
+        portfolioHighlights, date,
+      } = req.body;
+
+      const prompt = `You are an AI Growth Operator briefing a marketing agency on their client portfolio.
+
+=== TODAY: ${date || 'Today'} ===
+
+PORTFOLIO OVERVIEW:
+- Total active clients: ${totalClients || 0}
+- Clients with engine reports run: ${clientsWithEngines || 0}
+- Active growth plays running: ${activePlays || 0}
+- Clients with strong momentum: ${strongClients || 0}
+- Clients with stalled momentum: ${stalledClients || 0}
+- Clients on autopilot (autonomous mode): ${autonomousClients || 0}
+
+CLIENTS NEEDING ATTENTION:
+${Array.isArray(needsAttentionClients) && needsAttentionClients.length > 0
+  ? needsAttentionClients.map((c: any) =>
+      `- ${c.name}: momentum=${c.momentum}, health=${c.health}, engines=${c.enginesRun}/4, active plays=${c.activePlays}${c.nextBestMove ? `, next move: "${c.nextBestMove}"` : ''}`
+    ).join('\n')
+  : '- None flagged'}
+
+STRONG PERFORMERS:
+${Array.isArray(portfolioHighlights) && portfolioHighlights.length > 0
+  ? portfolioHighlights.join('\n')
+  : '- No clients with strong momentum yet'}
+
+=== YOUR TASK ===
+
+Produce a focused growth operator briefing with:
+
+1. PORTFOLIO SUMMARY (2-3 sentences): A concise executive summary of where the portfolio stands today. Reference specific numbers. Tone: confident, data-driven, consultative.
+
+2. TODAY'S PRIORITIES (exactly 4-5 items): Specific, actionable tasks for the growth operator today. Must reference client names where relevant. Each should be a complete sentence describing exactly what to do and why.
+   Examples of good priorities:
+   - "Run the Website Engine for [ClientName] — they've been on the platform 3 weeks with no engine data, making it impossible to identify conversion gaps."
+   - "Apply the Review Velocity Sprint to [ClientName] — their GBP score is strong but they only have 4 reviews, which is hurting Maps Pack ranking."
+   - "Review and approve queued AI actions for all 3 autonomous clients before 10am to keep autopilot momentum going."
+
+3. URGENT CLIENTS (1-3 items max, only if genuinely urgent): Specific client + specific concern + specific action. If no genuine urgency, return empty array.
+
+Return JSON:
+{
+  "portfolioSummary": "...",
+  "todaysPriorities": ["...", "...", "...", "...", "..."],
+  "urgentClients": ["ClientName: specific concern and action needed"]
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: 900,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (err: any) {
+      console.error('[growth-operator/daily-brief]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/ai/client/autopilot-run', async (req, res) => {
+    try {
+      const { clientId, clientName, queuedActions } = req.body;
+      if (!clientId || !Array.isArray(queuedActions)) {
+        return res.status(400).json({ error: 'clientId and queuedActions required' });
+      }
+      if (queuedActions.length === 0) {
+        return res.json({ approved: 0, summary: 'No queued actions to approve.' });
+      }
+      res.json({
+        approved: queuedActions.length,
+        summary: `Autopilot approved ${queuedActions.length} queued ${queuedActions.length === 1 ? 'action' : 'actions'} for ${clientName || clientId}.`,
+        actionIds: queuedActions.map((a: any) => a.id),
+      });
+    } catch (err: any) {
+      console.error('[autopilot-run]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================================
   // Phase 4 — GBP Engine + Ads Engine (Client Workspace)
   // ============================================================
 

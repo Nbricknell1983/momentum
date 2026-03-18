@@ -213,6 +213,38 @@ export default function GrowthOperatorPanel({ client }: Props) {
   const ModeIcon = MODE_CONFIG[automationMode].icon;
   const modeColor = MODE_CONFIG[automationMode].color;
 
+  const [runningAutopilot, setRunningAutopilot] = useState(false);
+
+  const handleAutopilotRun = useCallback(async () => {
+    const queued = actions.filter(a => a.status === 'queued');
+    if (queued.length === 0) {
+      toast({ title: 'No queued actions to approve' });
+      return;
+    }
+    setRunningAutopilot(true);
+    try {
+      const res = await fetch('/api/ai/client/autopilot-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: client.id,
+          clientName: client.businessName,
+          queuedActions: queued.map(a => ({ id: a.id, action: a.action, engine: a.engine })),
+        }),
+      });
+      if (!res.ok) throw new Error('Autopilot run failed');
+      for (const action of queued) {
+        await updateClientAIActionStatus(orgId!, client.id, action.id, 'approved', 'Auto-approved by Autopilot', authReady);
+      }
+      setActions(prev => prev.map(a => a.status === 'queued' ? { ...a, status: 'approved' as const, outcome: 'Auto-approved by Autopilot' } : a));
+      toast({ title: `Autopilot approved ${queued.length} ${queued.length === 1 ? 'action' : 'actions'}`, description: 'All queued actions have been approved.' });
+    } catch (err: any) {
+      toast({ title: 'Autopilot run failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setRunningAutopilot(false);
+    }
+  }, [actions, client, orgId, authReady, toast]);
+
   return (
     <div className="border rounded-lg overflow-hidden bg-background">
       {/* Header */}
@@ -341,18 +373,32 @@ export default function GrowthOperatorPanel({ client }: Props) {
 
           {/* ── AI Actions Feed ── */}
           <div className="px-4 py-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1 shrink-0">
                 <Zap className="h-3 w-3" /> AI Actions
               </p>
-              <Button
-                variant="ghost" size="sm"
-                className="h-6 text-xs px-2 gap-1"
-                onClick={() => setShowAddAction(v => !v)}
-                data-testid="button-add-ai-action"
-              >
-                <Plus className="h-3 w-3" /> Log
-              </Button>
+              <div className="flex items-center gap-1.5 ml-auto">
+                {automationMode === 'autonomous' && actions.filter(a => a.status === 'queued').length > 0 && (
+                  <Button
+                    variant="default" size="sm"
+                    className="h-6 text-xs px-2 gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={handleAutopilotRun}
+                    disabled={runningAutopilot}
+                    data-testid="button-run-autopilot"
+                  >
+                    {runningAutopilot ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bot className="h-3 w-3" />}
+                    {runningAutopilot ? 'Running…' : `Autopilot (${actions.filter(a => a.status === 'queued').length})`}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-6 text-xs px-2 gap-1"
+                  onClick={() => setShowAddAction(v => !v)}
+                  data-testid="button-add-ai-action"
+                >
+                  <Plus className="h-3 w-3" /> Log
+                </Button>
+              </div>
             </div>
 
             {showAddAction && (

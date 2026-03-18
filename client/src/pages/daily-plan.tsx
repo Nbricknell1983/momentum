@@ -28,6 +28,7 @@ import {
   fetchPlanTasks, fetchActionRecommendations, fetchLeads, fetchClients,
   fetchAIDebrief, saveAIDebrief, fetchActivities, updatePlanTask
 } from '@/lib/firestoreService';
+import GrowthOperatorDailyBrief from '@/components/GrowthOperatorDailyBrief';
 import {
   DailyPlanDoc, AIBrief, AIDebrief, PlanTimeBlock, PlanActionRecommendation,
   formatDateDDMMYYYY, parseDateDDMMYYYY, getTodayDDMMYYYY, toPlanDateKey,
@@ -867,6 +868,10 @@ export default function DailyPlanPage() {
         isGenerating={isGeneratingBrief}
         onGenerate={handleGenerateBrief}
       />
+
+      {isManager && (
+        <GrowthOperatorDailyBrief clients={clients} />
+      )}
       
       <RevenueLanes
         tasks={planTasks}
