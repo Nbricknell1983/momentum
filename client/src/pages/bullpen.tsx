@@ -48,6 +48,18 @@ interface AttentionItem {
   linkedLabel?: string;
 }
 
+interface AgentCommsMessage {
+  id: string;
+  from: string;
+  fromIcon: typeof Briefcase;
+  fromBg: string;
+  to: string;
+  message: string;
+  type: 'alert' | 'update' | 'handoff' | 'broadcast' | 'complete';
+  priority: 'high' | 'medium' | 'low';
+  minutesAgo: number;
+}
+
 interface AutomationRules {
   workHoursStart: string;
   workHoursEnd: string;
@@ -73,6 +85,20 @@ const DEFAULT_RULES: AutomationRules = {
 };
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
+
+const ROLE_META: Record<string, { icon: typeof Briefcase; bg: string }> = {
+  'Sales':       { icon: BriefcaseBusiness, bg: 'bg-blue-500' },
+  'SEO':         { icon: Search,            bg: 'bg-emerald-500' },
+  'Website':     { icon: Globe,             bg: 'bg-orange-500' },
+  'Ads':         { icon: BarChart3,         bg: 'bg-amber-500' },
+  'GBP':         { icon: Star,              bg: 'bg-yellow-600' },
+  'Growth':      { icon: TrendingUp,        bg: 'bg-indigo-500' },
+  'Reviews':     { icon: Shield,            bg: 'bg-purple-500' },
+  'Strategy':    { icon: Eye,               bg: 'bg-slate-600' },
+  'Strategist':  { icon: Compass,           bg: 'bg-violet-600' },
+  'Ops':         { icon: Cpu,               bg: 'bg-gray-500' },
+  'Team':        { icon: Users,             bg: 'bg-slate-700' },
+};
 
 const STATUS_CONFIG: Record<BullpenStatus, { label: string; color: string; dot: string }> = {
   active:            { label: 'Active',            color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400', dot: 'bg-emerald-500' },
@@ -194,6 +220,43 @@ function AttentionCard({ item }: { item: AttentionItem }) {
           </Button>
         </Link>
       )}
+    </div>
+  );
+}
+
+// ─── Message Bubble ───────────────────────────────────────────────────────────
+
+const MSG_TYPE_CONFIG = {
+  alert:     { label: 'ALERT',     color: 'text-red-500' },
+  update:    { label: 'UPDATE',    color: 'text-blue-500' },
+  handoff:   { label: 'HANDOFF',  color: 'text-violet-500' },
+  broadcast: { label: 'BROADCAST',color: 'text-emerald-600' },
+  complete:  { label: 'DONE',     color: 'text-emerald-600' },
+};
+
+function MessageBubble({ msg }: { msg: AgentCommsMessage }) {
+  const Icon = msg.fromIcon;
+  const tc = MSG_TYPE_CONFIG[msg.type];
+  const timeStr = msg.minutesAgo === 0
+    ? 'just now'
+    : msg.minutesAgo < 60
+    ? `${msg.minutesAgo}m ago`
+    : `${Math.floor(msg.minutesAgo / 60)}h ${msg.minutesAgo % 60}m ago`;
+  return (
+    <div className="flex items-start gap-3 py-3 border-b border-border/30 last:border-0">
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${msg.fromBg}`}>
+        <Icon className="h-4 w-4 text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+          <span className="text-[12px] font-bold text-foreground">{msg.from}</span>
+          <span className="text-[11px] text-muted-foreground">→</span>
+          <span className="text-[12px] font-semibold text-muted-foreground">{msg.to}</span>
+          <span className={`text-[10px] font-bold uppercase ml-auto shrink-0 ${tc.color}`}>{tc.label}</span>
+          <span className="text-[10px] text-muted-foreground shrink-0">{timeStr}</span>
+        </div>
+        <p className="text-[13px] text-foreground/85 leading-snug">{msg.message}</p>
+      </div>
     </div>
   );
 }
@@ -573,6 +636,149 @@ export default function BullpenPage() {
   const activeRoles = roles.filter(r => r.status !== 'idle');
   const idleRoles   = roles.filter(r => r.status === 'idle');
 
+  // ── Agent comms feed ──────────────────────────────────────────────────────
+
+  const agentFeed = useMemo<AgentCommsMessage[]>(() => {
+    const msgs: AgentCommsMessage[] = [];
+    const rm = (key: string) => ROLE_META[key] ?? ROLE_META['Ops'];
+    let minuteCounter = 0;
+    const push = (
+      id: string, from: string, to: string,
+      message: string, type: AgentCommsMessage['type'],
+      priority: AgentCommsMessage['priority']
+    ) => {
+      const base = priority === 'high' ? 2 : priority === 'medium' ? 15 : 45;
+      minuteCounter += priority === 'high' ? 3 : priority === 'medium' ? 8 : 18;
+      msgs.push({ id, from, fromIcon: rm(from).icon, fromBg: rm(from).bg, to, message, type, priority, minutesAgo: base + minuteCounter });
+    };
+
+    // ── Overdue follow-ups (Sales → Strategist)
+    if (overdueLeads.length > 0) {
+      const sample = overdueLeads.slice(0, 2).map(l => l.businessName).join(', ');
+      push('overdue', 'Sales', 'Strategist',
+        `${overdueLeads.length} lead${overdueLeads.length > 1 ? 's' : ''} have passed their follow-up date — ${sample}${overdueLeads.length > 2 ? ` +${overdueLeads.length - 2} more` : ''}. Pipeline momentum stalling.`,
+        'alert', 'high');
+    }
+
+    // ── Open NBA queue (Sales → Strategist)
+    if (openNBA.length > 0) {
+      push('nba', 'Sales', 'Strategist',
+        `${openNBA.length} AI outreach action${openNBA.length > 1 ? 's' : ''} queued and awaiting sequencing. Ready to execute on your go-ahead.`,
+        'update', openNBA.length > 5 ? 'medium' : 'low');
+    }
+
+    // ── Stalled clients (Growth → Strategist)
+    const stalledClients = activeClients.filter(c => c.learningInsight?.momentumStatus === 'stalled');
+    if (stalledClients.length > 0) {
+      push('stalled', 'Growth', 'Strategist',
+        `${stalledClients.map(c => c.businessName).slice(0, 2).join(', ')}${stalledClients.length > 2 ? ` +${stalledClients.length - 2}` : ''} — momentum has stalled. Growth engine showing no forward movement. Intervention needed.`,
+        'alert', 'high');
+    }
+
+    // ── Red health clients (Growth → Strategist)
+    const redClients = activeClients.filter(c => c.healthStatus === 'red');
+    if (redClients.length > 0) {
+      push('red-health', 'Growth', 'Strategist',
+        `${redClients.length} client${redClients.length > 1 ? 's' : ''} showing critical health status. Churn risk is elevated — ${redClients.map(c => c.businessName).slice(0, 2).join(', ')}. Flagging for immediate review.`,
+        'alert', 'high');
+    }
+
+    // ── Blocked execution (Ops → Strategist)
+    if (blockedClients.length > 0) {
+      push('blocked', 'Ops', 'Strategist',
+        `Execution blocked for ${blockedClients.map(c => c.businessName).slice(0, 2).join(', ')}${blockedClients.length > 2 ? ` +${blockedClients.length - 2} more` : ''}. Missing inputs or unresolved conflicts. Systems cannot auto-proceed.`,
+        'alert', 'high');
+    }
+
+    // ── Missing GBP connection (GBP → Strategist)
+    const noGBP = activeClients.filter(c => !c.gbpLocationName);
+    if (noGBP.length > 0) {
+      push('no-gbp', 'GBP', 'Strategist',
+        `${noGBP.length} client${noGBP.length > 1 ? 's' : ''} without GBP OAuth connected. Local rank tracking and review management are offline for these accounts.`,
+        'update', 'medium');
+    }
+
+    // ── Missing onboarding context (Strategy → Strategist)
+    const noOnboarding = activeClients.filter(c => !c.clientOnboarding?.businessContext);
+    if (noOnboarding.length > 0) {
+      push('no-onboarding', 'Strategy', 'Strategist',
+        `${noOnboarding.length} client${noOnboarding.length > 1 ? 's' : ''} missing onboarding context. SEO, Website and Ads engines require this before generating intelligence. Recommend prioritising discovery calls.`,
+        'handoff', 'medium');
+    }
+
+    // ── Website low grades (Website → Strategist)
+    const lowGradeWebsite = clientsWithWebsite.filter(c => c.websiteEngine?.overallGrade === 'F' || c.websiteEngine?.overallGrade === 'D');
+    if (lowGradeWebsite.length > 0) {
+      const c = lowGradeWebsite[0];
+      push('low-website', 'Website', 'Strategist',
+        `${c.businessName} website audit returned ${c.websiteEngine?.overallGrade} grade. Conversion structure critically weak. Recommend escalating to rebuild priority before any ad spend.`,
+        'alert', 'medium');
+    }
+
+    // ── SEO plans ready (SEO → Strategist)
+    if (clientsWithSEO.length > 0) {
+      push('seo-ready', 'SEO', 'Strategist',
+        `SEO intelligence plans ready for ${clientsWithSEO.length} client${clientsWithSEO.length > 1 ? 's' : ''}. Keyword targets, content gaps and 3-month roadmaps available. Awaiting strategic sequencing.`,
+        'update', 'medium');
+    }
+
+    // ── Ads-ready clients (Ads → Strategist)
+    const adsReady = clientsWithAds.filter(c => (c.adsEngine?.readinessScore || 0) >= 70);
+    if (adsReady.length > 0) {
+      const c = adsReady[0];
+      push('ads-ready', 'Ads', 'Strategist',
+        `${c.businessName} shows ${c.adsEngine?.readinessScore}% paid search readiness — above launch threshold. Recommend activating campaign structure. Budget and keyword targets are mapped.`,
+        'handoff', 'medium');
+    }
+
+    // ── GBP reports ready (GBP → Strategist)
+    if (clientsWithGBP.length > 0) {
+      push('gbp-reports', 'GBP', 'Strategist',
+        `GBP optimisation audit complete for ${clientsWithGBP.length} client${clientsWithGBP.length > 1 ? 's' : ''}. Profile completeness, review strength and posting cadence scored. Action lists generated.`,
+        'complete', 'low');
+    }
+
+    // ── No active plays (Strategist → Growth)
+    const noPlays = activeClients.filter(c => !c.appliedPlays || c.appliedPlays.length === 0);
+    if (noPlays.length > 0) {
+      push('no-plays', 'Strategist', 'Growth',
+        `${noPlays.length} client${noPlays.length > 1 ? 's' : ''} with no growth play activated. Without a play, the AI action feed has no sequencing framework. Recommend selecting a play per client this week.`,
+        'handoff', 'medium');
+    }
+
+    // ── Autopilot running (Ops → Team)
+    if (autonomousClients.length > 0) {
+      push('autopilot', 'Ops', 'Team',
+        `${autonomousClients.length} client${autonomousClients.length > 1 ? 's' : ''} running autonomously on autopilot. All scheduled actions are auto-approving. Systems nominal — monitoring active.`,
+        'broadcast', 'low');
+    }
+
+    // ── Strong momentum (Strategist → Team)
+    const strongClients = activeClients.filter(c => c.learningInsight?.momentumStatus === 'strong');
+    if (strongClients.length > 0) {
+      push('strong', 'Strategist', 'Team',
+        `Portfolio update — ${strongClients.length} client${strongClients.length > 1 ? 's' : ''} showing strong growth momentum: ${strongClients.map(c => c.businessName).slice(0, 3).join(', ')}. Engines performing above baseline.`,
+        'broadcast', 'low');
+    }
+
+    // ── Prescriptions generated (Strategy → Strategist)
+    if (clientsWithPrescription.length > 0) {
+      push('prescriptions', 'Strategy', 'Strategist',
+        `${clientsWithPrescription.length} growth prescription${clientsWithPrescription.length > 1 ? 's' : ''} generated for pipeline leads. Recommended product stacks and investment tiers ready for discovery presentations.`,
+        'complete', 'low');
+    }
+
+    // ── All quiet fallback
+    if (msgs.length === 0) {
+      push('quiet', 'Ops', 'Team',
+        'All systems operational. No alerts or blockers detected. Agents monitoring pipeline and client portfolio.',
+        'broadcast', 'low');
+    }
+
+    return msgs.reverse(); // newest first → oldest at top, newest at bottom
+  }, [overdueLeads, openNBA, activeClients, blockedClients, clientsWithSEO, clientsWithWebsite,
+      clientsWithGBP, clientsWithAds, clientsWithPrescription, autonomousClients]);
+
   // ── Work hours check ──────────────────────────────────────────────────────
 
   const isWithinWorkHours = useMemo(() => {
@@ -683,6 +889,28 @@ export default function BullpenPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* ── Team Comms ───────────────────────────────────────────────────── */}
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+            </span>
+            Team Comms — Live
+          </h2>
+          <Card className="border bg-card">
+            <CardContent className="p-0">
+              <div className="max-h-[480px] overflow-y-auto px-4">
+                {agentFeed.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">No agent messages yet.</div>
+                ) : (
+                  agentFeed.map(msg => <MessageBubble key={msg.id} msg={msg} />)
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── Automation Rules ─────────────────────────────────────────────── */}
