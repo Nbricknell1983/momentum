@@ -292,7 +292,7 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
               {/* Stack tab */}
               {activeTab === 'stack' && (
                 <div className="space-y-2">
-                  {prescription.recommendedStack
+                  {[...prescription.recommendedStack]
                     .sort((a, b) => a.priority - b.priority)
                     .map(rec => <StackCard key={rec.product} rec={rec} />)}
                 </div>
@@ -301,7 +301,7 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
               {/* Investment tab */}
               {activeTab === 'investment' && (
                 <div className="space-y-4">
-                  {prescription.investmentOptions
+                  {[...prescription.investmentOptions]
                     .sort((a, b) => a.monthlyInvestment - b.monthlyInvestment)
                     .map(opt => <InvestmentCard key={opt.tier} opt={opt} />)}
                 </div>
