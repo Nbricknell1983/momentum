@@ -486,7 +486,7 @@ const appSlice = createSlice({
     
     addNBAAction(state, action: PayloadAction<NBAAction>) {
       state.nbaQueue.push(action.payload);
-      state.nbaQueue.sort((a, b) => b.priorityScore - a.priorityScore);
+      state.nbaQueue = [...state.nbaQueue].sort((a, b) => b.priorityScore - a.priorityScore);
     },
     
     updateNBAAction(state, action: PayloadAction<{ id: string; updates: Partial<NBAAction> }>) {

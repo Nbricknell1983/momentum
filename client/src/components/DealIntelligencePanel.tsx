@@ -172,7 +172,7 @@ function generateDealSummary(lead: Lead, activities: Activity[]): string {
 
   const leadActivities = activities.filter(a => a.leadId === lead.id);
   if (leadActivities.length > 0) {
-    const lastActivity = leadActivities.sort((a, b) =>
+    const lastActivity = [...leadActivities].sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )[0];
     const daysAgo = differenceInDays(new Date(), new Date(lastActivity.createdAt));
