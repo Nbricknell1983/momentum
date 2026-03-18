@@ -1,6 +1,6 @@
 import { db, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, where, Timestamp, collection, limit, setDoc, writeBatch } from './firebase';
 import { auth } from './firebase';
-import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction, RejectedBusiness, Organization, TeamMember, ConversationLog } from './types';
+import type { Lead, Activity, NBAAction, LeadHistory, FocusModeSettings, Client, ClientHistory, Deliverable, StrategySession, StrategyPlan, ContentDraft, ChannelInsight, AnalyticsSnapshot, EvidenceTask, InsightChannel, DailyPlanDoc, AIBrief, AIDebrief, UserDailySettings, PlanActionRecommendation, Task, StrategyEngineState, StrategyEngineOutput, StrategyAction, RejectedBusiness, Organization, TeamMember, ConversationLog, AIAction, ExecutionStatusState, AutomationMode } from './types';
 import { calculateClientHealth, createDefaultDailyPlanDoc, formatDateDDMMYYYY, activityTypeToTaskType, getCurrentTimeSlot, getTodayDDMMYYYY, toPlanDateKey, ACTIVITY_LABELS } from './types';
 
 function logFirestoreOperation(operation: string, path: string, orgId: string | null, success: boolean, error?: any) {
@@ -3051,4 +3051,85 @@ export async function fetchRecentIntegrationEvents(orgId: string, clientId: stri
     logFirestoreOperation('READ', path, orgId, false, error);
     return [];
   }
+}
+
+// ============================================================
+// AI Actions — subcollection: orgs/{orgId}/clients/{clientId}/aiActions
+// ============================================================
+
+export async function fetchClientAIActions(orgId: string, clientId: string, authReady: boolean = false, limitCount = 20): Promise<AIAction[]> {
+  const path = `orgs/${orgId}/clients/${clientId}/aiActions`;
+  if (!checkAuthReady(orgId, authReady, 'READ', path)) return [];
+  try {
+    const ref = collection(db, 'orgs', orgId, 'clients', clientId, 'aiActions');
+    const q = query(ref, orderBy('createdAt', 'desc'), limit(limitCount));
+    const snap = await getDocs(q);
+    const actions = snap.docs.map(d => ({ id: d.id, ...convertTimestampToDate(d.data()) })) as AIAction[];
+    logFirestoreOperation('READ', path, orgId, true);
+    return actions;
+  } catch (error: any) {
+    logFirestoreOperation('READ', path, orgId, false, error);
+    return [];
+  }
+}
+
+export async function addClientAIAction(orgId: string, clientId: string, action: Omit<AIAction, 'id'>, authReady: boolean = false): Promise<string> {
+  const path = `orgs/${orgId}/clients/${clientId}/aiActions`;
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) throw new Error('Not authenticated');
+  try {
+    const ref = collection(db, 'orgs', orgId, 'clients', clientId, 'aiActions');
+    const docRef = await addDoc(ref, convertDatesToTimestamp(action));
+    logFirestoreOperation('WRITE', path, orgId, true);
+    return docRef.id;
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function updateClientAIActionStatus(orgId: string, clientId: string, actionId: string, status: AIAction['status'], outcome?: string, authReady: boolean = false): Promise<void> {
+  const path = `orgs/${orgId}/clients/${clientId}/aiActions/${actionId}`;
+  if (!checkAuthReady(orgId, authReady, 'WRITE', path)) throw new Error('Not authenticated');
+  try {
+    const docRef = doc(db, 'orgs', orgId, 'clients', clientId, 'aiActions', actionId);
+    const update: any = { status };
+    if (status === 'done' || status === 'rejected') update.completedAt = Timestamp.fromDate(new Date());
+    if (outcome) update.outcome = outcome;
+    await updateDoc(docRef, update);
+    logFirestoreOperation('WRITE', path, orgId, true);
+  } catch (error: any) {
+    logFirestoreOperation('WRITE', path, orgId, false, error);
+    throw error;
+  }
+}
+
+export async function computeIntelligenceScore(client: Client): Promise<{ overall: number; understanding: number; execution: number; performance: number; learning: number }> {
+  let understanding = 0;
+  if (client.clientOnboarding?.businessOverview) understanding += 20;
+  if (client.clientOnboarding?.keyServices) understanding += 20;
+  if (client.clientOnboarding?.targetCustomers) understanding += 15;
+  if (client.gbpLocationName) understanding += 15;
+  if (client.website) understanding += 15;
+  if (client.clientOnboarding?.locations) understanding += 15;
+
+  let execution = 0;
+  const es = client.executionStatus;
+  const channels = [es?.website, es?.seo, es?.gbp, es?.ads];
+  channels.forEach(ch => {
+    if (ch?.status === 'active') execution += 25;
+    else if (ch?.status === 'in_progress') execution += 15;
+    else if (ch?.status === 'ready') execution += 5;
+  });
+
+  let performance = 0;
+  const health = client.healthStatus;
+  if (health === 'green') performance = 80;
+  else if (health === 'amber') performance = 50;
+  else performance = 20;
+  if (client.localFalconPlaceId) performance = Math.min(100, performance + 20);
+
+  const learning = 20;
+
+  const overall = Math.round((understanding + execution + performance + learning) / 4);
+  return { overall, understanding, execution, performance, learning };
 }

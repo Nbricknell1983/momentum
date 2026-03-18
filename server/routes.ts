@@ -8037,5 +8037,99 @@ Return ONLY the reply text. No quotes, no labels, no explanation.`;
     }
   });
 
+  // ============================================================
+  // Phase 1 — AI Growth Operator: Execution Status + AI Actions
+  // ============================================================
+
+  app.patch('/api/clients/:clientId/execution-status', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, executionStatus } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      if (!executionStatus || typeof executionStatus !== 'object') return res.status(400).json({ error: 'executionStatus object required' });
+      await firestore!.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        executionStatus,
+        updatedAt: new Date(),
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[clients/execution-status]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/clients/:clientId/ai-actions', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.query as { orgId: string };
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      const snap = await firestore!.collection('orgs').doc(orgId).collection('clients').doc(clientId)
+        .collection('aiActions').orderBy('createdAt', 'desc').limit(50).get();
+      const actions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json(actions);
+    } catch (err: any) {
+      console.error('[clients/ai-actions GET]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/clients/:clientId/ai-actions', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, engine, action, reason, status = 'queued' } = req.body;
+      if (!orgId || !engine || !action) return res.status(400).json({ error: 'orgId, engine, action required' });
+      const validEngines = ['website', 'seo', 'gbp', 'ads', 'sales', 'strategy', 'client_growth', 'system'];
+      if (!validEngines.includes(engine)) return res.status(400).json({ error: 'invalid engine' });
+      const docRef = await firestore!.collection('orgs').doc(orgId).collection('clients').doc(clientId)
+        .collection('aiActions').add({ engine, action, reason: reason || '', status, createdAt: new Date() });
+      res.json({ success: true, id: docRef.id });
+    } catch (err: any) {
+      console.error('[clients/ai-actions POST]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/clients/:clientId/ai-actions/:actionId', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId, actionId } = req.params;
+      const { orgId, status, outcome } = req.body;
+      if (!orgId || !status) return res.status(400).json({ error: 'orgId and status required' });
+      const validStatuses = ['queued', 'approved', 'running', 'done', 'rejected'];
+      if (!validStatuses.includes(status)) return res.status(400).json({ error: 'invalid status' });
+      const update: Record<string, any> = { status };
+      if (status === 'done' || status === 'rejected') update.completedAt = new Date();
+      if (outcome) update.outcome = outcome;
+      await firestore!.collection('orgs').doc(orgId).collection('clients').doc(clientId)
+        .collection('aiActions').doc(actionId).update(update);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[clients/ai-actions PATCH]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/clients/:clientId/automation-mode', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, automationMode } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      const valid = ['assisted', 'supervised', 'autonomous'];
+      if (!valid.includes(automationMode)) return res.status(400).json({ error: 'invalid automationMode' });
+      await firestore!.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        automationMode,
+        updatedAt: new Date(),
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[clients/automation-mode]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

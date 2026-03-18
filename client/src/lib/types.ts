@@ -1734,7 +1734,84 @@ export interface Client {
     lat: string;
     lng: string;
   };
+  // Phase 1 — AI Growth Operator
+  automationMode?: AutomationMode;
+  executionStatus?: ExecutionStatusState;
+  intelligenceScore?: IntelligenceScore;
 }
+
+export type AutomationMode = 'assisted' | 'supervised' | 'autonomous';
+
+export type ExecutionStatusValue =
+  | 'not_started'
+  | 'ready'
+  | 'in_progress'
+  | 'active'
+  | 'needs_input'
+  | 'blocked';
+
+export interface ExecutionChannelStatus {
+  status: ExecutionStatusValue;
+  updatedAt?: Date;
+  note?: string;
+}
+
+export interface ExecutionStatusState {
+  website?: ExecutionChannelStatus;
+  seo?: ExecutionChannelStatus;
+  gbp?: ExecutionChannelStatus;
+  ads?: ExecutionChannelStatus;
+}
+
+export interface IntelligenceScore {
+  overall: number;
+  understanding: number;
+  execution: number;
+  performance: number;
+  learning: number;
+  updatedAt?: Date;
+}
+
+export interface AIAction {
+  id: string;
+  engine: 'website' | 'seo' | 'gbp' | 'ads' | 'sales' | 'strategy' | 'client_growth' | 'system';
+  action: string;
+  reason: string;
+  status: 'queued' | 'approved' | 'running' | 'done' | 'rejected';
+  createdAt: Date;
+  completedAt?: Date;
+  outcome?: string;
+}
+
+export const EXECUTION_STATUS_LABELS: Record<ExecutionStatusValue, string> = {
+  not_started: 'Not Started',
+  ready: 'Ready',
+  in_progress: 'In Progress',
+  active: 'Active',
+  needs_input: 'Needs Input',
+  blocked: 'Blocked',
+};
+
+export const EXECUTION_STATUS_COLORS: Record<ExecutionStatusValue, string> = {
+  not_started: 'text-muted-foreground bg-muted/40',
+  ready: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950/40',
+  in_progress: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/40',
+  active: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/40',
+  needs_input: 'text-orange-600 bg-orange-50 dark:text-orange-400 dark:bg-orange-950/40',
+  blocked: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/40',
+};
+
+export const AUTOMATION_MODE_LABELS: Record<AutomationMode, string> = {
+  assisted: 'Assisted',
+  supervised: 'Supervised',
+  autonomous: 'Autonomous',
+};
+
+export const AUTOMATION_MODE_DESCRIPTIONS: Record<AutomationMode, string> = {
+  assisted: 'AI recommends only. You decide everything.',
+  supervised: 'AI prepares actions and queues them for your approval.',
+  autonomous: 'AI executes approved action classes automatically.',
+};
 
 export interface ClientOnboarding {
   businessOverview?: string;

@@ -6,6 +6,7 @@ import {
   Loader2, Link2, X, ExternalLink, Play, MessageSquare, ChevronDown,
   ThumbsUp, Building2, Unlink, Target, Radio, Image as ImageIcon,
 } from 'lucide-react';
+import GrowthOperatorPanel from './GrowthOperatorPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -961,6 +962,10 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
+
+        {/* AI Growth Operator — Phase 1 Panel */}
+        <GrowthOperatorPanel client={client} />
+
         <div>
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-3">Account Intelligence</p>
 
