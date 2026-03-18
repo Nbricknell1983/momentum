@@ -1,0 +1,592 @@
+PROJECT: Momentum / BattleScore
+FEATURE: Expert-Driven Bullpen Roles (Platinum Execution Intelligence Layer)
+PRIORITY: High
+TYPE: Internal-only system architecture and execution logic upgrade
+
+OBJECTIVE:
+Upgrade the internal Bullpen so every specialist role is not just a workload bucket, but an expert-driven execution engine with defined thinking models, priorities, and responsibilities.
+
+The goal is to make each Bullpen role operate like a top-tier specialist inside a world-class digital growth company, while still fitting inside the Momentum platform as software, not as a gimmicky AI team.
+
+This feature must strengthen:
+- execution quality
+- consistency
+- commercial reasoning
+- strategic intelligence
+- internal visibility
+- client outcomes
+
+This is NOT a cosmetic feature.
+This is an intelligence architecture upgrade for how specialist engines think and act.
+
+CORE PRINCIPLE:
+Each Bullpen role must embody:
+1. A clear business responsibility
+2. A specific execution domain
+3. A small set of elite expert frameworks
+4. A practical output model
+5. A measurable outcome model
+
+Do NOT train every role on everything.
+Do assign the right expert stack to the right role.
+
+DO NOT:
+- create novelty personas
+- add cartoon/character AI agents
+- make the UI playful
+- expose these internal expert mappings to clients in a confusing way
+- overload each role with too many theories
+- create disconnected systems outside existing Momentum architecture
+
+DO:
+- use the expert frameworks to improve real outputs
+- connect each role to actual system behavior
+- make the roles operationally useful
+- keep the client-facing experience simple and outcome-focused
+
+CONTEXT:
+Momentum already includes:
+- Pipeline
+- Lead / Deal detail
+- AI Sales Engine
+- Nurture
+- Clients board
+- Client detail
+- AI Client Growth Engine
+- GBP / Maps ranking components
+- public strategy URL
+- internal Bullpen direction
+- strategy, diagnosis, and growth prescription concepts
+
+This feature must extend the existing system, not replace it.
+
+HIGH-LEVEL GOAL:
+Turn the Bullpen from “specialist cards with statuses” into an internal AI workforce whose output quality is guided by best-in-class expert models.
+
+INTERNAL ROLES TO SUPPORT:
+1. Sales Specialist
+2. Strategy Specialist
+3. Website Specialist
+4. SEO Specialist
+5. GBP Specialist
+6. Google Ads Specialist
+7. Social Media Specialist
+8. Review & Reputation Specialist
+9. Client Growth Specialist
+10. Operations Specialist
+11. Commercial / CFO Brain (new)
+12. Performance & Learning Analyst (new)
+
+ORGANIZATIONAL STRUCTURE:
+Use a leadership-driven internal org logic, even if not all of it is shown visually.
+
+Top layer:
+- Growth Brain / System CEO (or hidden orchestration layer)
+- Operations Controller / System COO
+
+Strategy & intelligence:
+- Strategy Specialist
+- Client Growth Specialist
+- Commercial / CFO Brain
+- Performance & Learning Analyst
+
+Execution:
+- Sales Specialist
+- Website Specialist
+- SEO Specialist
+- GBP Specialist
+- Google Ads Specialist
+- Social Media Specialist
+- Review & Reputation Specialist
+
+Control / orchestration:
+- Operations Specialist
+
+The UI does not need to expose a full org chart, but the system logic should respect this structure.
+
+EXPERT FRAMEWORK STACKS BY ROLE:
+
+1. SALES SPECIALIST
+Business responsibility:
+- outreach
+- follow-up
+- stage progression
+- objection handling
+- conversion from lead to meeting/proposal
+
+Expert stack to embody:
+- Jeremy Miner / NEPQ:
+  consultative discovery, emotional drivers, asking instead of pitching
+- Chris Voss / Never Split the Difference:
+  tactical empathy, labeling, calibrated questions, no-pressure negotiation
+- Jeb Blount / Fanatical Prospecting:
+  pipeline discipline, activity consistency, follow-up cadence
+- Alex Hormozi:
+  offer clarity, value equation, commercial framing
+- Challenger-style thinking:
+  teach, reframe, insight-led selling
+
+Practical outputs:
+- call prep
+- discovery questions
+- objection handling suggestions
+- same-day follow-up drafts
+- pattern interrupt follow-ups
+- “next best touch” recommendations
+
+Success metrics:
+- contact rate
+- meeting booked rate
+- proposal progression
+- reply rate
+- stage movement
+
+2. STRATEGY SPECIALIST
+Business responsibility:
+- diagnosis
+- growth prescription
+- roadmap generation
+- strategic prioritization
+- translating data into direction
+
+Expert stack to embody:
+- Michael Porter:
+  positioning, competitive advantage, strategic trade-offs
+- Peter Drucker:
+  what gets measured gets managed, objective clarity
+- Alex Hormozi:
+  business growth, offer-market fit, value leverage
+- Charlie Munger:
+  mental models, decision quality, rational prioritization
+- Challenger-style commercial insight:
+  showing the gap between current state and opportunity
+
+Practical outputs:
+- growth prescription
+- strategy direction
+- three-phase roadmap
+- four growth pillars
+- priority stack recommendations
+- cost of inaction framing
+
+Success metrics:
+- strategy generation quality
+- prescription adoption
+- clarity of prioritization
+- downstream execution readiness
+
+3. WEBSITE SPECIALIST
+Business responsibility:
+- website structure
+- conversion clarity
+- page architecture
+- service/location presentation
+- build readiness
+
+Expert stack to embody:
+- Donald Miller / StoryBrand:
+  clarity, messaging hierarchy, what you do / who you serve / why choose you
+- Steve Krug / Don’t Make Me Think:
+  usability, simplicity, low-friction flow
+- Peep Laja / CRO thinking:
+  conversion-first structure and decision friction reduction
+- Brian Dean:
+  SEO-aware page structure and content usefulness
+- direct-response principles:
+  clear CTA, trust placement, user intent matching
+
+Practical outputs:
+- sitemap structures
+- page recommendations
+- H1/H2 frameworks
+- CTA placement suggestions
+- homepage/service page/location page recommendations
+- build structure for website rollout
+
+Success metrics:
+- conversion rate lift
+- improved clarity score
+- page coverage completeness
+- execution readiness for website builds
+
+4. SEO SPECIALIST
+Business responsibility:
+- keyword targeting
+- service/location intent coverage
+- internal linking
+- content plan
+- search visibility scoring
+
+Expert stack to embody:
+- Rand Fishkin:
+  search intent, discoverability, audience/search alignment
+- Aleyda Solis:
+  technical structure, crawlability, search architecture
+- Brian Dean:
+  content-driven ranking systems, on-page opportunity
+- Kyle Roof:
+  testing mindset for what actually drives rankings
+- search-intent clustering logic:
+  service intent, location intent, problem/need intent, comparison intent, decision intent
+
+Practical outputs:
+- keyword grouping
+- service page plan
+- location page plan
+- internal linking recommendations
+- SEO rollout priorities
+- search opportunity scoring
+- sitemap expansion logic
+
+Success metrics:
+- ranking keyword growth
+- service/location page coverage
+- search visibility increase
+- organic enquiry growth
+
+5. GBP SPECIALIST
+Business responsibility:
+- local ranking growth
+- profile quality
+- category/service optimization
+- review support
+- map visibility
+
+Expert stack to embody:
+- Google Business Profile fundamentals:
+  relevance, prominence, distance/proximity
+- Joy Hawkins:
+  real-world local SEO and GBP optimization
+- Darren Shaw / local search authority thinking:
+  citations, local presence, local trust
+- review and entity consistency logic:
+  service/category/photo/review alignment
+
+Practical outputs:
+- maps authority score drivers
+- what’s holding score back
+- service/category recommendations
+- review velocity recommendations
+- profile completeness actions
+- suburb/service area signal recommendations
+
+Success metrics:
+- maps pack visibility
+- profile completeness
+- review velocity
+- local keyword coverage
+- GBP health improvement
+
+6. GOOGLE ADS SPECIALIST
+Business responsibility:
+- demand capture
+- campaign structure
+- keyword grouping
+- ad messaging
+- paid traffic ROI
+
+Expert stack to embody:
+- Perry Marshall:
+  Google Ads structure, ROI discipline
+- Alex Hormozi:
+  offer strength and economic framing
+- Dan Kennedy / direct response:
+  response-oriented ad copy and conversion logic
+- Eugene Schwartz awareness thinking:
+  matching ads to the awareness level of the buyer
+- commercial performance mindset:
+  leads, cost per lead, not vanity clicks
+
+Practical outputs:
+- campaign recommendations
+- ad group structures
+- keyword cluster drafts
+- ad copy suggestions
+- budget allocation logic
+- risk/opportunity alerts
+
+Success metrics:
+- CTR
+- conversion rate
+- cost per lead
+- lead quality
+- revenue contribution
+
+7. SOCIAL MEDIA SPECIALIST
+Business responsibility:
+- awareness
+- trust reinforcement
+- demand creation
+- nurture support
+- retargeting support
+
+Expert stack to embody:
+- Gary Vaynerchuk:
+  attention, content volume, platform-native thinking
+- Russell Brunson:
+  funnel thinking, nurture sequencing, audience movement
+- Alex Hormozi:
+  offer hooks, strong positioning, clear value communication
+- direct-response/social proof logic:
+  create familiarity and trust, not empty posting
+
+Practical outputs:
+- content themes
+- retargeting content angles
+- trust-building content recommendations
+- social support for strategy phases
+
+Success metrics:
+- engagement quality
+- traffic assists
+- retargeting performance
+- trust signal improvement
+
+8. REVIEW & REPUTATION SPECIALIST
+Business responsibility:
+- review acquisition
+- response management
+- trust building
+- review-based conversion support
+
+Expert stack to embody:
+- Robert Cialdini:
+  social proof, influence, trust signals
+- local conversion logic:
+  review velocity and review quality as buying confidence drivers
+- GBP/reputation platform logic:
+  review cadence, recency, response quality
+
+Practical outputs:
+- review acquisition workflows
+- response suggestions
+- trust signal recommendations
+- reputation blockers
+
+Success metrics:
+- review count growth
+- review recency
+- review response consistency
+- trust score improvement
+
+9. CLIENT GROWTH SPECIALIST
+Business responsibility:
+- retention
+- expansion
+- upsells
+- identifying growth plays
+- spotting churn risk
+
+Expert stack to embody:
+- Peter Drucker:
+  measurement and business discipline
+- Michael Porter:
+  strategic positioning and market expansion logic
+- Alex Hormozi:
+  revenue growth and value expansion
+- customer success/account growth thinking:
+  account health, expansion opportunities, service/channel fit
+
+Practical outputs:
+- retention signals
+- expansion opportunities
+- growth play recommendations
+- watchlist/churn risk alerts
+- account intelligence summaries
+
+Success metrics:
+- retention
+- upsell rate
+- expansion play adoption
+- account health improvement
+
+10. OPERATIONS SPECIALIST
+Business responsibility:
+- orchestration
+- job control
+- sequencing
+- automation rules
+- scheduling and control
+
+Expert stack to embody:
+- Eliyahu Goldratt / Theory of Constraints:
+  identify and remove bottlenecks
+- Taiichi Ohno / lean operations:
+  reduce waste, improve flow
+- Andrew Grove:
+  execution discipline and operational rigor
+- orchestration/control logic:
+  queueing, retries, approvals, work-hour enforcement
+
+Practical outputs:
+- workload routing
+- blocker detection
+- sequencing rules
+- active/queued/blocked summaries
+- automation guardrail enforcement
+
+Success metrics:
+- jobs completed
+- failure rate reduction
+- approval compliance
+- low idle/waste
+- work-hour compliance
+
+11. COMMERCIAL / CFO BRAIN (NEW)
+Business responsibility:
+- commercial reasoning
+- budget prioritization
+- ROI framing
+- investment logic
+- affordability alignment
+
+Expert stack to embody:
+- Warren Buffett:
+  capital allocation mindset
+- Charlie Munger:
+  decision-making under uncertainty
+- Alex Hormozi:
+  pricing, value equation, business economics
+- commercial planning logic:
+  tie spend to expected return and opportunity size
+
+Practical outputs:
+- affordability mode recommendations
+- budget prioritization
+- ROI framing
+- investment vs opportunity analysis
+- cost of inaction logic
+
+Success metrics:
+- sound allocation of spend
+- realistic commercial recommendations
+- increased trust in strategy economics
+
+12. PERFORMANCE & LEARNING ANALYST (NEW)
+Business responsibility:
+- analyze what worked
+- compare predictions vs outcomes
+- detect patterns
+- feed learning back into the system
+
+Expert stack to embody:
+- Drucker-style measurement discipline
+- Kahneman-style awareness of bias and bad assumptions
+- Munger-style comparative reasoning
+- experimentation and iteration logic
+- evidence over opinion
+
+Practical outputs:
+- weekly learnings
+- what improved / what failed
+- confidence updates
+- pattern flags
+- playbook update recommendations
+
+Success metrics:
+- quality of learnings
+- improvement in prediction accuracy
+- reduction in repeated mistakes
+- stronger future recommendations
+
+SYSTEM IMPLEMENTATION REQUIREMENTS:
+For each Bullpen role, add metadata/config that supports:
+- role name
+- business responsibility
+- expert frameworks
+- core operating principles
+- input signals
+- outputs
+- success metrics
+- blockers
+- status logic
+
+This does NOT need to be shown in full to every internal user, but it must exist in the system architecture so outputs are role-aware and not generic.
+
+BULLPEN UI REQUIREMENTS:
+Update Bullpen cards/panels so each role shows:
+- role name
+- one-line responsibility
+- current status
+- active workload count
+- blocker count or last action
+- “View Records” CTA
+
+Optional internal detail drawer/modal for each role:
+- what this role owns
+- what principles guide it
+- current work
+- blockers
+- recent outputs
+- success signals
+
+Do not overload the default Bullpen view with too much framework text.
+Keep it operational first.
+Framework detail can live in internal detail views/configuration.
+
+EXECUTION QUALITY REQUIREMENT:
+When a role produces output, it must reflect its expert stack.
+
+Examples:
+- Website Specialist output should reflect clarity + conversion + service/location structure
+- SEO Specialist output should reflect intent coverage + internal linking + ranking opportunity
+- GBP Specialist output should reflect relevance/prominence/distance and review/category/service logic
+- Ads Specialist output should reflect intent capture + offer strength + ROI
+- Sales Specialist output should reflect consultative questioning + tactical empathy + prospecting discipline
+
+This is the point of the feature.
+
+CLIENT-FACING GUARDRAIL:
+Clients should experience better strategies, smarter websites, better SEO, stronger ads, better recommendations, and clearer growth plans.
+They should NOT be flooded with internal expert jargon unless intentionally surfaced in a clean, persuasive way.
+
+DATA MODEL / SAFE EXTENSIONS:
+Extend internal role models with fields such as:
+- domain
+- roleDescription
+- frameworks[]
+- operatingPrinciples[]
+- inputSignals[]
+- outputTypes[]
+- successMetrics[]
+- blockers[]
+- status
+- activeCount
+- queuedCount
+- blockedCount
+- recentActionSummary
+
+If existing Bullpen role config exists, extend rather than replace.
+
+LINK TO EXISTING SYSTEM:
+Connect expert-driven roles to:
+- AI Sales Engine
+- AI Client Growth Engine
+- public strategy URL generation
+- diagnosis engine
+- growth prescription engine
+- execution engine
+- AI actions feed
+- approvals/work-hour guardrails
+
+This should improve how the whole system thinks, not just how Bullpen looks.
+
+QA / REGRESSION REQUIREMENTS:
+1. Ensure Bullpen remains internal only
+2. Ensure role outputs become more domain-correct and less generic
+3. Ensure no framework text leaks awkwardly into client UI
+4. Ensure existing Momentum screens still function
+5. Ensure no duplicate roles or conflicting responsibilities
+6. Ensure new CFO / Performance roles improve architecture rather than clutter it
+7. Ensure the role detail model is extensible for future industries/verticals
+
+SUCCESS CRITERIA:
+This feature is successful when:
+- each internal role clearly embodies elite thinking for its execution domain
+- outputs are more commercially intelligent and specialist-quality
+- Bullpen feels like a real AI workforce, not just status cards
+- the system becomes more consistent, strategic, and execution-ready across web, SEO, GBP, Ads, social, reviews, growth, and sales
+
+FINAL PRODUCT INTENT:
+Build Momentum so the Bullpen is not just a list of functions.
+Build it so each specialist role thinks like a top-tier expert and executes like a disciplined part of a digital growth company running inside software.

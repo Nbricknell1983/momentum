@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import type { RootState } from '@/store';
@@ -19,7 +21,9 @@ import {
   Settings2, AlertTriangle, CheckCircle2, Clock, Zap, ChevronDown, ChevronRight,
   ExternalLink, RefreshCw, Activity as ActivityIcon, Timer, Ban,
   BriefcaseBusiness, Cpu, Eye, Radio, Compass, Bot, Link2, MapPin,
-  FileSearch, PlayCircle, Wrench, UserCheck, GitMerge, List
+  FileSearch, PlayCircle, Wrench, UserCheck, GitMerge, List,
+  Landmark, FlaskConical, Share2, BookOpen, Target, Layers,
+  TrendingDown, ArrowRight, ChevronLeft
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +42,7 @@ interface RoleMetrics {
   lastActionLabel?: string;
   detail: string;
   linkedPath?: string;
+  tier?: 'leadership' | 'execution' | 'control';
 }
 
 interface AttentionItem {
@@ -107,7 +112,278 @@ const ROLE_META: Record<string, { icon: typeof Briefcase; bg: string }> = {
   'Strategy':    { icon: Eye,               bg: 'bg-slate-600' },
   'Strategist':  { icon: Compass,           bg: 'bg-violet-600' },
   'Ops':         { icon: Cpu,               bg: 'bg-gray-500' },
+  'Social':      { icon: Share2,            bg: 'bg-pink-500' },
+  'Commercial':  { icon: Landmark,          bg: 'bg-teal-600' },
+  'Performance': { icon: FlaskConical,      bg: 'bg-rose-600' },
   'Team':        { icon: Users,             bg: 'bg-slate-700' },
+};
+
+// ─── Role Intelligence Config ─────────────────────────────────────────────────
+
+interface RoleFramework { name: string; focus: string }
+
+interface RoleConfig {
+  id: string;
+  tier: 'leadership' | 'execution' | 'control';
+  roleDescription: string;
+  expertFrameworks: RoleFramework[];
+  operatingPrinciples: string[];
+  inputSignals: string[];
+  outputTypes: string[];
+  successMetrics: string[];
+}
+
+const ROLE_CONFIG: Record<string, RoleConfig> = {
+  sales: {
+    id: 'sales', tier: 'execution',
+    roleDescription: 'Outreach, follow-up, stage progression, objection handling, conversion from lead to meeting or proposal.',
+    expertFrameworks: [
+      { name: 'NEPQ (Jeremy Miner)', focus: 'Consultative discovery — ask instead of pitch, surface emotional drivers' },
+      { name: 'Never Split the Difference (Chris Voss)', focus: 'Tactical empathy, labeling, calibrated questions, no-pressure negotiation' },
+      { name: 'Fanatical Prospecting (Jeb Blount)', focus: 'Pipeline discipline, activity consistency, follow-up cadence' },
+      { name: 'Value Equation (Alex Hormozi)', focus: 'Offer clarity, commercial framing, dream outcome articulation' },
+      { name: 'Challenger Sale', focus: 'Teach, reframe, insight-led selling — lead with a point of view' },
+    ],
+    operatingPrinciples: [
+      'Ask before telling — understand the problem before presenting the solution',
+      'Follow up the same day. Momentum dies in the gap.',
+      'Every touch must move the prospect closer to a decision — not just check in',
+      'Pipeline discipline over activity vanity',
+    ],
+    inputSignals: ['lead stage', 'last contact date', 'overdue follow-ups', 'next best actions', 'open NBA queue'],
+    outputTypes: ['call prep notes', 'discovery questions', 'objection handling suggestions', 'follow-up drafts', 'next best touch recommendations'],
+    successMetrics: ['contact rate', 'meeting booked rate', 'proposal progression rate', 'reply rate', 'stage movement velocity'],
+  },
+  strategy: {
+    id: 'strategy', tier: 'leadership',
+    roleDescription: 'Diagnosis, growth prescription, roadmap generation, strategic prioritization, translating data into direction.',
+    expertFrameworks: [
+      { name: 'Competitive Advantage (Michael Porter)', focus: 'Positioning, strategic trade-offs, sustainable differentiation' },
+      { name: 'Measurement Discipline (Peter Drucker)', focus: 'What gets measured gets managed — objective clarity and progress tracking' },
+      { name: 'Business Growth (Alex Hormozi)', focus: 'Offer-market fit, value leverage, compounding growth logic' },
+      { name: 'Mental Models (Charlie Munger)', focus: 'Decision quality, rational prioritization, avoiding first-order thinking' },
+      { name: 'Challenger Insight Selling', focus: 'Show the gap between current state and opportunity — create urgency from evidence' },
+    ],
+    operatingPrinciples: [
+      'Diagnosis before direction — never prescribe without understanding the business',
+      'Strategic trade-offs are decisions, not compromises',
+      'Show the cost of inaction, not just the benefit of action',
+      'Every recommendation must be executable — not just directional',
+    ],
+    inputSignals: ['discovery context', 'strategy intelligence', 'engine scores', 'growth plays', 'lead stage data'],
+    outputTypes: ['growth prescription', 'strategy direction', '3-phase roadmap', 'four growth pillars', 'priority stack recommendations', 'cost of inaction framing'],
+    successMetrics: ['prescription adoption rate', 'clarity of prioritization', 'downstream execution readiness', 'strategy generation quality'],
+  },
+  website: {
+    id: 'website', tier: 'execution',
+    roleDescription: 'Website structure, conversion clarity, page architecture, service/location presentation, build readiness.',
+    expertFrameworks: [
+      { name: 'StoryBrand (Donald Miller)', focus: 'Clarity hierarchy — what you do, who you serve, why choose you' },
+      { name: "Don't Make Me Think (Steve Krug)", focus: 'Usability, simplicity, low-friction user flow' },
+      { name: 'CRO Thinking (Peep Laja)', focus: 'Conversion-first structure, decision friction reduction, trust placement' },
+      { name: 'SEO-aware Content (Brian Dean)', focus: 'Page structure aligned with search intent and content usefulness' },
+      { name: 'Direct Response Principles', focus: 'Clear CTA, trust signals in the right places, intent matching' },
+    ],
+    operatingPrinciples: [
+      'Clarity beats cleverness — if a visitor has to think, you have failed',
+      'Every page must have one job',
+      'Build for the buyer\'s decision, not the client\'s ego',
+      'Running ads to a weak website is burning money',
+    ],
+    inputSignals: ['website engine score', 'overall grade', 'onboarding context', 'service data', 'conversion structure flags'],
+    outputTypes: ['sitemap structures', 'page recommendations', 'H1/H2 frameworks', 'CTA placement suggestions', 'service/location page plans', 'build rollout structure'],
+    successMetrics: ['conversion rate lift', 'improved clarity score', 'page coverage completeness', 'build readiness'],
+  },
+  seo: {
+    id: 'seo', tier: 'execution',
+    roleDescription: 'Keyword targeting, service/location intent coverage, internal linking, content planning, search visibility scoring.',
+    expertFrameworks: [
+      { name: 'Search Intent (Rand Fishkin)', focus: 'Audience/search alignment, discoverability, intent before keyword volume' },
+      { name: 'Search Architecture (Aleyda Solis)', focus: 'Technical structure, crawlability, page hierarchy' },
+      { name: 'Content-driven Rankings (Brian Dean)', focus: 'On-page opportunity, content clusters, ranking content systems' },
+      { name: 'Testing Mindset (Kyle Roof)', focus: 'What actually drives rankings — data over assumption' },
+      { name: 'Intent Clustering Logic', focus: 'Service intent, location intent, problem/need intent, comparison and decision intent' },
+    ],
+    operatingPrinciples: [
+      'Service pages before blog content — commercial intent converts',
+      'Location coverage is local moat-building',
+      'Internal linking is authority distribution — treat it as architecture',
+      'Rankings are earned by relevance, not tricks',
+    ],
+    inputSignals: ['SEO engine outputs', 'onboarding service/location data', 'keyword targets', 'content gap analysis', 'visibility score'],
+    outputTypes: ['keyword grouping', 'service page plan', 'location page plan', 'internal linking recommendations', 'SEO rollout priorities', 'search opportunity scoring'],
+    successMetrics: ['ranking keyword growth', 'service/location page coverage', 'search visibility increase', 'organic enquiry growth'],
+  },
+  gbp: {
+    id: 'gbp', tier: 'execution',
+    roleDescription: 'Local ranking growth, profile quality, category and service optimization, review support, map visibility.',
+    expertFrameworks: [
+      { name: 'GBP Fundamentals (Google)', focus: 'Relevance, prominence, distance — the three ranking levers for Maps Pack' },
+      { name: 'Local SEO Authority (Joy Hawkins)', focus: 'Real-world GBP optimization and local visibility strategy' },
+      { name: 'Local Trust (Darren Shaw)', focus: 'Citations, local presence consistency, entity authority' },
+      { name: 'Review & Entity Consistency', focus: 'Service/category/photo/review alignment as a ranking signal' },
+    ],
+    operatingPrinciples: [
+      'Profile completeness is the foundation — gaps are ranking gaps',
+      'Review velocity beats review count — recency matters most',
+      'Category precision outweighs breadth — own the right category first',
+      'Proximity cannot be controlled, but relevance and prominence can',
+    ],
+    inputSignals: ['GBP engine score', 'review velocity', 'profile completeness', 'GBP location linked', 'maps scan data'],
+    outputTypes: ['maps authority score drivers', 'what\'s holding score back', 'service/category recommendations', 'review velocity plan', 'profile completeness actions'],
+    successMetrics: ['maps pack visibility', 'profile completeness score', 'review velocity', 'local keyword coverage', 'GBP health improvement'],
+  },
+  ads: {
+    id: 'ads', tier: 'execution',
+    roleDescription: 'Demand capture, campaign structure, keyword grouping, ad messaging, paid traffic ROI.',
+    expertFrameworks: [
+      { name: 'Google Ads Structure (Perry Marshall)', focus: 'ROI discipline, quality score thinking, search intent matching' },
+      { name: 'Offer Strength (Alex Hormozi)', focus: 'Commercial framing, value equation, irresistible offer mechanics' },
+      { name: 'Direct Response Copy (Dan Kennedy)', focus: 'Response-oriented ads, conversion logic, specific CTAs' },
+      { name: 'Awareness Levels (Eugene Schwartz)', focus: 'Match ad message to buyer awareness — cold vs warm vs hot traffic' },
+      { name: 'Commercial Performance Mindset', focus: 'Leads and cost per lead — not impressions or clicks' },
+    ],
+    operatingPrinciples: [
+      'Ads amplify what already works — weak websites kill campaign ROI',
+      'Intent match is everything — serve the right message at the right stage',
+      'Budget without tracking is waste — every dollar must be accountable',
+      'Readiness score must exceed 60 before recommending launch',
+    ],
+    inputSignals: ['ads engine outputs', 'readiness score', 'website grade', 'SEO foundation', 'onboarding context'],
+    outputTypes: ['campaign structure recommendations', 'ad group plans', 'keyword cluster drafts', 'ad copy suggestions', 'budget allocation logic', 'risk/opportunity alerts'],
+    successMetrics: ['CTR', 'conversion rate', 'cost per lead', 'lead quality', 'revenue contribution'],
+  },
+  social: {
+    id: 'social', tier: 'execution',
+    roleDescription: 'Awareness, trust reinforcement, demand creation, nurture support, retargeting signal.',
+    expertFrameworks: [
+      { name: 'Attention Economy (Gary Vaynerchuk)', focus: 'Platform-native content, volume, native behaviour over broadcast' },
+      { name: 'Funnel Thinking (Russell Brunson)', focus: 'Audience movement, nurture sequencing, trust ladder' },
+      { name: 'Positioning & Hooks (Alex Hormozi)', focus: 'Offer hooks, strong positioning, value communication that stops the scroll' },
+      { name: 'Social Proof Logic', focus: 'Create familiarity and trust — not empty posting' },
+    ],
+    operatingPrinciples: [
+      'Reach without relevance is noise',
+      'Social supports the funnel — it is rarely the close',
+      'Retargeting is the bridge between awareness and decision',
+      'Trust-building content outperforms promotional content 3-to-1',
+    ],
+    inputSignals: ['growth plays', 'client phase', 'SEO content plan', 'review velocity', 'awareness objectives'],
+    outputTypes: ['content themes', 'retargeting content angles', 'trust-building content plan', 'social support for strategy phases'],
+    successMetrics: ['engagement quality', 'traffic assists', 'retargeting performance', 'trust signal improvement'],
+  },
+  review: {
+    id: 'review', tier: 'execution',
+    roleDescription: 'Review acquisition, response management, trust building, review-based conversion support.',
+    expertFrameworks: [
+      { name: 'Influence & Social Proof (Robert Cialdini)', focus: 'Social proof as a buying trigger — volume, recency, and specificity' },
+      { name: 'Local Conversion Logic', focus: 'Review velocity and quality as direct buying confidence drivers' },
+      { name: 'GBP Reputation Platform Logic', focus: 'Review cadence, recency signals, response consistency as ranking factor' },
+    ],
+    operatingPrinciples: [
+      'A recent 4-star beats an old 5-star — recency is the signal',
+      'Every unanswered review is a missed trust moment',
+      'Review acquisition is a process, not a campaign',
+      'Response quality reflects the brand — every reply is public',
+    ],
+    inputSignals: ['GBP engine review scores', 'review count', 'response rate', 'review recency', 'GBP auth status'],
+    outputTypes: ['review acquisition workflows', 'response suggestions', 'trust signal recommendations', 'reputation blocker flags'],
+    successMetrics: ['review count growth', 'review recency', 'response consistency', 'trust score improvement'],
+  },
+  growth: {
+    id: 'growth', tier: 'leadership',
+    roleDescription: 'Retention, expansion, upsells, identifying growth plays, spotting churn risk.',
+    expertFrameworks: [
+      { name: 'Measurement Discipline (Peter Drucker)', focus: 'Account health measurement, objective tracking, performance accountability' },
+      { name: 'Strategic Positioning (Michael Porter)', focus: 'Expansion into adjacent services, market extension logic' },
+      { name: 'Revenue Growth (Alex Hormozi)', focus: 'Value expansion, upsell logic, business economics of retention' },
+      { name: 'Customer Success Thinking', focus: 'Account health signals, expansion opportunities, service/channel fit' },
+    ],
+    operatingPrinciples: [
+      'Retention is cheaper than acquisition — protect health before pursuing expansion',
+      'Churn signals appear weeks before the cancellation — spot them early',
+      'Every upsell must serve the client\'s outcome, not just revenue',
+      'Strong momentum clients are the best expansion targets',
+    ],
+    inputSignals: ['health status', 'learning insight', 'applied plays', 'engine scores', 'automation mode', 'action history'],
+    outputTypes: ['retention signals', 'expansion opportunities', 'growth play recommendations', 'churn risk alerts', 'account intelligence summaries'],
+    successMetrics: ['retention rate', 'upsell rate', 'expansion play adoption', 'account health improvement'],
+  },
+  strategist: {
+    id: 'strategist', tier: 'leadership',
+    roleDescription: 'Senior coordinator — owns client outcomes by sequencing engines, plays, and actions across all specialists.',
+    expertFrameworks: [
+      { name: 'Systems Thinking', focus: 'How parts interact — sequencing decisions that prevent specialist conflicts' },
+      { name: 'Prioritization Logic (Drucker + Munger)', focus: 'What to focus on first — leverage points and constraint resolution' },
+      { name: 'Commercial Intelligence (Hormozi)', focus: 'Connecting execution to commercial outcomes for the client' },
+    ],
+    operatingPrinciples: [
+      'Coordinate before executing — misaligned specialists waste resources',
+      'One strategic direction at a time — avoid plan fragmentation',
+      'The Strategist escalates to the manager, not the other way around',
+      'Stalled momentum is always an input problem or sequencing problem',
+    ],
+    inputSignals: ['all engine outputs', 'learning insights', 'momentum status', 'applied plays', 'specialist statuses'],
+    outputTypes: ['strategic direction', 'play sequencing decisions', 'specialist coordination', 'escalation flags', 'momentum assessments'],
+    successMetrics: ['client momentum status', 'coordination quality', 'execution readiness', 'stalled client resolution rate'],
+  },
+  ops: {
+    id: 'ops', tier: 'control',
+    roleDescription: 'Orchestration, job control, sequencing, automation rules, scheduling and execution control.',
+    expertFrameworks: [
+      { name: 'Theory of Constraints (Goldratt)', focus: 'Identify and remove bottlenecks — the weakest link limits the system' },
+      { name: 'Lean Operations (Taiichi Ohno)', focus: 'Reduce waste, improve flow, eliminate non-value steps' },
+      { name: 'Execution Discipline (Andrew Grove)', focus: 'Operational rigor, output-focused management, accountability' },
+      { name: 'Orchestration Logic', focus: 'Queueing, retries, approvals, work-hour enforcement, guardrails' },
+    ],
+    operatingPrinciples: [
+      'The bottleneck controls the throughput — fix it before expanding capacity',
+      'Automation without guardrails creates new failure modes',
+      'Every queued job must have an owner and a completion state',
+      'Compliance with work-hour rules is not optional',
+    ],
+    inputSignals: ['automation rules', 'job queue', 'approval queue', 'blocked clients', 'work hours config'],
+    outputTypes: ['workload routing', 'blocker detection', 'sequencing rules', 'active/queued/blocked summaries', 'guardrail enforcement'],
+    successMetrics: ['jobs completed rate', 'failure rate reduction', 'approval compliance', 'work-hour adherence'],
+  },
+  commercial: {
+    id: 'commercial', tier: 'leadership',
+    roleDescription: 'Commercial reasoning, budget prioritization, ROI framing, investment logic, affordability alignment.',
+    expertFrameworks: [
+      { name: 'Capital Allocation (Warren Buffett)', focus: 'Where does each dollar produce the most return — think in returns, not costs' },
+      { name: 'Decision Under Uncertainty (Charlie Munger)', focus: 'Inversion, margin of safety, avoiding the bad bet masquerading as opportunity' },
+      { name: 'Pricing & Value (Alex Hormozi)', focus: 'Value equation, dream outcome vs price perception, offer economics' },
+      { name: 'Commercial Planning Logic', focus: 'Tie spend to expected return and opportunity size — evidence-based budgets' },
+    ],
+    operatingPrinciples: [
+      'Every budget recommendation must be anchored to expected return',
+      'The cost of inaction is a real number — calculate it',
+      'Price is only too high when value is unclear',
+      'Affordability and willingness-to-pay are different problems',
+    ],
+    inputSignals: ['ads readiness', 'revenue potential', 'client tier', 'investment tiers from prescription', 'onboarding commercial context'],
+    outputTypes: ['affordability mode recommendations', 'budget prioritization', 'ROI framing', 'investment vs opportunity analysis', 'cost of inaction logic'],
+    successMetrics: ['commercial recommendation quality', 'allocation soundness', 'trust in strategy economics', 'budget-to-outcome accuracy'],
+  },
+  performance: {
+    id: 'performance', tier: 'leadership',
+    roleDescription: 'Analyze what worked, compare predictions vs outcomes, detect patterns, feed learning back into the system.',
+    expertFrameworks: [
+      { name: 'Measurement Discipline (Peter Drucker)', focus: 'Evidence over opinion — track what matters, ignore what doesn\'t' },
+      { name: 'Cognitive Bias Awareness (Daniel Kahneman)', focus: 'Identify and correct bad assumptions — overconfidence, recency, anchoring' },
+      { name: 'Comparative Reasoning (Charlie Munger)', focus: 'Learn from outcomes across clients — what patterns repeat?' },
+      { name: 'Experimentation Logic', focus: 'Build, measure, learn — iteration as a discipline, not a reaction' },
+    ],
+    operatingPrinciples: [
+      'Repeated mistakes are system failures, not people failures',
+      'Prediction accuracy improves through honest review of what was wrong',
+      'Patterns only become visible when outcomes are tracked rigorously',
+      'Evidence updates confidence — opinion does not',
+    ],
+    inputSignals: ['engine scores over time', 'action approval/rejection rates', 'momentum status history', 'learning insights', 'active plays outcomes'],
+    outputTypes: ['weekly learnings summary', 'what improved / what failed', 'confidence updates', 'pattern flags', 'playbook update recommendations'],
+    successMetrics: ['quality of learnings', 'improvement in prediction accuracy', 'reduction in repeated mistakes', 'stronger future recommendations'],
+  },
 };
 
 const STATUS_CONFIG: Record<BullpenStatus, { label: string; color: string; dot: string }> = {
@@ -148,9 +424,14 @@ function SummaryCard({ label, value, icon: Icon, color }: { label: string; value
 
 // ─── Role Card ────────────────────────────────────────────────────────────────
 
-function RoleCard({ role, expanded, onToggle }: { role: RoleMetrics; expanded: boolean; onToggle: () => void }) {
+const TIER_BADGE: Record<string, string> = {
+  leadership: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400',
+  execution:  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+  control:    'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+};
+
+function RoleCard({ role, onViewIntel }: { role: RoleMetrics; onViewIntel: () => void }) {
   const Icon = role.icon;
-  const cfg = STATUS_CONFIG[role.status];
 
   return (
     <Card className="border bg-card hover:shadow-sm transition-shadow">
@@ -161,7 +442,14 @@ function RoleCard({ role, expanded, onToggle }: { role: RoleMetrics; expanded: b
               <Icon className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">{role.name}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold truncate">{role.name}</p>
+                {role.tier && (
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${TIER_BADGE[role.tier] || TIER_BADGE.execution}`}>
+                    {role.tier}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">{role.detail}</p>
             </div>
           </div>
@@ -188,17 +476,148 @@ function RoleCard({ role, expanded, onToggle }: { role: RoleMetrics; expanded: b
           )}
         </div>
 
-        {role.linkedPath && (
-          <div className="mt-3">
-            <Link href={role.linkedPath}>
+        <div className="mt-3 flex gap-2">
+          {role.linkedPath && (
+            <Link href={role.linkedPath} className="flex-1">
               <Button variant="outline" size="sm" className="w-full h-7 text-xs gap-1">
                 <ExternalLink className="h-3 w-3" /> View Records
               </Button>
             </Link>
-          </div>
-        )}
+          )}
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 px-2 text-muted-foreground" onClick={onViewIntel}>
+            <BookOpen className="h-3 w-3" /> Intel
+          </Button>
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Role Intel Drawer ────────────────────────────────────────────────────────
+
+function RoleIntelDrawer({ role, config, open, onClose }: {
+  role: RoleMetrics | null;
+  config: RoleConfig | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  if (!role || !config) return null;
+  const Icon = role.icon;
+
+  return (
+    <Sheet open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <SheetContent side="right" className="w-full sm:w-[540px] overflow-y-auto">
+        <SheetHeader className="mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-muted/60">
+              <Icon className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <SheetTitle className="text-base">{role.name}</SheetTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">{config.roleDescription}</p>
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="space-y-6">
+          {/* Expert Frameworks */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+              <BookOpen className="h-3 w-3" /> Expert Frameworks
+            </h3>
+            <div className="space-y-2">
+              {config.expertFrameworks.map((f, i) => (
+                <div key={i} className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-xs font-semibold">{f.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{f.focus}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Operating Principles */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+              <Target className="h-3 w-3" /> Operating Principles
+            </h3>
+            <ul className="space-y-2">
+              {config.operatingPrinciples.map((p, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
+                  <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                  {p}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <Separator />
+
+          {/* Output Types */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+              <Layers className="h-3 w-3" /> What This Role Produces
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {config.outputTypes.map((o, i) => (
+                <span key={i} className="text-[11px] px-2 py-1 rounded-md bg-muted border text-muted-foreground">{o}</span>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Input Signals */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+              <ActivityIcon className="h-3 w-3" /> Input Signals
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {config.inputSignals.map((s, i) => (
+                <span key={i} className="text-[11px] px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400">{s}</span>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Success Metrics */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+              <TrendingUp className="h-3 w-3" /> Success Metrics
+            </h3>
+            <ul className="space-y-1.5">
+              {config.successMetrics.map((m, i) => (
+                <li key={i} className="flex items-center gap-2 text-xs text-foreground/80">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                  {m}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <Separator />
+
+          {/* Current Status */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+              <ActivityIcon className="h-3 w-3" /> Current Status
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg border bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{role.currentCount}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{role.currentLabel}</p>
+              </div>
+              <div className={`p-3 rounded-lg border text-center ${role.blockerCount > 0 ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : 'bg-muted/30'}`}>
+                <p className={`text-2xl font-bold ${role.blockerCount > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{role.blockerCount}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{role.blockerCount > 0 ? role.blockerSummary || 'blockers' : 'no blockers'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -358,6 +777,7 @@ export default function BullpenPage() {
   const [rulesSaving, setRulesSaving] = useState(false);
   const [rulesLoaded, setRulesLoaded] = useState(false);
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
+  const [intelRole, setIntelRole] = useState<RoleMetrics | null>(null);
 
   // ── Live-feed state ───────────────────────────────────────────────────────
   const [visibleCount, setVisibleCount] = useState(0);
@@ -559,121 +979,105 @@ export default function BullpenPage() {
         id: 'sales',
         name: 'Sales Specialist',
         icon: BriefcaseBusiness,
+        tier: 'execution',
         status: overdueLeads.length > 5 ? 'needs_attention' : salesActions.length > 0 ? 'active' : overdueLeads.length > 0 ? 'needs_attention' : 'idle',
         currentCount: salesActions.length,
         currentLabel: 'open outreach actions',
         blockerCount: overdueLeads.length,
         blockerSummary: overdueLeads.length ? `${overdueLeads.length} overdue follow-ups` : undefined,
         lastActionLabel: lastSalesActivity ? `${lastSalesActivity.type} — ${formatDistanceToNow(new Date(lastSalesActivity.createdAt), { addSuffix: true })}` : undefined,
-        detail: 'Outreach, follow-up, stage progression',
+        detail: 'Outreach, follow-up, stage progression, conversion',
         linkedPath: '/pipeline',
       },
       {
-        id: 'seo',
-        name: 'SEO Specialist',
-        icon: Search,
+        id: 'seo', name: 'SEO Specialist', icon: Search, tier: 'execution',
         status: clientsWithSEO.length > 0 ? 'active' : 'idle',
-        currentCount: clientsWithSEO.length,
-        currentLabel: 'clients with SEO plans',
+        currentCount: clientsWithSEO.length, currentLabel: 'clients with SEO plans',
         blockerCount: activeClients.filter(c => !c.seoEngine && !c.clientOnboarding?.seoInputs).length,
         blockerSummary: 'Missing service/location data',
         lastActionLabel: clientsWithSEO.length > 0 ? `${clientsWithSEO.length} SEO plans generated` : undefined,
-        detail: 'Keyword targeting, content plans, visibility scoring',
+        detail: 'Keyword targeting, intent coverage, content planning, visibility scoring',
         linkedPath: '/clients',
       },
       {
-        id: 'website',
-        name: 'Website Specialist',
-        icon: Globe,
+        id: 'website', name: 'Website Specialist', icon: Globe, tier: 'execution',
         status: clientsWithWebsite.length > 0 ? 'active' : 'idle',
-        currentCount: clientsWithWebsite.length,
-        currentLabel: 'clients with website audits',
-        blockerCount: clientsWithWebsite.filter(c => {
-          const grade = c.websiteEngine?.overallGrade;
-          return grade === 'F' || grade === 'D';
-        }).length,
+        currentCount: clientsWithWebsite.length, currentLabel: 'clients with website audits',
+        blockerCount: clientsWithWebsite.filter(c => { const g = c.websiteEngine?.overallGrade; return g === 'F' || g === 'D'; }).length,
         blockerSummary: 'Low-grade sites needing rebuild',
         lastActionLabel: clientsWithWebsite.length > 0 ? `${clientsWithWebsite.length} website audits active` : undefined,
-        detail: 'Conversion scoring, sitemap, build structure',
+        detail: 'Conversion clarity, sitemap structure, build readiness',
         linkedPath: '/clients',
       },
       {
-        id: 'ads',
-        name: 'Google Ads Specialist',
-        icon: BarChart3,
+        id: 'ads', name: 'Google Ads Specialist', icon: BarChart3, tier: 'execution',
         status: clientsWithAds.length > 0 ? 'active' : 'idle',
-        currentCount: clientsWithAds.length,
-        currentLabel: 'clients with ads plans',
+        currentCount: clientsWithAds.length, currentLabel: 'clients with ads plans',
         blockerCount: clientsWithAds.filter(c => (c.adsEngine?.readinessScore || 0) < 50).length,
         blockerSummary: 'Low readiness — needs SEO/GBP first',
         lastActionLabel: clientsWithAds.length > 0 ? `${clientsWithAds.length} campaigns assessed` : undefined,
-        detail: 'Campaign structure, budgets, keyword targeting',
+        detail: 'Demand capture, campaign structure, budget ROI',
         linkedPath: '/clients',
       },
       {
-        id: 'gbp',
-        name: 'GBP Specialist',
-        icon: Star,
+        id: 'gbp', name: 'GBP Specialist', icon: Star, tier: 'execution',
         status: clientsWithGBP.length > 0 ? 'active' : clientsWithGBPAuth.length > 0 ? 'active' : 'idle',
-        currentCount: clientsWithGBP.length,
-        currentLabel: 'clients with GBP reports',
+        currentCount: clientsWithGBP.length, currentLabel: 'clients with GBP reports',
         blockerCount: activeClients.filter(c => !c.gbpLocationName).length,
         blockerSummary: 'GBP OAuth not connected',
         lastActionLabel: clientsWithGBP.length > 0 ? `${clientsWithGBP.length} GBP profiles assessed` : undefined,
-        detail: 'Profile optimisation, review strategy, local visibility',
+        detail: 'Profile optimisation, review strategy, local map visibility',
         linkedPath: '/clients',
       },
       {
-        id: 'growth',
-        name: 'Client Growth Specialist',
-        icon: TrendingUp,
-        status: aiActiveClients.length > 0 ? 'active' : redAmberClients.length > 0 ? 'needs_attention' : 'idle',
+        id: 'social', name: 'Social Media Specialist', icon: Share2, tier: 'execution',
+        status: aiActiveClients.filter(c => c.appliedPlays?.some((p: string) => p.toLowerCase().includes('social') || p.toLowerCase().includes('content'))).length > 0 ? 'active' : 'idle',
         currentCount: aiActiveClients.length,
-        currentLabel: 'clients with AI growth active',
-        blockerCount: redAmberClients.length,
-        blockerSummary: `${redAmberClients.filter(c => c.healthStatus === 'red').length} critical, ${redAmberClients.filter(c => c.healthStatus === 'amber').length} amber`,
-        lastActionLabel: aiActiveClients.length > 0 ? `${aiActiveClients.length} clients monitored` : undefined,
-        detail: 'Health monitoring, churn prevention, expansion signals',
+        currentLabel: 'active clients in scope',
+        blockerCount: 0,
+        lastActionLabel: 'Awareness, trust, retargeting support',
+        detail: 'Awareness content, trust building, demand creation, retargeting',
         linkedPath: '/clients',
       },
       {
-        id: 'review',
-        name: 'Review & Reputation',
-        icon: Shield,
+        id: 'review', name: 'Review & Reputation', icon: Shield, tier: 'execution',
         status: clientsWithGBPAuth.length > 0 ? 'active' : 'idle',
-        currentCount: clientsWithGBPAuth.length,
-        currentLabel: 'clients with GBP connected',
+        currentCount: clientsWithGBPAuth.length, currentLabel: 'clients with GBP connected',
         blockerCount: clientsWithGBP.filter(c => (c.gbpEngine?.scores?.reviewStrength || 0) < 50).length,
         blockerSummary: 'Weak review profiles',
         lastActionLabel: clientsWithGBPAuth.length > 0 ? `${clientsWithGBPAuth.length} profiles monitored` : undefined,
-        detail: 'Review acquisition, response management, profile authority',
+        detail: 'Review acquisition, response management, trust building',
         linkedPath: '/clients',
       },
       {
-        id: 'strategy',
-        name: 'Strategy Specialist',
-        icon: Eye,
+        id: 'growth', name: 'Client Growth Specialist', icon: TrendingUp, tier: 'leadership',
+        status: aiActiveClients.length > 0 ? 'active' : redAmberClients.length > 0 ? 'needs_attention' : 'idle',
+        currentCount: aiActiveClients.length, currentLabel: 'clients with AI growth active',
+        blockerCount: redAmberClients.length,
+        blockerSummary: `${redAmberClients.filter(c => c.healthStatus === 'red').length} critical, ${redAmberClients.filter(c => c.healthStatus === 'amber').length} amber`,
+        lastActionLabel: aiActiveClients.length > 0 ? `${aiActiveClients.length} clients monitored` : undefined,
+        detail: 'Retention, expansion, churn prevention, account intelligence',
+        linkedPath: '/clients',
+      },
+      {
+        id: 'strategy', name: 'Strategy Specialist', icon: Eye, tier: 'leadership',
         status: clientsWithPrescription.length > 0 ? 'active' : 'idle',
-        currentCount: clientsWithPrescription.length,
-        currentLabel: 'growth prescriptions generated',
+        currentCount: clientsWithPrescription.length, currentLabel: 'growth prescriptions generated',
         blockerCount: activeLeads.filter(l => !l.strategyIntelligence?.businessOverview).length,
         blockerSummary: 'Missing discovery context',
         lastActionLabel: clientsWithPrescription.length > 0 ? `${clientsWithPrescription.length} strategies active` : undefined,
-        detail: 'Growth prescriptions, discovery inputs, strategy intelligence',
+        detail: 'Diagnosis, growth prescription, roadmap, strategic prioritization',
         linkedPath: '/pipeline',
       },
       {
-        id: 'strategist',
-        name: 'Client Strategist',
-        icon: Compass,
+        id: 'strategist', name: 'Client Strategist', icon: Compass, tier: 'leadership',
         status: (() => {
           const stalled = activeClients.filter(c => c.learningInsight?.momentumStatus === 'stalled');
           if (stalled.length > 0) return 'needs_attention' as const;
           if (aiActiveClients.length > 0) return 'active' as const;
           return 'idle' as const;
         })(),
-        currentCount: aiActiveClients.length,
-        currentLabel: 'clients with active growth strategy',
+        currentCount: aiActiveClients.length, currentLabel: 'clients with active growth strategy',
         blockerCount: activeClients.filter(c => !c.appliedPlays || c.appliedPlays.length === 0).length,
         blockerSummary: 'No growth play activated',
         lastActionLabel: (() => {
@@ -683,19 +1087,37 @@ export default function BullpenPage() {
           if (strong.length > 0) return `${strong.length} client${strong.length > 1 ? 's' : ''} with strong momentum`;
           return undefined;
         })(),
-        detail: 'Owns client outcomes — sequences engines, plays & actions across all specialists',
+        detail: 'Senior coordinator — sequences engines, plays & actions across all specialists',
         linkedPath: '/clients',
       },
       {
-        id: 'ops',
-        name: 'Operations Specialist',
-        icon: Cpu,
+        id: 'commercial', name: 'Commercial Intelligence', icon: Landmark, tier: 'leadership',
+        status: clientsWithPrescription.length > 0 ? 'active' : 'idle',
+        currentCount: clientsWithPrescription.length, currentLabel: 'clients with investment tiers',
+        blockerCount: activeClients.filter(c => !c.growthPrescription?.investmentTiers).length,
+        blockerSummary: 'No investment tiers generated',
+        lastActionLabel: clientsWithPrescription.length > 0 ? `${clientsWithPrescription.length} ROI models active` : 'No commercial models yet',
+        detail: 'Budget logic, ROI framing, cost of inaction, investment allocation',
+        linkedPath: '/clients',
+      },
+      {
+        id: 'performance', name: 'Performance Analyst', icon: FlaskConical, tier: 'leadership',
+        status: activeClients.filter(c => c.learningInsight?.overallAssessment).length > 0 ? 'active' : 'idle',
+        currentCount: activeClients.filter(c => c.learningInsight?.overallAssessment).length,
+        currentLabel: 'clients with learning data',
+        blockerCount: activeClients.filter(c => !c.learningInsight).length,
+        blockerSummary: 'No learning insights generated yet',
+        lastActionLabel: 'Pattern detection, prediction accuracy, playbook updates',
+        detail: 'What worked, what failed, pattern analysis, confidence updates',
+        linkedPath: '/clients',
+      },
+      {
+        id: 'ops', name: 'Operations Specialist', icon: Cpu, tier: 'control',
         status: autonomousClients.length > 0 ? 'active' : aiActiveClients.length > 0 ? 'active' : 'idle',
-        currentCount: autonomousClients.length,
-        currentLabel: 'clients on autopilot',
+        currentCount: autonomousClients.length, currentLabel: 'clients on autopilot',
         blockerCount: 0,
         lastActionLabel: autonomousClients.length > 0 ? `${autonomousClients.length} on autonomous mode` : 'All clients in manual mode',
-        detail: 'Automation rules, job execution, OpenClaw orchestration',
+        detail: 'Orchestration, automation rules, job control, OpenClaw execution',
         linkedPath: '/clients',
       },
     ];
@@ -1278,48 +1700,49 @@ export default function BullpenPage() {
 
         {/* ── Workforce ────────────────────────────────────────────────────── */}
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4 flex items-center gap-2">
             <Briefcase className="h-3.5 w-3.5" />
             Workforce — {activeRoles.length} active, {idleRoles.length} idle
           </h2>
 
-          {activeRoles.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
-              {activeRoles.map(role => (
-                <RoleCard
-                  key={role.id}
-                  role={role}
-                  expanded={expandedRoles.has(role.id)}
-                  onToggle={() => setExpandedRoles(prev => {
-                    const next = new Set(prev);
-                    next.has(role.id) ? next.delete(role.id) : next.add(role.id);
-                    return next;
-                  })}
-                />
-              ))}
-            </div>
-          )}
-
-          {idleRoles.length > 0 && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-2 mt-1">Idle — no active workloads</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {idleRoles.map(role => (
-                  <RoleCard
-                    key={role.id}
-                    role={role}
-                    expanded={expandedRoles.has(role.id)}
-                    onToggle={() => setExpandedRoles(prev => {
-                      const next = new Set(prev);
-                      next.has(role.id) ? next.delete(role.id) : next.add(role.id);
-                      return next;
-                    })}
-                  />
-                ))}
+          {(['leadership', 'execution', 'control'] as const).map(tier => {
+            const tierRoles = roles.filter(r => r.tier === tier);
+            if (!tierRoles.length) return null;
+            const tierLabel: Record<string, string> = {
+              leadership: 'Leadership & Strategy',
+              execution:  'Execution Specialists',
+              control:    'Control & Orchestration',
+            };
+            return (
+              <div key={tier} className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${TIER_BADGE[tier]}`}>
+                    {tier}
+                  </span>
+                  <p className="text-xs text-muted-foreground">{tierLabel[tier]}</p>
+                  <div className="flex-1 border-t ml-1" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {tierRoles.map(role => (
+                    <RoleCard
+                      key={role.id}
+                      role={role}
+                      onViewIntel={() => setIntelRole(role)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
         </div>
+
+        {/* ── Role Intel Drawer ────────────────────────────────────────────── */}
+        <RoleIntelDrawer
+          role={intelRole}
+          config={intelRole ? ROLE_CONFIG[intelRole.id] ?? null : null}
+          open={!!intelRole}
+          onClose={() => setIntelRole(null)}
+        />
 
         {/* ── Automation Rules ─────────────────────────────────────────────── */}
         <div>
