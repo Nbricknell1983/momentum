@@ -8177,6 +8177,256 @@ Include 2-4 products in recommendedStack, sorted by priority (1 = highest). Incl
   });
 
   // ============================================================
+  // Phase 3 — Website Engine + SEO Engine (Client Workspace)
+  // ============================================================
+
+  app.post('/api/ai/client/website-engine', async (req, res) => {
+    try {
+      const {
+        businessName, industry, websiteUrl, websitePageCount, websiteObjective,
+        businessOverview, targetCustomers, keyServices, businessGoals, locations,
+        keyDifferentiators, bookingCtaPreference, selectedProducts,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: 'businessName required' });
+
+      const pageSignal = websitePageCount
+        ? `${websitePageCount} pages indexed`
+        : 'Page count unknown';
+
+      const prompt = `You are a senior web strategist auditing a client website to create a prioritised action plan.
+
+=== CLIENT CONTEXT ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Website: ${websiteUrl || 'Not provided'}
+Pages indexed: ${pageSignal}
+Website objective: ${websiteObjective || 'Not specified'}
+Business overview: ${businessOverview || 'Not provided'}
+Target customers: ${targetCustomers || 'Not provided'}
+Core services: ${keyServices || 'Not provided'}
+Growth goals: ${businessGoals || 'Not provided'}
+Locations served: ${locations || 'Not provided'}
+Key differentiators: ${keyDifferentiators || 'Not provided'}
+Preferred CTA: ${bookingCtaPreference || 'Not specified'}
+Active products: ${Array.isArray(selectedProducts) ? selectedProducts.join(', ') : 'Not specified'}
+
+=== SCORING RULES ===
+
+HEALTH SCORE (0-100):
+- Start at 60 for a basic functioning website
+- +15 if clear primary CTA exists
+- +10 if services are clearly described
+- +10 if location/contact info is prominent
+- +10 if page count > 10 (adequate structure)
+- -20 if no website URL provided
+- -15 if page count < 5 (thin site)
+- -10 if no industry match in content
+
+CONVERSION GRADE (A-F):
+- A: Clear CTA, phone visible, booking system, trust signals
+- B: CTA exists, phone in header, basic trust
+- C: CTA below fold, contact on separate page only
+- D: Unclear CTA, buried contact, no trust signals
+- F: No CTA, no phone, no way to convert
+
+STRUCTURE GRADE (A-F):
+- A: Homepage, Services, About, Contact, Location pages + blog
+- B: Home + Services + Contact, some location pages
+- C: Basic pages but missing service detail or location
+- D: 1-2 pages, thin structure
+- F: Landing page only or no site
+
+CONTENT GRADE (A-F):
+- A: Keyword-rich service descriptions, customer-focused copy, FAQs, proof
+- B: Good service descriptions, some customer language
+- C: Generic descriptions, minimal customer benefit language
+- D: Very thin content, minimal detail
+- F: No substantive content
+
+=== TASK CATEGORIES ===
+- conversion: CTAs, phone visibility, booking, forms, trust badges
+- structure: page count, site architecture, service pages, location pages
+- content: copy quality, keywords, service descriptions, local signals
+- speed: page load, image optimisation, Core Web Vitals
+- trust: reviews integration, testimonials, credentials, before/after
+- seo: meta titles, schema markup, local SEO signals, headings
+
+=== OUTPUT FORMAT (JSON only) ===
+{
+  "healthScore": 65,
+  "healthLabel": "needs-work",
+  "summary": "2-3 sentences assessing current website position relative to their business goals. Be specific and reference their data.",
+  "conversionGrade": "C",
+  "structureGrade": "B",
+  "contentGrade": "C",
+  "quickWins": [
+    "Specific immediate action 1 — include a real detail about what to change",
+    "Specific immediate action 2",
+    "Specific immediate action 3"
+  ],
+  "tasks": [
+    {
+      "priority": 1,
+      "category": "conversion",
+      "task": "Specific task name",
+      "reason": "Why this matters for this specific business",
+      "estimatedImpact": "Expected conversion or ranking improvement",
+      "effort": "quick-win"
+    }
+  ]
+}
+
+Rules:
+- healthLabel must be one of: critical, needs-work, good, strong
+- Include 5-8 tasks total, sorted by priority (1 = highest)
+- Mix categories — don't give all the same category
+- Quick wins must be genuinely quick (< 1 day effort each)
+- Be specific to this business — no generic filler`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: 2000,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (err: any) {
+      console.error('[website-engine]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/ai/client/seo-engine', async (req, res) => {
+    try {
+      const {
+        businessName, industry, websiteUrl,
+        businessOverview, targetCustomers, keyServices, businessGoals, locations,
+        seoServices, seoLocations, seoObjective,
+        manualKeywordNotes, competitorKeywordNotes, keywordSummary,
+        websitePageCount, selectedProducts,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: 'businessName required' });
+
+      const prompt = `You are a local SEO strategist building an intelligence plan for a client.
+
+=== CLIENT CONTEXT ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Website: ${websiteUrl || 'Not provided'}
+Pages indexed: ${websitePageCount ? `${websitePageCount} pages` : 'Unknown'}
+Business overview: ${businessOverview || 'Not provided'}
+Target customers: ${targetCustomers || 'Not provided'}
+Core services: ${keyServices || 'Not provided'}
+Growth goals: ${businessGoals || 'Not provided'}
+Locations served: ${locations || 'Not provided'}
+SEO target services: ${seoServices || 'Not provided'}
+SEO target locations: ${seoLocations || 'Not provided'}
+SEO objective: ${seoObjective || 'Not provided'}
+Manual keyword notes: ${manualKeywordNotes || 'Not provided'}
+Competitor keyword notes: ${competitorKeywordNotes || 'Not provided'}
+Keyword research summary: ${keywordSummary || 'Not provided'}
+Active products: ${Array.isArray(selectedProducts) ? selectedProducts.join(', ') : 'Not specified'}
+
+=== SCORING RULES ===
+
+VISIBILITY SCORE (0-100):
+- Start at 40 for a business with a website
+- +20 if 10+ pages (adequate structure for SEO)
+- +15 if keyword targets are defined (from notes)
+- +15 if service pages and location pages exist (infer from page count and services)
+- +10 if competitor research is noted
+- -20 if no website
+- -10 if page count < 5 (thin site, hard to rank)
+- Adjust label: 0-30 = Very Weak, 31-50 = Weak, 51-70 = Building, 71-85 = Moderate, 86-100 = Strong
+
+=== CONTENT GAP RULES ===
+Generate specific page/content opportunities:
+- service-page: For each service they offer that likely lacks a dedicated page
+- location-page: For each key service area / suburb combination
+- faq-page: For common questions their customers would ask
+- blog-post: For educational content that builds authority
+
+For Australian local businesses:
+- Use suburb-level location targeting (not just city)
+- Monthly search estimates should reflect Australian search volume (typically lower than US): use ranges like "20-80/mo", "50-200/mo", "200-500/mo"
+
+=== 3-MONTH ROADMAP RULES ===
+Month 1: Foundation — fix what's missing, quick structural wins
+Month 2: Content build — create the highest-priority missing pages
+Month 3: Authority + local signals — citations, links, reviews, optimisation
+
+=== OUTPUT FORMAT (JSON only) ===
+{
+  "visibilityScore": 42,
+  "visibilityLabel": "Weak",
+  "summary": "2-3 sentences on current SEO position. Be specific — reference their services, locations, and gaps.",
+  "keywordTargets": [
+    "primary keyword 1",
+    "primary keyword 2",
+    "primary keyword 3",
+    "primary keyword 4",
+    "primary keyword 5"
+  ],
+  "contentGaps": [
+    {
+      "type": "service-page",
+      "title": "Specific page title",
+      "targetKeyword": "exact keyword string",
+      "estimatedMonthlySearches": "50-200/mo",
+      "urgency": "high",
+      "rationale": "Why this page matters for this business specifically"
+    }
+  ],
+  "monthlyPlan": [
+    {
+      "month": 1,
+      "focus": "Foundation & Technical Fixes",
+      "actions": [
+        "Specific action 1",
+        "Specific action 2",
+        "Specific action 3",
+        "Specific action 4"
+      ]
+    },
+    {
+      "month": 2,
+      "focus": "Content Creation",
+      "actions": ["..."]
+    },
+    {
+      "month": 3,
+      "focus": "Authority & Local Signals",
+      "actions": ["..."]
+    }
+  ]
+}
+
+Rules:
+- Provide 5-8 keyword targets (primary + long-tail)
+- Provide 4-8 content gaps, prioritised by urgency
+- Each month should have 3-5 specific, actionable items
+- Everything must be specific to this exact business and industry`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: 2500,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (err: any) {
+      console.error('[seo-engine]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================================
   // Phase 1 — AI Growth Operator: Execution Status + AI Actions
   // ============================================================
 

@@ -1715,6 +1715,64 @@ export interface GBPPlaybook {
   updatedAt?: string;
 }
 
+// ─── Phase 3: Website Engine ──────────────────────────────────────────────────
+
+export type WebsiteTaskCategory = 'conversion' | 'structure' | 'content' | 'speed' | 'trust' | 'seo';
+export type WebsiteTaskEffort = 'quick-win' | 'medium' | 'project';
+export type GradeValue = 'A' | 'B' | 'C' | 'D' | 'F';
+export type WebsiteHealthLabel = 'critical' | 'needs-work' | 'good' | 'strong';
+
+export interface WebsiteTask {
+  priority: 1 | 2 | 3;
+  category: WebsiteTaskCategory;
+  task: string;
+  reason: string;
+  estimatedImpact: string;
+  effort: WebsiteTaskEffort;
+}
+
+export interface WebsiteEngineReport {
+  healthScore: number;
+  healthLabel: WebsiteHealthLabel;
+  summary: string;
+  conversionGrade: GradeValue;
+  structureGrade: GradeValue;
+  contentGrade: GradeValue;
+  tasks: WebsiteTask[];
+  quickWins: string[];
+  generatedAt: Date;
+}
+
+// ─── Phase 3: SEO Engine ──────────────────────────────────────────────────────
+
+export type ContentGapType = 'service-page' | 'location-page' | 'faq-page' | 'blog-post';
+export type SEOUrgency = 'high' | 'medium' | 'low';
+
+export interface ContentGap {
+  type: ContentGapType;
+  title: string;
+  targetKeyword: string;
+  estimatedMonthlySearches: string;
+  urgency: SEOUrgency;
+  rationale: string;
+}
+
+export interface SEOMonthlyAction {
+  month: number;
+  focus: string;
+  actions: string[];
+}
+
+export interface SEOEngineReport {
+  visibilityScore: number;
+  visibilityLabel: string;
+  summary: string;
+  keywordTargets: string[];
+  contentGaps: ContentGap[];
+  monthlyPlan: SEOMonthlyAction[];
+  generatedAt: Date;
+}
+
 export interface Client {
   id: string;
   orgId: string;
@@ -1786,6 +1844,9 @@ export interface Client {
   automationMode?: AutomationMode;
   executionStatus?: ExecutionStatusState;
   intelligenceScore?: IntelligenceScore;
+  // Phase 3 — Website & SEO Engines
+  websiteEngine?: WebsiteEngineReport;
+  seoEngine?: SEOEngineReport;
 }
 
 export type AutomationMode = 'assisted' | 'supervised' | 'autonomous';

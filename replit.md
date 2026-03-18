@@ -53,6 +53,9 @@ Preferred communication style: Simple, everyday language.
 - **Local Presence (Local Falcon Integration)**: GBP rank tracking section in the ClientGrowthIntelligencePanel, displaying scan history and heatmaps.
 - **Google Business Profile Integration (OAuth2)**: Full GBP OAuth2 connection flow for managing GBP accounts, locations, and replying to reviews directly within the application.
 - **AI Growth Operator**: Framework for automating growth activities with per-client automation modes (assisted, supervised, autonomous), execution status tracking, and an AI Actions Feed.
+- **Growth Prescription Engine** (Phase 2): Evidence-based AI diagnosis for prospects — analyses digital presence signals, strategy intelligence, and discovery context to produce a recommended product stack, tiered investment options (Starter→Performance), and cost-of-inaction framing. Integrated into the Deal Intelligence panel and enriches pre-call prep.
+- **Website Engine** (Phase 3): AI-powered website health audit for clients — scores conversion, structure, and content (A–F grades), generates a prioritised action task list with effort levels, and provides quick wins. Runs from onboarding context + website data. Lives in the Client Growth Intelligence panel.
+- **SEO Engine** (Phase 3): AI-powered SEO intelligence plan for clients — generates a visibility score, keyword targets, content gap analysis (service/location/FAQ/blog page opportunities), and a 3-month build roadmap. Lives in the Client Growth Intelligence panel.
 
 ## External Dependencies
 
