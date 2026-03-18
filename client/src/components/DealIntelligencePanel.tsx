@@ -14,6 +14,7 @@ import {
   StrategyIntelligence,
   STAGE_LABELS,
 } from '@/lib/types';
+import GrowthPrescriptionPanel from './GrowthPrescriptionPanel';
 import {
   Heart,
   Globe,
@@ -914,6 +915,8 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       </div>
 
       <StrategyIntelligenceCard lead={lead} />
+
+      <GrowthPrescriptionPanel lead={lead} />
 
       <div className="rounded-lg border bg-card p-3" data-testid="card-online-presence">
         <div className="flex items-center justify-between mb-2">

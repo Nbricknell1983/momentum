@@ -326,6 +326,9 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         return acc;
       }, {});
 
+      const si = selectedLead?.strategyIntelligence || {};
+      const prescription = selectedLead?.growthPrescription;
+
       const payload = {
         businessName: preCallInputs.businessName,
         location: preCallInputs.location,
@@ -343,6 +346,16 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
         industry: preCallInputs.industry,
         sitemapPageCount: sitemapPages.length || null,
         sitemapSections: Object.keys(sitemapSections).length > 0 ? sitemapSections : null,
+        // Strategy intelligence context
+        strategyIntelligence: Object.values(si).some(Boolean) ? si : null,
+        // Growth prescription context
+        growthPrescription: prescription ? {
+          diagnosis: prescription.businessDiagnosis,
+          urgency: prescription.urgencyLevel,
+          primaryObjective: prescription.primaryObjective,
+          recommendedStack: prescription.recommendedStack.slice(0, 3).map(r => `${r.label} (${r.reason})`),
+          costOfInaction: prescription.costOfInaction,
+        } : null,
       };
       const res = await fetch('/api/ai/sales-engine/pre-call', {
         method: 'POST',

@@ -5026,6 +5026,7 @@ Please analyze these meeting notes and extract actionable insights.`;
         reviewCount, rating, gbpPhotoCount, gbpPostsLast30Days,
         facebookUrl, instagramUrl, linkedinUrl, industry,
         sitemapPageCount, sitemapSections,
+        strategyIntelligence, growthPrescription,
       } = req.body;
 
       if (!businessName) {
@@ -5053,6 +5054,25 @@ Please analyze these meeting notes and extract actionable insights.`;
         ? `${sitemapPageCount} indexed pages found. Sections: ${Object.entries(sitemapSections || {}).map(([s, c]) => `/${s} (${c} pages)`).join(', ') || 'homepage only'}`
         : 'Not scanned';
 
+      // Build strategy intelligence summary
+      const siSummary = strategyIntelligence ? [
+        strategyIntelligence.businessOverview ? `Business: ${strategyIntelligence.businessOverview}` : null,
+        strategyIntelligence.idealCustomer ? `Ideal customer: ${strategyIntelligence.idealCustomer}` : null,
+        strategyIntelligence.coreServices ? `Core services: ${strategyIntelligence.coreServices}` : null,
+        strategyIntelligence.targetLocations ? `Target areas: ${strategyIntelligence.targetLocations}` : null,
+        strategyIntelligence.growthObjective ? `Growth goal: ${strategyIntelligence.growthObjective}` : null,
+        strategyIntelligence.discoveryNotes ? `Discovery notes: ${strategyIntelligence.discoveryNotes}` : null,
+      ].filter(Boolean).join('\n') : null;
+
+      // Build prescription summary
+      const prescriptionSummary = growthPrescription ? [
+        `Diagnosis: ${growthPrescription.diagnosis}`,
+        `Urgency: ${growthPrescription.urgency}`,
+        `Primary objective: ${growthPrescription.primaryObjective}`,
+        `Recommended stack: ${Array.isArray(growthPrescription.recommendedStack) ? growthPrescription.recommendedStack.join(', ') : ''}`,
+        `Cost of inaction: ${growthPrescription.costOfInaction}`,
+      ].join('\n') : null;
+
       const prompt = `You are a sharp digital marketing analyst who has audited thousands of trade and service business websites. You are preparing intelligence for a sales consultant about to call ${businessName}.
 
 Your job: produce a brutally honest, evidence-based audit using ONLY the data provided. Every point must cite a specific data fact. NO vague filler. NO generic observations.
@@ -5067,7 +5087,7 @@ Google Reviews: ${reviewCount != null ? `${reviewCount} reviews, ${rating} star 
 GBP Photos: ${gbpPhotoCount != null ? gbpPhotoCount : "unknown"}
 GBP Posts (30 days): ${gbpPostsLast30Days != null ? gbpPostsLast30Days : "unknown"}
 Social Profiles: ${socialPlatforms.length > 0 ? socialPlatforms.join(', ') : "None detected"}
-Website Content (sitemap): ${sitemapSummary}
+Website Content (sitemap): ${sitemapSummary}${siSummary ? `\n\n=== STRATEGY INTELLIGENCE (from discovery conversations) ===\n${siSummary}` : ''}${prescriptionSummary ? `\n\n=== GROWTH PRESCRIPTION (system diagnosis) ===\n${prescriptionSummary}` : ''}
 
 === ANALYSIS RULES ===
 STRENGTHS — Only list real strengths backed by this specific data:
@@ -5100,7 +5120,8 @@ Respond with JSON only, no commentary:
   "gaps": [
     { "title": "Specific gap title", "evidence": "The exact data point — cite numbers", "impact": "Why this is losing them leads or rankings right now" }
   ],
-  "salesHook": "A natural 1-sentence conversation opener for the sales rep — should reference the most compelling gap and feel like something a human would actually say on a cold call, not a script"
+  "salesHook": "A natural 1-sentence conversation opener for the sales rep — should reference the most compelling gap and feel like something a human would actually say on a cold call, not a script",
+  "prescriptionSummary": "${prescriptionSummary ? 'Use the growth prescription above to add a 1-sentence commercial frame: what the rep should position as the primary solution and why now' : 'null — no prescription available yet'}"
 }`;
 
       const response = await openai.chat.completions.create({
@@ -8033,6 +8054,124 @@ Return ONLY the reply text. No quotes, no labels, no explanation.`;
       res.json({ success: true });
     } catch (err: any) {
       console.error('[clients/local-falcon-place]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================================
+  // Phase 2 — Growth Prescription Engine
+  // ============================================================
+
+  app.post('/api/ai/growth-prescription', async (req, res) => {
+    try {
+      const {
+        businessName, industry, location,
+        hasWebsite, websiteUrl, sitemapPageCount, crawledPageCount,
+        hasGBP, reviewCount, rating,
+        businessOverview, idealCustomer, coreServices,
+        targetLocations, growthObjective, discoveryNotes,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: 'businessName required' });
+
+      const prompt = `You are a senior digital growth strategist running a commercial diagnosis for a prospect.
+Your job is to produce a structured growth prescription that determines the right product mix, priority order, and investment framing based on the evidence below.
+
+=== BUSINESS DATA ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Location: ${location || 'Not specified'}
+
+DIGITAL PRESENCE SIGNALS:
+- Website: ${hasWebsite ? `Yes (${websiteUrl || 'URL not provided'})` : 'No website found'}
+- Website pages indexed: ${sitemapPageCount || 0}
+- Pages crawled: ${crawledPageCount || 0}
+- Google Business Profile: ${hasGBP ? 'Yes' : 'No'}
+- Reviews: ${reviewCount || 0} (Rating: ${rating || 0}★)
+
+STRATEGY INTELLIGENCE (from discovery):
+- Business Overview: ${businessOverview || 'Not provided'}
+- Ideal Customer: ${idealCustomer || 'Not provided'}
+- Core Services: ${coreServices || 'Not provided'}
+- Target Locations: ${targetLocations || 'Not provided'}
+- Growth Objective: ${growthObjective || 'Not provided'}
+- Discovery Notes: ${discoveryNotes || 'Not provided'}
+
+=== DECISION RULES TO APPLY ===
+
+WEBSITE:
+- No website → website is #1 priority, nothing else works without it
+- Website exists but <5 pages → rebuild or expansion required
+- Website exists but no service/location pages → SEO structural expansion required
+- Website exists and >10 pages → proceed to organic/paid growth
+
+GBP:
+- No GBP → GBP activation is urgent, it is free visibility they are missing
+- GBP exists but <10 reviews → review growth play required
+- GBP exists and reviews strong → GBP optimisation for maps pack
+
+LEAD FLOW:
+- No website OR very weak web presence → Google Ads is too risky without a conversion foundation
+- Website exists but no organic visibility signal → SEO + GBP is the priority
+- Website exists with some organic signal → blend SEO + Ads based on urgency
+- Strong website + strong GBP → aggressive Ads + SEO domination play
+
+BUSINESS STAGE (infer from data):
+- startup (no website, no GBP, no reviews) → foundations stack
+- growing (website exists, some reviews, some presence) → optimization stack
+- established (strong website, strong GBP, >20 reviews) → domination stack
+
+=== INVESTMENT TIERS (use realistic Australian digital marketing pricing) ===
+- Starter: $997/mo — core foundations (1-2 channels)
+- Momentum: $1,997/mo — growth focus (2-3 channels)
+- Accelerated: $3,497/mo — aggressive growth (3-4 channels)
+- Performance/Hybrid: $5,500+/mo — full-stack domination
+
+=== OUTPUT FORMAT (JSON only, no commentary) ===
+{
+  "businessDiagnosis": "2-3 sentences: honest assessment of current digital position, key gaps, and the core growth opportunity. Be specific to this business — no generic statements.",
+  "urgencyLevel": "high|medium|low",
+  "primaryObjective": "One clear sentence — the single most important thing this business needs to achieve in the next 90 days.",
+  "recommendedStack": [
+    {
+      "product": "website|seo|gbp|ads",
+      "label": "e.g. Website Rebuild, Local SEO, GBP Activation, Google Ads",
+      "priority": 1,
+      "reason": "Why this specific business needs this right now — cite their data",
+      "impact": "Expected outcome e.g. 'Convert existing visitors, build authority'",
+      "timeline": "e.g. '30-day launch', '90-day results', 'Immediate visibility'"
+    }
+  ],
+  "investmentOptions": [
+    {
+      "tier": "starter|momentum|accelerated|performance",
+      "label": "Short name e.g. 'Foundation Start'",
+      "monthlyInvestment": 997,
+      "weeklyEquivalent": 230,
+      "speed": "e.g. 'Slow and steady', 'Strong growth pace', 'Fast-track'",
+      "description": "What is included and why it fits",
+      "outcomes": "What they can expect to happen",
+      "tradeoffs": "What they give up vs higher tier",
+      "recommended": false
+    }
+  ],
+  "costOfInaction": "One punchy sentence — what continuing without a strategy is costing them right now in leads or revenue."
+}
+
+Include 2-4 products in recommendedStack, sorted by priority (1 = highest). Include 3-4 investment options. Mark the most appropriate one as recommended: true.`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: 2000,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      const data = JSON.parse(content);
+      res.json(data);
+    } catch (err: any) {
+      console.error('[growth-prescription]', err);
       res.status(500).json({ error: err.message });
     }
   });

@@ -254,6 +254,53 @@ export interface StrategyIntelligence {
   updatedAt?: Date;
 }
 
+export type InvestmentTier = 'starter' | 'momentum' | 'accelerated' | 'performance';
+
+export interface ProductRecommendation {
+  product: 'website' | 'seo' | 'gbp' | 'ads';
+  label: string;
+  priority: number;
+  reason: string;
+  impact: string;
+  timeline: string;
+}
+
+export interface InvestmentOption {
+  tier: InvestmentTier;
+  label: string;
+  monthlyInvestment: number;
+  weeklyEquivalent: number;
+  speed: string;
+  description: string;
+  outcomes: string;
+  tradeoffs: string;
+  recommended: boolean;
+}
+
+export interface GrowthPrescription {
+  businessDiagnosis: string;
+  urgencyLevel: 'high' | 'medium' | 'low';
+  recommendedStack: ProductRecommendation[];
+  investmentOptions: InvestmentOption[];
+  costOfInaction: string;
+  primaryObjective: string;
+  generatedAt: Date;
+}
+
+export const INVESTMENT_TIER_LABELS: Record<InvestmentTier, string> = {
+  starter: 'Starter',
+  momentum: 'Momentum',
+  accelerated: 'Accelerated',
+  performance: 'Performance / Hybrid',
+};
+
+export const INVESTMENT_TIER_COLORS: Record<InvestmentTier, string> = {
+  starter: 'border-slate-200 dark:border-slate-700',
+  momentum: 'border-blue-200 dark:border-blue-800',
+  accelerated: 'border-violet-200 dark:border-violet-800',
+  performance: 'border-amber-200 dark:border-amber-800',
+};
+
 export interface Lead {
   id: string;
   userId: string;
@@ -326,6 +373,7 @@ export interface Lead {
   mockWebsiteHtml?: string;
   mockWebsiteGaps?: string[];
   mockWebsiteGeneratedAt?: Date;
+  growthPrescription?: GrowthPrescription;
 }
 
 export interface AhrefsKeyword {
