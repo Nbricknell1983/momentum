@@ -17,7 +17,7 @@ import {
   Briefcase, TrendingUp, Globe, Search, BarChart3, Star, Users, Shield,
   Settings2, AlertTriangle, CheckCircle2, Clock, Zap, ChevronDown, ChevronRight,
   ExternalLink, RefreshCw, Activity as ActivityIcon, Timer, Ban,
-  BriefcaseBusiness, Cpu, Eye, Radio
+  BriefcaseBusiness, Cpu, Eye, Radio, Compass
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -525,6 +525,30 @@ export default function BullpenPage() {
         lastActionLabel: clientsWithPrescription.length > 0 ? `${clientsWithPrescription.length} strategies active` : undefined,
         detail: 'Growth prescriptions, discovery inputs, strategy intelligence',
         linkedPath: '/pipeline',
+      },
+      {
+        id: 'strategist',
+        name: 'Client Strategist',
+        icon: Compass,
+        status: (() => {
+          const stalled = activeClients.filter(c => c.learningInsight?.momentumStatus === 'stalled');
+          if (stalled.length > 0) return 'needs_attention' as const;
+          if (aiActiveClients.length > 0) return 'active' as const;
+          return 'idle' as const;
+        })(),
+        currentCount: aiActiveClients.length,
+        currentLabel: 'clients with active growth strategy',
+        blockerCount: activeClients.filter(c => !c.appliedPlays || c.appliedPlays.length === 0).length,
+        blockerSummary: 'No growth play activated',
+        lastActionLabel: (() => {
+          const stalled = activeClients.filter(c => c.learningInsight?.momentumStatus === 'stalled');
+          if (stalled.length > 0) return `${stalled.length} client${stalled.length > 1 ? 's' : ''} stalled — needs direction`;
+          const strong = activeClients.filter(c => c.learningInsight?.momentumStatus === 'strong');
+          if (strong.length > 0) return `${strong.length} client${strong.length > 1 ? 's' : ''} with strong momentum`;
+          return undefined;
+        })(),
+        detail: 'Owns client outcomes — sequences engines, plays & actions across all specialists',
+        linkedPath: '/clients',
       },
       {
         id: 'ops',
