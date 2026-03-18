@@ -8962,5 +8962,90 @@ Rules:
     }
   });
 
+  // ── Bullpen: AI-generated team comms ────────────────────────────────────────
+  app.post('/api/bullpen/comms', async (req, res) => {
+    const { orgId, context } = req.body as {
+      orgId?: string;
+      context?: {
+        activeClientCount: number;
+        blockedClientNames: string[];
+        overdueLeadCount: number;
+        noGBPClientNames: string[];
+        noPlaysCount: number;
+        redHealthClientNames: string[];
+        autonomousClientCount: number;
+        supervisedClientCount: number;
+        activePipelineLeadCount: number;
+        openNBACount: number;
+        recentClawActions?: string[];
+      };
+    };
+
+    if (!context) return res.status(400).json({ error: 'context required' });
+
+    const ctx = context;
+    const contextSummary = [
+      `Active clients: ${ctx.activeClientCount}`,
+      ctx.blockedClientNames.length > 0 ? `Blocked/stalled clients: ${ctx.blockedClientNames.join(', ')}` : null,
+      `Overdue leads needing follow-up: ${ctx.overdueLeadCount}`,
+      ctx.noGBPClientNames.length > 0 ? `Clients with no GBP linked: ${ctx.noGBPClientNames.join(', ')}` : null,
+      ctx.noPlaysCount > 0 ? `Clients with no growth play activated: ${ctx.noPlaysCount}` : null,
+      ctx.redHealthClientNames.length > 0 ? `At-risk (red health) clients: ${ctx.redHealthClientNames.join(', ')}` : null,
+      `Clients on autonomous autopilot: ${ctx.autonomousClientCount}`,
+      `Clients in supervised mode: ${ctx.supervisedClientCount}`,
+      `Active pipeline leads: ${ctx.activePipelineLeadCount}`,
+      `Open next-best-actions: ${ctx.openNBACount}`,
+      ctx.recentClawActions?.length ? `Recent AI actions taken: ${ctx.recentClawActions.slice(0, 4).join('; ')}` : null,
+    ].filter(Boolean).join('\n');
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.85,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `You are simulating a live Slack-style internal team communications feed for a marketing agency's AI workforce. Generate a realistic conversation between these named agent roles:
+
+- Ops: System oversight, workflow status, blocker tracking
+- Sales: Lead pipeline, follow-ups, NEPQ sequencing
+- SEO: Keyword strategy, content gap plans, visibility roadmaps
+- Website: Website audits, conversion scoring, rebuild recommendations
+- Ads: Google Ads campaigns, readiness scores, budget modelling
+- GBP: Google Business Profile audits, review management, maps ranking
+- Growth: Client health monitoring, churn risk, momentum scoring
+- Strategy: Growth plays, action sequencing, strategy coordination
+- Strategist: Senior coordinator — asks questions, makes decisions, delegates
+
+Rules:
+- Generate exactly 12-15 messages in strict chronological order (oldest first, newest last)
+- minutesAgo must STRICTLY DECREASE from first message (~70) to last message (~3)
+- Make it feel like a real work Slack channel: direct, professional, concise
+- Include natural follow-up questions, acknowledgements, and hand-offs between agents
+- Reference actual client names and numbers from the context below
+- Vary message lengths: some 1 line, some 2-3 sentences
+- Ops always opens the session with a morning status check
+- Strategist asks probing questions and makes decisions
+- If blockers or red health clients exist, address them with urgency
+- Return ONLY a JSON object: { "messages": [{ "from": "Ops", "message": "...", "minutesAgo": 68 }, ...] }`,
+          },
+          {
+            role: 'user',
+            content: `Current agency context:\n${contextSummary}\n\nGenerate the team comms conversation.`,
+          },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content || '{}';
+      const parsed = JSON.parse(raw);
+      const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+      res.json({ messages });
+    } catch (err: any) {
+      console.error('[bullpen/comms]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

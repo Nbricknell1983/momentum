@@ -11,7 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import type { RootState } from '@/store';
 import type { Lead, Activity, Client, NBAAction } from '@/lib/types';
-import { db, doc, getDoc, setDoc } from '@/lib/firebase';
+import { db, doc, getDoc, setDoc, collection, query, orderBy, limit, onSnapshot } from '@/lib/firebase';
+import { useQuery } from '@tanstack/react-query';
 import { differenceInDays, formatDistanceToNow, isToday, format } from 'date-fns';
 import {
   Briefcase, TrendingUp, Globe, Search, BarChart3, Star, Users, Shield,
@@ -708,10 +709,77 @@ export default function BullpenPage() {
   const activeRoles = roles.filter(r => r.status !== 'idle');
   const idleRoles   = roles.filter(r => r.status === 'idle');
 
-  // ── Agent comms feed ──────────────────────────────────────────────────────
+  // ── Comms context (lightweight state summary for the AI endpoint) ─────────
+
+  const commsContext = useMemo(() => ({
+    activeClientCount: activeClients.length,
+    blockedClientNames: blockedClients.map(c => c.businessName).slice(0, 5),
+    overdueLeadCount: overdueLeads.length,
+    noGBPClientNames: activeClients.filter(c => !c.gbpLocationName).map(c => c.businessName).slice(0, 4),
+    noPlaysCount: activeClients.filter(c => !c.appliedPlays?.length).length,
+    redHealthClientNames: activeClients.filter(c => c.healthStatus === 'red').map(c => c.businessName).slice(0, 4),
+    autonomousClientCount: autonomousClients.length,
+    supervisedClientCount: activeClients.filter(c => c.automationMode === 'supervised').length,
+    activePipelineLeadCount: activeLeads.length,
+    openNBACount: openNBA.length,
+  }), [activeClients, blockedClients, overdueLeads, activeLeads, autonomousClients, openNBA]);
+
+  // ── AI-generated comms (GPT via backend) ──────────────────────────────────
+
+  const { data: aiCommsData, isLoading: aiCommsLoading } = useQuery<{ messages: Array<{ from: string; message: string; minutesAgo: number }> }>({
+    queryKey: ['/api/bullpen/comms', orgId, commsContext.activeClientCount, commsContext.overdueLeadCount],
+    queryFn: async () => {
+      const res = await fetch('/api/bullpen/comms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, context: commsContext }),
+      });
+      if (!res.ok) throw new Error('AI comms unavailable');
+      return res.json();
+    },
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+    enabled: !!orgId && isManager,
+  });
+
+  // ── Real-time OpenClaw messages from Firestore ────────────────────────────
+
+  const [clawMessages, setClawMessages] = useState<AgentCommsMessage[]>([]);
+
+  useEffect(() => {
+    if (!orgId || !isManager) return;
+    const rm = (key: string) => ROLE_META[key] ?? ROLE_META['Ops'];
+    const q = query(
+      collection(db, 'orgs', orgId, 'bullpenComms'),
+      orderBy('createdAt', 'desc'),
+      limit(30),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const msgs: AgentCommsMessage[] = snap.docs.map(d => {
+        const data = d.data();
+        const meta = rm(data.from);
+        const createdAt = data.createdAt?.toDate?.() || new Date();
+        const minutesAgo = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 60000));
+        return {
+          id: d.id,
+          from: data.from,
+          fromIcon: meta.icon,
+          fromBg: meta.bg,
+          message: data.message,
+          minutesAgo,
+        };
+      }).reverse(); // oldest first
+      setClawMessages(msgs);
+    });
+    return () => unsub();
+  }, [orgId, isManager]);
+
+  // ── Merged feed: AI background + live OpenClaw actions ───────────────────
 
   const agentFeed = useMemo<AgentCommsMessage[]>(() => {
     const rm = (key: string) => ROLE_META[key] ?? ROLE_META['Ops'];
+
+    // While AI comms are loading, use the scripted fallback
     const msgs: AgentCommsMessage[] = [];
     let t = 118; // start ~2h ago, count down to 0 (now)
 
@@ -849,10 +917,28 @@ export default function BullpenPage() {
       say('sales-quiet', 'Sales', `Working through a few. I'll update the pipeline by end of day.`, 2);
     }
 
-    return msgs; // oldest at top, newest at bottom (chronological)
+    const scriptedFeed = msgs; // scripted fallback
+
+    // If AI comms are ready, use them instead of scripted; otherwise fall back
+    const baseFeed: AgentCommsMessage[] = aiCommsData?.messages?.length
+      ? aiCommsData.messages.map((m, i) => {
+          const meta = rm(m.from);
+          return { id: `ai-${i}`, from: m.from, fromIcon: meta.icon, fromBg: meta.bg, message: m.message, minutesAgo: m.minutesAgo };
+        })
+      : scriptedFeed;
+
+    // Append real-time OpenClaw messages (always most recent, always at bottom)
+    const clawOffset = clawMessages.length > 0 ? (clawMessages[clawMessages.length - 1].minutesAgo ?? 0) : 0;
+    const clawWithSource = clawMessages.map((m, i) => ({
+      ...m,
+      id: `claw-${m.id}-${i}`,
+      minutesAgo: Math.max(0, clawOffset > 0 ? clawOffset - 1 - i : i),
+    }));
+
+    return [...baseFeed, ...clawWithSource];
   }, [overdueLeads, openNBA, activeClients, blockedClients, clientsWithSEO, clientsWithWebsite,
       clientsWithGBP, clientsWithAds, clientsWithPrescription, autonomousClients,
-      activeLeads]);
+      activeLeads, aiCommsData, clawMessages]);
 
   // ── Live-feed animation: replay the feed each time agentFeed changes ────────
   useEffect(() => {
@@ -1104,6 +1190,21 @@ export default function BullpenPage() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
             </span>
             Team Comms — Live
+            {aiCommsLoading && (
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground/60 normal-case tracking-normal animate-pulse">
+                AI generating…
+              </span>
+            )}
+            {aiCommsData && !aiCommsLoading && (
+              <span className="ml-1 text-[10px] font-normal text-violet-500/70 normal-case tracking-normal">
+                · AI-powered
+              </span>
+            )}
+            {clawMessages.length > 0 && (
+              <span className="ml-1 text-[10px] font-normal text-emerald-600/70 normal-case tracking-normal">
+                · {clawMessages.length} live from Claw
+              </span>
+            )}
           </h2>
           <Card className="border bg-card">
             <CardContent className="p-0">

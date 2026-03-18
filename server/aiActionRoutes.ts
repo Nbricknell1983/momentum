@@ -54,6 +54,38 @@ function requireFirestore(res: Response): boolean {
   return true;
 }
 
+// ─── Bullpen comms: log OpenClaw actions as team messages ──────────────────
+const CLAW_AGENT_VOICE: Record<string, string> = {
+  'move-lead-stage':           'Sales',
+  'create-task':               'Strategy',
+  'log-call-outcome':          'Sales',
+  'draft-followup':            'Sales',
+  'send-approved-sms':         'Sales',
+  'send-approved-email':       'Sales',
+  'request-appointment-slot':  'Sales',
+  'suspects-needing-followup': 'Sales',
+  'next-best-action':          'Strategist',
+};
+
+async function writeBullpenComm(orgId: string, actionType: string, message: string) {
+  if (!firestore || !orgId) return;
+  const from = CLAW_AGENT_VOICE[actionType] || 'Ops';
+  try {
+    await firestore
+      .collection('orgs').doc(orgId)
+      .collection('bullpenComms')
+      .add({
+        from,
+        message,
+        actionType,
+        source: 'openclaw',
+        createdAt: new Date(),
+      });
+  } catch (e) {
+    console.error('[bullpenComms] write failed:', e);
+  }
+}
+
 async function writeAuditLog(orgId: string, action: string, payload: object, result: object) {
   if (!firestore) return;
   try {
@@ -355,6 +387,7 @@ Return JSON with exactly these fields:
       };
 
       await writeAuditLog(orgId, 'draft-followup', { leadId, channel, objective }, { wordCount: result.wordCount });
+      await writeBullpenComm(orgId, 'draft-followup', `Drafted ${channel} follow-up for ${lead.companyName}. Objective: ${objective}. ${result.wordCount} words — awaiting approval before send.`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error('[openclaw] draft-followup:', err);
@@ -398,6 +431,7 @@ Return JSON with exactly these fields:
 
       const created = { id: taskRef.id, ...task, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString() };
       await writeAuditLog(orgId, 'create-task', { leadId, taskType, dueDate }, { taskId: taskRef.id });
+      await writeBullpenComm(orgId, 'create-task', `Created task for ${lead.companyName}: ${taskType.replace(/_/g, ' ')}${dueDate ? ` — due ${dueDate}` : ''}. Queued in action feed.`);
       res.status(201).json({ success: true, task: created });
     } catch (err: any) {
       console.error('[openclaw] create-task:', err);
@@ -458,6 +492,7 @@ Return JSON with exactly these fields:
       };
 
       await writeAuditLog(orgId, 'log-call-outcome', { leadId, outcome, nextContactDate }, result);
+      await writeBullpenComm(orgId, 'log-call-outcome', `Logged call outcome for ${leadDoc.data()?.companyName || leadId}: ${outcome.replace(/_/g, ' ')}.${nextContactDate ? ` Next contact scheduled.` : ''}`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error('[openclaw] log-call-outcome:', err);
@@ -517,6 +552,7 @@ Return JSON with exactly these fields:
       };
 
       await writeAuditLog(orgId, 'move-lead-stage', { leadId, currentStage, newStage, reason }, result);
+      await writeBullpenComm(orgId, 'move-lead-stage', `Moved ${lead.companyName} from ${currentStage} → ${newStage}.${reason ? ` Reason: ${reason}.` : ''} Pipeline updated.`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error('[openclaw] move-lead-stage:', err);
@@ -633,6 +669,7 @@ Return JSON with exactly these fields:
       };
 
       await writeAuditLog(orgId, 'send-approved-sms', { leadId, messageLength: approvedMessage.length }, result);
+      await writeBullpenComm(orgId, 'send-approved-sms', `SMS queued for ${lead.companyName} (${lead.phone || 'no phone'}). Message approved and logged — delivery pending Twilio integration.`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error('[openclaw] send-approved-sms:', err);
@@ -698,6 +735,7 @@ Return JSON with exactly these fields:
       };
 
       await writeAuditLog(orgId, 'send-approved-email', { leadId, subject }, result);
+      await writeBullpenComm(orgId, 'send-approved-email', `Email queued for ${lead.companyName}. Subject: "${subject}". Logged and awaiting delivery — email provider integration pending.`);
       res.json({ success: true, ...result });
     } catch (err: any) {
       console.error('[openclaw] send-approved-email:', err);
