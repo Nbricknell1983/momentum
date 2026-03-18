@@ -8177,6 +8177,257 @@ Include 2-4 products in recommendedStack, sorted by priority (1 = highest). Incl
   });
 
   // ============================================================
+  // Phase 4 — GBP Engine + Ads Engine (Client Workspace)
+  // ============================================================
+
+  app.post('/api/ai/client/gbp-engine', async (req, res) => {
+    try {
+      const {
+        businessName, industry, location, websiteUrl,
+        reviewCount, rating, gbpPhotoCount, gbpPostsLast30Days,
+        businessOverview, keyServices, targetCustomers, locations,
+        keyDifferentiators, selectedProducts,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: 'businessName required' });
+
+      const reviewSignal = reviewCount != null
+        ? `${reviewCount} reviews, ${rating} star average`
+        : 'Review count unknown';
+
+      const prompt = `You are a senior local marketing strategist auditing a Google Business Profile to generate a scored optimisation report.
+
+=== CLIENT CONTEXT ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Location: ${location || 'Not specified'}
+Website: ${websiteUrl || 'Not provided'}
+Reviews: ${reviewSignal}
+GBP Photos: ${gbpPhotoCount != null ? gbpPhotoCount : 'Unknown'}
+GBP Posts (last 30 days): ${gbpPostsLast30Days != null ? gbpPostsLast30Days : 'Unknown'}
+Business overview: ${businessOverview || 'Not provided'}
+Core services: ${keyServices || 'Not provided'}
+Target customers: ${targetCustomers || 'Not provided'}
+Locations served: ${locations || 'Not provided'}
+Key differentiators: ${keyDifferentiators || 'Not provided'}
+Active products: ${Array.isArray(selectedProducts) ? selectedProducts.join(', ') : 'Not specified'}
+
+=== SCORING RULES ===
+
+OPTIMIZATION SCORE (0-100):
+- Start at 50
+- Reviews: +20 if >20 reviews, +10 if 10-20, +0 if <10, -10 if no reviews
+- Rating: +10 if 4.5+, +5 if 4.0-4.4, -5 if <3.5
+- Photos: +10 if >30 photos, +5 if 10-30, -5 if <5
+- Posts: +10 if >2 posts/month, +5 if 1-2/month, -10 if no posts
+- optimizationLabel: 0-39 = critical, 40-59 = needs-work, 60-79 = good, 80-100 = strong
+
+PROFILE GRADE (A-F):
+- A: All fields complete, primary category + secondary categories set, products/services listed, business description optimised with keywords
+- B: Most fields complete, primary category correct, basic description
+- C: Core fields complete, missing some secondary info
+- D: Minimal profile, missing key sections
+- F: Incomplete or unclaimed
+
+REVIEW GRADE (A-F):
+- A: >30 reviews, 4.5+ avg, recent reviews within last month, owner responds to reviews
+- B: 15-30 reviews, 4.0+ avg, some responses
+- C: 5-15 reviews, 3.5+ avg
+- D: 1-5 reviews or very low rating
+- F: No reviews
+
+POST GRADE (A-F):
+- A: Posts every week (4+/month) with photos, offers, and events
+- B: 2-3 posts/month, mix of content types
+- C: 1 post/month, basic content
+- D: Occasional posts, no consistency
+- F: No posts in last 30 days
+
+=== TASK CATEGORIES ===
+- profile: Business description, categories, services, products, attributes, Q&A setup
+- reviews: Response strategy, review request process, review velocity
+- posts: Posting cadence, content strategy, offers, events
+- photos: Photo strategy, team shots, service photos, before/after
+- local-seo: Primary keyword, service area optimisation, citation consistency
+- qa: Q&A section setup, popular questions, keyword opportunities in answers
+
+=== OUTPUT FORMAT (JSON only) ===
+{
+  "optimizationScore": 62,
+  "optimizationLabel": "good",
+  "summary": "2-3 sentences on the current GBP state. Be specific about what's working and what's missing based on the data provided.",
+  "profileGrade": "B",
+  "reviewGrade": "C",
+  "postGrade": "D",
+  "quickWins": [
+    "Specific action 1 that can be done today",
+    "Specific action 2",
+    "Specific action 3"
+  ],
+  "tasks": [
+    {
+      "priority": 1,
+      "category": "reviews",
+      "task": "Specific task title",
+      "reason": "Why this matters for this business specifically",
+      "impact": "What improvement to expect",
+      "effort": "quick-win"
+    }
+  ]
+}
+
+Include 5-7 tasks sorted by priority. Quick wins must be completable same-day. Be specific to this business — no generic advice.`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: 2000,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (err: any) {
+      console.error('[gbp-engine]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/ai/client/ads-engine', async (req, res) => {
+    try {
+      const {
+        businessName, industry, location, websiteUrl, hasWebsite, websitePageCount,
+        reviewCount, rating,
+        businessOverview, targetCustomers, keyServices, businessGoals, locations,
+        adsServices, monthlyBudget, fastestWinService, retargetingGoal,
+        pricingNotes, selectedProducts, existingSEOEngine,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: 'businessName required' });
+
+      const seoKeywords = existingSEOEngine?.keywordTargets?.length
+        ? existingSEOEngine.keywordTargets.join(', ')
+        : 'Not available';
+
+      const prompt = `You are a Google Ads strategist building an intelligence plan for a service business client in Australia.
+
+=== CLIENT CONTEXT ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Location: ${location || 'Not specified'}
+Website: ${websiteUrl || 'Not provided'} (exists: ${hasWebsite ? 'Yes' : 'No'})
+Website pages: ${websitePageCount || 'Unknown'}
+Reviews: ${reviewCount != null ? `${reviewCount} reviews, ${rating} star average` : 'Unknown'}
+Business overview: ${businessOverview || 'Not provided'}
+Target customers: ${targetCustomers || 'Not provided'}
+Core services: ${keyServices || 'Not provided'}
+Growth goals: ${businessGoals || 'Not provided'}
+Locations served: ${locations || 'Not provided'}
+Ads-specific services: ${adsServices || 'Not specified'}
+Client's intended monthly budget: ${monthlyBudget || 'Not specified'}
+Fastest win service: ${fastestWinService || 'Not specified'}
+Retargeting goal: ${retargetingGoal || 'Not specified'}
+Pricing notes: ${pricingNotes || 'Not provided'}
+SEO keyword targets (for paid alignment): ${seoKeywords}
+Active products: ${Array.isArray(selectedProducts) ? selectedProducts.join(', ') : 'Not specified'}
+
+=== READINESS SCORING RULES ===
+
+READINESS SCORE (0-100):
+- A website is required for ads — no website = max 30 score
+- +20 for website with >5 pages (conversion-ready)
+- +15 for clear service offering
+- +15 for known location targeting (suburb/city level)
+- +15 for defined budget
+- +10 for strong reviews (trust = better conversion)
+- +10 for retargeting goal defined
+- Score label: 0-40 = Not Ready, 41-60 = Nearly Ready, 61-75 = Ready, 76-100 = Optimised
+
+RISK LEVEL:
+- high: No website, or very new business with no reviews, or budget <$500/mo
+- medium: Website exists but thin, <10 reviews, or no clear service pages
+- low: Good website, clear service offer, reasonable budget, established business
+
+BUDGET RULES (Australian market):
+- Minimum viable: $800-$1,200/mo for 1 service in 1 location
+- Growth: $1,500-$3,000/mo for 2-3 services / multi-location
+- Aggressive: $3,500+/mo for full service coverage
+- If client stated budget is very low (<$500/mo), recommend minimum and flag risk
+- Budget breakdown should cover: Search (primary), Local (if local intent high), Remarketing (if retargeting goal set)
+
+CAMPAIGN TYPES:
+- search: Always include for primary service keywords (brand + non-brand)
+- local: Include if business is location-dependent (trades, local services)
+- remarketing: Include if website exists and retargeting goal is defined
+
+CPL ESTIMATION (Australian local services):
+- Trades/services: $30-$120 per lead depending on competition
+- Professional services: $50-$200 per lead
+- Retail/ecommerce: $20-$80 per lead
+
+=== OUTPUT FORMAT (JSON only) ===
+{
+  "readinessScore": 65,
+  "readinessLabel": "Ready",
+  "summary": "2-3 sentences on ads readiness and opportunity. Reference their specific services and market.",
+  "recommendedMonthlyBudget": 1500,
+  "budgetBreakdown": [
+    { "label": "Search Campaigns", "amount": 1000, "percentage": 67 },
+    { "label": "Local Campaigns", "amount": 300, "percentage": 20 },
+    { "label": "Remarketing", "amount": 200, "percentage": 13 }
+  ],
+  "campaigns": [
+    {
+      "name": "Campaign name",
+      "type": "search",
+      "keywords": ["keyword 1", "keyword 2", "keyword 3", "keyword 4"],
+      "monthlyBudget": 1000,
+      "expectedClicks": "120-180",
+      "expectedLeads": "8-15",
+      "priority": 1
+    }
+  ],
+  "targetKeywords": [
+    "primary paid keyword 1",
+    "primary paid keyword 2",
+    "primary paid keyword 3",
+    "primary paid keyword 4",
+    "primary paid keyword 5"
+  ],
+  "expectedCPL": "$80-$120",
+  "expectedMonthlyLeads": "8-20",
+  "riskLevel": "medium",
+  "riskNote": "Specific risk note — what could affect performance and what to watch",
+  "quickWins": [
+    "Specific immediate Ads action 1",
+    "Specific immediate Ads action 2",
+    "Specific immediate Ads action 3"
+  ]
+}
+
+Rules:
+- Provide 1-3 campaigns sorted by priority
+- Each campaign has 3-6 keywords
+- Budget breakdown percentages must sum to 100
+- All dollar amounts in AUD
+- Be specific to this business — no generic advice`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: 2500,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (err: any) {
+      console.error('[ads-engine]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================================
   // Phase 3 — Website Engine + SEO Engine (Client Workspace)
   // ============================================================
 

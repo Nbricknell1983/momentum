@@ -1715,11 +1715,67 @@ export interface GBPPlaybook {
   updatedAt?: string;
 }
 
+// ─── Shared grade type (used by Phase 3 + 4 engines) ─────────────────────────
+
+export type GradeValue = 'A' | 'B' | 'C' | 'D' | 'F';
+
+// ─── Phase 4: GBP Engine ──────────────────────────────────────────────────────
+
+export type GBPTaskCategory = 'profile' | 'reviews' | 'posts' | 'photos' | 'local-seo' | 'qa';
+
+export interface GBPTask {
+  priority: 1 | 2 | 3;
+  category: GBPTaskCategory;
+  task: string;
+  reason: string;
+  impact: string;
+  effort: 'quick-win' | 'medium' | 'project';
+}
+
+export interface GBPEngineReport {
+  optimizationScore: number;
+  optimizationLabel: 'critical' | 'needs-work' | 'good' | 'strong';
+  summary: string;
+  profileGrade: GradeValue;
+  reviewGrade: GradeValue;
+  postGrade: GradeValue;
+  tasks: GBPTask[];
+  quickWins: string[];
+  generatedAt: Date;
+}
+
+// ─── Phase 4: Ads Engine ──────────────────────────────────────────────────────
+
+export interface AdsCampaign {
+  name: string;
+  type: 'search' | 'local' | 'remarketing';
+  keywords: string[];
+  monthlyBudget: number;
+  expectedClicks: string;
+  expectedLeads: string;
+  priority: 1 | 2 | 3;
+}
+
+export interface AdsEngineReport {
+  readinessScore: number;
+  readinessLabel: string;
+  summary: string;
+  recommendedMonthlyBudget: number;
+  budgetBreakdown: { label: string; amount: number; percentage: number }[];
+  campaigns: AdsCampaign[];
+  targetKeywords: string[];
+  expectedCPL: string;
+  expectedMonthlyLeads: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  riskNote: string;
+  quickWins: string[];
+  generatedAt: Date;
+}
+
 // ─── Phase 3: Website Engine ──────────────────────────────────────────────────
 
 export type WebsiteTaskCategory = 'conversion' | 'structure' | 'content' | 'speed' | 'trust' | 'seo';
 export type WebsiteTaskEffort = 'quick-win' | 'medium' | 'project';
-export type GradeValue = 'A' | 'B' | 'C' | 'D' | 'F';
 export type WebsiteHealthLabel = 'critical' | 'needs-work' | 'good' | 'strong';
 
 export interface WebsiteTask {
@@ -1847,6 +1903,9 @@ export interface Client {
   // Phase 3 — Website & SEO Engines
   websiteEngine?: WebsiteEngineReport;
   seoEngine?: SEOEngineReport;
+  // Phase 4 — GBP & Ads Engines
+  gbpEngine?: GBPEngineReport;
+  adsEngine?: AdsEngineReport;
 }
 
 export type AutomationMode = 'assisted' | 'supervised' | 'autonomous';

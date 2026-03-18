@@ -56,6 +56,8 @@ Preferred communication style: Simple, everyday language.
 - **Growth Prescription Engine** (Phase 2): Evidence-based AI diagnosis for prospects — analyses digital presence signals, strategy intelligence, and discovery context to produce a recommended product stack, tiered investment options (Starter→Performance), and cost-of-inaction framing. Integrated into the Deal Intelligence panel and enriches pre-call prep.
 - **Website Engine** (Phase 3): AI-powered website health audit for clients — scores conversion, structure, and content (A–F grades), generates a prioritised action task list with effort levels, and provides quick wins. Runs from onboarding context + website data. Lives in the Client Growth Intelligence panel.
 - **SEO Engine** (Phase 3): AI-powered SEO intelligence plan for clients — generates a visibility score, keyword targets, content gap analysis (service/location/FAQ/blog page opportunities), and a 3-month build roadmap. Lives in the Client Growth Intelligence panel.
+- **GBP Engine** (Phase 4): AI-powered Google Business Profile optimisation report — scores profile completeness, review strength, and posting consistency (A–F grades), with a prioritised task list and quick wins. Distinct from the GBP Playbook and Maps Pack tools. Lives in the Client Growth Intelligence panel.
+- **Ads Engine** (Phase 4): AI-powered Google Ads intelligence plan — readiness score, recommended budget with breakdown, campaign structure (Search/Local/Remarketing), paid keyword targets, estimated CPL and leads/month, and risk assessment. Pulls from onboarding and SEO engine data. Lives in the Client Growth Intelligence panel.
 
 ## External Dependencies
 

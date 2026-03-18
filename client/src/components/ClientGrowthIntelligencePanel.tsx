@@ -9,6 +9,8 @@ import {
 import GrowthOperatorPanel from './GrowthOperatorPanel';
 import WebsiteEnginePanel from './WebsiteEnginePanel';
 import SEOEnginePanel from './SEOEnginePanel';
+import GBPEnginePanel from './GBPEnginePanel';
+import AdsEnginePanel from './AdsEnginePanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -971,6 +973,10 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
         {/* Phase 3 — Website & SEO Engines */}
         <WebsiteEnginePanel client={client} />
         <SEOEnginePanel client={client} />
+
+        {/* Phase 4 — GBP & Ads Engines */}
+        <GBPEnginePanel client={client} />
+        <AdsEnginePanel client={client} />
 
         <div>
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-3">Account Intelligence</p>
