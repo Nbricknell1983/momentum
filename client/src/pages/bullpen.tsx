@@ -17,7 +17,8 @@ import {
   Briefcase, TrendingUp, Globe, Search, BarChart3, Star, Users, Shield,
   Settings2, AlertTriangle, CheckCircle2, Clock, Zap, ChevronDown, ChevronRight,
   ExternalLink, RefreshCw, Activity as ActivityIcon, Timer, Ban,
-  BriefcaseBusiness, Cpu, Eye, Radio, Compass
+  BriefcaseBusiness, Cpu, Eye, Radio, Compass, Bot, Link2, MapPin,
+  FileSearch, PlayCircle, Wrench, UserCheck, GitMerge, List
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -55,6 +56,17 @@ interface AgentCommsMessage {
   fromBg: string;
   message: string;
   minutesAgo: number;
+}
+
+interface SecretaryItem {
+  id: string;
+  title: string;
+  reason: string;
+  flaggedBy: string;
+  priority: 'urgent' | 'high' | 'medium';
+  icon: typeof Briefcase;
+  actionLabel: string;
+  path: string;
 }
 
 interface AutomationRules {
@@ -256,6 +268,39 @@ function MessageBubble({ msg, grouped }: { msg: AgentCommsMessage; grouped: bool
         </div>
         <p className="text-[13px] text-foreground/85 leading-relaxed">{msg.message}</p>
       </div>
+    </div>
+  );
+}
+
+// ─── Secretary Card ───────────────────────────────────────────────────────────
+
+const PRIORITY_STYLE = {
+  urgent: { badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',   label: 'Urgent',  border: 'border-l-red-500' },
+  high:   { badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400', label: 'High', border: 'border-l-amber-500' },
+  medium: { badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',  label: 'Medium', border: 'border-l-blue-400' },
+};
+
+function SecretaryRecommendation({ item }: { item: SecretaryItem }) {
+  const Icon = item.icon;
+  const ps = PRIORITY_STYLE[item.priority];
+  return (
+    <div className={`flex items-start gap-4 p-4 border-b border-border/40 last:border-0 border-l-2 ${ps.border}`}>
+      <div className="p-2 rounded-lg bg-muted/60 shrink-0 mt-0.5">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <p className="text-sm font-semibold">{item.title}</p>
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${ps.badge}`}>{ps.label}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">{item.reason}</p>
+        <p className="text-[11px] text-muted-foreground/70 mt-0.5">Raised by {item.flaggedBy}</p>
+      </div>
+      <Link href={item.path}>
+        <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs gap-1.5 mt-0.5">
+          {item.actionLabel} <ChevronRight className="h-3 w-3" />
+        </Button>
+      </Link>
     </div>
   );
 }
@@ -781,6 +826,140 @@ export default function BullpenPage() {
       clientsWithGBP, clientsWithAds, clientsWithPrescription, autonomousClients,
       activeLeads]);
 
+  // ── Secretary recommendations ─────────────────────────────────────────────
+
+  const secretaryItems = useMemo<SecretaryItem[]>(() => {
+    const items: SecretaryItem[] = [];
+
+    const noGBP        = activeClients.filter(c => !c.gbpLocationName);
+    const noOnboarding = activeClients.filter(c => !c.clientOnboarding?.businessContext);
+    const noPlays      = activeClients.filter(c => !c.appliedPlays || c.appliedPlays.length === 0);
+    const noSEOInputs  = activeClients.filter(c => !c.seoEngine && !c.clientOnboarding?.seoInputs);
+    const lowGrade     = clientsWithWebsite.filter(c => c.websiteEngine?.overallGrade === 'F' || c.websiteEngine?.overallGrade === 'D');
+    const supervised   = activeClients.filter(c => c.automationMode === 'supervised');
+    const redClients   = activeClients.filter(c => c.healthStatus === 'red');
+
+    if (blockedClients.length > 0) {
+      items.push({
+        id: 'resolve-blockers',
+        title: `Resolve execution blockers for ${blockedClients.length} client${blockedClients.length > 1 ? 's' : ''}`,
+        reason: `${blockedClients.map(c => c.businessName).slice(0, 2).join(', ')} are stalled. The team cannot proceed until missing inputs are provided.`,
+        flaggedBy: 'Ops Agent',
+        priority: 'urgent',
+        icon: Wrench,
+        actionLabel: 'View Clients',
+        path: '/clients',
+      });
+    }
+
+    if (redClients.length > 0) {
+      items.push({
+        id: 'red-clients',
+        title: `Intervene on ${redClients.length} at-risk client${redClients.length > 1 ? 's' : ''}`,
+        reason: `${redClients.map(c => c.businessName).slice(0, 2).join(', ')} are in red health. Churn risk is high — direct contact needed this week.`,
+        flaggedBy: 'Growth Agent',
+        priority: 'urgent',
+        icon: UserCheck,
+        actionLabel: 'View Clients',
+        path: '/clients',
+      });
+    }
+
+    if (noGBP.length > 0) {
+      items.push({
+        id: 'link-gbp',
+        title: `Link Google Business Profiles for ${noGBP.length} client${noGBP.length > 1 ? 's' : ''}`,
+        reason: `GBP Agent cannot track rankings, manage reviews, or generate audit reports without OAuth access. This blocks the entire local SEO workflow.`,
+        flaggedBy: 'GBP Agent',
+        priority: 'high',
+        icon: Link2,
+        actionLabel: 'Connect GBPs',
+        path: '/clients',
+      });
+    }
+
+    if (overdueLeads.length > 0) {
+      items.push({
+        id: 'pipeline-followup',
+        title: `Clear ${overdueLeads.length} overdue follow-up${overdueLeads.length > 1 ? 's' : ''} in the pipeline`,
+        reason: `Sales Agent has flagged leads past their contact date. Momentum is stalling — these need a sequencing decision or contact today.`,
+        flaggedBy: 'Sales Agent',
+        priority: 'high',
+        icon: List,
+        actionLabel: 'View Pipeline',
+        path: '/pipeline',
+      });
+    }
+
+    if (noOnboarding.length > 0) {
+      items.push({
+        id: 'onboarding-context',
+        title: `Complete discovery inputs for ${noOnboarding.length} client${noOnboarding.length > 1 ? 's' : ''}`,
+        reason: `Strategy, SEO, Website and Ads engines are all blocked without onboarding context. Run a discovery call or fill in the onboarding card.`,
+        flaggedBy: 'Strategy Agent',
+        priority: 'high',
+        icon: FileSearch,
+        actionLabel: 'View Clients',
+        path: '/clients',
+      });
+    }
+
+    if (noPlays.length > 0) {
+      items.push({
+        id: 'activate-plays',
+        title: `Activate a growth play for ${noPlays.length} client${noPlays.length > 1 ? 's' : ''}`,
+        reason: `Without an active play, the AI action feed has no strategic sequencing framework. Actions are being generated but not coordinated.`,
+        flaggedBy: 'Strategist',
+        priority: 'high',
+        icon: PlayCircle,
+        actionLabel: 'View Clients',
+        path: '/clients',
+      });
+    }
+
+    if (noSEOInputs.length > 0) {
+      items.push({
+        id: 'seo-inputs',
+        title: `Add service & location data for ${noSEOInputs.length} client${noSEOInputs.length > 1 ? 's' : ''}`,
+        reason: `SEO Agent needs service types, target locations and competitor data to generate keyword plans. Fill in the SEO inputs tab in onboarding.`,
+        flaggedBy: 'SEO Agent',
+        priority: 'medium',
+        icon: MapPin,
+        actionLabel: 'View Clients',
+        path: '/clients',
+      });
+    }
+
+    if (lowGrade.length > 0) {
+      const c = lowGrade[0];
+      items.push({
+        id: 'website-rebuild',
+        title: `Prioritise website rebuild for ${c.businessName}`,
+        reason: `Website scored ${c.websiteEngine?.overallGrade} — conversion structure is critically weak. Running paid ads to this site will waste budget.`,
+        flaggedBy: 'Website Agent',
+        priority: 'medium',
+        icon: Globe,
+        actionLabel: 'View Client',
+        path: '/clients',
+      });
+    }
+
+    if (supervised.length > 0) {
+      items.push({
+        id: 'review-automation',
+        title: `Review autonomous mode eligibility for ${supervised.length} client${supervised.length > 1 ? 's' : ''}`,
+        reason: `These clients are in supervised mode, generating approval requests that need manual review. Consider upgrading eligible clients to reduce your workload.`,
+        flaggedBy: 'Ops Agent',
+        priority: 'medium',
+        icon: GitMerge,
+        actionLabel: 'Automation Rules',
+        path: '/bullpen',
+      });
+    }
+
+    return items;
+  }, [activeClients, blockedClients, clientsWithWebsite, overdueLeads]);
+
   // ── Work hours check ──────────────────────────────────────────────────────
 
   const isWithinWorkHours = useMemo(() => {
@@ -873,6 +1052,45 @@ export default function BullpenPage() {
                 )}
               </div>
             </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Secretary ────────────────────────────────────────────────────── */}
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+            <Bot className="h-3.5 w-3.5 text-violet-500" />
+            Secretary — Action Briefing
+          </h2>
+          <Card className="border bg-card">
+            <div className="px-5 py-4 border-b border-border/50 bg-violet-50/50 dark:bg-violet-950/20 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shrink-0 mt-0.5">
+                <Bot className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-violet-900 dark:text-violet-200">
+                  {secretaryItems.length > 0
+                    ? `I've reviewed the team's conversation and flagged ${secretaryItems.length} thing${secretaryItems.length > 1 ? 's' : ''} that need your direct involvement.`
+                    : 'I\'ve reviewed the team\'s conversation. Everything looks well-resourced — no immediate action required from you.'}
+                </p>
+                <p className="text-xs text-violet-700/70 dark:text-violet-400/70 mt-0.5">
+                  Based on agent feedback from today's comms — sorted by urgency.
+                </p>
+              </div>
+            </div>
+            {secretaryItems.length > 0 ? (
+              <CardContent className="p-0">
+                {secretaryItems.map(item => (
+                  <SecretaryRecommendation key={item.id} item={item} />
+                ))}
+              </CardContent>
+            ) : (
+              <CardContent className="px-5 py-6">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                  <p className="text-sm text-muted-foreground">All tools and integrations appear to be in good shape. I'll flag anything that changes.</p>
+                </div>
+              </CardContent>
+            )}
           </Card>
         </div>
 
