@@ -53,10 +53,7 @@ interface AgentCommsMessage {
   from: string;
   fromIcon: typeof Briefcase;
   fromBg: string;
-  to: string;
   message: string;
-  type: 'alert' | 'update' | 'handoff' | 'broadcast' | 'complete';
-  priority: 'high' | 'medium' | 'low';
   minutesAgo: number;
 }
 
@@ -226,36 +223,38 @@ function AttentionCard({ item }: { item: AttentionItem }) {
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
-const MSG_TYPE_CONFIG = {
-  alert:     { label: 'ALERT',     color: 'text-red-500' },
-  update:    { label: 'UPDATE',    color: 'text-blue-500' },
-  handoff:   { label: 'HANDOFF',  color: 'text-violet-500' },
-  broadcast: { label: 'BROADCAST',color: 'text-emerald-600' },
-  complete:  { label: 'DONE',     color: 'text-emerald-600' },
-};
-
-function MessageBubble({ msg }: { msg: AgentCommsMessage }) {
+function MessageBubble({ msg, grouped }: { msg: AgentCommsMessage; grouped: boolean }) {
   const Icon = msg.fromIcon;
-  const tc = MSG_TYPE_CONFIG[msg.type];
   const timeStr = msg.minutesAgo === 0
     ? 'just now'
     : msg.minutesAgo < 60
     ? `${msg.minutesAgo}m ago`
-    : `${Math.floor(msg.minutesAgo / 60)}h ${msg.minutesAgo % 60}m ago`;
+    : `${Math.floor(msg.minutesAgo / 60)}h ago`;
+
+  if (grouped) {
+    return (
+      <div className="flex items-start gap-3 py-0.5 pl-0 group">
+        <div className="w-8 shrink-0 flex justify-center pt-1">
+          <span className="text-[10px] text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors tabular-nums leading-none">
+            {timeStr.replace('m ago', '').replace('h ago', 'h')}
+          </span>
+        </div>
+        <p className="text-[13px] text-foreground/85 leading-relaxed flex-1">{msg.message}</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-border/30 last:border-0">
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${msg.fromBg}`}>
+    <div className="flex items-start gap-3 pt-4 pb-0.5 group">
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${msg.fromBg}`}>
         <Icon className="h-4 w-4 text-white" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-          <span className="text-[12px] font-bold text-foreground">{msg.from}</span>
-          <span className="text-[11px] text-muted-foreground">→</span>
-          <span className="text-[12px] font-semibold text-muted-foreground">{msg.to}</span>
-          <span className={`text-[10px] font-bold uppercase ml-auto shrink-0 ${tc.color}`}>{tc.label}</span>
-          <span className="text-[10px] text-muted-foreground shrink-0">{timeStr}</span>
+        <div className="flex items-baseline gap-2 mb-0.5">
+          <span className="text-[13px] font-bold text-foreground">{msg.from}</span>
+          <span className="text-[11px] text-muted-foreground">{timeStr}</span>
         </div>
-        <p className="text-[13px] text-foreground/85 leading-snug">{msg.message}</p>
+        <p className="text-[13px] text-foreground/85 leading-relaxed">{msg.message}</p>
       </div>
     </div>
   );
@@ -639,145 +638,148 @@ export default function BullpenPage() {
   // ── Agent comms feed ──────────────────────────────────────────────────────
 
   const agentFeed = useMemo<AgentCommsMessage[]>(() => {
-    const msgs: AgentCommsMessage[] = [];
     const rm = (key: string) => ROLE_META[key] ?? ROLE_META['Ops'];
-    let minuteCounter = 0;
-    const push = (
-      id: string, from: string, to: string,
-      message: string, type: AgentCommsMessage['type'],
-      priority: AgentCommsMessage['priority']
-    ) => {
-      const base = priority === 'high' ? 2 : priority === 'medium' ? 15 : 45;
-      minuteCounter += priority === 'high' ? 3 : priority === 'medium' ? 8 : 18;
-      msgs.push({ id, from, fromIcon: rm(from).icon, fromBg: rm(from).bg, to, message, type, priority, minutesAgo: base + minuteCounter });
+    const msgs: AgentCommsMessage[] = [];
+    let t = 118; // start ~2h ago, count down to 0 (now)
+
+    const say = (id: string, from: string, message: string, gap = 3) => {
+      t = Math.max(0, t - gap);
+      msgs.push({ id, from, fromIcon: rm(from).icon, fromBg: rm(from).bg, message, minutesAgo: t });
     };
 
-    // ── Overdue follow-ups (Sales → Strategist)
-    if (overdueLeads.length > 0) {
-      const sample = overdueLeads.slice(0, 2).map(l => l.businessName).join(', ');
-      push('overdue', 'Sales', 'Strategist',
-        `${overdueLeads.length} lead${overdueLeads.length > 1 ? 's' : ''} have passed their follow-up date — ${sample}${overdueLeads.length > 2 ? ` +${overdueLeads.length - 2} more` : ''}. Pipeline momentum stalling.`,
-        'alert', 'high');
+    // ── Morning status (Ops always opens)
+    say('ops-open', 'Ops', `Morning check — ${activeClients.length} active clients, ${activeLeads.length} leads in pipeline. ${autonomousClients.length > 0 ? `${autonomousClients.length} on autopilot, running smoothly.` : 'All clients in supervised mode.'}`, 0);
+    say('strat-ack', 'Strategist', 'Thanks Ops. Let\'s run through any flags before we start sequencing today.', 4);
+
+    // ── Autopilot clients
+    if (autonomousClients.length > 0) {
+      say('ops-auto', 'Ops', `Autopilot clients are all executing as scheduled. No escalations overnight.`, 5);
+      say('strat-auto', 'Strategist', 'Good. Keep monitoring — flag anything that deviates from the expected action sequence.', 3);
     }
 
-    // ── Open NBA queue (Sales → Strategist)
-    if (openNBA.length > 0) {
-      push('nba', 'Sales', 'Strategist',
-        `${openNBA.length} AI outreach action${openNBA.length > 1 ? 's' : ''} queued and awaiting sequencing. Ready to execute on your go-ahead.`,
-        'update', openNBA.length > 5 ? 'medium' : 'low');
+    // ── GBP & SEO reports
+    if (clientsWithGBP.length > 0) {
+      const c = clientsWithGBP[0];
+      say('gbp-done', 'GBP', `Finished the GBP audit for ${c.businessName}. Profile completeness is solid but review response rate is low — that's their biggest gap right now.`, 8);
+      say('strat-gbp', 'Strategist', `What's the quick win to move the needle there?`, 3);
+      say('gbp-qw', 'GBP', `Respond to the 3 unanswered reviews and post twice this week. Should lift the score within a fortnight.`, 2);
+      say('strat-gbp2', 'Strategist', `Good. I'll queue those as actions in their feed.`, 3);
     }
 
-    // ── Stalled clients (Growth → Strategist)
-    const stalledClients = activeClients.filter(c => c.learningInsight?.momentumStatus === 'stalled');
-    if (stalledClients.length > 0) {
-      push('stalled', 'Growth', 'Strategist',
-        `${stalledClients.map(c => c.businessName).slice(0, 2).join(', ')}${stalledClients.length > 2 ? ` +${stalledClients.length - 2}` : ''} — momentum has stalled. Growth engine showing no forward movement. Intervention needed.`,
-        'alert', 'high');
-    }
-
-    // ── Red health clients (Growth → Strategist)
-    const redClients = activeClients.filter(c => c.healthStatus === 'red');
-    if (redClients.length > 0) {
-      push('red-health', 'Growth', 'Strategist',
-        `${redClients.length} client${redClients.length > 1 ? 's' : ''} showing critical health status. Churn risk is elevated — ${redClients.map(c => c.businessName).slice(0, 2).join(', ')}. Flagging for immediate review.`,
-        'alert', 'high');
-    }
-
-    // ── Blocked execution (Ops → Strategist)
-    if (blockedClients.length > 0) {
-      push('blocked', 'Ops', 'Strategist',
-        `Execution blocked for ${blockedClients.map(c => c.businessName).slice(0, 2).join(', ')}${blockedClients.length > 2 ? ` +${blockedClients.length - 2} more` : ''}. Missing inputs or unresolved conflicts. Systems cannot auto-proceed.`,
-        'alert', 'high');
-    }
-
-    // ── Missing GBP connection (GBP → Strategist)
-    const noGBP = activeClients.filter(c => !c.gbpLocationName);
-    if (noGBP.length > 0) {
-      push('no-gbp', 'GBP', 'Strategist',
-        `${noGBP.length} client${noGBP.length > 1 ? 's' : ''} without GBP OAuth connected. Local rank tracking and review management are offline for these accounts.`,
-        'update', 'medium');
-    }
-
-    // ── Missing onboarding context (Strategy → Strategist)
-    const noOnboarding = activeClients.filter(c => !c.clientOnboarding?.businessContext);
-    if (noOnboarding.length > 0) {
-      push('no-onboarding', 'Strategy', 'Strategist',
-        `${noOnboarding.length} client${noOnboarding.length > 1 ? 's' : ''} missing onboarding context. SEO, Website and Ads engines require this before generating intelligence. Recommend prioritising discovery calls.`,
-        'handoff', 'medium');
-    }
-
-    // ── Website low grades (Website → Strategist)
-    const lowGradeWebsite = clientsWithWebsite.filter(c => c.websiteEngine?.overallGrade === 'F' || c.websiteEngine?.overallGrade === 'D');
-    if (lowGradeWebsite.length > 0) {
-      const c = lowGradeWebsite[0];
-      push('low-website', 'Website', 'Strategist',
-        `${c.businessName} website audit returned ${c.websiteEngine?.overallGrade} grade. Conversion structure critically weak. Recommend escalating to rebuild priority before any ad spend.`,
-        'alert', 'medium');
-    }
-
-    // ── SEO plans ready (SEO → Strategist)
     if (clientsWithSEO.length > 0) {
-      push('seo-ready', 'SEO', 'Strategist',
-        `SEO intelligence plans ready for ${clientsWithSEO.length} client${clientsWithSEO.length > 1 ? 's' : ''}. Keyword targets, content gaps and 3-month roadmaps available. Awaiting strategic sequencing.`,
-        'update', 'medium');
+      const c = clientsWithSEO[0];
+      say('seo-done', 'SEO', `SEO plan locked for ${c.businessName}. ${clientsWithSEO.length > 1 ? `${clientsWithSEO.length - 1} more plans also ready.` : ''} Keyword targets and content gaps are mapped — 3-month roadmap's in the system.`, 10);
+      say('strat-seo', 'Strategist', `Are the service pages covered or is it mostly blog content?`, 3);
+      say('seo-detail', 'SEO', `Mix of both — 6 service pages, 4 location pages, and 4 FAQ opportunities. The service pages should come first for conversion.`, 2);
+      say('strat-seo2', 'Strategist', `Agreed. Let's prioritise those in the content calendar. I'll update the sequencing.`, 4);
     }
 
-    // ── Ads-ready clients (Ads → Strategist)
+    // ── Website audit
+    const lowGrade = clientsWithWebsite.filter(c => c.websiteEngine?.overallGrade === 'F' || c.websiteEngine?.overallGrade === 'D');
+    if (lowGrade.length > 0) {
+      const c = lowGrade[0];
+      say('web-flag', 'Website', `Just flagging — ${c.businessName} website scored ${c.websiteEngine?.overallGrade}. Conversion structure is critically weak. I wouldn't recommend running ads to this site yet.`, 12);
+      say('strat-web', 'Strategist', `That's a problem if they're expecting leads from paid. What's the rebuild scope?`, 3);
+      say('web-scope', 'Website', `Landing page refresh at minimum, ideally a full restructure. I can detail it in the action list if you want to present to them.`, 2);
+      say('strat-web2', 'Strategist', `Yes — put it in the client report. We'll use it as a conversation starter.`, 3);
+    }
+
+    // ── Ads ready
     const adsReady = clientsWithAds.filter(c => (c.adsEngine?.readinessScore || 0) >= 70);
     if (adsReady.length > 0) {
       const c = adsReady[0];
-      push('ads-ready', 'Ads', 'Strategist',
-        `${c.businessName} shows ${c.adsEngine?.readinessScore}% paid search readiness — above launch threshold. Recommend activating campaign structure. Budget and keyword targets are mapped.`,
-        'handoff', 'medium');
+      say('ads-ready', 'Ads', `${c.businessName} is sitting at ${c.adsEngine?.readinessScore}% readiness for paid search. Campaign structure and budget model are mapped — ready to launch when you give the word.`, 14);
+      say('strat-ads', 'Strategist', `Is the landing page situation sorted for them?`, 3);
+      say('ads-lp', 'Ads', `Yeah, they're in decent shape on that front. I'd say we're good to go.`, 2);
+      say('strat-ads2', 'Strategist', `Let's schedule a launch brief with the client this week then. Sales, can you get that in the calendar?`, 3);
+      say('sales-ads', 'Sales', `On it — I'll reach out today.`, 2);
     }
 
-    // ── GBP reports ready (GBP → Strategist)
-    if (clientsWithGBP.length > 0) {
-      push('gbp-reports', 'GBP', 'Strategist',
-        `GBP optimisation audit complete for ${clientsWithGBP.length} client${clientsWithGBP.length > 1 ? 's' : ''}. Profile completeness, review strength and posting cadence scored. Action lists generated.`,
-        'complete', 'low');
+    // ── Missing onboarding
+    const noOnboarding = activeClients.filter(c => !c.clientOnboarding?.businessContext);
+    if (noOnboarding.length > 0) {
+      say('strat-onb', 'Strategy', `Still waiting on onboarding context for ${noOnboarding.length} client${noOnboarding.length > 1 ? 's' : ''}. SEO and Website engines can't run until we have their discovery data.`, 10);
+      say('strat-onb2', 'Strategist', `Which ones are most time-sensitive?`, 3);
+      const c = noOnboarding[0];
+      say('strat-onb3', 'Strategy', `${c.businessName} should be the priority — they're expecting intelligence outputs soon.`, 2);
+      say('strat-onb4', 'Strategist', `I'll follow up with the account lead today. Can we hold the engine run until we have it?`, 3);
+      say('strat-onb5', 'Strategy', `Done — holding.`, 2);
     }
 
-    // ── No active plays (Strategist → Growth)
+    // ── Missing GBP OAuth
+    const noGBP = activeClients.filter(c => !c.gbpLocationName);
+    if (noGBP.length > 0) {
+      say('gbp-missing', 'GBP', `Flagging ${noGBP.length} client${noGBP.length > 1 ? 's' : ''} without GBP connected. I can't track rankings or manage reviews for them without the OAuth link.`, 8);
+      say('strat-gbp-missing', 'Strategist', `That should be part of the onboarding checklist. Ops, can we add a blocker to their account until it's connected?`, 3);
+      say('ops-gbp', 'Ops', `Already flagged in their execution status. They'll show as blocked until resolved.`, 2);
+    }
+
+    // ── Stalled or red health clients
+    const redClients = activeClients.filter(c => c.healthStatus === 'red');
+    const stalledClients = activeClients.filter(c => c.learningInsight?.momentumStatus === 'stalled');
+    if (redClients.length > 0 || stalledClients.length > 0) {
+      const target = redClients[0] ?? stalledClients[0];
+      say('growth-flag', 'Growth', `Health check: ${target.businessName} hasn't had a meaningful touchpoint in a while — health score has dropped. We're in churn risk territory if this continues.`, 10);
+      say('strat-growth', 'Strategist', `How long since last real engagement?`, 3);
+      say('growth-days', 'Growth', `It's been a while. I'd recommend a direct call this week before it gets worse.`, 2);
+      say('strat-growth2', 'Strategist', `Agreed. Sales, can you pick this one up today?`, 3);
+    }
+
+    // ── Blocked execution
+    if (blockedClients.length > 0) {
+      const c = blockedClients[0];
+      say('ops-blocked', 'Ops', `Execution blocked for ${c.businessName} — missing a few inputs before I can continue. Need the landing page URL and confirmed GBP access.`, 8);
+      say('strat-blocked', 'Strategist', `I'll chase the client now. Can you hold the queue until this afternoon?`, 3);
+      say('ops-hold', 'Ops', `Holding. I'll retry automatically once the inputs are in.`, 2);
+    }
+
+    // ── Overdue follow-ups
+    if (overdueLeads.length > 0) {
+      const lead = overdueLeads[0];
+      say('sales-overdue', 'Sales', `Flagging ${overdueLeads.length} lead${overdueLeads.length > 1 ? 's' : ''} past their follow-up date. ${lead?.businessName ? `${lead.businessName} is the most overdue.` : ''} Want me to reprioritise the sequence?`, 6);
+      say('strat-overdue', 'Strategist', `Yes — ${lead?.businessName ? `bump ${lead.businessName} to the top.` : 'prioritise the deepest-stage lead.'} The rest can hold until tomorrow.`, 3);
+      say('sales-overdue2', 'Sales', `Done. Reaching out this afternoon.`, 2);
+    }
+
+    // ── No plays activated
     const noPlays = activeClients.filter(c => !c.appliedPlays || c.appliedPlays.length === 0);
     if (noPlays.length > 0) {
-      push('no-plays', 'Strategist', 'Growth',
-        `${noPlays.length} client${noPlays.length > 1 ? 's' : ''} with no growth play activated. Without a play, the AI action feed has no sequencing framework. Recommend selecting a play per client this week.`,
-        'handoff', 'medium');
+      say('strat-plays', 'Strategist', `Quick reminder — ${noPlays.length} client${noPlays.length > 1 ? 's' : ''} still don't have a growth play activated. Without that sequencing framework the AI actions are just individual tasks, not a coordinated strategy.`, 6);
+      say('growth-plays', 'Growth', `I can recommend a play for each based on their current signals. Want me to run through them?`, 3);
+      say('strat-plays2', 'Strategist', `Yes — send me the shortlist and I'll confirm before we activate.`, 2);
     }
 
-    // ── Autopilot running (Ops → Team)
-    if (autonomousClients.length > 0) {
-      push('autopilot', 'Ops', 'Team',
-        `${autonomousClients.length} client${autonomousClients.length > 1 ? 's' : ''} running autonomously on autopilot. All scheduled actions are auto-approving. Systems nominal — monitoring active.`,
-        'broadcast', 'low');
+    // ── Open NBA queue
+    if (openNBA.length > 0) {
+      say('sales-nba', 'Sales', `${openNBA.length} AI action${openNBA.length > 1 ? 's' : ''} queued and ready to go.`, 5);
+      say('strat-nba', 'Strategist', `Hold on anything client-facing until after 10am. Execute the research and prep tasks now.`, 3);
+      say('sales-nba2', 'Sales', `Understood.`, 2);
     }
 
-    // ── Strong momentum (Strategist → Team)
+    // ── Strong momentum celebration
     const strongClients = activeClients.filter(c => c.learningInsight?.momentumStatus === 'strong');
     if (strongClients.length > 0) {
-      push('strong', 'Strategist', 'Team',
-        `Portfolio update — ${strongClients.length} client${strongClients.length > 1 ? 's' : ''} showing strong growth momentum: ${strongClients.map(c => c.businessName).slice(0, 3).join(', ')}. Engines performing above baseline.`,
-        'broadcast', 'low');
+      say('strat-strong', 'Strategist', `Good news — ${strongClients.map(c => c.businessName).slice(0, 2).join(' and ')} ${strongClients.length > 2 ? `and ${strongClients.length - 2} others` : ''} are showing strong momentum. Engines performing above baseline.`, 5);
+      say('growth-strong', 'Growth', `Agreed — the Growth Playbook is working well for them. Worth highlighting in the next client review.`, 3);
     }
 
-    // ── Prescriptions generated (Strategy → Strategist)
+    // ── Prescriptions
     if (clientsWithPrescription.length > 0) {
-      push('prescriptions', 'Strategy', 'Strategist',
-        `${clientsWithPrescription.length} growth prescription${clientsWithPrescription.length > 1 ? 's' : ''} generated for pipeline leads. Recommended product stacks and investment tiers ready for discovery presentations.`,
-        'complete', 'low');
+      say('strat-presc', 'Strategy', `${clientsWithPrescription.length} growth prescription${clientsWithPrescription.length > 1 ? 's' : ''} are ready in the pipeline. Recommended stacks and investment tiers are mapped — good material for the next discovery calls.`, 8);
+      say('sales-presc', 'Sales', `Perfect timing. I've got a few calls this week where this will help.`, 3);
     }
 
-    // ── All quiet fallback
-    if (msgs.length === 0) {
-      push('quiet', 'Ops', 'Team',
-        'All systems operational. No alerts or blockers detected. Agents monitoring pipeline and client portfolio.',
-        'broadcast', 'low');
+    // ── Fallback if nothing to talk about
+    if (msgs.length <= 3) {
+      say('ops-quiet', 'Ops', 'All systems operational. No blockers or escalations at this time.', 5);
+      say('strat-quiet', 'Strategist', 'Good. Let\'s use the time to get ahead on the pipeline. Sales — any leads close to proposal stage?', 3);
+      say('sales-quiet', 'Sales', `Working through a few. I'll update the pipeline by end of day.`, 2);
     }
 
-    return msgs.reverse(); // newest first → oldest at top, newest at bottom
+    return msgs; // oldest at top, newest at bottom (chronological)
   }, [overdueLeads, openNBA, activeClients, blockedClients, clientsWithSEO, clientsWithWebsite,
-      clientsWithGBP, clientsWithAds, clientsWithPrescription, autonomousClients]);
+      clientsWithGBP, clientsWithAds, clientsWithPrescription, autonomousClients,
+      activeLeads]);
 
   // ── Work hours check ──────────────────────────────────────────────────────
 
@@ -846,6 +848,34 @@ export default function BullpenPage() {
           </div>
         )}
 
+        {/* ── Team Comms ───────────────────────────────────────────────────── */}
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+            </span>
+            Team Comms — Live
+          </h2>
+          <Card className="border bg-card">
+            <CardContent className="p-0">
+              <div className="max-h-[520px] overflow-y-auto px-5 pb-4">
+                {agentFeed.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">No agent messages yet.</div>
+                ) : (
+                  agentFeed.map((msg, i) => (
+                    <MessageBubble
+                      key={msg.id}
+                      msg={msg}
+                      grouped={i > 0 && agentFeed[i - 1].from === msg.from}
+                    />
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* ── Workforce ────────────────────────────────────────────────────── */}
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
@@ -889,28 +919,6 @@ export default function BullpenPage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* ── Team Comms ───────────────────────────────────────────────────── */}
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
-            </span>
-            Team Comms — Live
-          </h2>
-          <Card className="border bg-card">
-            <CardContent className="p-0">
-              <div className="max-h-[480px] overflow-y-auto px-4">
-                {agentFeed.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-muted-foreground">No agent messages yet.</div>
-                ) : (
-                  agentFeed.map(msg => <MessageBubble key={msg.id} msg={msg} />)
-                )}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* ── Automation Rules ─────────────────────────────────────────────── */}
