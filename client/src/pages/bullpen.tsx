@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { Link, Redirect } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -235,6 +235,29 @@ function AttentionCard({ item }: { item: AttentionItem }) {
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+function TypingIndicator({ from, fromBg, fromIcon: Icon }: { from: string; fromBg: string; fromIcon: typeof Briefcase }) {
+  return (
+    <div className="flex items-start gap-3 pt-4 pb-0.5 animate-fade-in">
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${fromBg}`}>
+        <Icon className="h-4 w-4 text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-[13px] font-bold text-foreground">{from}</span>
+          <span className="text-[11px] text-muted-foreground">typing…</span>
+        </div>
+        <div className="flex items-center gap-1 h-5">
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '0ms',   animationDuration: '0.8s' }} />
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '160ms', animationDuration: '0.8s' }} />
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '320ms', animationDuration: '0.8s' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({ msg, grouped }: { msg: AgentCommsMessage; grouped: boolean }) {
   const Icon = msg.fromIcon;
   const timeStr = msg.minutesAgo === 0
@@ -245,7 +268,7 @@ function MessageBubble({ msg, grouped }: { msg: AgentCommsMessage; grouped: bool
 
   if (grouped) {
     return (
-      <div className="flex items-start gap-3 py-0.5 pl-0 group">
+      <div className="flex items-start gap-3 py-0.5 pl-0 group animate-message-in">
         <div className="w-8 shrink-0 flex justify-center pt-1">
           <span className="text-[10px] text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors tabular-nums leading-none">
             {timeStr.replace('m ago', '').replace('h ago', 'h')}
@@ -257,7 +280,7 @@ function MessageBubble({ msg, grouped }: { msg: AgentCommsMessage; grouped: bool
   }
 
   return (
-    <div className="flex items-start gap-3 pt-4 pb-0.5 group">
+    <div className="flex items-start gap-3 pt-4 pb-0.5 group animate-message-in">
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${msg.fromBg}`}>
         <Icon className="h-4 w-4 text-white" />
       </div>
@@ -334,6 +357,11 @@ export default function BullpenPage() {
   const [rulesSaving, setRulesSaving] = useState(false);
   const [rulesLoaded, setRulesLoaded] = useState(false);
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
+
+  // ── Live-feed state ───────────────────────────────────────────────────────
+  const [visibleCount, setVisibleCount] = useState(0);
+  const [typingAgent, setTypingAgent] = useState<{ from: string; fromBg: string; fromIcon: typeof Briefcase } | null>(null);
+  const commsRef = useRef<HTMLDivElement>(null);
 
   // ── Load automation rules from Firestore ──────────────────────────────────
   useEffect(() => {
@@ -826,6 +854,47 @@ export default function BullpenPage() {
       clientsWithGBP, clientsWithAds, clientsWithPrescription, autonomousClients,
       activeLeads]);
 
+  // ── Live-feed animation: replay the feed each time agentFeed changes ────────
+  useEffect(() => {
+    let cancelled = false;
+
+    setVisibleCount(0);
+    setTypingAgent(null);
+
+    const feed = agentFeed; // snapshot
+
+    async function play() {
+      for (let i = 0; i < feed.length; i++) {
+        if (cancelled) return;
+        const msg = feed[i];
+
+        // Brief pause before showing typing indicator
+        await sleep(i === 0 ? 600 : 1400);
+        if (cancelled) return;
+
+        setTypingAgent({ from: msg.from, fromBg: msg.fromBg, fromIcon: msg.fromIcon });
+
+        // Typing duration: proportional to message length, capped
+        const typingMs = Math.min(1800, 700 + msg.message.length * 6);
+        await sleep(typingMs);
+        if (cancelled) return;
+
+        setTypingAgent(null);
+        setVisibleCount(i + 1);
+      }
+    }
+
+    play();
+    return () => { cancelled = true; };
+  }, [agentFeed.length]); // re-play only if the number of messages changes
+
+  // ── Auto-scroll comms panel ────────────────────────────────────────────────
+  useEffect(() => {
+    const el = commsRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [visibleCount, typingAgent]);
+
   // ── Secretary recommendations ─────────────────────────────────────────────
 
   const secretaryItems = useMemo<SecretaryItem[]>(() => {
@@ -1038,17 +1107,29 @@ export default function BullpenPage() {
           </h2>
           <Card className="border bg-card">
             <CardContent className="p-0">
-              <div className="max-h-[520px] overflow-y-auto px-5 pb-4">
+              <div ref={commsRef} className="max-h-[520px] overflow-y-auto px-5 pb-4">
                 {agentFeed.length === 0 ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">No agent messages yet.</div>
                 ) : (
-                  agentFeed.map((msg, i) => (
-                    <MessageBubble
-                      key={msg.id}
-                      msg={msg}
-                      grouped={i > 0 && agentFeed[i - 1].from === msg.from}
-                    />
-                  ))
+                  <>
+                    {agentFeed.slice(0, visibleCount).map((msg, i) => (
+                      <MessageBubble
+                        key={msg.id}
+                        msg={msg}
+                        grouped={i > 0 && agentFeed[i - 1].from === msg.from}
+                      />
+                    ))}
+                    {typingAgent && (
+                      <TypingIndicator
+                        from={typingAgent.from}
+                        fromBg={typingAgent.fromBg}
+                        fromIcon={typingAgent.fromIcon}
+                      />
+                    )}
+                    {visibleCount === 0 && !typingAgent && (
+                      <div className="py-8 text-center text-sm text-muted-foreground">Starting team comms…</div>
+                    )}
+                  </>
                 )}
               </div>
             </CardContent>
