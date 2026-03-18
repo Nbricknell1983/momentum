@@ -1715,6 +1715,47 @@ export interface GBPPlaybook {
   updatedAt?: string;
 }
 
+// ─── Phase 5: Playbook Library + Learning Insights ───────────────────────────
+
+export interface GrowthPlayAction {
+  engine: 'website' | 'seo' | 'gbp' | 'ads' | 'sales' | 'strategy' | 'client_growth' | 'system';
+  action: string;
+  reason: string;
+}
+
+export interface GrowthPlay {
+  id: string;
+  name: string;
+  category: 'gbp' | 'seo' | 'website' | 'ads' | 'multi';
+  tagline: string;
+  description: string;
+  estimatedDuration: string;
+  prerequisites: string[];
+  expectedOutcomes: string[];
+  actions: GrowthPlayAction[];
+}
+
+export interface AppliedPlay {
+  playId: string;
+  appliedAt: Date;
+  status: 'active' | 'complete' | 'paused';
+  queuedActionIds?: string[];
+}
+
+export type MomentumStatus = 'not-started' | 'building' | 'strong' | 'stalled';
+
+export interface LearningInsight {
+  overallAssessment: string;
+  topPerformingChannel: string;
+  weakestArea: string;
+  approvedActions: number;
+  rejectedActions: number;
+  completedActions: number;
+  nextBestMove: string;
+  momentumStatus: MomentumStatus;
+  generatedAt: Date;
+}
+
 // ─── Shared grade type (used by Phase 3 + 4 engines) ─────────────────────────
 
 export type GradeValue = 'A' | 'B' | 'C' | 'D' | 'F';
@@ -1906,6 +1947,9 @@ export interface Client {
   // Phase 4 — GBP & Ads Engines
   gbpEngine?: GBPEngineReport;
   adsEngine?: AdsEngineReport;
+  // Phase 5 — Playbook & Learning
+  appliedPlays?: AppliedPlay[];
+  learningInsight?: LearningInsight;
 }
 
 export type AutomationMode = 'assisted' | 'supervised' | 'autonomous';

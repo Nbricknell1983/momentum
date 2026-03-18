@@ -8177,6 +8177,105 @@ Include 2-4 products in recommendedStack, sorted by priority (1 = highest). Incl
   });
 
   // ============================================================
+  // Phase 5 — Learning Insights Engine
+  // ============================================================
+
+  app.post('/api/ai/client/learning-insights', async (req, res) => {
+    try {
+      const {
+        businessName, industry, automationMode,
+        totalActions, approvedActions, rejectedActions, completedActions, queuedActions,
+        recentActions, engineSummary, intelligenceScore, appliedPlays, channelStatus,
+      } = req.body;
+
+      if (!businessName) return res.status(400).json({ error: 'businessName required' });
+
+      const hasData = totalActions > 0 || Object.values(engineSummary || {}).some((v: any) => v !== 'Not run');
+
+      const prompt = `You are an AI growth intelligence system analysing client data to produce actionable insights.
+
+=== CLIENT DATA ===
+Business: ${businessName}
+Industry: ${industry || 'Not specified'}
+Automation Mode: ${automationMode || 'assisted'}
+
+ACTION HISTORY:
+- Total actions logged: ${totalActions || 0}
+- Approved/running: ${approvedActions || 0}
+- Completed (done): ${completedActions || 0}
+- Rejected: ${rejectedActions || 0}
+- Queued (pending): ${queuedActions || 0}
+
+RECENT ACTIONS (last 10):
+${Array.isArray(recentActions) && recentActions.length > 0 ? recentActions.join('\n') : 'No actions yet'}
+
+ENGINE REPORTS:
+- Website Engine: ${engineSummary?.website || 'Not run'}
+- SEO Engine: ${engineSummary?.seo || 'Not run'}
+- GBP Engine: ${engineSummary?.gbp || 'Not run'}
+- Ads Engine: ${engineSummary?.ads || 'Not run'}
+
+INTELLIGENCE SCORE:
+${intelligenceScore ? `Overall: ${intelligenceScore.overall}/100 | Understanding: ${intelligenceScore.understanding} | Execution: ${intelligenceScore.execution} | Performance: ${intelligenceScore.performance} | Learning: ${intelligenceScore.learning}` : 'Not calculated yet'}
+
+ACTIVE PLAYS:
+${Array.isArray(appliedPlays) && appliedPlays.length > 0 ? appliedPlays.join(', ') : 'No plays applied yet'}
+
+CHANNEL STATUS:
+${channelStatus ? Object.entries(channelStatus).map(([k, v]) => `${k}: ${v}`).join(', ') : 'Not set'}
+
+=== ANALYSIS RULES ===
+
+MOMENTUM STATUS:
+- not-started: No actions taken, no engine reports, no plays active
+- building: Some actions approved/completed, 1-2 engine reports run, momentum is developing
+- strong: 3+ completed actions, multiple engines run, plays active, positive patterns
+- stalled: Actions exist but mostly rejected or queued without movement; or previously active but no recent progress
+
+TOP PERFORMING CHANNEL:
+- Look at which engine has the best score AND which engine's actions have the most completions
+- If no data: identify which engine has the most potential based on what's available
+- Be specific: say "GBP (optimization score 78/100, 3 review actions completed)" not just "GBP"
+
+WEAKEST AREA:
+- Look at lowest engine scores, most rejections in a specific engine, or channels not yet started
+- Be specific: cite the actual score or gap
+
+NEXT BEST MOVE:
+- Should be the single highest-leverage action this client's team should take RIGHT NOW
+- Be concrete — reference a specific play they could apply, a specific engine report they should run, or a specific action to approve
+- One crisp sentence, max 2
+
+OVERALL ASSESSMENT:
+- 2-3 sentences summarising the current state of growth operations for this client
+- Should feel like a briefing from a senior consultant, not a generic report
+- Reference specific numbers and channel names
+
+=== OUTPUT FORMAT (JSON only) ===
+{
+  "overallAssessment": "2-3 sentence briefing on current growth operations state",
+  "topPerformingChannel": "Channel name + specific evidence",
+  "weakestArea": "Specific area + evidence",
+  "momentumStatus": "not-started",
+  "nextBestMove": "Single concrete action to take right now"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: 800,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+      res.json(JSON.parse(content));
+    } catch (err: any) {
+      console.error('[learning-insights]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================================
   // Phase 4 — GBP Engine + Ads Engine (Client Workspace)
   // ============================================================
 
