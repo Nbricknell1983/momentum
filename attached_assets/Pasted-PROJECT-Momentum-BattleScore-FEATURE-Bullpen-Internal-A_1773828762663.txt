@@ -1,0 +1,470 @@
+PROJECT: Momentum / BattleScore
+FEATURE: Bullpen (Internal AI Workforce Command Layer)
+PRIORITY: High
+TYPE: Internal operator feature only — NOT client-facing
+
+OBJECTIVE:
+Build an internal-only “Bullpen” layer inside Momentum that gives staff/operator visibility and control over the AI workforce running work across leads, deals, and clients.
+
+Bullpen is NOT a gimmick, avatar system, or client-facing novelty.
+Bullpen is the internal command layer that shows:
+- what AI roles/functions are working on
+- what is active right now
+- what is queued
+- what is blocked
+- what needs approval
+- what has completed
+- what automation rules are in force
+
+This feature must solve the current visibility/control gap:
+Right now, work may be happening in the background, but from inside Momentum there is not enough clarity around:
+- what the system is doing
+- which functional engine is responsible
+- whether work is active / idle / blocked
+- what requires intervention
+- whether automation is respecting work-hour rules and approval guardrails
+
+Bullpen should make Momentum feel like an AI-operated business system with managerial oversight.
+
+NON-NEGOTIABLE GUARDRAILS:
+1. Bullpen is internal only
+2. Do NOT expose Bullpen or agent-role UI in client-facing surfaces
+3. Do NOT turn this into a gimmicky “AI characters” system
+4. Use functional role names, not personalities
+5. Preserve multi-tenant isolation
+6. Extend current Momentum architecture without breaking Pipeline, Nurture, Clients, Client Detail, AI Sales Engine, AI Client Growth Engine, or public strategy URL flows
+7. Do NOT create duplicate task systems if existing activity/log/task objects can be extended safely
+
+CORE PRODUCT PRINCIPLE:
+Clients should see outcomes and progress.
+Internal operators should see the workforce and the work.
+
+BULLPEN DEFINITION:
+Bullpen = internal AI workforce management and execution visibility layer.
+
+It should represent functional specialist engines such as:
+- Sales Specialist
+- SEO Specialist
+- Website Specialist
+- Google Ads Specialist
+- GBP Specialist
+- Social Specialist
+- Client Growth Specialist
+- Business Strategist
+- Review / Reputation Specialist
+- Automation / Operations Specialist
+
+These are NOT separate client-facing personas.
+These are internal responsibility domains mapped to specialist engines/jobs.
+
+PRIMARY USER:
+- Nathan / internal operators / staff / admins / sales leaders / account managers
+
+SECONDARY USER:
+- future internal team members who need to understand system activity quickly
+
+DO NOT:
+- add cartoon AI avatars
+- add fake chatty bios
+- build novelty “meet your AI team” UI
+- fragment the product into disconnected agent pages
+- expose internal workforce language to clients
+
+USE CASES TO SUPPORT:
+1. Internal operator opens Momentum and instantly sees:
+   - what AI work is happening across the system
+   - what needs attention
+   - what is waiting for approval
+   - what is blocked
+   - what was completed recently
+
+2. Internal operator opens a client and can see:
+   - what roles/engines are currently working on that account
+   - what jobs are in flight
+   - what is queued next
+   - what intervention is required
+
+3. Internal operator can trust that:
+   - AI is respecting business hours
+   - AI is not sending email/SMS/calls outside allowed windows
+   - high-risk actions are not auto-executing without approval
+
+4. Internal operator can identify bottlenecks:
+   - SEO blocked due to missing service data
+   - Ads waiting approval
+   - GBP stalled due to no review activity
+   - Website rollout waiting on brand assets
+
+FEATURE STRUCTURE:
+Build Bullpen as an internal command layer with 4 main parts:
+
+PART 1 — BULLPEN OVERVIEW
+PART 2 — WORKFORCE BY FUNCTION
+PART 3 — ATTENTION / BLOCKERS / APPROVALS
+PART 4 — AUTOMATION RULES / CONTROL
+
+INFORMATION ARCHITECTURE:
+Bullpen should be accessible from the internal app navigation.
+Do NOT place it in client-facing public pages.
+Possible placement:
+- Management section
+- new “Bullpen” item in left nav under Management
+- or nested in Management / Operations if needed
+
+Keep discoverability high for internal users.
+
+PART 1 — BULLPEN OVERVIEW
+Create a top-level overview panel that answers:
+- What is happening right now?
+- How much is active?
+- Where are the issues?
+- What needs a decision?
+
+Required summary metrics:
+- Active Workloads
+- Queued Jobs
+- Awaiting Approval
+- Blocked Jobs
+- Completed Today
+- Failed / Needs Retry
+- Clients with Active AI Work
+- Leads / Deals / Clients affected today
+
+Optional but useful:
+- By business domain (sales, seo, web, ads, gbp, growth)
+- By priority
+- By tenant count (internal only, aggregated safely)
+
+PART 2 — WORKFORCE BY FUNCTION
+Show Bullpen by functional role, not by gimmick personality.
+
+Each role card/panel should include:
+- Role name
+- Status: Active / Idle / Awaiting Approval / Blocked / Needs Attention
+- Current work items
+- Queue
+- Last completed action
+- Current client/lead/deal count affected
+- Issues/blockers summary
+
+Initial functional roles to support:
+1. Sales Specialist
+2. SEO Specialist
+3. Website Specialist
+4. Google Ads Specialist
+5. GBP Specialist
+6. Client Growth Specialist
+7. Review / Reputation Specialist
+8. Strategy Specialist
+9. Operations / Automation Specialist
+
+Example internal role behavior:
+Sales Specialist
+- drafting follow-ups
+- preparing call prep
+- scheduling next actions
+- moving deals when logic supports it
+
+SEO Specialist
+- generating service/location page plans
+- preparing internal linking improvements
+- monitoring ranking target gaps
+- recommending/queuing SEO rollout jobs
+
+Website Specialist
+- preparing sitemap/build structures
+- publishing or preparing page updates
+- resolving website build dependencies
+
+Google Ads Specialist
+- preparing campaigns
+- reviewing keyword targeting
+- awaiting launch approval
+- monitoring campaign issues/opportunities
+
+GBP Specialist
+- surfacing maps authority gaps
+- preparing service/category/review recommendations
+- flagging local visibility issues
+
+Client Growth Specialist
+- monitoring client health
+- surfacing expansion opportunities
+- flagging churn/watchlist accounts
+
+PART 3 — ATTENTION / BLOCKERS / APPROVALS
+This is one of the most important sections.
+Create a consolidated area called something like:
+- Needs Attention
+- Blockers & Approvals
+- Action Required
+
+This must surface high-value operational issues across all roles.
+
+Examples:
+- SEO blocked: missing service inputs for 3 clients
+- Ads awaiting approval: 2 campaigns
+- GBP stagnating: no review growth in 14 days
+- Website rollout paused: assets not uploaded
+- Follow-up sequence prepared but outside business hours
+- Job failed: strategy generation retry required
+
+Each issue must show:
+- issue title
+- affected client/lead/deal
+- responsible functional role
+- severity
+- recommended next action
+- CTA (approve, retry, open record, dismiss, snooze)
+
+PART 4 — AUTOMATION RULES / CONTROL
+This is mandatory because the system must not run wild outside workday or approval guardrails.
+
+Create a visible internal control section for Bullpen that shows:
+- current automation mode
+- allowed operating hours
+- communication restrictions
+- approval requirements
+- last rule change
+- who changed it
+
+Support at minimum:
+- work hours window (e.g. 8:00am–5:30pm local time)
+- no SMS outside work hours
+- no email outside work hours unless explicitly allowed
+- no outbound calls outside work hours
+- require approval for campaign launches
+- require approval for publish actions
+- require approval for high-risk communications
+- allow different settings by domain (sales/marketing/operations) later if needed
+
+This should visually reassure the operator that the AI workforce is constrained correctly.
+
+BULLPEN UX PRINCIPLES:
+- clear
+- operational
+- managerial
+- not playful
+- not noisy
+- prioritised by actionability
+- use status chips, compact summaries, and drill-down detail
+- default view should answer “what needs my attention?”
+- internal operators should be able to scan it in under 30 seconds
+
+UI DESIGN REQUIREMENTS:
+1. Top summary row/cards
+2. “Needs Attention” section near top
+3. Functional role cards or grouped panels below
+4. Each role panel expandable to show:
+   - current jobs
+   - queued jobs
+   - recent actions
+   - blockers
+5. Add filters:
+   - role
+   - status
+   - priority
+   - client / region / tenant if appropriate
+6. Add time filter:
+   - now
+   - today
+   - last 7 days
+7. Include click-through links into the affected lead/deal/client record
+8. Use the existing Momentum design language and component patterns
+9. Do not create a visually disconnected admin app
+
+CLIENT DETAIL INTEGRATION:
+In addition to the main Bullpen page, add a compact Bullpen section to internal client detail view.
+
+This compact section should show:
+- which functional roles are currently assigned/active on this client
+- active jobs
+- queued jobs
+- blocked items
+- approvals needed
+- recent AI actions on this client
+
+This should complement, not replace:
+- Client Health Score
+- Service Performance
+- Retention Signals
+- Expansion Opportunities
+- Local GBP Rankings
+- AI Client Growth Engine
+
+Think of it as the internal workforce view for that account.
+
+RELATIONSHIP TO EXECUTION ENGINE:
+Bullpen is the visibility/control layer over the execution engine.
+
+Execution engine = work being done
+Bullpen = internal oversight of who/what is doing the work
+
+Do NOT merge them into one confusing concept.
+Do keep them tightly connected.
+
+Use a shared job model underneath:
+- role/function responsible
+- entity type (lead, deal, client)
+- entity id
+- job type
+- status
+- priority
+- startedAt
+- queuedAt
+- completedAt
+- blockedReason
+- requiresApproval
+- approvalStatus
+- lastHeartbeat
+- result summary
+
+DATA MODEL / SAFE EXTENSIONS:
+Extend existing collections safely.
+Add or extend support for concepts such as:
+- bullpenRoles
+- executionJobs
+- aiActions
+- approvals
+- automationRules
+- automationWindows
+- workerHeartbeats (if needed)
+- blockers
+- retries / failures
+
+Each relevant record must include:
+- orgId
+- entityType
+- entityId
+- role/function
+- status
+- timestamps
+- createdBy / triggeredBy where relevant
+
+Do not duplicate if current agentTasks / agentLogs / executionEvents already partially cover this.
+Prefer extending existing patterns.
+
+STATUS MODEL:
+Standardize status values where possible:
+- Idle
+- Active
+- Queued
+- Awaiting Approval
+- Blocked
+- Needs Attention
+- Completed
+- Failed
+
+For role summary cards, derive the visible status from underlying job states.
+
+AI ACTIONS FEED:
+Bullpen must reuse or extend the existing AI action logging model.
+Show human-readable action entries such as:
+- Prepared 8 suburb pages for SEO rollout
+- Drafted Google Ads campaign for approval
+- Detected weak location intent coverage on client website
+- Queued review acquisition workflow
+- Paused outbound follow-up due to work-hour rules
+
+Do not dump raw technical event logs.
+Translate logs into readable operator summaries.
+
+APPROVAL SYSTEM:
+Bullpen must integrate with approvals clearly.
+
+Support:
+- approve
+- reject
+- edit / review first
+- snooze
+- retry
+
+Show why approval is required:
+- outside work hours
+- medium/high-risk action
+- campaign launch
+- publish action
+- communication action
+- missing data uncertainty
+
+WORK-HOUR ENFORCEMENT:
+Critical requirement:
+The UI and job system must support workday restrictions so AI does not send messages or act outside approved windows.
+
+At minimum support:
+- account-level or org-level local business hours
+- queue work outside hours instead of executing immediately
+- show queued reason in Bullpen
+- surface “held until work hours” state where appropriate
+
+Example:
+“Follow-up email prepared — held until 8:00am due to communication rules”
+
+This is extremely important for trust and control.
+
+MANAGEMENT VALUE:
+Bullpen should feel like:
+- a manager walking the floor of an AI-operated office
+- seeing who is working on what
+- seeing where problems are
+- making decisions when needed
+
+It should NOT feel like:
+- a dev console
+- a raw job queue
+- a technical agent monitor only engineers can understand
+
+PHASED DELIVERY ORDER:
+Build in the safest order:
+
+PHASE 1
+- Bullpen nav entry
+- Bullpen overview
+- summary counts
+- needs attention section
+- role cards with mock/live derived summaries from existing logs if available
+
+PHASE 2
+- connect to execution jobs / AI actions / approvals
+- add client-level compact bullpen panel
+- add status filters and drill-down
+
+PHASE 3
+- automation rules section
+- work-hour enforcement visibility
+- approval queue actions
+- blocker resolution workflows
+
+PHASE 4
+- richer workload metrics
+- worker heartbeat / job retry / failure visibility
+- role efficiency insights
+
+DO NOT try to build an overly elaborate simulation layer first.
+Start with useful operational visibility and control.
+
+QA / REGRESSION REQUIREMENTS:
+Test for:
+1. No Bullpen UI exposed in client-facing views
+2. No tenant leakage in aggregated role/job summaries
+3. Correct role/status mapping
+4. Approvals and blockers visible and actionable
+5. Work-hour restrictions represented correctly
+6. Click-through from Bullpen to affected records works
+7. Existing Pipeline / Nurture / Clients / Client Detail flows remain intact
+8. No duplicate job rendering from repeated triggers
+9. No misleading statuses when no actual work exists
+10. Bullpen remains readable and performant with large job volumes
+
+SUCCESS CRITERIA:
+Bullpen is successful when an internal operator can open Momentum and within 30 seconds understand:
+- what AI work is happening
+- which functional roles are active
+- what is blocked
+- what needs approval
+- what is waiting for business hours
+- what has completed recently
+- where to intervene next
+
+FINAL PRODUCT INTENT:
+Bullpen should make Momentum feel like an AI-operated growth firm with internal workforce visibility and control, while keeping the client experience simple, premium, and outcome-focused.

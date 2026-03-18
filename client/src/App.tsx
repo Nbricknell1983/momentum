@@ -22,6 +22,7 @@ import ClientsPage from '@/pages/clients';
 import ClientPipelinePage from '@/pages/client-pipeline';
 import ResearchPage from '@/pages/research';
 import ManagementPage from '@/pages/management';
+import BullpenPage from '@/pages/bullpen';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -48,6 +49,7 @@ function ProtectedRoutes() {
       <Route path="/tasks" component={TasksPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/management" component={ManagementPage} />
+      <Route path="/bullpen" component={BullpenPage} />
       <Route component={NotFound} />
     </Switch>
   );

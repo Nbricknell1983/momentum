@@ -11,6 +11,7 @@ import {
   Users,
   Search,
   BarChart3,
+  Radio,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -41,6 +42,7 @@ const navItems = [
 
 const managerNavItems = [
   { title: 'Management', url: '/management', icon: BarChart3 },
+  { title: 'Bullpen',    url: '/bullpen',    icon: Radio },
 ];
 
 export default function AppSidebar() {
