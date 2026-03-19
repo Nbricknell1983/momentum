@@ -1,0 +1,245 @@
+                                                                                             
+ Build Brief — Activities Realtime Reconciliation                                             
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Make lead/client activity data update live in the app so operational timelines and related   
+ workflows reflect current Firestore state without requiring reloads.                         
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ Leads and clients now reconcile live through Firestore listeners, but activities still do    
+ not.                                                                                         
+                                                                                              
+ ### Current state                                                                            
+                                                                                              
+ - activities are fetched once at login                                                       
+ - activities remain outside the realtime reconciliation model                                
+ - changes made in another tab, by another user, or by server-side workflows are not          
+ reflected until reload                                                                       
+ - this leaves the operational state model inconsistent:                                      
+ - leads = live                                                                               
+ - clients = live                                                                             
+ - activities = stale                                                                         
+                                                                                              
+ If activities matter for:                                                                    
+ - lead timelines                                                                             
+ - notes/history                                                                              
+ - follow-up context                                                                          
+ - recent actions                                                                             
+ - AI/contextual recommendations                                                              
+                                                                                              
+ then stale activity state creates avoidable execution friction.                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make activities behave like a live operational surface.                                      
+                                                                                              
+ Success means:                                                                               
+ - new activity entries appear without reload                                                 
+ - updates from another tab/user appear without reload                                        
+ - related lead/client views show current activity history                                    
+ - activity state no longer lags behind live lead/client state                                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Add realtime reconciliation for activities                                                
+ 2. Align activity state ownership with the existing Firestore listener model                 
+ 3. Ensure activity updates surface in relevant lead/client views                             
+ 4. Maintain cross-org safety and clean unsubscribe behavior                                  
+ 5. Document updated activity state ownership if needed                                       
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - redesigning activity UX                                                                    
+ - broad note/task system changes                                                             
+ - rewriting state management entirely                                                        
+ - building analytics/reporting on top of activities                                          
+ - unrelated lead/client feature work                                                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Firestore is the live source of truth                                                 
+                                                                                              
+ Activity data should follow the same live-state philosophy already applied to leads and      
+ clients.                                                                                     
+                                                                                              
+ ### 2. Do not create competing truth sources                                                 
+                                                                                              
+ Avoid introducing:                                                                           
+ - login-time fetch truth                                                                     
+ - listener truth                                                                             
+ - local ad hoc activity state                                                                
+ all at once without clear ownership.                                                         
+                                                                                              
+ ### 3. Extend the current pattern, don’t reinvent it                                         
+                                                                                              
+ Use the established reconciliation approach where possible:                                  
+ - auth/org confirmed                                                                         
+ - scoped listener                                                                            
+ - Redux/store update if needed                                                               
+ - clean unsubscribe                                                                          
+                                                                                              
+ ### 4. Protect working functionality                                                         
+                                                                                              
+ Do not break existing timelines, notes, or detail views in the process.                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Confirm activity data shape and scope                                              
+                                                                                              
+ Before implementation, confirm:                                                              
+ - where activities live in Firestore                                                         
+ - whether they are org-scoped, lead-scoped, client-scoped, or both                           
+ - which UI surfaces consume them                                                             
+ - whether activities are large enough that listener scope should be narrowed                 
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Choose the right listener scope instead of blindly subscribing too broadly.                  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Add listener-backed activity reconciliation                                        
+                                                                                              
+ Implement realtime activity updates using onSnapshot.                                        
+                                                                                              
+ ### Recommended approach                                                                     
+                                                                                              
+ Follow the same established discipline as leads/clients:                                     
+ - wait for auth + org confirmation                                                           
+ - attach scoped listener(s)                                                                  
+ - normalize data consistently                                                                
+ - dispatch/store in a single controlled path                                                 
+ - unsubscribe on org switch/logout                                                           
+                                                                                              
+ ### Important design question                                                                
+                                                                                              
+ If activities are only meaningful in detail views, consider whether:                         
+ - global activity listener is appropriate                                                    
+ or                                                                                           
+ - per-lead/per-client listener is better                                                     
+                                                                                              
+ Choose the smallest safe high-impact scope.                                                  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Reconcile relevant views                                                           
+                                                                                              
+ Ensure the live activity updates are visible in the places that matter most.                 
+                                                                                              
+ Likely targets:                                                                              
+ - lead timeline/history                                                                      
+ - client activity/history surfaces                                                           
+ - any dashboard or panel showing recent actions                                              
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ A new note/activity should appear where the user expects it without reload.                  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Mutation consistency                                                               
+                                                                                              
+ Ensure activity creation/update flows converge to Firestore truth cleanly.                   
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Avoid a repeat of the old stale-state pattern:                                               
+ - local UI says activity exists                                                              
+ - Firestore truth differs                                                                    
+ - other tabs/users do not see it                                                             
+                                                                                              
+ Use the same reconciliation logic already established elsewhere.                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - activity collections may be large and expensive to listen to globally                      
+ - ordering/timeline sort may flicker if live updates are not normalized carefully            
+ - lead/client detail views may have assumptions based on static initial fetches              
+ - duplicate activity entries if listener reconciliation and local optimistic UI both append  
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - exact Firestore path for activities                                                        
+ - current activity fetch/write helpers                                                       
+ - which views consume activities today                                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test — freshness                                                                    
+                                                                                              
+ 1. activity created in tab A appears in tab B                                                
+ 2. activity created by another user appears without reload                                   
+ 3. activity created by backend/server-side flow appears without reload if applicable         
+                                                                                              
+ ### Must test — UI behavior                                                                  
+                                                                                              
+ 4. timeline ordering remains correct                                                         
+ 5. no duplicate entries                                                                      
+ 6. selected lead/client view stays stable as new activities arrive                           
+                                                                                              
+ ### Must test — lifecycle                                                                    
+                                                                                              
+ 7. listeners unsubscribe on org switch/logout                                                
+ 8. no cross-org activity leakage                                                             
+ 9. no stale activity set remains after context switch                                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - activity data updates live without reload                                                  
+ - timelines/history surfaces reflect current Firestore state                                 
+ - activity ordering and rendering remain stable                                              
+ - no duplicate or stale activity state persists                                              
+ - activity state ownership is as clear as lead/client ownership                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. confirm activity Firestore path and scope                                                 
+ 2. choose listener scope (global vs contextual)                                              
+ 3. implement listener-backed reconciliation                                                  
+ 4. wire affected UI surfaces                                                                 
+ 5. test multi-tab / multi-user / ordering behavior                                           
+ 6. document final ownership model if needed                                                  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - activity listener scope chosen and why                                                     
+ - state ownership decision                                                                   
+ - affected UI surfaces updated                                                               
+ - any performance tradeoffs                                                                  
+ - follow-up recommendations if activities should later be partitioned or paginated           
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not force a global listener if a narrower scoped listener is the better fit             
+ - do not create duplicate local/listener truth                                               
+ - do not leave ordering unstable                                                             
+ - do not expand into unrelated activity product redesign in this task  
