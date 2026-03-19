@@ -1,0 +1,279 @@
+Build Brief — Bullpen Work Queue, Trigger Engine & Agent Lifecycle
+Goal
+Make Bullpen’s specialist agents start doing real operational work on Momentum and its clients by detecting important signals, creating structured work items, assigning owner/supporting roles, and moving work through a visible lifecycle.
+
+Core product decision
+Do not wait for OpenClaw runtime task dispatch.
+
+The correct execution model today is:
+
+Bullpen as command layer
+specialist-context routing as the workforce logic
+trigger-driven work creation
+visible ownership and lifecycle inside Momentum
+This is how the agents become operationally real now.
+
+Problem
+Bullpen can currently:
+
+receive requests
+route to specialist-context analysis
+assign owner/supporting roles
+return structured responses
+But the agents still mostly work reactively when Nathan asks something.
+
+If the agents are going to feel alive and useful, they need to:
+
+notice important changes
+create work proactively
+attach themselves to Momentum and client issues
+carry work through a lifecycle
+Without that, they remain smart responders instead of an operating workforce.
+
+Outcome that matters most
+Make Bullpen generate and manage real work on Momentum and clients.
+
+Success means:
+
+important product/client signals generate Bullpen work items automatically
+each work item has:
+diagnosis
+owner
+supporting roles
+priority
+next action
+status
+Bullpen can present a live queue of meaningful work
+the agents are visibly “working” through that queue
+Scope
+In scope
+Trigger engine for important Momentum/client signals
+Bullpen work queue data model
+automatic work item creation from signals
+owner/supporting role assignment using current routing logic
+work item lifecycle/status model
+Bullpen UI for queue visibility and actionability
+Out of scope
+OpenClaw runtime dispatch
+full autonomous execution of all tasks
+full project management system replacement
+broad CRM/task redesign
+every possible trigger in v1
+Required architecture rules
+1. Work must come from real signals
+No fake activity feed theatre.
+Work items should be created from actual Momentum/client state.
+
+2. Each work item needs ownership
+Every item must have:
+
+primary owner
+optional supporting roles
+3. Work must have lifecycle
+At minimum:
+
+detected
+triaged
+in progress
+blocked
+awaiting review
+complete
+4. Bullpen remains the command interface
+Nathan should still interact through Bullpen, not manually manage a swarm.
+
+5. Start with high-value triggers only
+Do not create noise.
+Prefer fewer meaningful items over many low-value alerts.
+
+Recommended implementation approach
+Phase 1 — Define the work item model
+Create a Bullpen work item schema.
+
+Minimum fields
+id
+orgId
+clientId (optional where relevant)
+type
+title
+diagnosis
+sourceSignal
+priority
+status
+owner
+supporting
+nextAction
+createdAt
+updatedAt
+resolvedAt (optional)
+threadId (optional if linked to Bullpen thread)
+Goal
+Give the agents something real to work on.
+
+Phase 2 — Build a trigger engine
+Create v1 triggers from real system/client conditions.
+
+Recommended first triggers
+Start with a tight set:
+
+Product / system triggers
+OpenClaw config invalid
+control-plane config invalid
+failed/blocked automation
+verification/auth issue on key integrations
+important workflow regression signal
+Client / growth triggers
+stale engine output
+client health score drop
+no recent activity on a client
+lead stuck in stage too long
+onboarding incomplete
+GBP connection broken/reconnect required
+major reputation/review issue
+Goal
+Turn real signals into structured Bullpen work.
+
+Phase 3 — Route each work item to the right agents
+Use the existing two-stage Bullpen routing model to assign:
+
+primary owner
+supporting roles
+rationale
+next action
+Example mappings
+stale SEO output → SEO Specialist + Client Growth Specialist
+broken GBP auth → GBP Specialist + Operations Specialist
+client health drop → Client Growth Specialist + Strategy Specialist
+regression risk after product change → QA Tester + relevant engineering role
+blocked workflow handoff → Operations Specialist
+Goal
+The queue should feel like a workforce is actually triaging the business.
+
+Phase 4 — Build the Bullpen Work Queue UI
+Expose a visible queue inside Bullpen.
+
+Minimum UI fields
+title
+client/org context
+owner
+supporting roles
+priority
+status
+created time
+diagnosis summary
+next action
+Useful default views
+All open work
+High priority
+By owner
+By client
+Needs review
+Blocked
+Goal
+Nathan can see what the workforce is currently working on.
+
+Phase 5 — Add lifecycle transitions
+Allow work items to move through meaningful states.
+
+Recommended initial statuses
+detected
+triaged
+in_progress
+blocked
+awaiting_review
+complete
+Ownership logic
+Bullpen can set initial status
+Nathan and/or Bullpen should be able to update status
+manual override should exist
+Goal
+Work becomes operational, not just advisory.
+
+Phase 6 — Link work items to Bullpen threads
+If relevant, allow a work item to open or attach to a Bullpen thread.
+
+That gives:
+
+discussion context
+screenshots/videos/dictation
+agent reasoning
+review history
+Goal
+Queue item → thread → action → review becomes one connected system.
+
+Recommended v1 trigger set
+Start with 6–8 meaningful triggers, not 30.
+
+Best first triggers
+OpenClaw config invalid
+GBP connection reconnect required / revoked
+AI engine output stale
+Client health score drop
+No recent activity on client
+Lead stuck in stage too long
+Onboarding incomplete
+Control-plane config invalid
+That’s enough to make the agents feel active without drowning the queue in noise.
+
+Risks and dependencies
+Risks
+too many low-value alerts
+duplicate work items for the same issue
+vague diagnoses that don’t help action
+owners assigned without useful next action
+queue becoming an alert graveyard
+Dependencies
+access to the relevant product/client signals
+current routing logic for owner/supporting role assignment
+Bullpen thread model if linking queue items to threads
+QA requirements
+Must test — trigger creation
+each trigger creates the correct work item
+duplicate triggers do not spam identical items
+owner/supporting role assignment is sensible
+Must test — lifecycle
+work items move through statuses correctly
+manual status changes work
+completed items leave the active queue appropriately
+Must test — relevance
+high-value signals create actionable items
+low-value/noisy conditions do not flood the queue
+Must test — UI
+queue is readable and filterable
+owner/supporting roles are clearly visible
+client context is obvious where relevant
+Measurable success criteria
+This task is successful when:
+
+Bullpen creates real work items from system/client signals
+each item has clear owner/supporting roles
+each item has a diagnosis and next action
+Nathan can see a live queue of meaningful work
+the agents start feeling like an active operating workforce rather than just responders
+Recommended execution order
+define work item schema
+implement first trigger set
+apply current routing logic to assign owners
+build the queue UI
+add lifecycle/status transitions
+link items to Bullpen threads where useful
+QA signal quality and queue noise
+What good output looks like from this task
+Please return:
+
+work item schema
+trigger list implemented
+routing logic used for owner/supporting roles
+lifecycle statuses added
+queue UI summary
+any deduplication/noise controls
+follow-up recommendations for v2
+What not to do
+do not create a noisy alert stream and call it agent work
+do not generate ownerless items
+do not skip lifecycle/status
+do not wait for OpenClaw runtime dispatch to make agents useful
+do not overbuild a giant PM system in v1
+Final product rule
+Agents feel alive when they detect, triage, own, and move work through Momentum and its clients.
+That can and should happen inside Bullpen now, without waiting for OpenClaw runtime task execution.
+

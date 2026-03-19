@@ -9954,5 +9954,301 @@ Return JSON with exactly these fields:
     }
   });
 
+  // ─── Bullpen Work Queue ───────────────────────────────────────────────────
+
+  // Pre-defined trigger ownership map — no GPT call per item, keeps scan fast.
+  // owner/supporting match the Bullpen specialist workforce labels.
+  const TRIGGER_OWNERSHIP: Record<string, { owner: string; supporting: string[]; priority: 'high' | 'medium' | 'low' }> = {
+    openclaw_config_invalid:   { owner: 'Operations Manager', supporting: ['Backend Engineer'],          priority: 'high'   },
+    automation_rules_invalid:  { owner: 'Operations Manager', supporting: [],                            priority: 'medium' },
+    gbp_connection_revoked:    { owner: 'GBP Specialist',     supporting: ['Operations Manager'],        priority: 'high'   },
+    gbp_connection_broken:     { owner: 'GBP Specialist',     supporting: ['Operations Manager'],        priority: 'medium' },
+    seo_engine_stale:          { owner: 'SEO Specialist',     supporting: ['Client Growth Specialist'],  priority: 'medium' },
+    website_engine_stale:      { owner: 'Website Specialist', supporting: ['Client Growth Specialist'],  priority: 'low'    },
+    gbp_engine_stale:          { owner: 'GBP Specialist',     supporting: ['Client Growth Specialist'],  priority: 'low'    },
+    ads_engine_stale:          { owner: 'Ads Specialist',     supporting: ['Client Growth Specialist'],  priority: 'low'    },
+    onboarding_incomplete:     { owner: 'Client Growth Specialist', supporting: ['Operations Manager'],  priority: 'medium' },
+    lead_stuck_in_stage:       { owner: 'Strategy Advisor',   supporting: ['Client Growth Specialist'],  priority: 'medium' },
+    client_no_recent_contact:  { owner: 'Client Growth Specialist', supporting: ['Strategy Advisor'],    priority: 'medium' },
+  };
+
+  // GET /api/bullpen/work-items — return all work items for an org, newest first
+  app.get('/api/bullpen/work-items', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const orgId = req.query.orgId as string;
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+    try {
+      const snap = await firestore
+        .collection('orgs').doc(orgId).collection('bullpenWork')
+        .orderBy('createdAt', 'desc')
+        .limit(200)
+        .get();
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ items });
+    } catch (e: any) {
+      console.error('[bullpen/work-items] GET error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // PATCH /api/bullpen/work-items/:itemId — update status / fields
+  app.patch('/api/bullpen/work-items/:itemId', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const { itemId } = req.params;
+    const { orgId, status, threadId } = req.body;
+    if (!orgId || !itemId || !firestore) return res.status(400).json({ error: 'orgId and itemId required' });
+    try {
+      const ref = firestore.collection('orgs').doc(orgId).collection('bullpenWork').doc(itemId);
+      const updates: Record<string, any> = { updatedAt: new Date().toISOString() };
+      if (status) {
+        updates.status = status;
+        if (status === 'complete') updates.resolvedAt = new Date().toISOString();
+      }
+      if (threadId) updates.threadId = threadId;
+      await ref.update(updates);
+      res.json({ ok: true });
+    } catch (e: any) {
+      console.error('[bullpen/work-items] PATCH error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/bullpen/trigger-scan — scan Momentum state and create work items
+  // Deduplication: skip if existing item with same sourceSignal+clientId not in 'complete' status.
+  app.post('/api/bullpen/trigger-scan', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const { orgId } = req.body;
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+
+    const created: any[] = [];
+    const skipped: string[] = [];
+
+    async function existingItemKey(signal: string, clientId?: string): Promise<boolean> {
+      // Fetch by sourceSignal only (simple equality — no composite index needed),
+      // then filter status and clientId in code to avoid compound-query index requirements.
+      const snap = await firestore!.collection('orgs').doc(orgId).collection('bullpenWork')
+        .where('sourceSignal', '==', signal)
+        .get();
+      return snap.docs.some(d => {
+        const data = d.data();
+        if (data.status === 'complete') return false;
+        if (clientId) return data.clientId === clientId;
+        return true;
+      });
+    }
+
+    async function createItem(data: {
+      type: string; title: string; diagnosis: string; nextAction: string;
+      sourceSignal: string; clientId?: string; clientName?: string;
+      priority: 'high' | 'medium' | 'low'; owner: string; supporting: string[];
+    }) {
+      const dup = await existingItemKey(data.sourceSignal, data.clientId);
+      if (dup) { skipped.push(data.sourceSignal + (data.clientId ? ':' + data.clientId : '')); return; }
+      const ref = firestore!.collection('orgs').doc(orgId).collection('bullpenWork').doc();
+      const item = {
+        id: ref.id,
+        orgId,
+        clientId: data.clientId || null,
+        clientName: data.clientName || null,
+        type: data.type,
+        title: data.title,
+        diagnosis: data.diagnosis,
+        sourceSignal: data.sourceSignal,
+        priority: data.priority,
+        status: 'detected',
+        owner: data.owner,
+        supporting: data.supporting,
+        nextAction: data.nextAction,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        resolvedAt: null,
+        threadId: null,
+      };
+      await ref.set(item);
+      created.push(item);
+    }
+
+    try {
+      const STALE_ENGINE_DAYS = 30;
+      const STALE_CONTACT_DAYS = 21;
+      const LEAD_STUCK_DAYS = 21;
+      const now = Date.now();
+      const msPerDay = 86400000;
+
+      // ── Trigger 1: OpenClaw config invalid ──────────────────────────────
+      const ocSnap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('openclawConfig').get();
+      const ocData = ocSnap.data();
+      if (ocData?.lastVerification?.status && ocData.lastVerification.status !== 'healthy') {
+        const { owner, supporting, priority } = TRIGGER_OWNERSHIP.openclaw_config_invalid;
+        await createItem({
+          type: 'system', title: 'OpenClaw config verification failed',
+          diagnosis: `OpenClaw connection last verified as "${ocData.lastVerification.status}". Gateway may be unreachable or misconfigured. Integration-dependent automations may be failing silently.`,
+          nextAction: 'Open OpenClaw Setup, run verification, confirm gateway URL and API key are current.',
+          sourceSignal: 'openclaw_config_invalid',
+          priority, owner, supporting,
+        });
+      }
+
+      // ── Trigger 2: Automation rules invalid ────────────────────────────
+      const arSnap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('automationRules').get();
+      const arData = arSnap.data();
+      if (arData?.__validationStatus === 'invalid') {
+        const { owner, supporting, priority } = TRIGGER_OWNERSHIP.automation_rules_invalid;
+        await createItem({
+          type: 'system', title: 'Automation rules config is invalid',
+          diagnosis: `The stored automation rules document failed schema validation. This means work hour restrictions, comms controls, and approval gates may not be enforced correctly.`,
+          nextAction: 'Open Bullpen → Automation Rules, review and resave the configuration.',
+          sourceSignal: 'automation_rules_invalid',
+          priority, owner, supporting,
+        });
+      }
+
+      // ── Trigger 3: GBP connection broken ───────────────────────────────
+      const gbpSnap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').get();
+      const gbpData = gbpSnap.data();
+      if (gbpData?.connectionStatus && gbpData.connectionStatus !== 'healthy') {
+        const isRevoked = gbpData.connectionStatus === 'revoked';
+        const signal = isRevoked ? 'gbp_connection_revoked' : 'gbp_connection_broken';
+        const { owner, supporting, priority } = TRIGGER_OWNERSHIP[signal];
+        await createItem({
+          type: 'integration', title: `GBP connection ${isRevoked ? 'revoked — re-authentication required' : 'requires reconnection'}`,
+          diagnosis: `Google Business Profile OAuth token is ${isRevoked ? 'revoked (the Google account access was removed)' : 'expired or rejected'}. Review management and GBP engine runs are blocked until reconnected.`,
+          nextAction: isRevoked
+            ? 'Go to Settings → Google Business Profile, reconnect with the correct Google account.'
+            : 'Open GBP OAuth settings and trigger token refresh or reconnect.',
+          sourceSignal: signal,
+          priority, owner, supporting,
+        });
+      }
+
+      // ── Triggers 4-7: Stale engine outputs per client ──────────────────
+      const clientsSnap = await firestore.collection('orgs').doc(orgId).collection('clients').where('archived', '==', false).get();
+      const clients = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+
+      for (const client of clients) {
+        const name: string = client.businessName || client.name || 'Unknown client';
+
+        // Stale SEO engine
+        const seoAge = client.seoEngine?.generatedAt
+          ? (now - new Date(client.seoEngine.generatedAt.toDate?.() ?? client.seoEngine.generatedAt).getTime()) / msPerDay
+          : Infinity;
+        if (seoAge > STALE_ENGINE_DAYS) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.seo_engine_stale;
+          await createItem({
+            type: 'client', title: `SEO Intelligence stale — ${name}`,
+            diagnosis: `SEO engine report for ${name} is ${seoAge === Infinity ? 'missing (never run)' : `${Math.round(seoAge)} days old`}. Keyword targets, content gap analysis, and visibility scoring are out of date.`,
+            nextAction: `Run SEO Engine for ${name} from their Client Growth Intelligence panel.`,
+            sourceSignal: 'seo_engine_stale', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        }
+
+        // Stale website engine
+        const webAge = client.websiteEngine?.generatedAt
+          ? (now - new Date(client.websiteEngine.generatedAt.toDate?.() ?? client.websiteEngine.generatedAt).getTime()) / msPerDay
+          : Infinity;
+        if (webAge > STALE_ENGINE_DAYS) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.website_engine_stale;
+          await createItem({
+            type: 'client', title: `Website Audit stale — ${name}`,
+            diagnosis: `Website engine report for ${name} is ${webAge === Infinity ? 'missing (never run)' : `${Math.round(webAge)} days old`}. Conversion scoring, quick wins, and task list are outdated.`,
+            nextAction: `Run Website Engine for ${name} from their Client Growth Intelligence panel.`,
+            sourceSignal: 'website_engine_stale', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        }
+
+        // Stale GBP engine
+        const gbpEngAge = client.gbpEngine?.generatedAt
+          ? (now - new Date(client.gbpEngine.generatedAt.toDate?.() ?? client.gbpEngine.generatedAt).getTime()) / msPerDay
+          : Infinity;
+        if (gbpEngAge > STALE_ENGINE_DAYS) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.gbp_engine_stale;
+          await createItem({
+            type: 'client', title: `GBP Optimisation stale — ${name}`,
+            diagnosis: `GBP engine report for ${name} is ${gbpEngAge === Infinity ? 'missing (never run)' : `${Math.round(gbpEngAge)} days old`}. Profile scoring, review strength, and task list are outdated.`,
+            nextAction: `Run GBP Engine for ${name} from their Client Growth Intelligence panel.`,
+            sourceSignal: 'gbp_engine_stale', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        }
+
+        // Stale Ads engine
+        const adsAge = client.adsEngine?.generatedAt
+          ? (now - new Date(client.adsEngine.generatedAt.toDate?.() ?? client.adsEngine.generatedAt).getTime()) / msPerDay
+          : Infinity;
+        if (adsAge > STALE_ENGINE_DAYS) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.ads_engine_stale;
+          await createItem({
+            type: 'client', title: `Ads Intelligence stale — ${name}`,
+            diagnosis: `Ads engine report for ${name} is ${adsAge === Infinity ? 'missing (never run)' : `${Math.round(adsAge)} days old`}. Readiness score, campaign structure, and CPL estimates need refreshing.`,
+            nextAction: `Run Ads Engine for ${name} from their Client Growth Intelligence panel.`,
+            sourceSignal: 'ads_engine_stale', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        }
+
+        // Onboarding incomplete
+        if (client.deliveryStatus === 'onboarding' && !client.clientOnboarding?.strategyOutput) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.onboarding_incomplete;
+          await createItem({
+            type: 'client', title: `Onboarding incomplete — ${name}`,
+            diagnosis: `${name} is in onboarding status but AI onboarding outputs (strategy, sitemap, marketing plan) have not been generated. Handover to delivery team is blocked until this is complete.`,
+            nextAction: `Open ${name}'s client workspace, complete the onboarding context form, and run AI onboarding generation.`,
+            sourceSignal: 'onboarding_incomplete', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        }
+
+        // No recent contact
+        const lastContact = client.lastContactDate
+          ? new Date(client.lastContactDate.toDate?.() ?? client.lastContactDate).getTime()
+          : client.updatedAt
+            ? new Date(client.updatedAt.toDate?.() ?? client.updatedAt).getTime()
+            : null;
+        const daysSinceContact = lastContact ? (now - lastContact) / msPerDay : null;
+        if (daysSinceContact !== null && daysSinceContact > STALE_CONTACT_DAYS && client.deliveryStatus !== 'complete') {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.client_no_recent_contact;
+          await createItem({
+            type: 'client', title: `No recent contact — ${name}`,
+            diagnosis: `${name} has not been contacted in ${Math.round(daysSinceContact)} days. This creates churn risk and missed upsell windows. At ${Math.round(daysSinceContact)} days, the relationship may be drifting without the client noticing your value.`,
+            nextAction: `Schedule a check-in touchpoint for ${name}. Review their recent AI engine outputs for fresh talking points.`,
+            sourceSignal: 'client_no_recent_contact', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        }
+      }
+
+      // ── Trigger: Leads stuck in stage ──────────────────────────────────
+      const leadsSnap = await firestore.collection('orgs').doc(orgId).collection('leads')
+        .where('stage', 'not-in', ['won', 'lost', 'inactive'])
+        .get();
+      const LEAD_STUCK_THRESHOLD = now - LEAD_STUCK_DAYS * msPerDay;
+
+      for (const doc of leadsSnap.docs) {
+        const lead = doc.data() as any;
+        const leadName: string = lead.businessName || lead.contactName || 'Unknown lead';
+        const lastUpdate = lead.updatedAt
+          ? new Date(lead.updatedAt.toDate?.() ?? lead.updatedAt).getTime()
+          : lead.lastActivityAt
+            ? new Date(lead.lastActivityAt.toDate?.() ?? lead.lastActivityAt).getTime()
+            : null;
+        if (lastUpdate && lastUpdate < LEAD_STUCK_THRESHOLD) {
+          const stuckDays = Math.round((now - lastUpdate) / msPerDay);
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.lead_stuck_in_stage;
+          await createItem({
+            type: 'pipeline', title: `Lead stuck in "${lead.stage}" — ${leadName}`,
+            diagnosis: `${leadName} has been in the "${lead.stage}" stage for ${stuckDays} days without activity. No logged call, email, or stage movement. This lead is at risk of going cold.`,
+            nextAction: `Log an activity or move ${leadName} forward — qualify, schedule a follow-up call, or mark inactive if no longer viable.`,
+            sourceSignal: 'lead_stuck_in_stage', clientId: doc.id, clientName: leadName,
+            priority, owner, supporting,
+          });
+        }
+      }
+
+      res.json({ created: created.length, skipped: skipped.length, items: created });
+    } catch (e: any) {
+      console.error('[bullpen/trigger-scan] error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   return httpServer;
 }

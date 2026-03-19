@@ -15,6 +15,7 @@ import type { RootState } from '@/store';
 import type { Lead, Activity, Client, NBAAction } from '@/lib/types';
 import { db, doc, collection, query, orderBy, limit, onSnapshot } from '@/lib/firebase';
 import BullpenCommandCenter from '@/components/BullpenCommandCenter';
+import BullpenWorkQueue from '@/components/BullpenWorkQueue';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import type { AutomationRulesReadResult } from '@shared/controlPlaneSchemas';
@@ -1820,6 +1821,9 @@ export default function BullpenPage() {
 
         {/* ── Command Center ───────────────────────────────────────────────── */}
         <BullpenCommandCenter />
+
+        {/* ── Work Queue ───────────────────────────────────────────────────── */}
+        <BullpenWorkQueue />
 
         {/* ── Needs Attention ──────────────────────────────────────────────── */}
         {attentionItems.length > 0 && (
