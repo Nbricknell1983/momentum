@@ -21,7 +21,7 @@ function logFirestoreOperation(operation: string, path: string, orgId: string | 
   }
 }
 
-function convertTimestampToDate(data: any): any {
+export function convertTimestampToDate(data: any): any {
   if (data === null || data === undefined) return data;
   if (data instanceof Timestamp) return data.toDate();
   if (Array.isArray(data)) return data.map(convertTimestampToDate);

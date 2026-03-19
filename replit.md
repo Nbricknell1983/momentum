@@ -27,6 +27,7 @@ Preferred communication style: Simple, everyday language.
 - **Primary Database**: Firebase Firestore — all live application data lives here.
 - **PostgreSQL**: Orphaned; legacy routes (`/api/leads`, `/api/activities`) return `410 Gone`.
 - **Trust Boundary**: See `TRUST_BOUNDARY.md` for full auth flow and route classification.
+- **Live State**: Leads and clients are synced via `onSnapshot` listeners (`client/src/lib/firestoreSync.ts` — `useFirestoreSync` hook). Redux `leads[]` and `clients[]` are listener-fed live state, not a stale once-loaded cache. AI engine server writes to client docs appear automatically in the UI without reload. See `STATE_OWNERSHIP.md`.
 
 ### Auth & Security
 - **Firebase Authentication**: All user identity comes from Firebase ID tokens verified server-side.

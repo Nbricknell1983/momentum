@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Switch, Route, useLocation } from 'wouter';
 import { Provider, useDispatch } from 'react-redux';
-import { store, setLeads, setActivities, setClients } from './store';
+import { store, setActivities } from './store';
 import { queryClient } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -32,7 +32,8 @@ import MarketingHome from '@/pages/marketing/index';
 import MarketingServices from '@/pages/marketing/services';
 import MarketingAbout from '@/pages/marketing/about';
 import MarketingContact from '@/pages/marketing/contact';
-import { fetchLeads, fetchAllActivities, fetchClients } from '@/lib/firestoreService';
+import { fetchAllActivities } from '@/lib/firestoreService';
+import { useFirestoreSync } from '@/lib/firestoreSync';
 import { Loader2 } from 'lucide-react';
 
 function ProtectedRoutes() {
@@ -66,6 +67,14 @@ function AppLayout() {
   const { user, orgId, loading, authReady, membershipReady, orgError, isManager } = useAuth();
   const [, setLocation] = useLocation();
 
+  const { leadsReady, clientsReady } = useFirestoreSync({
+    orgId: orgId ?? null,
+    userId: user?.uid ?? null,
+    isManager,
+    authReady,
+    membershipReady,
+  });
+
   useEffect(() => {
     if (authReady && !user) {
       console.log('[App] authReady and no user, redirecting to login');
@@ -83,29 +92,19 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    async function loadData() {
-      if (!authReady || !membershipReady || !orgId || !user) {
-        console.log('[App] Skipping data fetch - authReady:', authReady, 'membershipReady:', membershipReady, 'orgId:', orgId);
-        return;
-      }
+    async function loadActivities() {
+      if (!authReady || !membershipReady || !orgId || !user) return;
       const userFilter = isManager ? undefined : user.uid;
-      console.log('[App] Auth and membership ready, fetching data for org:', orgId, '| isManager:', isManager, '| userFilter:', userFilter || 'ALL');
       try {
-        const [leads, activities, clients] = await Promise.all([
-          fetchLeads(orgId, true, userFilter),
-          fetchAllActivities(orgId, true, userFilter),
-          fetchClients(orgId, true, userFilter),
-        ]);
-        console.log('[App] Fetched', leads.length, 'leads,', activities.length, 'activities, and', clients.length, 'clients');
-        dispatch(setLeads(leads));
+        const activities = await fetchAllActivities(orgId, true, userFilter);
+        console.log('[App] Fetched', activities.length, 'activities');
         dispatch(setActivities(activities));
-        dispatch(setClients(clients));
       } catch (error) {
-        console.error('[App] Error loading data from Firestore:', error);
+        console.error('[App] Error loading activities from Firestore:', error);
       }
     }
     if (authReady && membershipReady && user && orgId) {
-      loadData();
+      loadActivities();
     }
   }, [dispatch, user, orgId, authReady, membershipReady, isManager]);
 
@@ -122,6 +121,7 @@ function AppLayout() {
   }
 
   if (orgError || !orgId) {
+    // orgError screen rendered below — don't gate on leadsReady here
     return (
       <div className="flex items-center justify-center min-h-screen" style={{ background: 'linear-gradient(135deg, #0d0520 0%, #1e0d52 50%, #0d0520 100%)' }}>
         <div className="text-center space-y-6 px-6 max-w-md">
@@ -166,6 +166,17 @@ function AppLayout() {
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!leadsReady || !clientsReady) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading pipeline...</p>
         </div>
       </div>
     );
