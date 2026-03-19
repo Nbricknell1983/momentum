@@ -1,0 +1,123 @@
+### 1. What exactly does PostgreSQL own today?                                               
+                                                                                              
+ I need a concrete list:                                                                      
+ - which entities/tables are actively used                                                    
+ - which features depend on them                                                              
+ - whether any of those entities overlap with Firestore domains                               
+ - which store wins if data conflicts                                                         
+                                                                                              
+ This is the biggest unresolved architecture question.                                        
+                                                                                              
+ ### 2. What methods exist in server/storage.ts and which store does each method hit?         
+                                                                                              
+ I want:                                                                                      
+ - method name                                                                                
+ - Firestore or Postgres                                                                      
+ - which routes/features call it                                                              
+                                                                                              
+ Right now “routes stay thin and call storage only” sounds good, but I need to know whether   
+ IStorage is a true domain layer or mostly a Postgres abstraction.                            
+                                                                                              
+ ### 3. Where is real authorization actually enforced?                                        
+                                                                                              
+ Specifically:                                                                                
+ - what is enforced in Firestore security rules                                               
+ - what is enforced in Express middleware/handlers                                            
+ - what is only enforced in the frontend                                                      
+ - how orgId is derived and trusted on the server                                             
+                                                                                              
+ I do not want a permission-illusion architecture.                                            
+                                                                                              
+ ### 4. For Bullpen and OpenClaw settings docs, what schema validation exists before write?   
+                                                                                              
+ For:                                                                                         
+ - orgs/{orgId}/settings/automationRules                                                      
+ - orgs/{orgId}/settings/openclawConfig                                                       
+                                                                                              
+ I want to know:                                                                              
+ - validation layer                                                                           
+ - defaults/fallbacks                                                                         
+ - malformed config handling                                                                  
+ - whether writes are audited/versioned                                                       
+                                                                                              
+ These are control-plane docs, so loose writes are risky.                                     
+                                                                                              
+ ### 5. How are AI outputs persisted and versioned?                                           
+                                                                                              
+ For:                                                                                         
+ - growth engine                                                                              
+ - strategy                                                                                   
+ - prescriptions                                                                              
+ - coaching/scoring outputs                                                                   
+                                                                                              
+ I need to know:                                                                              
+ - exact Firestore path                                                                       
+ - overwrite vs append behavior                                                               
+ - whether history/versioning exists                                                          
+ - what invalidates stale outputs                                                             
+                                                                                              
+ ### 6. What is the intended boundary between Redux, React Query, and onSnapshot for leads    
+ and clients?                                                                                 
+                                                                                              
+ I want one clean answer per domain:                                                          
+ - source of truth in the UI                                                                  
+ - mutation path                                                                              
+ - invalidation/update path                                                                   
+                                                                                              
+ This is the main frontend drift risk.                                                        
+                                                                                              
+ ### 7. For Google Business Profile OAuth, where are tokens stored and how are they scoped?   
+                                                                                              
+ Specifically:                                                                                
+ - per org or per client                                                                      
+ - refresh token handling                                                                     
+ - reconnect/expired-token behavior                                                           
+ - how wrong-account linkage is prevented                                                     
+                                                                                              
+ That’s one of the higher-risk integrations.                                                  
+                                                                                              
+ ### 8. For OpenClaw connection testing, what does “connected” actually verify?               
+                                                                                              
+ I want to know whether it checks:                                                            
+ - base URL reachable                                                                         
+ - expected API shape                                                                         
+ - usable runtime state                                                                       
+ - manifest/config validity                                                                   
+ or just basic HTTP response                                                                  
+                                                                                              
+ I want to avoid false-positive setup confidence.                                             
+                                                                                              
+ ### 9. What production incidents or repeated breakages have already happened?                
+                                                                                              
+ Not theoretical risks — actual repeat offenders:                                             
+ - env mismatch                                                                               
+ - auth/rules mistakes                                                                        
+ - stale state                                                                                
+ - integration failures                                                                       
+ - tenant leakage                                                                             
+ - broken automations                                                                         
+ - release regressions                                                                        
+                                                                                              
+ That tells me where the real bottleneck is.                                                  
+                                                                                              
+ ### 10. What does Replit think should be built or hardened next?                             
+                                                                                              
+ If they had to choose one:                                                                   
+ - control-plane hardening                                                                    
+ - auth/rules hardening                                                                       
+ - Postgres boundary cleanup                                                                  
+ - live task wiring into Bullpen                                                              
+ - AI output lifecycle cleanup                                                                
+ - integration reliability                                                                    
+ - release safety                                                                             
+                                                                                              
+ I want their actual priority call, not just platform description.                            
+                                                                                              
+ Why these are the right questions                                                            
+                                                                                              
+ The stack is mostly clear now. The remaining uncertainty is concentrated in:                 
+ - data ownership                                                                             
+ - authorization enforcement                                                                  
+ - control-plane safety                                                                       
+ - state-boundary clarity                                                                     
+ - real production fragility              
