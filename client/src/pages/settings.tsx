@@ -19,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays, Camera, X, Plug, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Phone, Mail, MessageSquare, Clock, Zap, Building2, Users, Save, Loader2, UserPlus, Crown, Shield, User, KeyRound, Lock, Bell, Sparkles, BrainCircuit, CheckSquare, CalendarDays, Camera, X, Plug, CheckCircle2, AlertTriangle, ExternalLink, RefreshCw, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const CHANNEL_ICONS: Record<TouchChannel, typeof Phone> = {
@@ -1221,10 +1221,24 @@ export default function SettingsPage() {
 
   const qc = useQueryClient();
 
-  const { data: gbpStatus, isLoading: gbpLoading } = useQuery<{ connected: boolean; connectedAt?: string }>({
+  type GbpConnectionStatus = 'healthy' | 'reconnect_required' | 'revoked' | 'unknown' | 'not_connected';
+  interface GbpStatus {
+    connected: boolean;
+    connectionStatus: GbpConnectionStatus;
+    connectedAt: string | null;
+    lastVerifiedAt: string | null;
+    lastFailureAt: string | null;
+    lastFailureReason: string | null;
+    connectedAccountEmail: string | null;
+    connectedAccountName: string | null;
+    connectedGBPAccount: string | null;
+    connectedGBPAccountTitle: string | null;
+  }
+
+  const { data: gbpStatus, isLoading: gbpLoading } = useQuery<GbpStatus>({
     queryKey: ['/api/gbp/status', orgId],
     queryFn: async () => {
-      if (!orgId) return { connected: false };
+      if (!orgId) return { connected: false, connectionStatus: 'not_connected' as const, connectedAt: null, lastVerifiedAt: null, lastFailureAt: null, lastFailureReason: null, connectedAccountEmail: null, connectedAccountName: null, connectedGBPAccount: null, connectedGBPAccountTitle: null };
       const r = await fetch(`/api/gbp/status?orgId=${orgId}`);
       return r.json();
     },
@@ -1333,9 +1347,19 @@ export default function SettingsPage() {
             {gbpLoading ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mt-1" />
             ) : gbpStatus?.connected ? (
-              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200">
-                <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
-              </Badge>
+              gbpStatus.connectionStatus === 'healthy' ? (
+                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200">
+                  <CheckCircle2 className="h-3 w-3 mr-1" /> Connected · Healthy
+                </Badge>
+              ) : gbpStatus.connectionStatus === 'revoked' ? (
+                <Badge className="bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border-red-200">
+                  <XCircle className="h-3 w-3 mr-1" /> Token Revoked
+                </Badge>
+              ) : (
+                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200">
+                  <AlertTriangle className="h-3 w-3 mr-1" /> Reconnect Required
+                </Badge>
+              )
             ) : (
               <Badge variant="outline" className="text-muted-foreground">Not connected</Badge>
             )}
@@ -1344,26 +1368,94 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           {gbpStatus?.connected ? (
             <div className="space-y-3">
-              {gbpStatus.connectedAt && (
-                <p className="text-xs text-muted-foreground">
-                  Connected {new Date(gbpStatus.connectedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                </p>
+              {/* Reconnect Required Banner */}
+              {(gbpStatus.connectionStatus === 'reconnect_required' || gbpStatus.connectionStatus === 'revoked') && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg" data-testid="banner-gbp-reconnect">
+                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1 flex-1">
+                    <p className="text-xs font-semibold text-red-700 dark:text-red-300">
+                      {gbpStatus.connectionStatus === 'revoked' ? 'Access revoked — reconnect required' : 'GBP connection broken — reconnect required'}
+                    </p>
+                    <p className="text-[11px] text-red-600 dark:text-red-400">
+                      {gbpStatus.connectionStatus === 'revoked'
+                        ? 'Google has revoked access to this account. Reconnect to restore GBP features for all clients in this org.'
+                        : 'The refresh token is no longer valid. GBP-dependent features are unavailable until you reconnect.'}
+                    </p>
+                    {gbpStatus.lastFailureReason && (
+                      <p className="text-[11px] text-red-500/80 dark:text-red-400/70 font-mono">Reason: {gbpStatus.lastFailureReason}</p>
+                    )}
+                  </div>
+                </div>
               )}
-              <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-muted-foreground">Live reviews and ratings are available in the Local Presence section of each client workspace. Link each client to their GBP location to start pulling data.</p>
+
+              {/* Org-scoped warning */}
+              <div className="flex items-start gap-2 p-3 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/60 rounded-lg" data-testid="banner-gbp-org-scope">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  This is an <strong>org-level connection</strong> — all clients in this organisation share the same Google account. If the wrong account is connected, all GBP features are affected.
+                </p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/20"
-                onClick={() => disconnectGBP.mutate()}
-                disabled={disconnectGBP.isPending}
-                data-testid="button-disconnect-gbp"
-              >
-                {disconnectGBP.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <X className="h-3.5 w-3.5 mr-1.5" />}
-                Disconnect
-              </Button>
+
+              {/* Connected account identity */}
+              <div className="p-3 rounded-lg border bg-muted/30 space-y-1.5" data-testid="panel-gbp-identity">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Connected Account</p>
+                {gbpStatus.connectedAccountEmail || gbpStatus.connectedAccountName ? (
+                  <div className="space-y-0.5">
+                    {gbpStatus.connectedAccountName && (
+                      <p className="text-xs font-medium">{gbpStatus.connectedAccountName}</p>
+                    )}
+                    {gbpStatus.connectedAccountEmail && (
+                      <p className="text-[11px] text-muted-foreground">{gbpStatus.connectedAccountEmail}</p>
+                    )}
+                    {gbpStatus.connectedGBPAccountTitle && (
+                      <p className="text-[11px] text-muted-foreground">GBP Account: {gbpStatus.connectedGBPAccountTitle}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground italic">Account identity not available — reconnect to populate this information.</p>
+                )}
+                <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
+                  {gbpStatus.connectedAt && (
+                    <span>Connected: {new Date(gbpStatus.connectedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                  )}
+                  {gbpStatus.lastVerifiedAt && (
+                    <span>Last verified: {new Date(gbpStatus.lastVerifiedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Healthy info line */}
+              {gbpStatus.connectionStatus === 'healthy' && (
+                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-muted-foreground">Live reviews and ratings are available in the Local Presence section of each client workspace. Link each client to their GBP location to start pulling data.</p>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {(gbpStatus.connectionStatus !== 'healthy') && gbpCredentials?.hasCredentials && (
+                  <Button
+                    size="sm"
+                    onClick={() => { if (orgId) window.location.href = `/api/gbp/connect?orgId=${orgId}`; }}
+                    data-testid="button-reconnect-gbp"
+                    className="gap-1.5"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Reconnect Google Account
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/20"
+                  onClick={() => disconnectGBP.mutate()}
+                  disabled={disconnectGBP.isPending}
+                  data-testid="button-disconnect-gbp"
+                >
+                  {disconnectGBP.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <X className="h-3.5 w-3.5 mr-1.5" />}
+                  Disconnect
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

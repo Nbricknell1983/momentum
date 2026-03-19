@@ -36,6 +36,8 @@ Preferred communication style: Simple, everyday language.
 - **Org Access**: `requireOrgAccess` middleware verifies Firestore membership (`orgs/{orgId}/members/{uid}` with `active == true`).
 - **Manager Gate**: `requireManager` enforces `owner`/`admin` role for sensitive operations.
 - **OpenClaw routes**: Use shared-secret `openclawAuth` instead of Firebase token (whitelisted from global middleware).
+- **OpenClaw Verification**: `POST /api/openclaw/test-connection` runs 4-stage verification (reachability → identity → auth → capability). Returns structured `ConnectionVerification` object with status enum: `unreachable | not_openclaw | auth_failed | missing_required_endpoints | healthy`. Provisioning gated on `healthy`. See `OPENCLAW_VERIFICATION.md`.
+- **GBP OAuth Trust**: OAuth callback stores connected account identity (`connectedAccountEmail`, `connectedAccountName`, `connectedGBPAccount`, `connectedGBPAccountTitle`) + `connectionStatus` field (`healthy | reconnect_required | revoked | unknown`). Token refresh failures write `connectionStatus` to Firestore (non-blocking) instead of only throwing. Settings UI shows identity, health badge, org-scope warning, reconnect CTA. See `GBP_OAUTH_TRUST.md`.
 - **Public routes**: GBP OAuth callback, public report URLs, device pairing — whitelisted in `auth.ts`.
 - **Firestore Rules**: Deployed separately via Firebase CLI — see `FIRESTORE_RULES_DEPLOY.md`. Rules cover all org collections including `settings`, `bullpenComms`, and `settingsHistory`.
 - **Control-Plane Config**: `automationRules` and `openclawConfig` are validated with Zod (`shared/controlPlaneSchemas.ts`), written only through server routes with audit trail at `orgs/{orgId}/settingsHistory/{type}/entries`. See `CONTROL_PLANE_CONFIG.md`.

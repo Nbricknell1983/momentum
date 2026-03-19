@@ -7232,7 +7232,7 @@ Return JSON:
   // Google Business Profile (GBP) OAuth + API
   // ============================================
 
-  const GBP_SCOPES = 'https://www.googleapis.com/auth/business.manage';
+  const GBP_SCOPES = 'openid email profile https://www.googleapis.com/auth/business.manage';
 
   // Helper: derive the redirect URI from the current request — supports custom domains
   function getGBPRedirectUri(req: any): string {
@@ -7246,32 +7246,52 @@ Return JSON:
 
   // Helper: get or refresh an access token for an org
   async function getGBPAccessToken(orgId: string): Promise<string> {
-    if (!firestore) throw new Error('Firestore not available');
+    if (!firestore) throw new Error('GBP_AUTH_UNAVAILABLE: Firestore not available');
     const docRef = firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp');
     const snap = await docRef.get();
-    if (!snap.exists) throw new Error('GBP not connected for this org');
+    if (!snap.exists) throw new Error('GBP_NOT_CONNECTED: GBP not connected for this org');
     const data = snap.data()!;
-    if (!data.refreshToken) throw new Error('No refresh token');
+    if (!data.refreshToken) throw new Error('GBP_NOT_CONNECTED: No refresh token');
     // Return existing access token if still valid
     if (data.accessToken && data.tokenExpiry && data.tokenExpiry > Date.now() + 60_000) {
       return data.accessToken;
     }
     // Refresh it
-    const r = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.GOOGLE_GBP_CLIENT_ID!,
-        client_secret: process.env.GOOGLE_GBP_CLIENT_SECRET!,
-        refresh_token: data.refreshToken,
-        grant_type: 'refresh_token',
-      }).toString(),
-    });
-    const tokens = await r.json();
-    if (tokens.error) throw new Error(`Token refresh failed: ${tokens.error_description || tokens.error}`);
+    let tokens: any;
+    try {
+      const r = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_GBP_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_GBP_CLIENT_SECRET!,
+          refresh_token: data.refreshToken,
+          grant_type: 'refresh_token',
+        }).toString(),
+      });
+      tokens = await r.json();
+    } catch (fetchErr: any) {
+      // Network-level failure — don't invalidate the stored status
+      throw new Error(`GBP_REFRESH_ERROR: Network error during token refresh: ${fetchErr.message}`);
+    }
+    if (tokens.error) {
+      // Distinguish revocation from generic failure
+      const status = tokens.error === 'invalid_grant' ? 'revoked' : 'reconnect_required';
+      const reason = tokens.error_description || tokens.error;
+      // Write failure state to Firestore (non-blocking)
+      docRef.update({
+        connectionStatus: status,
+        lastFailureAt: new Date().toISOString(),
+        lastFailureReason: reason,
+      }).catch(() => {});
+      throw new Error(`GBP_${status.toUpperCase()}: ${reason}`);
+    }
+    // Success — update token + mark healthy + stamp lastVerifiedAt
     await docRef.update({
       accessToken: tokens.access_token,
       tokenExpiry: Date.now() + (tokens.expires_in || 3600) * 1000,
+      connectionStatus: 'healthy',
+      lastVerifiedAt: new Date().toISOString(),
     });
     return tokens.access_token;
   }
@@ -7346,14 +7366,52 @@ Return JSON:
         return res.redirect(`/settings?tab=integrations&gbp=error&reason=${encodeURIComponent(tokens.error_description || tokens.error || 'no_refresh_token')}`);
       }
       if (!firestore) return res.redirect('/settings?tab=integrations&gbp=error&reason=no_firestore');
-      // Save tokens to Firestore
+
+      // Fetch connected account identity — non-blocking; store what's available
+      let connectedAccountEmail: string | null = null;
+      let connectedAccountName: string | null = null;
+      let connectedGBPAccount: string | null = null;
+      let connectedGBPAccountTitle: string | null = null;
+      try {
+        // User identity via OpenID userinfo endpoint (works with openid+email+profile scopes)
+        const uiResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+        if (uiResp.ok) {
+          const ui = await uiResp.json();
+          connectedAccountEmail = ui.email ?? null;
+          connectedAccountName = ui.name ?? null;
+        }
+      } catch {}
+      try {
+        // GBP account identity via Business Account Management API
+        const acctResp = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+        if (acctResp.ok) {
+          const acctData = await acctResp.json();
+          const firstAcct = acctData.accounts?.[0];
+          if (firstAcct) {
+            connectedGBPAccount = firstAcct.name ?? null;      // e.g. "accounts/123456789"
+            connectedGBPAccountTitle = firstAcct.accountName ?? null;
+          }
+        }
+      } catch {}
+
+      // Save tokens + identity to Firestore
       await firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').set({
         refreshToken: tokens.refresh_token,
         accessToken: tokens.access_token,
         tokenExpiry: Date.now() + (tokens.expires_in || 3600) * 1000,
         connectedAt: new Date().toISOString(),
         redirectUri,
-      }, { merge: true });
+        connectionStatus: 'healthy',
+        lastVerifiedAt: new Date().toISOString(),
+        connectedAccountEmail,
+        connectedAccountName,
+        connectedGBPAccount,
+        connectedGBPAccountTitle,
+      }, { merge: false });
       res.redirect('/settings?tab=integrations&gbp=connected');
     } catch (err: any) {
       console.error('[GBP callback]', err);
@@ -7361,15 +7419,29 @@ Return JSON:
     }
   });
 
-  // Check GBP connection status
+  // Check GBP connection status — returns rich identity + health fields
   app.get('/api/gbp/status', async (req, res) => {
     try {
-      if (!firestore) return res.json({ connected: false });
+      if (!firestore) return res.json({ connected: false, connectionStatus: 'unknown' });
       const orgId = req.query.orgId as string;
       if (!orgId) return res.status(400).json({ error: 'orgId required' });
       const snap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').get();
-      if (!snap.exists || !snap.data()?.refreshToken) return res.json({ connected: false });
-      res.json({ connected: true, connectedAt: snap.data()?.connectedAt });
+      if (!snap.exists || !snap.data()?.refreshToken) {
+        return res.json({ connected: false, connectionStatus: 'not_connected' });
+      }
+      const d = snap.data()!;
+      res.json({
+        connected: true,
+        connectionStatus: d.connectionStatus ?? 'unknown',
+        connectedAt: d.connectedAt ?? null,
+        lastVerifiedAt: d.lastVerifiedAt ?? null,
+        lastFailureAt: d.lastFailureAt ?? null,
+        lastFailureReason: d.lastFailureReason ?? null,
+        connectedAccountEmail: d.connectedAccountEmail ?? null,
+        connectedAccountName: d.connectedAccountName ?? null,
+        connectedGBPAccount: d.connectedGBPAccount ?? null,
+        connectedGBPAccountTitle: d.connectedGBPAccountTitle ?? null,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
