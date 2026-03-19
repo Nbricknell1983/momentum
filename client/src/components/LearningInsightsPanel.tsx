@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Brain, RefreshCw, ChevronDown, ChevronUp, Loader2, AlertTriangle,
-  TrendingUp, TrendingDown, Minus, CheckCircle2, XCircle, Zap, Target,
+  TrendingUp, TrendingDown, Minus, CheckCircle2, XCircle, Zap, Target, History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -10,7 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { updateClient } from '@/store/index';
 import { Client, LearningInsight, MomentumStatus, AIAction } from '@/lib/types';
 import { updateClientInFirestore, fetchClientAIActions } from '@/lib/firestoreService';
-import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
+import { generateRunId, enrichWithMeta, persistEngineHistory, isOutputStale } from '@/lib/engineOutputService';
+import { EngineHistoryDrawer } from '@/components/EngineHistoryDrawer';
 import { format } from 'date-fns';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ export default function LearningInsightsPanel({ client }: Props) {
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [actions, setActions] = useState<AIAction[]>([]);
   const { toast } = useToast();
   const dispatch = useDispatch();
@@ -152,9 +154,12 @@ export default function LearningInsightsPanel({ client }: Props) {
 
   return (
     <div className="rounded-lg border bg-card overflow-hidden" data-testid="card-learning-insights">
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setOpen(v => !v); }}
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer"
         data-testid="toggle-learning-insights"
       >
         <div className="flex items-center gap-2">
@@ -166,15 +171,30 @@ export default function LearningInsightsPanel({ client }: Props) {
               {momentumCfg.label}
             </span>
           )}
+          {insight && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isOutputStale(insight.generatedAt, 'learningInsight') ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
+              {isOutputStale(insight.generatedAt, 'learningInsight') ? 'Stale' : 'Fresh'}
+            </span>
+          )}
           {!insight && (
             <span className="text-xs text-muted-foreground italic">{enginesRun}/4 engines run</span>
           )}
         </div>
         <div className="flex items-center gap-2">
+          {insight && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setHistoryOpen(true); }}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="btn-history-learning-insights"
+            >
+              <History className="h-3 w-3" />
+              Runs
+            </button>
+          )}
           {insight && <span className="text-[10px] text-muted-foreground">{fmtDate(insight.generatedAt)}</span>}
           {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="border-t">
@@ -276,6 +296,14 @@ export default function LearningInsightsPanel({ client }: Props) {
           )}
         </div>
       )}
+      <EngineHistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        orgId={orgId || ''}
+        entityCollection="clients"
+        entityId={client.id}
+        engineType="learningInsight"
+      />
     </div>
   );
 }

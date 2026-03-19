@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   Stethoscope, Globe, Search, Star, BarChart3, Zap, AlertTriangle,
   ChevronDown, ChevronUp, CheckCircle2, Clock, TrendingUp, Loader2,
-  RefreshCw, Copy, Check,
+  RefreshCw, Copy, Check, History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,8 @@ import {
   INVESTMENT_TIER_LABELS, INVESTMENT_TIER_COLORS,
 } from '@/lib/types';
 import { updateLeadInFirestore } from '@/lib/firestoreService';
-import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
+import { generateRunId, enrichWithMeta, persistEngineHistory, isOutputStale } from '@/lib/engineOutputService';
+import { EngineHistoryDrawer } from '@/components/EngineHistoryDrawer';
 import { format } from 'date-fns';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -123,6 +124,7 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
   const { toast } = useToast();
 
   const [expanded, setExpanded] = useState(!!lead.growthPrescription);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [prescription, setPrescription] = useState<GrowthPrescription | null>(
     lead.growthPrescription ? { ...lead.growthPrescription, generatedAt: new Date(lead.growthPrescription.generatedAt) } : null
@@ -208,9 +210,12 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
   return (
     <div className="rounded-lg border overflow-hidden bg-background" data-testid="growth-prescription-panel">
       {/* Header */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v); }}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer"
         data-testid="button-prescription-toggle"
       >
         <div className="flex items-center gap-2">
@@ -225,8 +230,23 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
                 : 'Diagnose the opportunity and prescribe a growth stack'}
             </p>
           </div>
+          {prescription && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isOutputStale(prescription.generatedAt, 'growthPrescription') ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
+              {isOutputStale(prescription.generatedAt, 'growthPrescription') ? 'Stale' : 'Fresh'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {prescription && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setHistoryOpen(true); }}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="btn-history-growth-prescription"
+            >
+              <History className="h-3 w-3" />
+              Runs
+            </button>
+          )}
           {urgency && (
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${urgency.cls}`}>
               {urgency.label}
@@ -234,7 +254,7 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
           )}
           {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <div className="border-t">
@@ -324,6 +344,14 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
           )}
         </div>
       )}
+      <EngineHistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        orgId={orgId || ''}
+        entityCollection="leads"
+        entityId={lead.id}
+        engineType="growthPrescription"
+      />
     </div>
   );
 }

@@ -1,0 +1,302 @@
+Build Brief — Freshness Badges & Previous Runs UI                                            
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Make the new AI output metadata and history visible and useful in the product so users can   
+ immediately tell whether an engine result is fresh or stale, and can inspect previous runs   
+ without leaving the current workflow.                                                        
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ The storage layer now supports:                                                              
+ - generatedAt                                                                                
+ - runId                                                                                      
+ - engineType                                                                                 
+ - history records in engineHistory                                                           
+ - stale logic via isOutputStale(...)                                                         
+                                                                                              
+ But the UI does not yet expose enough of that value.                                         
+                                                                                              
+ ### Current gap                                                                              
+                                                                                              
+ Users can now technically have:                                                              
+ - fresh outputs                                                                              
+ - stale outputs                                                                              
+ - multiple prior runs                                                                        
+                                                                                              
+ …but they still may not be able to easily answer:                                            
+ - how old is this result?                                                                    
+ - is this still current enough to trust?                                                     
+ - what happened on the previous run?                                                         
+ - did the score/recommendation improve or degrade?                                           
+                                                                                              
+ That means the infrastructure work is done, but the operator value is only partially         
+ realized.                                                                                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Expose AI output freshness and history in a way that improves trust and decision quality     
+ without overbuilding a heavy analytics interface.                                            
+                                                                                              
+ Success means:                                                                               
+ - every engine panel clearly shows fresh vs stale state                                      
+ - users can see when the latest result was generated                                         
+ - users can open a “previous runs” view                                                      
+ - previous runs are ordered and understandable                                               
+ - the new UI works off the history model already built                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Freshness badge in each engine panel header                                               
+ 2. “Generated at” / recency display for latest output                                        
+ 3. “Previous runs” drawer or panel                                                           
+ 4. Previous runs list ordered by newest first                                                
+ 5. Basic run summary display using existing metadata/history                                 
+ 6. Reuse of existing isOutputStale(...) and history storage model                            
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - full diff/comparison engine                                                                
+ - trend charts                                                                               
+ - deep analytics dashboard                                                                   
+ - prompt/version debugging UI                                                                
+ - large redesign of engine panels                                                            
+ - autopilot attribution overhaul                                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Use the metadata already created                                                      
+                                                                                              
+ Do not invent a parallel freshness model.                                                    
+ Use:                                                                                         
+ - generatedAt                                                                                
+ - runId                                                                                      
+ - engineType                                                                                 
+ - isOutputStale(...)                                                                         
+                                                                                              
+ ### 2. Preserve current panel usability                                                      
+                                                                                              
+ This should be a focused enhancement, not a redesign of every engine experience.             
+                                                                                              
+ ### 3. Keep history read lightweight                                                         
+                                                                                              
+ Use the existing history structure and fetch only what’s needed for the UI.                  
+ Do not over-query or over-render.                                                            
+                                                                                              
+ ### 4. Make stale state obvious                                                              
+                                                                                              
+ A stale result should not visually read the same as a fresh one.                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Freshness badge in panel headers                                                   
+                                                                                              
+ For each engine panel, add a freshness indicator in the header.                              
+                                                                                              
+ ### Target panels                                                                            
+                                                                                              
+ - Website Engine                                                                             
+ - SEO Engine                                                                                 
+ - GBP Engine                                                                                 
+ - Ads Engine                                                                                 
+ - Learning Insights                                                                          
+ - Growth Prescription                                                                        
+ - any other panel already using the new metadata shape                                       
+                                                                                              
+ ### Badge states                                                                             
+                                                                                              
+ At minimum:                                                                                  
+ - Fresh                                                                                      
+ - Stale                                                                                      
+ - Missing (if no output exists yet)                                                          
+                                                                                              
+ ### Logic                                                                                    
+                                                                                              
+ - if no report → Missing / Not generated                                                     
+ - if report exists and isOutputStale(report.generatedA t, engineType) → Stale                
+ - otherwise → Fresh                                                                          
+                                                                                              
+ ### Display                                                                                  
+                                                                                              
+ Keep it small and operational:                                                               
+ - badge                                                                                      
+ - generated date/time or “X days ago” if useful                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Latest output recency display                                                      
+                                                                                              
+ Show when the current output was generated.                                                  
+                                                                                              
+ ### Minimum requirement                                                                      
+                                                                                              
+ Display one of:                                                                              
+ - Generated DD-MM-YYYY                                                                       
+ - or Generated X days ago                                                                    
+ - ideally both if it fits cleanly                                                            
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ The user should be able to judge recency without opening a history view.                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Previous runs drawer                                                               
+                                                                                              
+ Add a lightweight drawer/panel accessible from each engine panel.                            
+                                                                                              
+ ### Behavior                                                                                 
+                                                                                              
+ - click “Previous runs”                                                                      
+ - open drawer                                                                                
+ - fetch history for that engine/entity                                                       
+ - show newest first                                                                          
+                                                                                              
+ ### Minimum per-run fields                                                                   
+                                                                                              
+ - generatedAt                                                                                
+ - runId                                                                                      
+ - engineType                                                                                 
+ - score / summary metric if available                                                        
+ - maybe modelUsed if useful and not noisy                                                    
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Let the user inspect prior runs without needing a full comparison system yet.                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Basic summary row design                                                           
+                                                                                              
+ Each run entry should make quick scanning possible.                                          
+                                                                                              
+ ### Suggested fields                                                                         
+                                                                                              
+ - date/time                                                                                  
+ - freshness/age                                                                              
+ - summary score if available                                                                 
+ - short status line if one exists                                                            
+ - run ID secondary, not primary                                                              
+                                                                                              
+ ### Keep it practical                                                                        
+                                                                                              
+ Do not make the user read raw JSON or overly technical metadata.                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Empty and edge states                                                              
+                                                                                              
+ Handle these cleanly:                                                                        
+                                                                                              
+ - no history yet                                                                             
+ - malformed old run with partial metadata                                                    
+ - old records from before full metadata adoption                                             
+ - loading state                                                                              
+ - fetch error state                                                                          
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ The history UI should degrade gracefully without pretending data exists when it does not.    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - cluttering engine headers                                                                  
+ - inconsistent score/summary availability across engine types                                
+ - expensive history reads if not scoped properly                                             
+ - exposing technical metadata in a way that confuses users                                   
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - existing engine history paths                                                              
+ - current engine panel structure                                                             
+ - availability of summary fields in stored outputs                                           
+ - existing isOutputStale(...)                                                                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test — freshness                                                                    
+                                                                                              
+ 1. fresh output shows Fresh badge                                                            
+ 2. stale output shows Stale badge                                                            
+ 3. missing output shows Missing/Not generated                                                
+ 4. generated date/recency renders correctly                                                  
+                                                                                              
+ ### Must test — history                                                                      
+                                                                                              
+ 5. previous runs drawer opens correctly                                                      
+ 6. runs are ordered newest first                                                             
+ 7. correct org/client/engine history is shown                                                
+ 8. no cross-entity leakage                                                                   
+                                                                                              
+ ### Must test — compatibility                                                                
+                                                                                              
+ 9. old outputs without perfect metadata degrade gracefully                                   
+ 10. engine panels still render correctly with current latest output shape                    
+                                                                                              
+ ### Must test — UX                                                                           
+                                                                                              
+ 11. header layout remains clean                                                              
+ 12. history drawer is readable and useful, not noisy                                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - every major engine panel communicates freshness clearly                                    
+ - users can see when the latest output was generated                                         
+ - users can access prior runs easily                                                         
+ - previous runs are ordered and understandable                                               
+ - the AI output history infrastructure becomes visible product value, not hidden backend     
+ plumbing                                                                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. add freshness badges to engine headers                                                    
+ 2. add latest generated-time display                                                         
+ 3. build shared previous-runs drawer component                                               
+ 4. wire drawer into one representative engine panel first                                    
+ 5. extend across all target engine panels                                                    
+ 6. QA fresh/stale/missing/history states                                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - which engine panels were updated                                                           
+ - freshness badge states implemented                                                         
+ - previous runs drawer behavior                                                              
+ - how history rows are summarized                                                            
+ - any engine-specific exceptions or limitations                                              
+ - follow-up recommendations for comparison view or trend chart                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not jump straight to a full diff/comparison system                                      
+ - do not over-engineer charting in this task                                                 
+ - do not expose raw technical metadata as the main UI                                        
+ - do not redesign the entire engine surface                                                  
+ - do not leave stale outputs visually indistinguishable from fresh ones                      
+                                                                            

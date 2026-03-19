@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   Star, RefreshCw, Copy, Check, ChevronDown, ChevronUp,
   Loader2, AlertTriangle, Zap, User, Camera, MessageSquare,
-  Search as SearchIcon, HelpCircle, CheckCircle2, Clock, TrendingUp,
+  Search as SearchIcon, HelpCircle, CheckCircle2, Clock, TrendingUp, History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -13,7 +13,8 @@ import {
   Client, GBPEngineReport, GBPTask, GBPTaskCategory, GradeValue,
 } from '@/lib/types';
 import { updateClientInFirestore } from '@/lib/firestoreService';
-import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
+import { generateRunId, enrichWithMeta, persistEngineHistory, isOutputStale } from '@/lib/engineOutputService';
+import { EngineHistoryDrawer } from '@/components/EngineHistoryDrawer';
 import { format } from 'date-fns';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ export default function GBPEnginePanel({ client }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const { toast } = useToast();
   const dispatch = useDispatch();
   const { orgId, authReady } = useAuth();
@@ -174,9 +176,12 @@ export default function GBPEnginePanel({ client }: Props) {
 
   return (
     <div className="rounded-lg border bg-card overflow-hidden" data-testid="card-gbp-engine">
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setOpen(v => !v); }}
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer"
         data-testid="toggle-gbp-engine"
       >
         <div className="flex items-center gap-2">
@@ -187,13 +192,28 @@ export default function GBPEnginePanel({ client }: Props) {
               {report.optimizationScore}/100 · {optCfg?.label}
             </span>
           )}
+          {report && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isOutputStale(report.generatedAt, 'gbpEngine') ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
+              {isOutputStale(report.generatedAt, 'gbpEngine') ? 'Stale' : 'Fresh'}
+            </span>
+          )}
           {!report && <span className="text-xs text-muted-foreground italic">Not analysed</span>}
         </div>
         <div className="flex items-center gap-2">
+          {report && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setHistoryOpen(true); }}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="btn-history-gbp-engine"
+            >
+              <History className="h-3 w-3" />
+              Runs
+            </button>
+          )}
           {report && <span className="text-[10px] text-muted-foreground">{fmtDate(report.generatedAt)}</span>}
           {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="border-t">
@@ -287,6 +307,14 @@ export default function GBPEnginePanel({ client }: Props) {
           )}
         </div>
       )}
+      <EngineHistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        orgId={orgId || ''}
+        entityCollection="clients"
+        entityId={client.id}
+        engineType="gbpEngine"
+      />
     </div>
   );
 }
