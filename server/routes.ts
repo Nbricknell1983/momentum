@@ -7421,8 +7421,32 @@ Return ONLY a JSON object with ALL these fields:
       const pack = JSON.parse(raw);
       const prepCallPack = { ...pack, generatedAt: new Date().toISOString(), leadId };
 
-      await leadRef.update({ prepCallPack });
-      res.json({ prepCallPack });
+      // Auto-hydrate strategyIntelligence with agent intelligence (only populate empty fields)
+      const existingSI = lead.strategyIntelligence || {};
+      const siPatch: Record<string, string> = {};
+      if (!existingSI.businessOverview?.trim() && pack.businessSnapshot) {
+        siPatch.businessOverview = pack.businessSnapshot;
+      }
+      if (!existingSI.idealCustomer?.trim() && pack.customerProfile?.likelyCustomer) {
+        siPatch.idealCustomer = pack.customerProfile.likelyCustomer;
+      }
+      if (!existingSI.discoveryNotes?.trim() && pack.searchIntentAnalysis?.whyTheySearch) {
+        siPatch.discoveryNotes = [
+          pack.searchIntentAnalysis.whyTheySearch && `Search intent: ${pack.searchIntentAnalysis.whyTheySearch}`,
+          pack.searchIntentAnalysis.conversionBarriers && `Conversion barriers: ${pack.searchIntentAnalysis.conversionBarriers}`,
+        ].filter(Boolean).join('\n\n');
+      }
+      if (!existingSI.growthObjective?.trim() && pack.commercialAngle) {
+        siPatch.growthObjective = pack.commercialAngle;
+      }
+
+      const updatePayload: Record<string, any> = { prepCallPack };
+      if (Object.keys(siPatch).length > 0) {
+        updatePayload.strategyIntelligence = { ...existingSI, ...siPatch, updatedAt: new Date().toISOString() };
+      }
+
+      await leadRef.update(updatePayload);
+      res.json({ prepCallPack, strategyIntelligence: updatePayload.strategyIntelligence });
     } catch (err) {
       console.error("[generate-prep-pack]", err);
       res.status(500).json({ error: "Failed to generate prep call pack" });

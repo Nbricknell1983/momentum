@@ -55,6 +55,9 @@ import {
   Building2,
   Maximize2,
   Layout,
+  Brain,
+  ShieldCheck,
+  Monitor,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin, SiSalesforce } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
@@ -157,16 +160,33 @@ function computeDealHealth(lead: Lead, activities: Activity[]): {
 }
 
 function generateDealSummary(lead: Lead, activities: Activity[]): string {
-  const parts: string[] = [];
+  const pack = (lead as any).prepCallPack;
 
+  // If a prep pack exists, use its commercial intelligence as the primary summary
+  if (pack?.businessSnapshot) {
+    const parts: string[] = [pack.businessSnapshot];
+    if (pack.commercialAngle) {
+      parts.push(`Key angle: ${pack.commercialAngle}`);
+    }
+    const leadActivities = activities.filter(a => a.leadId === lead.id);
+    if (leadActivities.length > 0) {
+      const last = [...leadActivities].sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0];
+      const daysAgo = differenceInDays(new Date(), new Date(last.createdAt));
+      if (daysAgo === 0) parts.push(`Last activity: today (${last.type}).`);
+      else if (daysAgo === 1) parts.push(`Last activity: yesterday (${last.type}).`);
+      else parts.push(`Last activity: ${daysAgo} days ago (${last.type}).`);
+    }
+    return parts.join(' ');
+  }
+
+  // Fallback: rule-based summary
+  const parts: string[] = [];
   if (lead.companyName) {
     let intro = `${lead.companyName}`;
-    if (lead.territory || lead.areaName) {
-      intro += ` is located in ${lead.territory || lead.areaName}`;
-    }
-    if (lead.sourceData?.googleTypes?.[0]) {
-      intro += ` and operates in ${lead.sourceData.googleTypes[0]}`;
-    }
+    if (lead.territory || lead.areaName) intro += ` is located in ${lead.territory || lead.areaName}`;
+    if (lead.sourceData?.googleTypes?.[0]) intro += ` and operates in ${lead.sourceData.googleTypes[0]}`;
     parts.push(intro + '.');
   }
 
@@ -176,13 +196,9 @@ function generateDealSummary(lead: Lead, activities: Activity[]): string {
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )[0];
     const daysAgo = differenceInDays(new Date(), new Date(lastActivity.createdAt));
-    if (daysAgo === 0) {
-      parts.push(`Last activity was today (${lastActivity.type}).`);
-    } else if (daysAgo === 1) {
-      parts.push(`Last activity was yesterday (${lastActivity.type}).`);
-    } else {
-      parts.push(`Last activity was ${daysAgo} days ago (${lastActivity.type}).`);
-    }
+    if (daysAgo === 0) parts.push(`Last activity was today (${lastActivity.type}).`);
+    else if (daysAgo === 1) parts.push(`Last activity was yesterday (${lastActivity.type}).`);
+    else parts.push(`Last activity was ${daysAgo} days ago (${lastActivity.type}).`);
   } else {
     parts.push('No activity has been logged yet.');
   }
@@ -348,6 +364,175 @@ function SITextArea({ value, onChange, placeholder, rows, fieldLabel, tidyEndpoi
             className={`p-1 rounded transition-colors ${recording ? 'bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 animate-pulse' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}>
             {recording ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentIntelligenceCard({ lead }: { lead: Lead }) {
+  const pack = (lead as any).prepCallPack;
+  const [expanded, setExpanded] = useState(true);
+  if (!pack?.businessSnapshot) return null;
+
+  const cp = pack.customerProfile || {};
+  const si = pack.searchIntentAnalysis || {};
+  const wa = pack.websiteAnalysis || {};
+  const hasCP = cp.likelyCustomer || cp.jobsToBeDone || cp.urgencyEmotion || cp.trustFactors;
+  const hasSI = si.whyTheySearch || si.whatTheyNeedToSee || (si.primarySearchTerms?.length > 0);
+  const hasWA = wa.whatItTries || wa.keyWeaknesses?.length;
+  const hasOps = pack.opportunities?.length > 0 || pack.gaps?.length > 0;
+
+  return (
+    <div className="rounded-lg border border-violet-200 dark:border-violet-800/40 bg-violet-50/30 dark:bg-violet-950/10 overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+        onClick={() => setExpanded(v => !v)}
+        data-testid="button-toggle-agent-intelligence"
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded bg-violet-500 flex items-center justify-center shrink-0">
+            <Brain className="h-3.5 w-3.5 text-white" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-violet-900 dark:text-violet-200">Agent Intelligence</p>
+            <p className="text-[10px] text-violet-500 dark:text-violet-400">Commercial point of view · auto-generated</p>
+          </div>
+        </div>
+        {expanded ? <ChevronUp className="h-3.5 w-3.5 text-violet-400" /> : <ChevronDown className="h-3.5 w-3.5 text-violet-400" />}
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-3 space-y-3 border-t border-violet-200 dark:border-violet-800/40 pt-3">
+
+          {/* Customer profile */}
+          {hasCP && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
+                <Users className="h-3 w-3" /> Customer Profile
+              </p>
+              {cp.likelyCustomer && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Who: </span>{cp.likelyCustomer}
+                </div>
+              )}
+              {cp.jobsToBeDone && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Job to be done: </span>{cp.jobsToBeDone}
+                </div>
+              )}
+              {cp.urgencyEmotion && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Urgency: </span>{cp.urgencyEmotion}
+                </div>
+              )}
+              {cp.trustFactors && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Trust factors: </span>{cp.trustFactors}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Search intent */}
+          {hasSI && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                <Search className="h-3 w-3" /> Search Intent
+              </p>
+              {si.primarySearchTerms?.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {si.primarySearchTerms.map((t: string, i: number) => (
+                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 font-medium">{t}</span>
+                  ))}
+                </div>
+              )}
+              {si.whyTheySearch && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Why they search: </span>{si.whyTheySearch}
+                </div>
+              )}
+              {si.whatTheyNeedToSee && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">What they need to see: </span>{si.whatTheyNeedToSee}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Website interpretation */}
+          {hasWA && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Monitor className="h-3 w-3" /> Website Interpretation
+              </p>
+              {wa.whatItTries && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">What it's trying to do: </span>{wa.whatItTries}
+                </div>
+              )}
+              {wa.keyWeaknesses?.length > 0 && (
+                <ul className="space-y-1">
+                  {wa.keyWeaknesses.map((w: string, i: number) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                      <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+                      {w}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {wa.missedOpportunity && (
+                <div className="text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Missed opportunity: </span>{wa.missedOpportunity}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Opportunities */}
+          {hasOps && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {pack.opportunities?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-green-600 dark:text-green-400 mb-1 flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" /> Opportunities
+                  </p>
+                  <ul className="space-y-1">
+                    {pack.opportunities.slice(0, 3).map((op: string, i: number) => (
+                      <li key={i} className="flex items-start gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+                        <CheckCircle2 className="h-3 w-3 text-green-500 mt-0.5 shrink-0" />{op}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {pack.gaps?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-red-500 dark:text-red-400 mb-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Key Gaps
+                  </p>
+                  <ul className="space-y-1">
+                    {pack.gaps.slice(0, 3).map((g: string, i: number) => (
+                      <li key={i} className="flex items-start gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+                        <AlertTriangle className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />{g}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Commercial angle */}
+          {pack.commercialAngle && (
+            <div className="rounded-md bg-violet-100 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800/40 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-1 flex items-center gap-1">
+                <Zap className="h-3 w-3" /> Commercial Angle
+              </p>
+              <p className="text-xs font-medium text-violet-900 dark:text-violet-200 leading-relaxed">{pack.commercialAngle}</p>
+            </div>
+          )}
+
         </div>
       )}
     </div>
@@ -913,6 +1098,8 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
           <p className="text-sm text-muted-foreground italic">Not enough information yet. Log a conversation or generate call prep to build a richer summary.</p>
         )}
       </div>
+
+      <AgentIntelligenceCard lead={lead} />
 
       <StrategyIntelligenceCard lead={lead} />
 

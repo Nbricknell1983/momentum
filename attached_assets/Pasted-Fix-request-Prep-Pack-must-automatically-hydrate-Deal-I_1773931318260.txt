@@ -1,0 +1,58 @@
+Fix request — Prep Pack must automatically hydrate Deal Intelligence
+The latest improvement updated the AI Sales Engine / Prep Pack, but it is not automatically updating the Deal Intelligence section on the deal card.
+
+Problem
+The agent is now generating much stronger commercial prep:
+
+customer profile
+search intent analysis
+website analysis
+stronger opportunities/gaps/call angle
+But the core Deal Intelligence section still looks weak or empty.
+
+That means the agent has already done useful thinking, but the main deal view does not reflect it.
+
+Required change
+The Prep Call Pack / AI Sales Engine output needs to automatically hydrate the Deal Intelligence section.
+
+Product rule
+If the prep pack already knows:
+
+what the business likely does
+who the customer likely is
+what search intent is driving the lead
+what the website is trying to do
+where the commercial opportunity is
+what the next best action is
+then the Deal Intelligence section should not remain empty or weak.
+
+Expected behavior
+When prep is generated or refreshed, the system should automatically update the deal intelligence layer with the best current strategic/commercial understanding.
+
+This should include fields/sections like:
+business understanding
+customer understanding
+search intent understanding
+website interpretation
+opportunity summary
+key gaps
+next best action
+commercial angle
+Important
+Do this in a way that respects the existing confidence model:
+
+factual core fields should still use confidence gates
+but Deal Intelligence is an interpretation layer and should be updated automatically from prep/strategy output
+Goal
+When I open a lead card, the main Deal Intelligence section should already reflect the agent’s latest thinking. I should not have to go hunting in the AI Sales Engine panel to find the useful prep.
+
+Success criteria
+generating/refeshing prep updates Deal Intelligence automatically
+Deal Intelligence no longer remains empty if prep exists
+the deal card opens with a strong commercial point of view, not a hollow shell
+Bottom line
+You’re right.
+The intelligence should not stay trapped inside the prep engine panel.
+
+The agents should automatically update the Deal Intelligence section with what they’ve learned.
+

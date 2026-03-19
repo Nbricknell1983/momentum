@@ -226,7 +226,9 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
       if (!res.ok) throw new Error('Failed to generate prep pack');
       const data = await res.json();
       if (data.prepCallPack) {
-        dispatch(patchLead({ id: selectedLead.id, updates: { prepCallPack: data.prepCallPack } }));
+        const updates: any = { prepCallPack: data.prepCallPack };
+        if (data.strategyIntelligence) updates.strategyIntelligence = data.strategyIntelligence;
+        dispatch(patchLead({ id: selectedLead.id, updates }));
       }
     } catch (err: any) {
       setPrepPackError(err.message || 'Failed to generate prep pack');
