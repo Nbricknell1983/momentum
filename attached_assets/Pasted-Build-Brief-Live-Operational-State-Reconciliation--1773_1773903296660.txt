@@ -1,0 +1,343 @@
+Build Brief — Live Operational State Reconciliation                                          
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Make the live operational surfaces of Momentum reflect current Firestore state without       
+ requiring manual reloads.                                                                    
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ The current frontend state model is stale-by-design for core operational domains.            
+                                                                                              
+ ### Current reality                                                                          
+                                                                                              
+ Leads                                                                                        
+ - loaded once from Firestore at login via fetchLeads(orgId)                                  
+ - stored in Redux as the effective UI source of truth                                        
+ - mutated through a two-step pattern:                                                        
+ - local Redux patch                                                                          
+ - direct Firestore updateDoc                                                                 
+ - no app-level onSnapshot                                                                    
+ - changes made in another tab, by another user, or by server-side AI writes are invisible    
+ until reload                                                                                 
+                                                                                              
+ Clients                                                                                      
+ - same pattern as leads                                                                      
+ - loaded once into Redux                                                                     
+ - mutated locally + written to Firestore                                                     
+ - no app-level real-time reconciliation                                                      
+                                                                                              
+ AI engine outputs                                                                            
+ - written server-side to Firestore on client documents                                       
+ - active UI does not update unless user reloads                                              
+ - this has caused repeated friction on engine features                                       
+                                                                                              
+ Current exception                                                                            
+ - Bullpen comms / AI Actions Feed already uses onSnapshot locally and behaves like a live    
+ surface                                                                                      
+                                                                                              
+ This means:                                                                                  
+ - pipeline state can go stale                                                                
+ - client state can go stale                                                                  
+ - engine re-runs can succeed but appear unchanged to the user                                
+ - multi-tab and multi-user visibility is poor                                                
+ - Redux can drift from Firestore truth                                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make leads, clients, and server-written AI engine outputs appear live in the UI with minimal 
+ architectural disruption.                                                                    
+                                                                                              
+ Success means:                                                                               
+ - updates from another tab or user appear without reload                                     
+ - AI engine writes to client docs appear without reload                                      
+ - Redux no longer acts as an unrefreshed stale cache of operational entities                 
+ - the user trusts that what they see is current                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. App-level real-time reconciliation for leads                                              
+ 2. App-level real-time reconciliation for clients                                            
+ 3. Reconciliation of server-side AI engine writes into visible UI state                      
+ 4. Reduction of stale Redux drift                                                            
+ 5. Safer mutation flow for Firestore-backed entities                                         
+ 6. Minimal documentation of state ownership after the change                                 
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - full Redux removal                                                                         
+ - full migration to React Query for Firestore-backed operational entities                    
+ - AI output history/versioning                                                               
+ - Postgres cleanup                                                                           
+ - OpenClaw/GBP hardening                                                                     
+ - redesign of all page/store architecture                                                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Firestore is the durable source of truth                                              
+                                                                                              
+ For leads and clients, Firestore-backed state must become the effective live truth.          
+                                                                                              
+ Redux may still exist for:                                                                   
+ - selected entity                                                                            
+ - filters                                                                                    
+ - panel state                                                                                
+ - UI workflow state                                                                          
+ - local derived state                                                                        
+                                                                                              
+ But it should not remain a stale once-loaded mirror of operational entities.                 
+                                                                                              
+ ### 2. Do not rewrite the frontend unnecessarily                                             
+                                                                                              
+ This task should extend the current architecture safely.                                     
+ Do not rip out Redux unless absolutely necessary.                                            
+                                                                                              
+ ### 3. Avoid duplicate truth                                                                 
+                                                                                              
+ If onSnapshot is added, define exactly how Redux is updated from it.                         
+ Do not let:                                                                                  
+ - Redux                                                                                      
+ - Firestore listeners                                                                        
+ - ad hoc local mutations                                                                     
+ all compete as independent authorities.                                                      
+                                                                                              
+ ### 4. Protect working functionality                                                         
+                                                                                              
+ Existing pipeline/client workflows should continue working while freshness improves.         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — State ownership clarification                                                      
+                                                                                              
+ Define and implement the new boundary:                                                       
+                                                                                              
+ ### Leads                                                                                    
+                                                                                              
+ - Firestore listener is the freshness channel                                                
+ - Redux holds current in-app lead collection only if it is updated from the listener         
+ - local mutation should not become a permanent unsynced truth source                         
+                                                                                              
+ ### Clients                                                                                  
+                                                                                              
+ - same model as leads                                                                        
+                                                                                              
+ ### AI engine outputs                                                                        
+                                                                                              
+ - because outputs are written onto client docs in Firestore, client reconciliation must      
+ update visible engine data automatically                                                     
+                                                                                              
+ ### Deliverable                                                                              
+                                                                                              
+ A short state-ownership note:                                                                
+ - what Redux owns                                                                            
+ - what listener-backed Firestore state owns                                                  
+ - where mutations reconcile                                                                  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — App-level listeners                                                                
+                                                                                              
+ Add onSnapshot-based listeners for org-scoped:                                               
+ - leads                                                                                      
+ - clients                                                                                    
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - scoped by orgId                                                                            
+ - unsubscribe cleanly on logout/org switch                                                   
+ - avoid cross-org leakage                                                                    
+ - update Redux from listener snapshots in a controlled way                                   
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ If another tab/user/server write changes Firestore, the active UI updates automatically.     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Mutation cleanup                                                                   
+                                                                                              
+ Current pattern is:                                                                          
+ - patch Redux                                                                                
+ - then updateDoc                                                                             
+                                                                                              
+ That creates drift risk.                                                                     
+                                                                                              
+ ### Improve this flow                                                                        
+                                                                                              
+ Choose one of these patterns intentionally:                                                  
+                                                                                              
+ #### Option A — Firestore-first + listener reconciliation                                    
+                                                                                              
+ - write to Firestore                                                                         
+ - let listener update Redux/UI state                                                         
+                                                                                              
+ #### Option B — controlled optimistic update                                                 
+                                                                                              
+ - optimistic Redux update                                                                    
+ - Firestore write                                                                            
+ - rollback or reconcile on failure / listener update                                         
+                                                                                              
+ ### Recommendation                                                                           
+                                                                                              
+ Prefer the simpler safer pattern unless UX clearly requires optimistic updates.              
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Reduce “local state says updated, Firestore truth disagrees” behavior.                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — AI engine result visibility                                                        
+                                                                                              
+ Make sure when:                                                                              
+ - Website Engine                                                                             
+ - SEO Engine                                                                                 
+ - GBP Engine                                                                                 
+ - Ads Engine                                                                                 
+ - Growth Prescription                                                                        
+ - Learning Insight                                                                           
+ - Strategy Intelligence                                                                      
+                                                                                              
+ write to the client document, the active UI reflects those changes without reload.           
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - ClientFocusView and related client surfaces update automatically                           
+ - rerun results appear live                                                                  
+ - stale post-run confusion is removed                                                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Guard against live-update regressions                                              
+                                                                                              
+ Because live listeners can create UI churn, verify:                                          
+ - selected item remains stable                                                               
+ - filters remain stable                                                                      
+ - drawers/panels don’t break when live updates arrive                                        
+ - no duplicate list items                                                                    
+ - no flicker from poor state replacement logic                                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended technical approach                                                               
+                                                                                              
+ ### Leads/clients collection listeners                                                       
+                                                                                              
+ Use Firestore onSnapshot on org-scoped collections and normalize results before dispatching  
+ to Redux.                                                                                    
+                                                                                              
+ ### Redux shape                                                                              
+                                                                                              
+ Keep Redux if useful, but treat it as:                                                       
+ - listener-fed operational state                                                             
+ - not login-time snapshot state only                                                         
+                                                                                              
+ ### React Query boundary                                                                     
+                                                                                              
+ Do not expand React Query into the legacy /api/leads path.                                   
+ If any query logic still points at those legacy endpoints, remove/quarantine it as part of   
+ this cleanup.                                                                                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - duplicate event handling                                                                   
+ - listener memory leaks on org switch                                                        
+ - unstable selected entity when collections refresh                                          
+ - accidental performance regression if snapshots are too broad                               
+ - optimistic update conflict if both local patch and snapshot updates race                   
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - current lead/client Firestore fetch shape                                                  
+ - existing Redux actions for replacing/upserting entities                                    
+ - route/page lifecycle where listeners should attach                                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test — freshness                                                                    
+                                                                                              
+ 1. lead updated in tab A appears in tab B                                                    
+ 2. client updated by another user appears in active session                                  
+ 3. AI engine rerun updates client view without reload                                        
+                                                                                              
+ ### Must test — mutation integrity                                                           
+                                                                                              
+ 4. failed Firestore write does not leave permanent false state in Redux                      
+ 5. successful write converges to Firestore truth cleanly                                     
+ 6. no duplicate or conflicting updates after mutation                                        
+                                                                                              
+ ### Must test — UI stability                                                                 
+                                                                                              
+ 7. filters remain applied after live updates                                                 
+ 8. selected lead/client remains stable where appropriate                                     
+ 9. right drawer / detail panels do not break on background updates                           
+                                                                                              
+ ### Must test — isolation                                                                    
+                                                                                              
+ 10. switching org unsubscribes old listeners                                                 
+ 11. no cross-org snapshot leakage                                                            
+ 12. logout clears listener-fed state correctly                                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - leads update live without reload                                                           
+ - clients update live without reload                                                         
+ - server-side AI engine writes appear in the active UI automatically                         
+ - multi-tab drift is materially reduced or eliminated                                        
+ - Redux no longer behaves like a stale cache of operational state                            
+ - no new UI instability is introduced by live listeners                                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. define state ownership boundary                                                           
+ 2. implement org-scoped leads listener                                                       
+ 3. implement org-scoped clients listener                                                     
+ 4. reconcile Redux updates from listeners                                                    
+ 5. simplify/clean mutation flow                                                              
+ 6. verify engine output updates appear live                                                  
+ 7. QA multi-tab, multi-user, and server-write scenarios                                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - listener locations added                                                                   
+ - Redux ownership changes made                                                               
+ - mutation flow decision taken                                                               
+ - how AI engine result freshness now works                                                   
+ - any performance or UI stability tradeoffs                                                  
+ - known follow-up items                                                                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not rewrite the whole frontend state architecture                                       
+ - do not migrate to a brand-new state library                                                
+ - do not expand legacy REST usage                                                            
+ - do not leave both stale Redux and live snapshot state competing without a defined owner    
+ - do not scope this into AI history/versioning yet                                           
+                                                                  
