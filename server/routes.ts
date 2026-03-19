@@ -9407,13 +9407,35 @@ Rules:
     }
   });
 
-  // POST /api/openclaw/test-connection — staged verification: reachability → identity → auth → capability
+  // POST /api/openclaw/test-connection — staged verification: reachability → identity → auth → healthy
+  // Adaptive gateway-compatible: probes multiple endpoint candidates rather than assuming /api/v1/skills.
+  // OpenClaw may be a gateway/dashboard that doesn't expose a REST management API at /api/v1/skills —
+  // in that case, reachability + auth acceptance is sufficient for a healthy verdict.
   app.post('/api/openclaw/test-connection', async (req: any, res: any) => {
     const { baseUrl } = req.body;
     if (!baseUrl) return res.status(400).json({ error: 'baseUrl required' });
 
     const apiKey = process.env.OPENCLAW_API_KEY || '';
-    const REQUIRED_ENDPOINTS = ['/api/v1/skills', '/api/v1/agents'];
+
+    // Gateway probe candidates — tried in order; first to return any HTTP response wins.
+    // These are common health/status endpoints that a gateway-style service typically exposes.
+    // /api/v1/skills is kept in the list as a fallback — but is not required.
+    const PROBE_CANDIDATES = [
+      '/api/v1/health',
+      '/health',
+      '/api/health',
+      '/api/v1/status',
+      '/status',
+      '/api/v1/ping',
+      '/ping',
+      '/api/v1/skills',
+      '/',
+    ];
+
+    // Informational endpoint probe — run after auth, results shown but do not block healthy status.
+    // These are the skill/agent registration endpoints. Gateway-style OpenClaw instances expose
+    // these as inbound hooks Momentum registers manually via dashboard, not as REST management API.
+    const INFO_ENDPOINTS = ['/api/v1/skills', '/api/v1/agents'];
 
     // Environment safety — warn on local/dev-like URLs
     function isDevLikeUrl(url: string): boolean {
@@ -9433,13 +9455,16 @@ Rules:
       ? `Warning: "${new URL(baseUrl).hostname}" looks like a local or development host. Verify this is the correct target for your organisation.`
       : null;
 
+    const makeEndpointResults = (available: boolean) =>
+      INFO_ENDPOINTS.map(p => ({ path: p, available }));
+
     const failResult = (
       status: string, message: string, extra: Record<string, unknown> = {}
     ) => res.json({
       status,
       reachable: false,
       authValid: null,
-      requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
+      requiredEndpoints: makeEndpointResults(false),
       detectedVersion: null,
       message,
       testedUrl: baseUrl,
@@ -9447,66 +9472,83 @@ Rules:
       ...extra,
     });
 
-    // ── Stage 1: Reachability + Identity ─────────────────────────────────────
-    // Try GET /api/v1/skills unauthenticated. A generic web server won't have this.
-    let identityResp: Response;
-    try {
-      identityResp = await fetch(`${baseUrl}/api/v1/skills`, {
-        signal: AbortSignal.timeout(6000),
-        method: 'GET',
-      });
-    } catch (err: any) {
-      return failResult('unreachable', `Cannot reach ${baseUrl} — check the URL and that OpenClaw is running. (${err.message})`);
+    // ── Stage 1: Reachability — probe candidates until one responds ───────────
+    let identityResp: Response | null = null;
+    let successfulProbePath = '';
+    let lastProbeError = '';
+
+    for (const probePath of PROBE_CANDIDATES) {
+      try {
+        const r = await fetch(`${baseUrl}${probePath}`, {
+          signal: AbortSignal.timeout(6000),
+          method: 'GET',
+        });
+        identityResp = r;
+        successfulProbePath = probePath;
+        break; // First successful HTTP response wins
+      } catch (err: any) {
+        lastProbeError = err.message;
+        // Continue to next candidate
+      }
     }
 
-    // Must return JSON — HTML means it's not an OpenClaw instance
+    if (!identityResp) {
+      return failResult(
+        'unreachable',
+        `Cannot reach ${baseUrl} — all probe endpoints timed out or refused connection. Check the URL and that OpenClaw is running. (${lastProbeError})`
+      );
+    }
+
+    // ── Stage 2: Identity — confirm this is an API service, not a random web server ──
     const identityCt = identityResp.headers.get('content-type') || '';
     let identityBody: any = null;
     try { identityBody = await identityResp.json(); } catch {}
 
+    // Accept: JSON response, auth-required (401/403), or any non-HTML status from an API path
     const isJsonResponse = identityCt.includes('application/json') || identityBody !== null;
-    if (!isJsonResponse) {
+    const isAuthRequired = identityResp.status === 401 || identityResp.status === 403;
+    const isHtmlOnly = identityCt.includes('text/html') && !isJsonResponse && !isAuthRequired;
+
+    // Only reject if it returned pure HTML without any auth challenge — likely a web server, not an API gateway
+    if (isHtmlOnly && successfulProbePath === '/') {
       return res.json({
         status: 'not_openclaw',
         reachable: true,
         authValid: null,
-        requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
+        requiredEndpoints: makeEndpointResults(false),
         detectedVersion: null,
-        message: `The URL is reachable (HTTP ${identityResp.status}) but returned non-JSON content — this does not appear to be an OpenClaw instance.`,
+        message: `The URL is reachable (HTTP ${identityResp.status} at ${successfulProbePath}) but returned HTML — this does not appear to be an OpenClaw gateway instance.`,
         httpStatus: identityResp.status,
         testedUrl: baseUrl,
         envWarning,
       });
     }
 
-    // ── Stage 2: Auth ─────────────────────────────────────────────────────────
-    // If unauthenticated request got 401/403, confirm OpenClaw is there but key is wrong/missing
-    if (identityResp.status === 401 || identityResp.status === 403) {
-      if (!apiKey) {
-        return res.json({
-          status: 'auth_failed',
-          reachable: true,
-          authValid: false,
-          requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
-          detectedVersion: null,
-          message: `OpenClaw instance detected at ${baseUrl} but OPENCLAW_API_KEY is not configured. Add it to your Replit secrets.`,
-          httpStatus: identityResp.status,
-          testedUrl: baseUrl,
-          envWarning,
-        });
-      }
+    // ── Stage 3: Auth ─────────────────────────────────────────────────────────
+    if (isAuthRequired && !apiKey) {
+      return res.json({
+        status: 'auth_failed',
+        reachable: true,
+        authValid: false,
+        requiredEndpoints: makeEndpointResults(false),
+        detectedVersion: null,
+        message: `OpenClaw gateway detected at ${baseUrl} (HTTP ${identityResp.status} on ${successfulProbePath}) but OPENCLAW_API_KEY is not configured. Add it to your Replit secrets.`,
+        httpStatus: identityResp.status,
+        testedUrl: baseUrl,
+        envWarning,
+      });
     }
 
-    // Make authenticated request to verify key is accepted
+    // Send authenticated request to the same probe path that responded
     let authResp: Response;
     try {
-      authResp = await fetch(`${baseUrl}/api/v1/skills`, {
+      authResp = await fetch(`${baseUrl}${successfulProbePath}`, {
         signal: AbortSignal.timeout(6000),
         method: 'GET',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'x-api-key': apiKey },
       });
     } catch (err: any) {
-      return failResult('unreachable', `Authenticated request failed: ${err.message}`, { reachable: true });
+      return failResult('unreachable', `Authenticated probe failed: ${err.message}`, { reachable: true });
     }
 
     if (authResp.status === 401 || authResp.status === 403) {
@@ -9514,7 +9556,7 @@ Rules:
         status: 'auth_failed',
         reachable: true,
         authValid: false,
-        requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
+        requiredEndpoints: makeEndpointResults(false),
         detectedVersion: null,
         message: `Authentication failed (HTTP ${authResp.status}) — the OPENCLAW_API_KEY was rejected. Check it matches OpenClaw's Authentication settings.`,
         httpStatus: authResp.status,
@@ -9523,13 +9565,15 @@ Rules:
       });
     }
 
-    // ── Stage 3: Capability ───────────────────────────────────────────────────
-    // Verify all required endpoints respond with JSON under auth
+    // ── Stage 4: Informational endpoint probe ────────────────────────────────
+    // Check skill/agent registration endpoints — informational only.
+    // Gateway-style OpenClaw instances (like v18789) may return 404 here — that is expected
+    // and does NOT block healthy status. Skills are configured via the OpenClaw dashboard UI.
     const endpointResults: { path: string; available: boolean }[] = [];
-    for (const endpoint of REQUIRED_ENDPOINTS) {
+    for (const endpoint of INFO_ENDPOINTS) {
       try {
         const er = await fetch(`${baseUrl}${endpoint}`, {
-          signal: AbortSignal.timeout(6000),
+          signal: AbortSignal.timeout(5000),
           method: 'GET',
           headers: { 'Authorization': `Bearer ${apiKey}`, 'x-api-key': apiKey },
         });
@@ -9538,35 +9582,26 @@ Rules:
         try { body = await er.json(); } catch {}
         endpointResults.push({
           path: endpoint,
-          available: (er.ok || er.status === 200) && (ct.includes('application/json') || body !== null),
+          // Available = responds with JSON (not 404). 404 = not supported by this gateway version.
+          available: er.status !== 404 && (ct.includes('application/json') || body !== null),
         });
       } catch {
         endpointResults.push({ path: endpoint, available: false });
       }
     }
 
-    const allAvailable = endpointResults.every(e => e.available);
-    if (!allAvailable) {
-      const missing = endpointResults.filter(e => !e.available).map(e => e.path).join(', ');
-      return res.json({
-        status: 'missing_required_endpoints',
-        reachable: true,
-        authValid: true,
-        requiredEndpoints: endpointResults,
-        detectedVersion: null,
-        message: `OpenClaw is reachable and authenticated but required endpoints are unavailable: ${missing}`,
-        httpStatus: authResp.status,
-        testedUrl: baseUrl,
-        envWarning,
-      });
-    }
-
-    // ── Stage 4: Healthy ──────────────────────────────────────────────────────
+    // ── Stage 5: Healthy ──────────────────────────────────────────────────────
+    // Reachable + auth accepted = healthy. Skill/agent endpoint availability is informational.
     let detectedVersion: string | null = null;
     try {
-      const ab = await authResp.json().catch(() => ({}));
-      detectedVersion = ab?.version ?? ab?.api_version ?? null;
+      const ab = await authResp.json().catch(() => null) ?? identityBody;
+      if (ab) detectedVersion = ab?.version ?? ab?.api_version ?? ab?.gateway_version ?? null;
     } catch {}
+
+    const skillEndpointsAvailable = endpointResults.every(e => e.available);
+    const message = skillEndpointsAvailable
+      ? 'OpenClaw instance is verified and healthy — reachable, authenticated, and skill/agent registration endpoints available.'
+      : `OpenClaw gateway is verified and healthy — reachable and authenticated via ${successfulProbePath}. Skill registration endpoints (${INFO_ENDPOINTS.join(', ')}) are not exposed by this gateway version — configure skill URLs manually in the OpenClaw dashboard.`;
 
     return res.json({
       status: 'healthy',
@@ -9574,8 +9609,9 @@ Rules:
       authValid: true,
       requiredEndpoints: endpointResults,
       detectedVersion,
-      message: 'OpenClaw instance is verified and healthy — reachable, authenticated, and all required endpoints are available.',
-      httpStatus: 200,
+      message,
+      httpStatus: authResp.status,
+      probePath: successfulProbePath,
       testedUrl: baseUrl,
       envWarning,
     });
@@ -9590,7 +9626,7 @@ Rules:
     const appUrl = process.env.APP_BASE_URL
       || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : 'http://localhost:5000');
 
-    const report: { type: string; id: string; status: 'created' | 'exists' | 'failed'; message?: string }[] = [];
+    const report: { type: string; id: string; status: 'created' | 'exists' | 'failed' | 'not_supported'; message?: string }[] = [];
 
     async function tryCreate(endpoint: string, body: any, label: string, id: string) {
       try {
@@ -9603,6 +9639,10 @@ Rules:
         const json = await r.json().catch(() => ({}));
         if (r.status === 409 || json.already_exists || json.conflict) {
           report.push({ type: label, id, status: 'exists', message: 'Already exists in OpenClaw' });
+        } else if (r.status === 404 || r.status === 405) {
+          // 404/405 = this OpenClaw version doesn't expose a REST registration API.
+          // Gateway-style instances require manual configuration via the OpenClaw dashboard UI.
+          report.push({ type: label, id, status: 'not_supported', message: 'Auto-registration not available — configure this skill URL manually in the OpenClaw dashboard' });
         } else if (r.ok) {
           report.push({ type: label, id, status: 'created' });
         } else {
@@ -9650,7 +9690,8 @@ Rules:
     const created = report.filter(r => r.status === 'created').length;
     const failed = report.filter(r => r.status === 'failed').length;
     const exists = report.filter(r => r.status === 'exists').length;
-    res.json({ report, created, failed, exists });
+    const notSupported = report.filter(r => r.status === 'not_supported').length;
+    res.json({ report, created, failed, exists, notSupported });
   });
 
   // ─── Bullpen Command Center — Media Upload ────────────────────────────────

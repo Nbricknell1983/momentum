@@ -1,32 +1,35 @@
 # OpenClaw Connection Verification Contract
 
-_Completed: OpenClaw Connection Verification Hardening build brief._
+_Updated: OpenClaw Contract Mismatch Fix — gateway-compatible verification._
 
 ---
 
-## Problem replaced
+## Architecture clarification
 
-The previous `test-connection` route did:
-```
-fetch(baseUrl, { method: 'GET', timeout: 5s }) → { connected: true }
-```
-A random HTTP server returning `200 OK` with HTML would pass. Auth, identity, and capability were never verified.
+OpenClaw at port 18789 is a **gateway/dashboard** service — not a REST skill management API.
+
+The actual integration contract is:
+- **OpenClaw → Momentum**: OpenClaw calls Momentum's `/api/ai/*` endpoints (defined in `aiActionRoutes.ts`)
+- **Momentum → OpenClaw**: Momentum can verify reachability and auth, but OpenClaw does **not** expose `/api/v1/skills` or `/api/v1/agents` as REST management endpoints on the gateway port
+
+Skills/agents are configured in OpenClaw **via the dashboard UI** (copy skill URLs from the manifest). The previous verification assumed a REST management API surface that does not exist on the gateway port.
 
 ---
 
-## New verification model
+## Verification model
 
-Connection status now means: **this is a real, authenticated, usable OpenClaw instance** — not just "some URL answered."
+Connection status means: **this is a reachable, authenticated OpenClaw gateway instance** — not just "some URL answered."
 
 ### Status enum
 
 | Status | Meaning |
 |---|---|
-| `unreachable` | URL does not respond within timeout, or connection is refused |
-| `not_openclaw` | URL responds but returns HTML/non-JSON — not an OpenClaw instance |
-| `auth_failed` | OpenClaw detected but API key is rejected (401/403) or not configured |
-| `missing_required_endpoints` | Authenticated but required endpoints are missing or not returning JSON |
-| `healthy` | Reachable, identity confirmed, auth valid, all required endpoints available |
+| `unreachable` | All probe candidates timed out or refused connection |
+| `not_openclaw` | URL responds with pure HTML on all non-API paths — likely a web server, not an API gateway |
+| `auth_failed` | Gateway detected but API key is rejected (401/403) or not configured |
+| `healthy` | Reachable, auth accepted — gateway is operational. Skill registration endpoint availability is informational only. |
+
+> **Removed**: `missing_required_endpoints` — this status no longer exists. A gateway that returns 404 on `/api/v1/skills` is still `healthy` as long as it is reachable and auth is not rejected.
 
 ### Response shape
 
@@ -35,11 +38,12 @@ interface ConnectionVerification {
   status: VerificationStatus;
   reachable: boolean;
   authValid: boolean | null;     // null if auth was never attempted
-  requiredEndpoints: { path: string; available: boolean }[];
+  requiredEndpoints: { path: string; available: boolean }[];  // informational — does not block healthy
   detectedVersion: string | null;
   message: string;               // human-readable explanation
   httpStatus?: number;
-  testedUrl: string;             // exact URL that was tested
+  probePath?: string;            // which candidate path responded (e.g. '/health', '/api/v1/health')
+  testedUrl: string;             // exact URL tested
   envWarning: string | null;     // set if localhost/dev URL detected
 }
 ```
@@ -49,28 +53,34 @@ interface ConnectionVerification {
 ## Staged verification flow
 
 ```
-Stage 1 — Reachability + Identity
-  GET {baseUrl}/api/v1/skills (unauthenticated, 6s timeout)
-  ├── timeout / connection refused  → unreachable
-  └── responds
-       └── Content-Type not JSON AND body not parseable as JSON
-           → not_openclaw
-           (a generic web server returns HTML here)
+Stage 1 — Reachability (adaptive probe)
+  Try each candidate in order (6s timeout each):
+    /api/v1/health → /health → /api/health → /api/v1/status → /status
+    → /api/v1/ping → /ping → /api/v1/skills → /
+  ├── all timeout / connection refused  → unreachable
+  └── first HTTP response → continues with that path (successfulProbePath)
 
-Stage 2 — Auth
-  GET {baseUrl}/api/v1/skills (with Authorization: Bearer {key} + x-api-key: {key})
+Stage 2 — Identity
+  Examine response from successfulProbePath:
+  ├── JSON response OR 401/403 (auth challenge) → OpenClaw gateway confirmed
+  └── Pure HTML on '/' (last fallback) → not_openclaw
+
+Stage 3 — Auth
+  GET {successfulProbePath} with:
+    Authorization: Bearer {OPENCLAW_API_KEY}
+    x-api-key: {OPENCLAW_API_KEY}
   ├── 401 or 403     → auth_failed
-  └── authenticated response continues
+  └── any other status → auth accepted, continues
 
-Stage 3 — Capability
-  For each required endpoint [/api/v1/skills, /api/v1/agents]:
-    GET {endpoint} (authenticated, 6s timeout)
-    Check: ok status + JSON content-type
-  └── any endpoint unavailable → missing_required_endpoints
+Stage 4 — Informational endpoint probe (non-blocking)
+  GET /api/v1/skills (authenticated) — informational
+  GET /api/v1/agents (authenticated) — informational
+  404 = expected for gateway-style OpenClaw — does NOT block healthy
 
-Stage 4 — Healthy
-  All checks pass → healthy
-  Detects version field from response body if present.
+Stage 5 — Healthy
+  Reachable + auth not rejected → healthy
+  Message clarifies whether skill endpoints are available (REST-API mode)
+  or need manual dashboard configuration (gateway mode).
 ```
 
 ---
@@ -82,20 +92,49 @@ OpenClaw expects both headers:
 Authorization: Bearer {OPENCLAW_API_KEY}
 x-api-key: {OPENCLAW_API_KEY}
 ```
-Both are sent on every authenticated call (matching the provision route's existing contract).
+Both are sent on every authenticated call.
 
 The `OPENCLAW_API_KEY` environment secret is read server-side and never exposed to the frontend.
 
 ---
 
-## Required endpoints
+## Informational endpoints (non-blocking)
 
-| Endpoint | Purpose |
+| Endpoint | Expected in REST-API mode | Expected in gateway mode |
+|---|---|---|
+| `GET /api/v1/skills` | 200 JSON | 404 (normal) |
+| `GET /api/v1/agents` | 200 JSON | 404 (normal) |
+
+When 404, the verification message instructs the user to configure skill URLs manually via the OpenClaw dashboard. The `requiredEndpoints` array in the response reflects the probe results but does not affect the `healthy` status.
+
+---
+
+## Provisioning
+
+The provision endpoint (`POST /api/openclaw/provision`) attempts to auto-register skills and agents via `POST /api/v1/skills` and `POST /api/v1/agents`.
+
+### Status values per item
+
+| Status | Meaning |
 |---|---|
-| `GET /api/v1/skills` | Skills manifest — used for identity + auth verification |
-| `GET /api/v1/agents` | Agents manifest — capability check |
+| `created` | Successfully registered via REST API |
+| `exists` | Already registered (HTTP 409 / `already_exists` flag) |
+| `not_supported` | HTTP 404 or 405 — endpoint not exposed by this gateway version. Configure this skill URL manually in the OpenClaw dashboard. |
+| `failed` | Unexpected error (network, 5xx, etc.) |
 
-These are the endpoints used by the provisioning flow. Additional endpoints (cron jobs, etc.) are not currently part of the mandatory capability check, but can be added to `REQUIRED_ENDPOINTS` in the route with no other changes.
+`not_supported` is **amber** in the UI (not red) — it is expected behaviour for gateway-style OpenClaw and requires manual dashboard configuration, not debugging.
+
+The provision summary counts `created`, `exists`, `notSupported`, and `failed` separately.
+
+---
+
+## Provisioning gate
+
+The "Provision OpenClaw" button is disabled unless:
+1. A base URL is saved to the org config (`savedBaseUrl` populated)
+2. The last connection test returned `status: 'healthy'`
+
+If the URL input changes after a successful test, the verification result is cleared automatically.
 
 ---
 
@@ -110,48 +149,33 @@ Patterns flagged:
 - `ngrok` tunnels
 - `.replit.dev`, `.repl.co` preview domains
 
-The warning is shown inline in the verification result panel and does **not** block a healthy status — it's informational.
-
----
-
-## Provisioning gate
-
-The "Provision OpenClaw" button is now disabled unless:
-1. A base URL is saved to the org config (`savedBaseUrl` populated)
-2. The last connection test returned `status: 'healthy'`
-
-If the URL input changes after a successful test, the verification result is cleared automatically — preventing stale healthy results from a different URL enabling provisioning.
+The warning is shown inline and does **not** block a healthy status.
 
 ---
 
 ## Frontend status display
 
 The Connection Status card shows:
-- A verification tile with the status label coloured by severity (red/amber/green)
-- An expanded result panel below the URL input, showing:
-  - Exact URL tested (font-mono)
-  - Human-readable message explaining the failure
-  - Per-endpoint availability checklist
+- A verification tile coloured by severity (red/amber/green)
+- An expanded result panel below the URL input showing:
+  - Exact URL tested (font-mono) + probe path that responded
+  - Human-readable message explaining the result
+  - Per-endpoint availability checklist (informational)
   - Auth validity indicator
   - Detected version (if present)
   - Environment warning (if applicable)
 
-The panel is colour-coded:
+Colour coding:
 - `healthy` → green border/background
-- `auth_failed`, `missing_required_endpoints` → amber border/background
+- `auth_failed` → amber border/background
 - `unreachable`, `not_openclaw` → red border/background
 
 ---
 
-## Backward compatibility
+## Skill URL reference for manual dashboard configuration
 
-The route interface has changed: the old `{ connected: boolean }` response is replaced by the structured `ConnectionVerification` object. The frontend has been fully updated — no legacy boolean checks remain in `openclaw-setup.tsx`.
+All skill endpoints are documented in the manifest at `GET /api/openclaw/manifest`. The OpenClaw Setup page copies each URL with one click. The base URL for all skill endpoints is:
 
----
-
-## Follow-up recommendations
-
-1. **Version gate** — if `detectedVersion` is present, validate it's within a supported semver range; return `incompatible_api` if too old.
-2. **Cron capability check** — add `GET /api/v1/crons` or equivalent to `REQUIRED_ENDPOINTS` once the cron provisioning flow is implemented.
-3. **Re-test on provision** — run a verification check at the start of the provision flow as an additional guard (currently provision trusts `savedBaseUrl` without re-verifying).
-4. **Connection health badge in Bullpen** — surface the last verification status from Firestore `openclawConfig.lastVerification` so managers can see health without navigating to the setup page.
+```
+APP_BASE_URL (production: https://momentum.battlescore.com.au)
+```

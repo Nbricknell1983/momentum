@@ -44,10 +44,11 @@ interface Manifest {
 }
 
 interface ProvisionResult {
-  report: { type: string; id: string; status: 'created' | 'exists' | 'failed'; message?: string }[];
+  report: { type: string; id: string; status: 'created' | 'exists' | 'failed' | 'not_supported'; message?: string }[];
   created: number;
   failed: number;
   exists: number;
+  notSupported: number;
 }
 
 type VerificationStatus =
@@ -470,13 +471,13 @@ export default function OpenClawSetupPage() {
                 <Badge variant="outline" className="text-[10px]">Safe defaults only</Badge>
               </div>
               <p className="text-xs text-muted-foreground max-w-lg">
-                Momentum will attempt to create all required skills and agents in OpenClaw via its REST API. 
-                High-risk communication capabilities (SMS, email) are <strong>never auto-enabled</strong> — they must be manually activated after your guardrails are live.
+                Momentum will attempt to register skills and agents with OpenClaw via its REST API. If your OpenClaw instance is gateway/dashboard-based and doesn't expose a registration API, items will show as <strong>"Configure via dashboard"</strong> — copy the skill URLs from the manifest above and add them manually in your OpenClaw dashboard. High-risk capabilities (SMS, email) are <strong>never auto-enabled</strong>.
               </p>
               {provisionResult && (
-                <div className="mt-3 flex items-center gap-4 text-xs">
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" /> {provisionResult.created} created</span>
-                  <span className="flex items-center gap-1 text-muted-foreground"><Info className="h-3 w-3" /> {provisionResult.exists} already existed</span>
+                <div className="mt-3 flex items-center gap-4 text-xs flex-wrap">
+                  {provisionResult.created > 0 && <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" /> {provisionResult.created} created</span>}
+                  {provisionResult.exists > 0 && <span className="flex items-center gap-1 text-muted-foreground"><Info className="h-3 w-3" /> {provisionResult.exists} already existed</span>}
+                  {(provisionResult.notSupported ?? 0) > 0 && <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><AlertTriangle className="h-3 w-3" /> {provisionResult.notSupported} need manual setup</span>}
                   {provisionResult.failed > 0 && <span className="flex items-center gap-1 text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> {provisionResult.failed} failed</span>}
                 </div>
               )}
@@ -501,12 +502,12 @@ export default function OpenClawSetupPage() {
                 <span>Item</span><span>Type</span><span>Result</span>
               </div>
               {provisionResult.report.map((r, i) => (
-                <div key={i} className={`grid grid-cols-[1fr_80px_1fr] items-center px-3 py-2 text-xs border-b last:border-0 ${r.status === 'failed' ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
+                <div key={i} className={`grid grid-cols-[1fr_80px_1fr] items-center px-3 py-2 text-xs border-b last:border-0 ${r.status === 'failed' ? 'bg-red-50 dark:bg-red-950/20' : r.status === 'not_supported' ? 'bg-amber-50 dark:bg-amber-950/20' : ''}`}>
                   <span className="font-mono text-[11px]">{r.id}</span>
                   <span className="text-muted-foreground">{r.type}</span>
-                  <span className={`flex items-center gap-1 ${r.status === 'created' ? 'text-emerald-600 dark:text-emerald-400' : r.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                    {r.status === 'created' ? <CheckCircle2 className="h-3 w-3" /> : r.status === 'exists' ? <Info className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                    {r.status === 'created' ? 'Created' : r.status === 'exists' ? 'Already exists' : r.message || 'Failed'}
+                  <span className={`flex items-center gap-1 ${r.status === 'created' ? 'text-emerald-600 dark:text-emerald-400' : r.status === 'failed' ? 'text-red-600 dark:text-red-400' : r.status === 'not_supported' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                    {r.status === 'created' ? <CheckCircle2 className="h-3 w-3" /> : r.status === 'exists' ? <Info className="h-3 w-3" /> : r.status === 'not_supported' ? <AlertTriangle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                    {r.status === 'created' ? 'Created' : r.status === 'exists' ? 'Already exists' : r.status === 'not_supported' ? 'Configure via dashboard' : r.message || 'Failed'}
                   </span>
                 </div>
               ))}
