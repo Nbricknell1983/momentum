@@ -1,0 +1,97 @@
+Bullpen → Real Agent Routing Proof Checklist
+Use one Bullpen thread and test these in order.
+
+Test 1 — Single specialist routing
+Send Bullpen a request that clearly belongs to one role.
+
+Example:
+
+“Review this frontend screen hierarchy and tell me what to change.”
+Pass criteria
+Bullpen should:
+
+assign Frontend Developer as primary owner
+show that routing visibly
+produce a response that looks like it came from real frontend-specialist logic, not generic filler
+Stronger proof
+If available, Bullpen should also show:
+
+routed / awaiting / complete status
+evidence that the actual frontend-developer runtime agent handled it
+Test 2 — Backend-specific request
+Send:
+
+“Review this auth middleware design and tell me what’s unsafe.”
+Pass criteria
+Bullpen should:
+
+assign Backend Developer
+return backend-specific reasoning
+not answer like a generic strategist
+Test 3 — Dual-role routing
+Send something that clearly needs two roles.
+
+Example:
+
+“Review this feature delivery for regression risk and implementation quality.”
+Expected roles
+Primary: Backend or Frontend, depending on the feature
+Supporting: QA Tester
+Pass criteria
+Bullpen should:
+
+show both owner + supporting role
+include QA/regression thinking, not just implementation advice
+Test 4 — Ops routing
+Send:
+
+“This workflow feels blocked between strategy and execution — diagnose the handoff issue.”
+Pass criteria
+Bullpen should:
+
+assign Operations Specialist or Strategy + Ops
+return orchestration/sequence/blocker logic
+not just product/UI feedback
+Test 5 — Direct answer vs routing
+Send a simple question:
+
+“What does this status badge mean?”
+Pass criteria
+Bullpen should:
+
+answer directly if no specialist dispatch is needed
+not route everything unnecessarily
+This proves Bullpen is making routing decisions, not blindly fanning out.
+
+What would prove it’s real
+Strong proof
+You can see:
+
+primary owner maps to a real runtime agent
+supporting roles map to real runtime agents
+routed status changes through a lifecycle
+output quality changes by specialist
+Bullpen synthesizes the result back into one response
+Weak proof
+You only see:
+
+role labels
+nice-looking owner assignment
+generic response content
+That would mean the routing is still mostly presentation.
+
+One sharp question for Replit
+If you want a direct confirmation, ask:
+
+For Bullpen thread requests, are you dispatching to the actual OpenClaw agent IDs (e.g. frontend-developer, backend-developer, qa-tester), or only assigning those roles in the UI/synthesis layer?
+
+That is the decisive question.
+
+Bottom line
+If Bullpen can:
+
+route selectively
+use the correct real specialist
+bring back specialist-specific output
+and avoid routing simple questions
+then the orchestration loop is real.

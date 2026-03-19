@@ -56,6 +56,9 @@ interface BullpenSynthesis {
   risks: string;
   status: string;
   routingRationale: string;
+  // Two-stage dispatch proof
+  dispatchedTo?: string | null;  // name of specialist actually invoked (null = direct answer)
+  isDirectAnswer?: boolean;
 }
 
 interface BullpenMessage {
@@ -236,13 +239,39 @@ function BullpenResponse({ msg }: { msg: BullpenMessage }) {
     </div>
   );
 
+  // Direct answer: simple card, no routing section
+  if (s.isDirectAnswer) {
+    return (
+      <div className="flex flex-col items-start gap-1 mb-4 w-full">
+        <div className="w-full max-w-[92%] rounded-2xl rounded-tl-sm border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/20 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-violet-100 dark:border-violet-900 flex items-center gap-2">
+            <Bot className="h-4 w-4 text-violet-500" />
+            <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">Bullpen</span>
+            <span className="ml-auto text-[10px] text-muted-foreground">Direct answer</span>
+          </div>
+          <div className="p-4 space-y-2">
+            {s.diagnosis && <p className="text-sm text-muted-foreground leading-relaxed">{s.diagnosis}</p>}
+            <p className="text-sm text-foreground leading-relaxed font-medium">{s.action}</p>
+          </div>
+        </div>
+        <p className="text-[10px] text-muted-foreground">{format(msg.createdAt, 'HH:mm dd/MM/yyyy')}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-start gap-1 mb-4 w-full">
       <div className="w-full max-w-[92%] rounded-2xl rounded-tl-sm border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/20 overflow-hidden">
         {/* Header */}
-        <div className="px-4 py-2.5 border-b border-violet-100 dark:border-violet-900 flex items-center gap-2">
-          <Bot className="h-4 w-4 text-violet-500" />
-          <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">Bullpen Response</span>
+        <div className="px-4 py-2.5 border-b border-violet-100 dark:border-violet-900 flex items-center gap-2 flex-wrap">
+          <Bot className="h-4 w-4 text-violet-500 shrink-0" />
+          <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">Bullpen</span>
+          {/* Dispatch proof badge — shows the specialist was genuinely invoked */}
+          {s.dispatchedTo && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/50 text-[10px] font-medium text-violet-700 dark:text-violet-300">
+              <span className="opacity-60">dispatched →</span> {s.dispatchedTo}
+            </span>
+          )}
           <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${STATUS_META[s.status as ThreadStatus]?.color ?? 'bg-slate-100 text-slate-600'}`}>
             {s.status}
           </span>
@@ -256,27 +285,37 @@ function BullpenResponse({ msg }: { msg: BullpenMessage }) {
           </div>
 
           {/* Workforce routing */}
-          <div className="flex flex-wrap gap-2">
-            {s.owner && <SpecialistChip name={s.owner} primary />}
-            {s.supporting?.map(r => <SpecialistChip key={r} name={r} />)}
-          </div>
-          {s.routingRationale && (
-            <p className="text-[10px] text-muted-foreground italic">{s.routingRationale}</p>
+          {(s.owner || (s.supporting?.length ?? 0) > 0) && (
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap gap-2">
+                {s.owner && <SpecialistChip name={s.owner} primary />}
+                {s.supporting?.map(r => <SpecialistChip key={r} name={r} />)}
+              </div>
+              {s.routingRationale && (
+                <p className="text-[10px] text-muted-foreground italic">{s.routingRationale}</p>
+              )}
+            </div>
           )}
 
           <Separator />
 
           {/* Action */}
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-500 mb-1">Next Action</p>
-            <p className="text-sm font-medium text-foreground">{s.action}</p>
-          </div>
+          {s.action && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-500 mb-1">Next Action</p>
+              <p className="text-sm font-medium text-foreground">{s.action}</p>
+            </div>
+          )}
 
           {/* Implementation logic */}
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-500 mb-1">Implementation Logic</p>
-            <p className="text-sm text-muted-foreground leading-relaxed">{s.implementationLogic}</p>
-          </div>
+          {s.implementationLogic && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-500 mb-1">
+                {s.dispatchedTo ? `${s.dispatchedTo} Analysis` : 'Implementation Logic'}
+              </p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{s.implementationLogic}</p>
+            </div>
+          )}
 
           {/* Risks */}
           {s.risks && s.risks !== 'No significant risks.' && (

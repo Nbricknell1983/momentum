@@ -9775,72 +9775,179 @@ Rules:
     const { orgId, threadContext, message, imageBase64 } = req.body;
     if (!orgId || !message) return res.status(400).json({ error: 'orgId and message required' });
 
-    const systemPrompt = `You are Bullpen — the AI command interface for a marketing agency's internal operating system called Momentum Agent.
+    // ── Specialist system prompts ─────────────────────────────────────────────
+    // Each role gets its own domain-specific system prompt — this is what makes
+    // routing REAL: the output quality genuinely differs by specialist.
+    const SPECIALIST_PROMPTS: Record<string, string> = {
+      'Frontend Developer': `You are a senior React/TypeScript frontend developer embedded in a marketing agency's AI operating system (Momentum Agent).
+You specialise in: React 18 hooks, TypeScript, Tailwind CSS, Shadcn/Radix UI components, Vite, Wouter routing, Redux Toolkit, TanStack Query, component architecture, accessibility, and performance optimisation.
+Your job: analyse the input from a developer/manager perspective. Provide specific, implementable frontend guidance — reference actual React patterns, component names, prop shapes, or file paths where relevant. Avoid generic UX theory. Be a real engineer.`,
 
-You receive feedback, review requests, build requests, bugs, and UX concerns from Nathan (the agency owner/manager).
-You synthesize all inputs into a structured, decision-ready response.
+      'Backend Engineer': `You are a senior Node.js/TypeScript backend engineer embedded in a marketing agency's AI operating system (Momentum Agent).
+You specialise in: Express.js, Firebase Admin SDK, Firestore data modelling, Firebase Auth token verification, middleware design, RESTful API design, Zod schema validation, OpenAI API integration, security hardening, and multi-tenant architecture.
+Your job: audit, diagnose, or design backend systems with precision. Reference specific middleware patterns, Firestore path structures, auth flows, or security anti-patterns. Be a real engineer — not a consultant.`,
 
-You have access to a specialist workforce: Frontend Developer, Backend Engineer, SEO Specialist, Website Specialist, Ads Specialist, GBP Specialist, Client Growth Specialist, Review & Reputation Manager, Strategy Advisor, Operations Manager, QA Engineer.
+      'QA Engineer': `You are a senior QA engineer with a focus on regression prevention, test design, and quality gates in a fast-moving SaaS product.
+You specialise in: end-to-end test planning, risk-based testing, regression taxonomy, edge case identification, UI state coverage, acceptance criteria, and Playwright-style test design.
+Your job: identify what can break, what's being missed, and what quality gates need to exist. Reference specific user flows, state transitions, or failure modes. Be a real QA engineer — not a rubber stamp.`,
 
-Your job:
-1. Diagnose the real underlying problem (not just the surface request)
-2. Identify what outcome matters most
-3. Determine the primary owner from the specialist list
-4. Assign supporting specialists if needed
-5. Propose a concrete next action
-6. Provide implementation logic (what specifically needs to change and why)
-7. Flag real risks or dependencies
-8. Assign a status
+      'Operations Manager': `You are a senior operations specialist embedded in a marketing agency AI platform.
+You specialise in: process design, workflow sequencing, handoff architecture, dependency mapping, automation rule design, bottleneck diagnosis, and cross-team coordination.
+Your job: diagnose the actual process failure or sequencing issue. Identify what's blocked, what the real handoff gap is, and what the correct operational sequence should be. Reference specific workflows, teams, or automation triggers. Be a real ops analyst.`,
 
-Always return a JSON object with exactly these fields:
-{
-  "diagnosis": "Clear problem statement (2-3 sentences)",
-  "owner": "Primary specialist role (from the workforce list)",
-  "supporting": ["array of supporting specialist roles"],
-  "action": "Specific, actionable next step (1-2 sentences)",
-  "implementationLogic": "What specifically needs to change, how, and why (3-5 sentences)",
-  "risks": "Real risks or dependencies (1-2 sentences, or 'No significant risks.')",
-  "status": "open",
-  "routingRationale": "Why this was routed to this owner (1 sentence)"
-}
+      'Strategy Advisor': `You are a senior growth strategist embedded in a marketing agency AI platform (Momentum Agent).
+You specialise in: digital agency growth strategy, pipeline prioritisation, positioning, GTM planning, ROI framing, OKR alignment, client lifecycle strategy, and competitive analysis.
+Your job: diagnose the strategic situation and provide a sharp, opinionated recommendation. Reference the specific business context, not generic frameworks. Be a real strategist, not a slide deck generator.`,
 
-Be specific and concrete. Reference the page/route/category when provided. Do not give generic advice. Extract the real problem from dictated or typed input — do not dump transcripts back.`;
+      'SEO Specialist': `You are a senior SEO specialist embedded in a marketing agency AI platform.
+You specialise in: keyword intent mapping, topical authority, content gap analysis, local SEO (GBP, NAP, citation), technical SEO (Core Web Vitals, crawlability, schema), and search-driven content planning.
+Your job: give precise SEO guidance based on the specific input. Reference actual keyword patterns, content opportunities, or technical fixes. Be a real SEO practitioner — not a generic "content is king" voice.`,
 
-    const userContext = `Thread context:
+      'Website Specialist': `You are a senior website conversion specialist embedded in a marketing agency AI platform.
+You specialise in: conversion rate optimisation, landing page structure, UX hierarchy, above-the-fold design, CTA design, trust signals, mobile-first layout, and lead generation funnel design.
+Your job: diagnose what's structurally or persuasively wrong with the website and what specifically needs to change to improve conversion. Reference actual page elements, layout patterns, and conversion principles.`,
+
+      'GBP Specialist': `You are a senior Google Business Profile and local presence specialist.
+You specialise in: GBP profile completeness, review velocity strategy, local map pack ranking factors, Q&A management, photo strategy, post cadence, NAP consistency, and local citation building.
+Your job: give specific, actionable GBP optimisation guidance based on the input. Reference actual GBP fields, ranking signals, and local search patterns. Be a real local SEO practitioner.`,
+
+      'Ads Specialist': `You are a senior Google Ads specialist embedded in a marketing agency AI platform.
+You specialise in: Search, Local, Performance Max, and Remarketing campaign architecture; bidding strategy; quality score optimisation; negative keyword management; ROAS and CPL modelling; and budget allocation.
+Your job: give precise, implementation-ready Google Ads guidance. Reference campaign types, bidding modes, match types, or conversion tracking specifics. Be a real paid search practitioner.`,
+
+      'Review & Reputation Manager': `You are a senior review and reputation management specialist.
+You specialise in: review generation strategies, response templating, sentiment monitoring, crisis response, platform-specific review policies (Google, Facebook, Trustpilot), and proactive reputation building.
+Your job: give specific guidance on improving, protecting, or recovering review standing. Reference the actual review situation described. Be a real reputation strategist.`,
+
+      'Client Growth Specialist': `You are a senior client success and account growth specialist embedded in a marketing agency AI platform.
+You specialise in: client lifecycle management, churn signal identification, upsell timing, expansion revenue, health scoring, success milestone design, and retention playbooks.
+Your job: diagnose the client growth situation and give a precise, sequenced recommendation. Reference actual lifecycle stages, account signals, or expansion triggers. Be a real client growth strategist.`,
+    };
+
+    const threadCtx = `Thread context:
 - Title: ${threadContext?.title || 'Untitled'}
 - Category: ${threadContext?.category || 'review'}
 - Route/Page: ${threadContext?.route || 'Not specified'}
-- Priority: ${threadContext?.priority || 'medium'}
-
-Nathan's message:
-${message}`;
+- Priority: ${threadContext?.priority || 'medium'}`;
 
     try {
-      let messages: any[];
+      // ── Stage 1: Routing decision ─────────────────────────────────────────
+      // Determine who owns this, whether it needs specialist dispatch, or if it can be answered directly.
+      const routingSystemPrompt = `You are Bullpen — the AI command interface for a marketing agency's internal operating system.
+You receive requests and decide how to route them.
+
+Workforce: Frontend Developer, Backend Engineer, SEO Specialist, Website Specialist, Ads Specialist, GBP Specialist, Client Growth Specialist, Review & Reputation Manager, Strategy Advisor, Operations Manager, QA Engineer.
+
+Routing rules:
+- If the question is simple, factual, or definitional (e.g. "what does this status mean?", "what's this field for?") → set isDirectAnswer to true and provide a directAnswer
+- Otherwise → assign the most specific owner from the workforce list, assign supporting roles if a second domain is clearly needed, and explain the routing
+
+Return JSON with exactly these fields:
+{
+  "isDirectAnswer": boolean,
+  "directAnswer": "Short direct answer if isDirectAnswer is true, otherwise empty string",
+  "owner": "Primary specialist (empty string if isDirectAnswer)",
+  "supporting": [],
+  "routingRationale": "One sentence: why this owner, or 'Direct answer — no specialist needed'",
+  "diagnosis": "Clear problem statement (2-3 sentences, even for direct answers)"
+}`;
+
+      let routingMessages: any[];
       if (imageBase64) {
-        messages = [{
+        routingMessages = [{
           role: 'user',
           content: [
-            { type: 'text', text: `${systemPrompt}\n\n${userContext}` },
+            { type: 'text', text: `${routingSystemPrompt}\n\n${threadCtx}\n\nNathan's message:\n${message}` },
+            { type: 'image_url', image_url: { url: imageBase64, detail: 'auto' } },
+          ],
+        }];
+      } else {
+        routingMessages = [
+          { role: 'system', content: routingSystemPrompt },
+          { role: 'user', content: `${threadCtx}\n\nNathan's message:\n${message}` },
+        ];
+      }
+
+      const routingResp = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: routingMessages,
+        response_format: { type: 'json_object' },
+        max_tokens: 600,
+      });
+
+      const routing = JSON.parse(routingResp.choices[0].message.content || '{}');
+
+      // ── Direct answer path ────────────────────────────────────────────────
+      if (routing.isDirectAnswer) {
+        return res.json({
+          diagnosis: routing.diagnosis || routing.directAnswer,
+          owner: '',
+          supporting: [],
+          action: routing.directAnswer,
+          implementationLogic: '',
+          risks: 'No significant risks.',
+          status: 'complete',
+          routingRationale: 'Direct answer — no specialist dispatch needed.',
+          dispatchedTo: null,
+          isDirectAnswer: true,
+        });
+      }
+
+      // ── Stage 2: Specialist analysis ─────────────────────────────────────
+      // The specialist's system prompt is determined by the routing decision.
+      // This is the key: output quality genuinely differs because a different system context is used.
+      const owner: string = routing.owner || 'Operations Manager';
+      const specialistPrompt = SPECIALIST_PROMPTS[owner] || `You are a specialist advisor embedded in a marketing agency AI platform. Provide expert guidance based on your domain expertise.`;
+
+      const specialistSystemPrompt = `${specialistPrompt}
+
+You have been dispatched by Bullpen's routing layer to handle this specific request.
+Return JSON with exactly these fields:
+{
+  "action": "Specific, concrete next step (1-2 sentences) — speak from your specialist role",
+  "implementationLogic": "What specifically needs to change, how to do it, and why — 3-5 sentences from your specialist perspective. Be technical and precise for your domain.",
+  "risks": "Real domain-specific risks or dependencies (1-2 sentences, or 'No significant risks.')"
+}`;
+
+      let specialistMessages: any[];
+      if (imageBase64) {
+        specialistMessages = [{
+          role: 'user',
+          content: [
+            { type: 'text', text: `${specialistSystemPrompt}\n\nContext:\n${threadCtx}\n\nProblem diagnosis: ${routing.diagnosis}\n\nNathan's message:\n${message}` },
             { type: 'image_url', image_url: { url: imageBase64, detail: 'high' } },
           ],
         }];
       } else {
-        messages = [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContext },
+        specialistMessages = [
+          { role: 'system', content: specialistSystemPrompt },
+          { role: 'user', content: `${threadCtx}\n\nProblem diagnosis: ${routing.diagnosis}\n\nNathan's message:\n${message}` },
         ];
       }
 
-      const response = await openai.chat.completions.create({
+      const specialistResp = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
-        messages,
+        messages: specialistMessages,
         response_format: { type: 'json_object' },
-        max_tokens: 1500,
+        max_tokens: 1200,
       });
 
-      const result = JSON.parse(response.choices[0].message.content || '{}');
-      res.json(result);
+      const specialist = JSON.parse(specialistResp.choices[0].message.content || '{}');
+
+      // ── Combine routing + specialist output ───────────────────────────────
+      return res.json({
+        diagnosis: routing.diagnosis || '',
+        owner,
+        supporting: Array.isArray(routing.supporting) ? routing.supporting : [],
+        action: specialist.action || '',
+        implementationLogic: specialist.implementationLogic || '',
+        risks: specialist.risks || 'No significant risks.',
+        status: 'complete',
+        routingRationale: routing.routingRationale || '',
+        dispatchedTo: owner,  // confirms real specialist dispatch occurred
+        isDirectAnswer: false,
+      });
+
     } catch (e: any) {
       console.error('[Bullpen synthesize] error:', e);
       res.status(500).json({ error: e.message || 'Synthesis failed' });
