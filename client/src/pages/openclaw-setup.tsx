@@ -50,6 +50,33 @@ interface ProvisionResult {
   exists: number;
 }
 
+type VerificationStatus =
+  | 'unreachable'
+  | 'not_openclaw'
+  | 'auth_failed'
+  | 'missing_required_endpoints'
+  | 'healthy';
+
+interface ConnectionVerification {
+  status: VerificationStatus;
+  reachable: boolean;
+  authValid: boolean | null;
+  requiredEndpoints: { path: string; available: boolean }[];
+  detectedVersion: string | null;
+  message: string;
+  httpStatus?: number;
+  testedUrl: string;
+  envWarning: string | null;
+}
+
+const VERIFICATION_LABELS: Record<VerificationStatus, { label: string; color: string }> = {
+  unreachable:                { label: 'Unreachable',               color: 'text-red-600 dark:text-red-400' },
+  not_openclaw:               { label: 'Not an OpenClaw instance',  color: 'text-red-600 dark:text-red-400' },
+  auth_failed:                { label: 'Authentication failed',     color: 'text-amber-600 dark:text-amber-400' },
+  missing_required_endpoints: { label: 'Required endpoints missing',color: 'text-amber-600 dark:text-amber-400' },
+  healthy:                    { label: 'Healthy',                   color: 'text-emerald-600 dark:text-emerald-400' },
+};
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 const RISK_BADGE: Record<string, string> = {
@@ -111,7 +138,7 @@ export default function OpenClawSetupPage() {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'ok' | 'failed'>('unknown');
+  const [connectionResult, setConnectionResult] = useState<ConnectionVerification | null>(null);
   const [testingConn, setTestingConn] = useState(false);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
 
@@ -152,6 +179,13 @@ export default function OpenClawSetupPage() {
     }
   }, [savedConfig]);
 
+  // Clear stale connection result when the URL input changes
+  useEffect(() => {
+    if (connectionResult && baseUrl.trim() !== connectionResult.testedUrl) {
+      setConnectionResult(null);
+    }
+  }, [baseUrl]);
+
   // Save config
   const saveConfig = useMutation({
     mutationFn: async () => {
@@ -166,17 +200,26 @@ export default function OpenClawSetupPage() {
     onError: (err: any) => toast({ title: 'Save failed', description: err.message, variant: 'destructive' }),
   });
 
-  // Test connection
+  // Test connection — staged verification
   const testConnection = async () => {
     if (!baseUrl.trim()) return;
     setTestingConn(true);
-    setConnectionStatus('unknown');
+    setConnectionResult(null);
     try {
       const r = await apiRequest('POST', '/api/openclaw/test-connection', { baseUrl: baseUrl.trim() });
-      const data = await r.json();
-      setConnectionStatus(data.connected ? 'ok' : 'failed');
-    } catch {
-      setConnectionStatus('failed');
+      const data: ConnectionVerification = await r.json();
+      setConnectionResult(data);
+    } catch (err: any) {
+      setConnectionResult({
+        status: 'unreachable',
+        reachable: false,
+        authValid: null,
+        requiredEndpoints: [],
+        detectedVersion: null,
+        message: `Request failed: ${err.message}`,
+        testedUrl: baseUrl.trim(),
+        envWarning: null,
+      });
     } finally {
       setTestingConn(false);
     }
@@ -303,21 +346,81 @@ export default function OpenClawSetupPage() {
                 </p>
               </div>
             </div>
-            {/* Connection Test */}
+            {/* Connection Verification */}
             <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
               <StatusIcon
                 loading={testingConn}
-                ok={connectionStatus === 'ok'}
-                warning={connectionStatus === 'unknown' && !testingConn}
+                ok={connectionResult?.status === 'healthy'}
+                warning={connectionResult != null && connectionResult.status !== 'healthy' && !testingConn}
               />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold">Live Connection</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {testingConn ? 'Testing...' : connectionStatus === 'ok' ? 'Reachable' : connectionStatus === 'failed' ? 'Cannot reach OpenClaw' : 'Not tested yet'}
+                <p className="text-xs font-semibold">Verification</p>
+                <p className={`text-[11px] ${connectionResult ? VERIFICATION_LABELS[connectionResult.status].color : 'text-muted-foreground'}`}>
+                  {testingConn
+                    ? 'Verifying...'
+                    : connectionResult
+                    ? VERIFICATION_LABELS[connectionResult.status].label
+                    : 'Not tested yet'}
                 </p>
               </div>
             </div>
           </div>
+
+          {/* Verification result detail panel */}
+          {connectionResult && !testingConn && (
+            <div className={`rounded-lg border p-3 space-y-2 text-xs ${
+              connectionResult.status === 'healthy'
+                ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20'
+                : connectionResult.status === 'auth_failed' || connectionResult.status === 'missing_required_endpoints'
+                ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+                : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
+            }`} data-testid="panel-verification-result">
+              {/* Tested URL */}
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+                <Globe className="h-3 w-3 shrink-0" />
+                <span className="truncate">{connectionResult.testedUrl}</span>
+              </div>
+              {/* Status message */}
+              <p className="text-[11px] leading-relaxed">{connectionResult.message}</p>
+              {/* Endpoint capability results */}
+              {connectionResult.requiredEndpoints.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required Endpoints</p>
+                  {connectionResult.requiredEndpoints.map(ep => (
+                    <div key={ep.path} className="flex items-center gap-2">
+                      {ep.available
+                        ? <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                        : <XCircle className="h-3 w-3 text-red-500 shrink-0" />}
+                      <span className="font-mono text-[11px]">{ep.path}</span>
+                      <span className={`text-[10px] ${ep.available ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {ep.available ? 'available' : 'unavailable'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Auth validity */}
+              {connectionResult.authValid !== null && (
+                <div className="flex items-center gap-2">
+                  {connectionResult.authValid
+                    ? <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                    : <XCircle className="h-3 w-3 text-red-500 shrink-0" />}
+                  <span className="text-[11px]">API key {connectionResult.authValid ? 'accepted' : 'rejected'}</span>
+                </div>
+              )}
+              {/* Detected version */}
+              {connectionResult.detectedVersion && (
+                <p className="text-[11px] text-muted-foreground">Detected version: {connectionResult.detectedVersion}</p>
+              )}
+              {/* Environment warning */}
+              {connectionResult.envWarning && (
+                <div className="flex items-start gap-1.5 p-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400" data-testid="banner-env-warning">
+                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                  <span className="text-[11px]">{connectionResult.envWarning}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Base URL Input */}
           <div className="space-y-2">
@@ -382,7 +485,8 @@ export default function OpenClawSetupPage() {
               size="sm"
               className="gap-1.5 text-xs shrink-0"
               onClick={() => provision.mutate()}
-              disabled={!baseUrlSaved || provision.isPending}
+              disabled={connectionResult?.status !== 'healthy' || !baseUrlSaved || provision.isPending}
+              title={!baseUrlSaved ? 'Save the base URL first' : connectionResult?.status !== 'healthy' ? 'Run a successful connection test first' : undefined}
               data-testid="button-provision"
             >
               {provision.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
@@ -409,9 +513,14 @@ export default function OpenClawSetupPage() {
             </div>
           )}
 
-          {!baseUrlSaved && (
+          {connectionResult?.status !== 'healthy' && (
             <p className="mt-3 text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-              <AlertTriangle className="h-3 w-3 shrink-0" /> Save a base URL above before provisioning
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              {!baseUrlSaved
+                ? 'Save a base URL above, then run a connection test before provisioning'
+                : connectionResult === null
+                ? 'Run a connection test above — provisioning requires a verified healthy connection'
+                : `Connection must be healthy to provision — current status: ${VERIFICATION_LABELS[connectionResult.status].label}`}
             </p>
           )}
         </CardContent>

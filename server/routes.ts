@@ -9355,19 +9355,178 @@ Rules:
     }
   });
 
-  // POST /api/openclaw/test-connection — ping OpenClaw base URL
+  // POST /api/openclaw/test-connection — staged verification: reachability → identity → auth → capability
   app.post('/api/openclaw/test-connection', async (req: any, res: any) => {
     const { baseUrl } = req.body;
     if (!baseUrl) return res.status(400).json({ error: 'baseUrl required' });
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(baseUrl, { signal: controller.signal, method: 'GET' });
-      clearTimeout(timeout);
-      res.json({ connected: true, status: response.status });
-    } catch (err: any) {
-      res.json({ connected: false, error: err.message });
+
+    const apiKey = process.env.OPENCLAW_API_KEY || '';
+    const REQUIRED_ENDPOINTS = ['/api/v1/skills', '/api/v1/agents'];
+
+    // Environment safety — warn on local/dev-like URLs
+    function isDevLikeUrl(url: string): boolean {
+      try {
+        const h = new URL(url).hostname;
+        return (
+          h === 'localhost' || h === '127.0.0.1' || h === '::1' ||
+          h.startsWith('192.168.') || h.startsWith('10.') ||
+          /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+          h.endsWith('.local') || h.includes('ngrok') ||
+          h.includes('.replit.dev') || h.includes('.repl.co') ||
+          h.includes('localhost')
+        );
+      } catch { return false; }
     }
+    const envWarning = isDevLikeUrl(baseUrl)
+      ? `Warning: "${new URL(baseUrl).hostname}" looks like a local or development host. Verify this is the correct target for your organisation.`
+      : null;
+
+    const failResult = (
+      status: string, message: string, extra: Record<string, unknown> = {}
+    ) => res.json({
+      status,
+      reachable: false,
+      authValid: null,
+      requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
+      detectedVersion: null,
+      message,
+      testedUrl: baseUrl,
+      envWarning,
+      ...extra,
+    });
+
+    // ── Stage 1: Reachability + Identity ─────────────────────────────────────
+    // Try GET /api/v1/skills unauthenticated. A generic web server won't have this.
+    let identityResp: Response;
+    try {
+      identityResp = await fetch(`${baseUrl}/api/v1/skills`, {
+        signal: AbortSignal.timeout(6000),
+        method: 'GET',
+      });
+    } catch (err: any) {
+      return failResult('unreachable', `Cannot reach ${baseUrl} — check the URL and that OpenClaw is running. (${err.message})`);
+    }
+
+    // Must return JSON — HTML means it's not an OpenClaw instance
+    const identityCt = identityResp.headers.get('content-type') || '';
+    let identityBody: any = null;
+    try { identityBody = await identityResp.json(); } catch {}
+
+    const isJsonResponse = identityCt.includes('application/json') || identityBody !== null;
+    if (!isJsonResponse) {
+      return res.json({
+        status: 'not_openclaw',
+        reachable: true,
+        authValid: null,
+        requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
+        detectedVersion: null,
+        message: `The URL is reachable (HTTP ${identityResp.status}) but returned non-JSON content — this does not appear to be an OpenClaw instance.`,
+        httpStatus: identityResp.status,
+        testedUrl: baseUrl,
+        envWarning,
+      });
+    }
+
+    // ── Stage 2: Auth ─────────────────────────────────────────────────────────
+    // If unauthenticated request got 401/403, confirm OpenClaw is there but key is wrong/missing
+    if (identityResp.status === 401 || identityResp.status === 403) {
+      if (!apiKey) {
+        return res.json({
+          status: 'auth_failed',
+          reachable: true,
+          authValid: false,
+          requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
+          detectedVersion: null,
+          message: `OpenClaw instance detected at ${baseUrl} but OPENCLAW_API_KEY is not configured. Add it to your Replit secrets.`,
+          httpStatus: identityResp.status,
+          testedUrl: baseUrl,
+          envWarning,
+        });
+      }
+    }
+
+    // Make authenticated request to verify key is accepted
+    let authResp: Response;
+    try {
+      authResp = await fetch(`${baseUrl}/api/v1/skills`, {
+        signal: AbortSignal.timeout(6000),
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'x-api-key': apiKey },
+      });
+    } catch (err: any) {
+      return failResult('unreachable', `Authenticated request failed: ${err.message}`, { reachable: true });
+    }
+
+    if (authResp.status === 401 || authResp.status === 403) {
+      return res.json({
+        status: 'auth_failed',
+        reachable: true,
+        authValid: false,
+        requiredEndpoints: REQUIRED_ENDPOINTS.map(p => ({ path: p, available: false })),
+        detectedVersion: null,
+        message: `Authentication failed (HTTP ${authResp.status}) — the OPENCLAW_API_KEY was rejected. Check it matches OpenClaw's Authentication settings.`,
+        httpStatus: authResp.status,
+        testedUrl: baseUrl,
+        envWarning,
+      });
+    }
+
+    // ── Stage 3: Capability ───────────────────────────────────────────────────
+    // Verify all required endpoints respond with JSON under auth
+    const endpointResults: { path: string; available: boolean }[] = [];
+    for (const endpoint of REQUIRED_ENDPOINTS) {
+      try {
+        const er = await fetch(`${baseUrl}${endpoint}`, {
+          signal: AbortSignal.timeout(6000),
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'x-api-key': apiKey },
+        });
+        const ct = er.headers.get('content-type') || '';
+        let body: any = null;
+        try { body = await er.json(); } catch {}
+        endpointResults.push({
+          path: endpoint,
+          available: (er.ok || er.status === 200) && (ct.includes('application/json') || body !== null),
+        });
+      } catch {
+        endpointResults.push({ path: endpoint, available: false });
+      }
+    }
+
+    const allAvailable = endpointResults.every(e => e.available);
+    if (!allAvailable) {
+      const missing = endpointResults.filter(e => !e.available).map(e => e.path).join(', ');
+      return res.json({
+        status: 'missing_required_endpoints',
+        reachable: true,
+        authValid: true,
+        requiredEndpoints: endpointResults,
+        detectedVersion: null,
+        message: `OpenClaw is reachable and authenticated but required endpoints are unavailable: ${missing}`,
+        httpStatus: authResp.status,
+        testedUrl: baseUrl,
+        envWarning,
+      });
+    }
+
+    // ── Stage 4: Healthy ──────────────────────────────────────────────────────
+    let detectedVersion: string | null = null;
+    try {
+      const ab = await authResp.json().catch(() => ({}));
+      detectedVersion = ab?.version ?? ab?.api_version ?? null;
+    } catch {}
+
+    return res.json({
+      status: 'healthy',
+      reachable: true,
+      authValid: true,
+      requiredEndpoints: endpointResults,
+      detectedVersion,
+      message: 'OpenClaw instance is verified and healthy — reachable, authenticated, and all required endpoints are available.',
+      httpStatus: 200,
+      testedUrl: baseUrl,
+      envWarning,
+    });
   });
 
   // POST /api/openclaw/provision — attempt to create skills + agents via OpenClaw REST API

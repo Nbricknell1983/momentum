@@ -1,0 +1,347 @@
+Build Brief — OpenClaw Connection Verification Hardening                                     
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Replace the current false-confidence “connected” check with a real OpenClaw verification     
+ flow that distinguishes reachability, identity, auth, endpoint availability, and usable      
+ runtime state.                                                                               
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ The current OpenClaw test is only a reachability check.                                      
+                                                                                              
+ ### Current behavior                                                                         
+                                                                                              
+ The setup flow does:                                                                         
+ - fetch(baseUrl, { method: 'GET', signal: AbortSignal.timeout(5000) })                       
+                                                                                              
+ If the URL responds in time, it returns something like:                                      
+ - { connected: true, status: 200 }                                                           
+                                                                                              
+ ### What this actually proves                                                                
+                                                                                              
+ - the URL is reachable                                                                       
+ - some HTTP response came back before timeout                                                
+                                                                                              
+ ### What it does not prove                                                                   
+                                                                                              
+ - the target is actually an OpenClaw instance                                                
+ - the API shape/version is correct                                                           
+ - auth works                                                                                 
+ - required endpoints exist                                                                   
+ - the runtime is usable                                                                      
+ - manifest/config is valid                                                                   
+ - the instance is the intended environment                                                   
+                                                                                              
+ A random web server returning 200 OK with HTML would currently pass.                         
+                                                                                              
+ This creates false setup confidence in a provisioning/control-plane surface, which is the    
+ wrong failure mode.                                                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make OpenClaw connection status mean:                                                        
+ “this is a real, authenticated, usable OpenClaw instance”                                    
+ not:                                                                                         
+ “some URL answered.”                                                                         
+                                                                                              
+ Success means:                                                                               
+ - the UI distinguishes reachable vs valid vs authenticated vs healthy                        
+ - non-OpenClaw endpoints fail clearly                                                        
+ - auth failures are explicit                                                                 
+ - wrong or incomplete setups are actionable                                                  
+ - provisioning can be gated on meaningful readiness, not just HTTP reachability              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Replace single reachability-based “connected” logic with staged verification              
+ 2. Verify expected OpenClaw identity/API shape                                               
+ 3. Verify auth against the real API key/header path                                          
+ 4. Verify required endpoints/capabilities exist                                              
+ 5. Return structured status to the frontend                                                  
+ 6. Improve UI status wording and gating logic                                                
+ 7. Document the connection verification contract                                             
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - full OpenClaw provisioning redesign                                                        
+ - manifest editing UX redesign                                                               
+ - Bullpen workflow changes                                                                   
+ - broader agent feature development                                                          
+ - unrelated control-plane settings changes                                                   
+ - generic webhook integration patterns                                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. “Reachable” is not “Connected”                                                        
+                                                                                              
+ The system must distinguish:                                                                 
+ - URL reachable                                                                              
+ - OpenClaw detected                                                                          
+ - auth valid                                                                                 
+ - runtime healthy                                                                            
+ - config complete                                                                            
+                                                                                              
+ ### 2. Verify identity, not just network response                                            
+                                                                                              
+ The connection test must establish that the target is actually an OpenClaw instance, not     
+ just any HTTP server.                                                                        
+                                                                                              
+ ### 3. Verify auth explicitly                                                                
+                                                                                              
+ A target should not be considered healthy if the provided API key is rejected.               
+                                                                                              
+ ### 4. Provisioning should be gated by meaningful readiness                                  
+                                                                                              
+ If the instance is only reachable but not authenticated/compatible/healthy, provisioning     
+ actions should remain blocked.                                                               
+                                                                                              
+ ### 5. Protect existing working functionality                                                
+                                                                                              
+ Extend the current setup flow safely; do not over-engineer a full platform rewrite.          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Define a staged verification model                                                 
+                                                                                              
+ Replace the current binary result with a structured status object.                           
+                                                                                              
+ ### Recommended statuses                                                                     
+                                                                                              
+ At minimum:                                                                                  
+                                                                                              
+ - unreachable                                                                                
+ - reachable                                                                                  
+ - not_openclaw                                                                               
+ - auth_failed                                                                                
+ - missing_required_endpoints                                                                 
+ - incompatible_api                                                                           
+ - healthy                                                                                    
+ - healthy_but_config_incomplete (optional if meaningful)                                     
+                                                                                              
+ ### Recommended response shape                                                               
+                                                                                              
+ Something like:                                                                              
+                                                                                              
+ - status                                                                                     
+ - httpStatus                                                                                 
+ - message                                                                                    
+ - details                                                                                    
+ - detectedVersion (if available)                                                             
+ - requiredEndpoints                                                                          
+ - authValid                                                                                  
+ - reachable                                                                                  
+                                                                                              
+ The exact shape is flexible, but it should be structured and explicit.                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Verify OpenClaw identity                                                           
+                                                                                              
+ The test should check more than /.                                                           
+                                                                                              
+ ### Verify one or more of:                                                                   
+                                                                                              
+ - expected API response shape                                                                
+ - expected version field/header                                                              
+ - expected endpoint behavior                                                                 
+ - expected JSON response rather than arbitrary HTML                                          
+                                                                                              
+ ### Candidate checks                                                                         
+                                                                                              
+ Use the real OpenClaw API contract available to the app. For example, verify known endpoints 
+ such as:                                                                                     
+ - /api/v1/skills                                                                             
+ - /api/v1/agents                                                                             
+                                                                                              
+ Use whichever endpoints are actually expected and stable in this integration.                
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ A generic web server must not pass as OpenClaw.                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Verify auth                                                                        
+                                                                                              
+ Add a real authenticated verification call using the configured API key.                     
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - send the real auth header/path OpenClaw expects                                            
+ - distinguish:                                                                               
+ - no response                                                                                
+ - unauthorized                                                                               
+ - forbidden                                                                                  
+ - success                                                                                    
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ A server should not be marked healthy if it responds but rejects the key.                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Verify required capabilities/endpoints                                             
+                                                                                              
+ Check that the instance exposes what Momentum actually needs.                                
+                                                                                              
+ ### At minimum                                                                               
+                                                                                              
+ Confirm the expected endpoints used by the setup/provisioning flow exist and respond         
+ correctly.                                                                                   
+                                                                                              
+ If Momentum relies on:                                                                       
+ - skills manifest                                                                            
+ - agents manifest                                                                            
+ - export/config routes                                                                       
+                                                                                              
+ then those should be part of the verification standard.                                      
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ A partial or incompatible OpenClaw instance should not appear “ready.”                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Improve frontend status model                                                      
+                                                                                              
+ Update /openclaw-setup so the UI reflects real verification states.                          
+                                                                                              
+ ### Replace ambiguous “Connected” behavior with clearer labels like:                         
+                                                                                              
+ - Reachable                                                                                  
+ - OpenClaw detected                                                                          
+ - Authentication failed                                                                      
+ - Required endpoints missing                                                                 
+ - Healthy                                                                                    
+ - Config invalid                                                                             
+ - Wrong target / incompatible instance                                                       
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - status copy should be explicit                                                             
+ - warning/error states should guide correction                                               
+ - provisioning/export actions should be gated behind healthy state                           
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 6 — Environment safety                                                                 
+                                                                                              
+ Because OpenClaw base URL is persisted and can accidentally point to the wrong target, add   
+ safety signals where practical.                                                              
+                                                                                              
+ ### Minimum useful improvements                                                              
+                                                                                              
+ - show the exact base URL being tested                                                       
+ - clearly distinguish saved config vs verified health                                        
+ - warn if URL looks local/dev-like in contexts where that is suspicious                      
+ - e.g. localhost, local LAN, dev preview host                                                
+ - do not treat “saved URL” as “safe target”                                                  
+                                                                                              
+ This does not need to become a giant environment system, but it should reduce wrong-target   
+ confusion.                                                                                   
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - assuming wrong OpenClaw endpoint contract                                                  
+ - making the check too strict and blocking valid instances                                   
+ - making the check too weak and preserving false positives                                   
+ - frontend still using old boolean assumptions after backend changes                         
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - need the actual OpenClaw API contract used by this setup flow                              
+ - need the real auth header/key mechanism                                                    
+ - need to know which endpoints are truly required for Momentum’s provisioning use case       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test — reachability vs identity                                                     
+                                                                                              
+ 1. unreachable URL returns unreachable                                                       
+ 2. generic HTML web server returns not_openclaw or equivalent                                
+ 3. valid OpenClaw base URL is recognized correctly                                           
+                                                                                              
+ ### Must test — auth                                                                         
+                                                                                              
+ 4. valid URL + invalid API key returns auth_failed                                           
+ 5. valid URL + valid key proceeds to endpoint/capability verification                        
+                                                                                              
+ ### Must test — capability checks                                                            
+                                                                                              
+ 6. instance missing required endpoints returns missing_required_endpoints                    
+ 7. compatible healthy instance returns healthy                                               
+                                                                                              
+ ### Must test — UI behavior                                                                  
+                                                                                              
+ 8. frontend shows correct status label/message per state                                     
+ 9. provisioning remains gated unless health is sufficient                                    
+ 10. invalid/stale saved config does not masquerade as verified readiness                     
+                                                                                              
+ ### Must test — environment safety                                                           
+                                                                                              
+ 11. suspicious local/dev URLs are visually obvious                                           
+ 12. saved URL and verified connection state remain distinct concepts                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - a random HTTP server can no longer pass as “connected”                                     
+ - auth failures are clearly identified                                                       
+ - OpenClaw identity/capability is verified before healthy status is shown                    
+ - the frontend uses structured status, not a raw boolean                                     
+ - provisioning is gated on meaningful readiness                                              
+ - users can trust what “healthy/connected” means                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. define structured verification result model                                               
+ 2. identify actual required OpenClaw endpoints and auth contract                             
+ 3. implement backend verification flow                                                       
+ 4. return granular statuses to frontend                                                      
+ 5. update /openclaw-setup status UI and gating                                               
+ 6. QA generic server / auth fail / healthy instance / wrong-target scenarios                 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - verification status model added                                                            
+ - endpoints/auth contract used for health checks                                             
+ - backend changes made                                                                       
+ - frontend status/gating changes made                                                        
+ - any compatibility assumptions or caveats                                                   
+ - follow-up recommendations for deeper provisioning validation                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not keep labeling simple reachability as “connected”                                    
+ - do not rely on / returning 200 as sufficient proof                                         
+ - do not leave auth validity implicit                                                        
+ - do not overbuild a full provisioning workflow redesign in this task                        
+ - do not weaken existing control-plane validation/auth protections                           
+                                                                       
