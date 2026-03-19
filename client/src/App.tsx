@@ -24,6 +24,7 @@ import ResearchPage from '@/pages/research';
 import ManagementPage from '@/pages/management';
 import BullpenPage from '@/pages/bullpen';
 import OpenClawSetupPage from '@/pages/openclaw-setup';
+import MyWorkPage from '@/pages/my-work';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -34,6 +35,16 @@ import MarketingAbout from '@/pages/marketing/about';
 import MarketingContact from '@/pages/marketing/contact';
 import { useFirestoreSync } from '@/lib/firestoreSync';
 import { Loader2 } from 'lucide-react';
+
+function ManagerGate({ component: Component }: { component: React.ComponentType }) {
+  const { isManager } = useAuth();
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    if (!isManager) setLocation('/dashboard');
+  }, [isManager, setLocation]);
+  if (!isManager) return null;
+  return <Component />;
+}
 
 function ProtectedRoutes() {
   return (
@@ -48,10 +59,11 @@ function ProtectedRoutes() {
       <Route path="/forecast" component={DashboardPage} />
       <Route path="/daily-plan" component={DailyPlanPage} />
       <Route path="/tasks" component={TasksPage} />
+      <Route path="/my-work" component={MyWorkPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/management" component={ManagementPage} />
-      <Route path="/bullpen" component={BullpenPage} />
-      <Route path="/openclaw-setup" component={OpenClawSetupPage} />
+      <Route path="/bullpen">{() => <ManagerGate component={BullpenPage} />}</Route>
+      <Route path="/openclaw-setup">{() => <ManagerGate component={OpenClawSetupPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

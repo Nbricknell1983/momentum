@@ -11878,5 +11878,40 @@ Return ONLY JSON:
     }
   });
 
+  // ── My Work — team-facing work item surface ─────────────────────────────
+  app.get('/api/my-work', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.orgId as string;
+    try {
+      const snap = await firestore!.collection('orgs').doc(orgId)
+        .collection('bullpenWork')
+        .where('status', '!=', 'resolved')
+        .orderBy('status')
+        .orderBy('createdAt', 'desc')
+        .limit(100)
+        .get();
+      const items = snap.docs.map(d => d.data());
+      res.json(items);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/my-work/:itemId', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.orgId as string;
+    const { itemId } = req.params;
+    const { status } = req.body as { status: string };
+    const validStatuses = ['detected', 'in_progress', 'resolved'];
+    if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    try {
+      const ref = firestore!.collection('orgs').doc(orgId).collection('bullpenWork').doc(itemId);
+      const snap = await ref.get();
+      if (!snap.exists) return res.status(404).json({ error: 'Not found' });
+      await ref.update({ status, updatedAt: new Date().toISOString(), ...(status === 'resolved' ? { resolvedAt: new Date().toISOString() } : {}) });
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   return httpServer;
 }

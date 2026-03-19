@@ -26,6 +26,13 @@ Preferred communication style: Simple, everyday language.
 - **Live State**: Leads and clients are synced via `onSnapshot` listeners. Redux `leads[]` and `clients[]` are listener-fed live state.
 - **AI Output Storage**: Engine outputs are dual-written: latest snapshot on the entity doc + durable history record in `engineHistory/{runId}` subcollection. History is immutable.
 
+### Role-Aware Agent Architecture
+- **Bullpen is internal-only**: Visible only to `owner`/`admin` roles. Non-managers who navigate directly to `/bullpen` or `/openclaw-setup` are redirected to `/dashboard` via the `ManagerGate` component in App.tsx.
+- **My Work page** (`/my-work`): Team-facing surface for all users. Shows pending bullpenWork items with natural-language framing ("Assigned to you", "Recommended next step", "Implementation Brief", "Client Alert"). Accessible from the sidebar with a live badge count showing items needing action.
+- **Live badge**: AppSidebar subscribes to `bullpenWork` where `status == 'detected'` via Firestore `onSnapshot` and shows the count on the My Work nav item.
+- **Work item surface API**: `GET /api/my-work` (all non-resolved items), `PATCH /api/my-work/:itemId` (status updates). Both require `requireOrgAccess`.
+- **Attribution model**: Work items shown to team users use product-native language, not internal Bullpen/agent framing.
+
 ### Auth & Security
 - **Firebase Authentication**: All user identity comes from Firebase ID tokens verified server-side.
 - **Token Verification**: `verifyFirebaseToken` middleware applied globally to all `/api/` routes.

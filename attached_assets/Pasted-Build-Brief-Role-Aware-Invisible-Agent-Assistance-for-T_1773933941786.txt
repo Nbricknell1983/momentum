@@ -1,0 +1,301 @@
+Build Brief — Role-Aware Invisible Agent Assistance for Team Users
+Goal
+Deliver agent functionality to all relevant users through their normal workflows without exposing Bullpen, the internal workforce, or Nathan’s private orchestration layer.
+
+Core product decision
+Bullpen is the internal command center.
+It is for:
+
+Nathan
+management
+approvals
+orchestration
+workforce control
+system-wide visibility
+Team users should not see Bullpen or the internal agent roster.
+
+Instead, they should experience:
+
+smarter screens
+richer intelligence
+better prompts
+better assignments
+better next actions
+stronger workflow support
+In short:
+
+Bullpen stays hidden.
+Agent assistance gets distributed.
+
+Problem
+Right now, the system is becoming powerful, but there is a risk of exposing:
+
+Bullpen
+the agent workforce
+orchestration mechanics
+internal command-center UI
+to users who should only be doing their job inside Momentum.
+
+That would be the wrong UX.
+
+Normal users should not feel like they are operating Nathan’s private control room.
+They should feel like their own workflow is more intelligent and more helpful.
+
+Outcome that matters most
+Give each user the benefits of the agent system inside the screens they already use, according to their role, without exposing the underlying Bullpen/agent machinery.
+
+Success means:
+
+users get agent-enhanced workflows
+Bullpen remains internal-only
+agent outputs appear as product intelligence, recommendations, prep, and next actions
+permissions and visibility remain role-aware
+Required architecture rules
+1. Expose outcomes, not machinery
+Users should see:
+
+prep packs
+recommendations
+assigned work
+strategy context
+delivery guidance
+alerts
+next best actions
+Users should not see:
+
+Bullpen page
+internal workforce cards
+OpenClaw setup
+orchestration/routing internals
+Nathan’s agent control layer
+2. Agent assistance should be role-aware
+Different users should see different forms of agent support depending on their role and workflow.
+
+3. Keep the internal and external surfaces separate
+Internal surface: Bullpen
+User-facing surface: enhanced role-specific workflows
+4. Permissions still matter
+Universal assistance does not mean universal control.
+
+Users can receive support widely, but:
+
+approvals
+escalations
+scheduling
+system-wide governance
+should remain restricted appropriately.
+Recommended implementation approach
+Phase 1 — Define team-user assistance surfaces
+Map where agent help should appear for each user type.
+
+Sales / lead-handling users
+Should get:
+
+prep call pack
+deal intelligence
+next best action
+follow-up recommendations
+call questions
+urgency/commercial angle
+Strategy / account users
+Should get:
+
+strategy suggestions
+client health insights
+growth opportunities
+expansion/churn risk prompts
+recommended next actions
+Delivery users
+Should get:
+
+implementation briefs
+accepted scope context
+blockers
+QA prompts
+delivery review context
+priority sequencing guidance
+Managers/admins
+May also get broader oversight, but this should still be separate from the hidden internal Bullpen surface unless intentionally allowed.
+
+Phase 2 — Hide Bullpen/internal workforce from non-authorized users
+Apply explicit visibility control so that normal team users cannot access:
+
+Bullpen page
+internal workforce command UI
+internal review pass controls
+OpenClaw setup
+private orchestration surfaces
+Important
+This is not only a navigation concern.
+It should also be protected at the route/permission level.
+
+Phase 3 — Distribute agent outputs into existing workflow screens
+Instead of showing Bullpen, surface agent benefits where the work already happens.
+
+Examples
+Leads / pipeline
+prep readiness badge
+deal intelligence
+next best action
+call prep guidance
+follow-up prompts
+Clients
+health insights
+growth opportunities
+risk flags
+delivery gaps
+next steps
+Delivery / production views
+implementation context
+blockers
+QA reminders
+acceptance-derived scope
+review prompts
+Goal
+The product feels smart everywhere without exposing the command layer.
+
+Phase 4 — Role-aware personal work views
+Let users see:
+
+work assigned to them
+recommendations relevant to them
+what the system suggests they do next
+Important
+This should be phrased as:
+
+“Assigned to you”
+“Needs your action”
+“Recommended next step”
+Not:
+
+“Bullpen agent says…”
+The system should feel cohesive, not theatrical.
+
+Phase 5 — Controlled attribution model
+Decide how visible agent authorship should be for non-Bullpen users.
+
+Recommendation
+For normal team users, prefer:
+
+product-native phrasing
+workflow-native recommendations
+system-native intelligence
+Examples:
+
+“Recommended next action”
+“Prep note”
+“Suggested follow-up”
+“Implementation brief”
+Instead of:
+
+“Frontend Developer agent says…”
+“Bullpen routed this to…”
+Why
+The system should feel like a smarter product, not like a hidden internal org chart leaking into end-user UX.
+
+User experience model
+Nathan / management
+Sees:
+
+Bullpen
+workforce
+work queue
+reviews
+approvals
+command layer
+Team users
+See:
+
+their normal screens
+plus intelligent support embedded in those screens
+plus work assigned to them
+plus recommendations relevant to their role
+They benefit from the agents without seeing the engine room.
+
+Suggested examples
+Sales user
+On a lead:
+
+prep pack ready
+likely customer profile
+search intent summary
+next best action
+suggested follow-up
+But no Bullpen page, no internal route/workforce card.
+
+Delivery user
+On accepted scope:
+
+implementation brief
+blockers
+tasks needing action
+QA guidance
+But no command-center controls.
+
+Client/account user
+On a client:
+
+health insight
+growth opportunity
+stale engine warning
+recommended intervention
+But no internal orchestration layer.
+
+Risks and dependencies
+Risks
+leaking Bullpen concepts into normal user UX
+making users feel monitored by hidden agents instead of helped
+role mismatch where users see recommendations they cannot act on
+permission mistakes exposing internal command surfaces
+Dependencies
+team roles / permissions model
+current route protection
+current lead/client/delivery views
+existing agent-generated outputs that can be redistributed into those views
+QA requirements
+Must test — visibility
+non-authorized users cannot access Bullpen
+non-authorized users cannot access OpenClaw/internal setup surfaces
+internal workforce UI remains hidden
+Must test — embedded assistance
+sales users see prep and next actions in lead workflows
+delivery users see implementation support in delivery workflows
+account/strategy users see relevant client intelligence
+Must test — permissions
+users only see assistance relevant to their scope
+users do not see controls they cannot use
+managers/admins still retain broader internal access appropriately
+Must test — UX
+the product feels smarter, not more confusing
+recommendations are phrased naturally
+no “internal agent theatre” leaks into normal user workflows
+Measurable success criteria
+This task is successful when:
+
+Bullpen remains internal-only
+normal users still get meaningful agent assistance
+role-specific workflows are visibly smarter and more useful
+users benefit from the agent system without seeing the internal orchestration layer
+Recommended execution order
+define role-based assistance surfaces
+lock down Bullpen/internal route visibility
+embed agent outputs into existing lead/client/delivery screens
+add personal assigned/recommended work views
+QA visibility and role fit
+What good output looks like from this task
+Please return:
+
+which user roles get which agent-assisted surfaces
+what routes/surfaces were hidden
+where agent outputs now appear in normal workflows
+any UX wording rules used to avoid exposing internal orchestration concepts
+What not to do
+do not expose Bullpen or the internal workforce to normal users
+do not make everyone operate the command center
+do not surface internal routing language where it adds no value
+do not give users recommendations without the ability or permission to act on them
+Final product rule
+Bullpen is internal.
+Agent assistance is distributed.
+Users should enjoy the benefits of the workforce without seeing Nathan’s private command layer.
+
