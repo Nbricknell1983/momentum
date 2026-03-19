@@ -1,0 +1,129 @@
+Mini Build Brief — Fix OpenClaw Setup Momentum App URL                                       
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Ensure the OpenClaw setup flow uses the correct canonical Momentum app URL instead of an     
+ unstable Replit/runtime host.                                                                
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ In the OpenClaw tab, the field:                                                              
+                                                                                              
+ Momentum App URL (sent to OpenClaw as endpoint base)                                         
+                                                                                              
+ is currently showing:                                                                        
+ - https://moment-ai--nathandbricknel.replit.app                                              
+                                                                                              
+ But the correct production URL is:                                                           
+ - https://momentum.battlescore.com.au/                                                       
+                                                                                              
+ This indicates the app URL is being derived from the current host/runtime origin rather than 
+ an explicit canonical environment config value.                                              
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make OpenClaw provisioning use the correct environment-specific canonical app URL.           
+                                                                                              
+ Success means:                                                                               
+ - production shows and sends https://momentum.battlescore.com.au/                            
+ - staging/dev uses its own explicit configured URL if needed                                 
+ - the displayed value matches the value actually sent to OpenClaw                            
+ - Replit preview/runtime host does not leak into production setup                            
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ - find where Momentum App URL is derived in OpenClaw Setup                                   
+ - replace host-derived logic with explicit environment-configured canonical app URL          
+ - ensure frontend display and backend/provisioning usage stay aligned                        
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - broader OpenClaw setup redesign                                                            
+ - connection verification changes                                                            
+ - unrelated environment/config work                                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rule                                                                   
+                                                                                              
+ Do not derive canonical integration URLs from the current browser/request host when          
+ environment-specific base URLs matter.                                                       
+                                                                                              
+ Use explicit config instead.                                                                 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ ### 1. Find current source                                                                   
+                                                                                              
+ Inspect where the OpenClaw setup page gets:                                                  
+ - displayed Momentum App URL                                                                 
+ - endpoint base sent to OpenClaw                                                             
+                                                                                              
+ Likely current anti-pattern:                                                                 
+ - window.location.origin                                                                     
+ - request host                                                                               
+ - Replit preview/deploy host                                                                 
+                                                                                              
+ ### 2. Replace with explicit config                                                          
+                                                                                              
+ Use a canonical environment variable/config source, e.g.:                                    
+ - frontend: import.meta.env.VITE_APP_BASE_U RL                                               
+ or equivalent                                                                                
+                                                                                              
+ ### 3. Environment behavior                                                                  
+                                                                                              
+ - production → https://momentum.battlescore.com.au/                                          
+ - staging/dev → explicit staging/dev value if needed                                         
+ - never silently fall back to the current runtime host unless that is an intentional         
+ local-only behavior                                                                          
+                                                                                              
+ ### 4. Keep display and actual send in sync                                                  
+                                                                                              
+ The value shown in the UI must be the same value used when sending the endpoint base to      
+ OpenClaw.                                                                                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks                                                                                        
+                                                                                              
+ - sending the wrong app URL to OpenClaw can cause provisioning/config to target the wrong    
+ environment                                                                                  
+ - host-derived config is especially dangerous in Replit because preview and deployed hosts   
+ differ                                                                                       
+ - this is the same class of issue as redirect/callback host mismatch problems                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ 1. production OpenClaw Setup shows https://momentum.battlescore.com.au/                      
+ 2. the same value is used in the actual provisioning payload                                 
+ 3. Replit preview host does not appear in production config                                  
+ 4. staging/dev environment still shows the correct non-production value if applicable        
+ 5. no mismatch between displayed URL and transmitted URL                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+ - OpenClaw Setup displays the correct canonical Momentum app URL                             
+ - OpenClaw receives the correct canonical endpoint base                                      
+ - host-derived drift is removed from this flow                                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like                                                                  
+                                                                                              
+ Please return:                                                                               
+ - where the URL was previously derived from                                                  
+ - what config source replaced it                                                             
+ - how production vs staging values now work                                                  
+ - QA confirmation that displayed and transmitted values match                                
+                                                             

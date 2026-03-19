@@ -9314,9 +9314,8 @@ Rules:
 
   // GET /api/openclaw/manifest — return the full skill/agent/cron definitions
   app.get('/api/openclaw/manifest', async (req: any, res: any) => {
-    const appUrl = process.env.REPLIT_DOMAINS
-      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-      : 'http://localhost:5000';
+    const appUrl = process.env.APP_BASE_URL
+      || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : 'http://localhost:5000');
 
     res.json({
       appUrl,
@@ -9588,9 +9587,8 @@ Rules:
     if (!orgId || !baseUrl) return res.status(400).json({ error: 'orgId and baseUrl required' });
 
     const apiKey = process.env.OPENCLAW_API_KEY || '';
-    const appUrl = process.env.REPLIT_DOMAINS
-      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-      : 'http://localhost:5000';
+    const appUrl = process.env.APP_BASE_URL
+      || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : 'http://localhost:5000');
 
     const report: { type: string; id: string; status: 'created' | 'exists' | 'failed'; message?: string }[] = [];
 
