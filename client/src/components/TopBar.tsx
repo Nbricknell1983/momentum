@@ -22,7 +22,7 @@ interface TopBarProps {
 
 export default function TopBar({ onAgentClick }: TopBarProps) {
   const dispatch = useDispatch();
-  const { user: authUser, signOut, userRole } = useAuth();
+  const { user: authUser, signOut, userRole, effectiveRole, viewAsUser } = useAuth();
   const searchQuery = useSelector((state: RootState) => state.app.searchQuery);
 
   const initials = authUser?.displayName?.split(' ').map(n => n[0]).join('') || authUser?.email?.charAt(0).toUpperCase() || 'U';
@@ -76,7 +76,9 @@ export default function TopBar({ onAgentClick }: TopBarProps) {
                   {authUser?.email}
                 </p>
                 {userRole && (
-                  <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
+                  <p className="text-xs text-muted-foreground capitalize" data-testid="text-user-role">
+                    {viewAsUser ? `Viewing as: ${viewAsUser.role}` : userRole}
+                  </p>
                 )}
               </div>
             </DropdownMenuLabel>

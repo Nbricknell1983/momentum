@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, lazy, Suspense } from 'react';
+const ViewAsUserModal = lazy(() => import('@/components/ViewAsUserModal'));
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ import {
   Clock,
   Shield,
   Crown,
+  Eye,
 } from 'lucide-react';
 import { format, isToday, isThisWeek, subDays, formatDistanceToNow } from 'date-fns';
 import { Redirect } from 'wouter';
@@ -57,6 +59,7 @@ export default function ManagementPage() {
   const { user, orgId, authReady, membershipReady, isManager } = useAuth();
   const [selectedRepId, setSelectedRepId] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'today' | 'week' | '30days'>('week');
+  const [showViewAs, setShowViewAs] = useState(false);
 
   if (!isManager) {
     return <Redirect to="/dashboard" />;
@@ -207,16 +210,33 @@ export default function ManagementPage() {
           <h1 className="text-2xl font-bold text-foreground" data-testid="text-management-title">Management Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">Team overview and performance tracking</p>
         </div>
-        {selectedRepId && (
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => setSelectedRepId(null)}
-            data-testid="button-back-to-overview"
+            size="sm"
+            className="gap-1.5 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+            onClick={() => setShowViewAs(true)}
+            data-testid="button-open-view-as"
           >
-            Back to Overview
+            <Eye className="h-4 w-4" />
+            View As User
           </Button>
-        )}
+          {selectedRepId && (
+            <Button
+              variant="outline"
+              onClick={() => setSelectedRepId(null)}
+              data-testid="button-back-to-overview"
+            >
+              Back to Overview
+            </Button>
+          )}
+        </div>
       </div>
+      <Suspense fallback={null}>
+        {showViewAs && (
+          <ViewAsUserModal open={showViewAs} onClose={() => setShowViewAs(false)} />
+        )}
+      </Suspense>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4" data-testid="card-stat-total-reps">

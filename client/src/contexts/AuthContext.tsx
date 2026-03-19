@@ -25,11 +25,24 @@ interface AuthUser {
   photoURL: string | null;
 }
 
+export interface ViewAsUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: TeamMemberRole;
+  logId: string | null;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   orgId: string | null;
   userRole: TeamMemberRole | null;
   isManager: boolean;
+  effectiveIsManager: boolean;
+  effectiveRole: TeamMemberRole | null;
+  viewAsUser: ViewAsUser | null;
+  setViewAsUser: (u: ViewAsUser) => void;
+  clearViewAs: () => void;
   loading: boolean;
   authReady: boolean;
   membershipReady: boolean;
@@ -52,8 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [membershipReady, setMembershipReady] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
+  const [viewAsUser, setViewAsUserState] = useState<ViewAsUser | null>(null);
 
   const isManager = useMemo(() => userRole === 'owner' || userRole === 'admin', [userRole]);
+  const effectiveRole = viewAsUser ? viewAsUser.role : userRole;
+  const effectiveIsManager = viewAsUser
+    ? viewAsUser.role === 'owner' || viewAsUser.role === 'admin'
+    : isManager;
+
+  function setViewAsUser(u: ViewAsUser) { setViewAsUserState(u); }
+  function clearViewAs() { setViewAsUserState(null); }
 
   useEffect(() => {
     console.log('[Auth] Setting up onAuthStateChanged listener');
@@ -357,6 +378,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       orgId,
       userRole,
       isManager,
+      effectiveIsManager,
+      effectiveRole,
+      viewAsUser,
+      setViewAsUser,
+      clearViewAs,
       loading,
       authReady,
       membershipReady,

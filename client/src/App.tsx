@@ -11,6 +11,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import AppSidebar from '@/components/AppSidebar';
 import TopBar from '@/components/TopBar';
+import ImpersonationBanner from '@/components/ImpersonationBanner';
 import AISalesEngine from '@/components/AISalesEngine';
 import DashboardPage from '@/pages/dashboard';
 import PipelinePage from '@/pages/pipeline';
@@ -37,12 +38,12 @@ import { useFirestoreSync } from '@/lib/firestoreSync';
 import { Loader2 } from 'lucide-react';
 
 function ManagerGate({ component: Component }: { component: React.ComponentType }) {
-  const { isManager } = useAuth();
+  const { effectiveIsManager } = useAuth();
   const [, setLocation] = useLocation();
   useEffect(() => {
-    if (!isManager) setLocation('/dashboard');
-  }, [isManager, setLocation]);
-  if (!isManager) return null;
+    if (!effectiveIsManager) setLocation('/dashboard');
+  }, [effectiveIsManager, setLocation]);
+  if (!effectiveIsManager) return null;
   return <Component />;
 }
 
@@ -183,13 +184,16 @@ function AppLayout() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0">
-          <TopBar onAgentClick={() => setIsAgentOpen(true)} />
-          <main className="flex-1 overflow-hidden">
-            <ProtectedRoutes />
-          </main>
+      <div className="flex flex-col h-screen w-full">
+        <ImpersonationBanner />
+        <div className="flex flex-1 min-h-0 w-full">
+          <AppSidebar />
+          <div className="flex flex-col flex-1 min-w-0">
+            <TopBar onAgentClick={() => setIsAgentOpen(true)} />
+            <main className="flex-1 overflow-hidden">
+              <ProtectedRoutes />
+            </main>
+          </div>
         </div>
       </div>
       <AISalesEngine 

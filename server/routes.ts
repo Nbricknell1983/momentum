@@ -11878,6 +11878,69 @@ Return ONLY JSON:
     }
   });
 
+  // ── Org members list (for impersonation picker) ─────────────────────────
+  app.get('/api/org/members', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const orgId = req.orgId as string;
+    try {
+      const snap = await firestore!.collection('orgs').doc(orgId).collection('members').get();
+      const members = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          uid: d.id,
+          email: data.email || '',
+          displayName: data.displayName || null,
+          role: data.role || 'member',
+          active: data.active === true,
+        };
+      });
+      res.json(members);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Impersonation audit log ─────────────────────────────────────────────
+  app.post('/api/impersonation/log', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.orgId as string;
+    const uid = req.user?.uid as string;
+    const email = req.user?.email as string | undefined;
+    const { event, targetUid, targetEmail, targetName, targetRole, logId } = req.body as {
+      event: 'started' | 'ended';
+      targetUid: string;
+      targetEmail: string;
+      targetName: string;
+      targetRole: string;
+      logId?: string;
+    };
+    try {
+      const col = firestore!.collection('orgs').doc(orgId).collection('impersonationLog');
+      if (event === 'started') {
+        const ref = col.doc();
+        await ref.set({
+          id: ref.id,
+          orgId,
+          impersonatorUid: uid,
+          impersonatorEmail: email || null,
+          targetUid,
+          targetEmail,
+          targetName,
+          targetRole,
+          event: 'started',
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        });
+        res.json({ ok: true, logId: ref.id });
+      } else if (event === 'ended' && logId) {
+        await col.doc(logId).update({ event: 'ended', endedAt: new Date().toISOString() });
+        res.json({ ok: true });
+      } else {
+        res.status(400).json({ error: 'Invalid event or missing logId for ended event' });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── My Work — team-facing work item surface ─────────────────────────────
   app.get('/api/my-work', requireOrgAccess, async (req: any, res: any) => {
     const orgId = req.orgId as string;

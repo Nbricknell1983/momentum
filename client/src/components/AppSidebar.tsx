@@ -69,7 +69,7 @@ function useMyWorkCount(orgId: string | null) {
 export default function AppSidebar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { isManager, user, orgId } = useAuth();
+  const { isManager, effectiveIsManager, user, orgId } = useAuth();
   const myWorkCount = useMyWorkCount(orgId ?? null);
 
   return (
@@ -112,7 +112,7 @@ export default function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        {isManager && (
+        {effectiveIsManager && isManager && (
           <SidebarGroup>
             <SidebarGroupLabel>Management</SidebarGroupLabel>
             <SidebarGroupContent>
