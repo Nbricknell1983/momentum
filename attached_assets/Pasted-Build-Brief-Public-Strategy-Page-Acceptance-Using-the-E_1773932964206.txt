@@ -1,0 +1,322 @@
+Build Brief — Public Strategy Page + Acceptance, Using the Existing Strategy Structure
+Goal
+Turn the existing public strategy page into a first-class commercial artifact that:
+
+preserves the current structure and layout exactly as the foundation
+is populated automatically from the strategy object
+helps win the deal
+captures acceptance
+converts accepted scope into real delivery work in Bullpen
+Core product decision
+Do not redesign the public strategy page from scratch.
+
+The current public strategy page structure is already the right foundation and should be preserved.
+
+The work now is to:
+
+keep the current layout hierarchy
+make the content generation and acceptance workflow robust
+connect acceptance to delivery
+Non-negotiable requirement
+Preserve the current structure and layout
+The public strategy URL must keep the same top-to-bottom structure it currently has:
+
+Sticky Navigation Bar
+Hero Section
+Digital Visibility Triangle
+Search Engine View
+Market Opportunity
+Market Capture Map
+Discovery Path
+Buyer Reality Gap
+Intent Coverage
+Digital Presence Audit
+Momentum Moment
+Growth Roadmap
+Growth Pillars
+Insight Snapshots
+Cost of Inaction
+Revenue Simulator
+Projected Outcomes & KPIs
+Scope Acceptance Section
+This should remain the canonical presentation structure unless there is a very strong reason to change it later.
+
+Important
+The implementation should improve:
+
+content quality
+automation
+data population
+acceptance flow
+delivery conversion
+Not the underlying page architecture.
+
+Problem
+Right now, the strategy/public URL flow is still too disconnected from the commercial and delivery engine.
+
+The current gaps are likely:
+
+strategy generation may not consistently populate the page strongly enough
+acceptance may not be fully operational
+accepted scope may not yet convert cleanly into delivery work
+the page may still behave like a presentation artifact rather than a commercial workflow asset
+You want the page to act like a real agency proposal/strategy experience:
+
+sharp enough to help win
+clear enough to discuss
+actionable enough to convert into work
+Outcome that matters most
+Make the current public strategy page the commercial bridge between:
+
+prep intelligence
+strategy
+acceptance
+delivery
+Success means:
+
+the page keeps its current structure/layout
+the strategy content is populated strongly and coherently
+the acceptance section captures real scope decisions
+accepted services convert directly into delivery work
+the page feels like a polished agency artifact, not just a report
+Existing page structure to preserve
+The page already has this structure and should keep it:
+
+Sticky Navigation Bar
+Business name
+confidence level badge
+Book a Call button
+Hero Section
+Digital Visibility Strategy pill
+confidence badge
+business name
+industry / location / website row
+strategy direction quote
+confidence explanation
+3-stat forecast band
+Growth Readiness score ring + 5 sub-score bars
+prepared date + confidential note
+Digital Visibility Triangle
+Relevance / Authority / Trust cards with:
+score
+progress bar
+evidence
+interpretation
+Search Engine View
+page distribution stats
+warning banners for service/location page weakness
+Market Opportunity
+monthly searches
+current capture
+potential capture
+keyword table
+Market Capture Map
+cluster cards by topic
+Discovery Path
+5-stage buyer journey timeline
+Buyer Reality Gap
+critical gap alert
+expectations vs current signals comparison
+Intent Coverage
+expandable intent rows with evidence + suggested move
+Digital Presence Audit
+Website / GBP / Authority & Trust audit cards
+Momentum Moment
+summary paragraph
+bold quote/question
+Growth Roadmap
+3-phase cards with objective, activities, outcome
+Growth Pillars
+3–4 pillars with rationale, actions, outcomes
+Insight Snapshots
+2–4 metric cards
+Cost of Inaction
+3/6/12 month loss timeline
+conservative/optimistic scenarios
+Revenue Simulator
+interactive sliders
+visitors / enquiries / customers / revenue outputs
+Projected Outcomes & KPIs
+outcome cards
+KPI tracking table
+Scope Acceptance Section
+service checkboxes
+contact name / email / notes
+Accept Selected Services button
+accepted state confirmation
+What needs to be built
+Phase 1 — Canonical strategy object → current page structure mapping
+Create or finalize a structured strategy object that maps cleanly into the existing page layout.
+
+The strategy object needs to drive:
+hero strategy direction
+growth readiness score + sub-scores
+triangle evidence
+search opportunity data
+buyer journey interpretation
+reality gap language
+intent coverage rows
+audit cards
+roadmap
+pillars
+snapshots
+cost of inaction
+projected outcomes
+acceptance scope
+Important
+Do not let page sections become disconnected ad hoc outputs.
+The page should render from one coherent strategy data object.
+
+Phase 2 — Strengthen content generation for the current sections
+The agents need to populate the existing layout with strong content, not placeholders.
+
+The content needs to feel:
+commercially sharp
+easy to discuss on a sales/follow-up call
+persuasive without sounding generic
+grounded in what is known plus reasonable interpretation
+Especially important sections to strengthen
+Strategy Direction
+Momentum Moment
+Buyer Reality Gap
+Growth Roadmap
+Growth Pillars
+Cost of Inaction
+Scope Acceptance framing
+These are the sections most likely to influence the close.
+
+Phase 3 — Make the page a first-class public URL
+The page should be publishable as a public strategy link with the existing layout preserved.
+
+Requirements
+shareable public URL
+clean rendering across devices
+commercially credible presentation
+optional PDF export from same strategy object if needed later
+no structure drift between internal and public versions
+Important
+The public page should be the web-native version of the existing strategy structure.
+Not a separate parallel artifact.
+
+Phase 4 — Acceptance capture on the existing acceptance section
+Use the existing Scope Acceptance Section as the operational capture point.
+
+Required behavior
+The bottom section should:
+
+capture selected services
+capture contact name/email/notes
+store acceptance state
+support accepted/not accepted state
+show accepted services after submission
+Better support if practical
+partial acceptance
+notes/scope modifiers
+follow-up status
+Phase 5 — Accepted scope → delivery conversion
+When a prospect accepts services from the acceptance section, the system should automatically convert them into real Bullpen delivery work.
+
+Example mappings
+Website
+owner: Website Specialist / Full Stack Developer
+supporting: Frontend Developer, QA
+SEO
+owner: SEO Specialist
+supporting: Website Specialist, Strategy Specialist
+GBP
+owner: GBP Specialist
+supporting: Review & Reputation Specialist
+Ads
+owner: Google Ads Specialist
+supporting: Strategy Specialist, Website Specialist
+Social
+owner: Social Media Specialist
+supporting: Strategy Specialist
+CRM
+owner: CRM & Automation Engineer
+supporting: Operations Specialist
+Content
+owner: Strategy Specialist or appropriate content/growth owner
+supporting: SEO / Website as needed
+Required outputs
+work items
+owner/supporting role assignment
+linked Bullpen thread(s)
+implementation-ready context from the strategy
+onboarding/delivery initiation where needed
+Commercial rules
+1. This page must help win the work
+It is not just a diagnostic report.
+It should:
+
+sharpen belief
+reduce uncertainty
+frame opportunity
+make the recommended scope feel logical
+2. Acceptance must feel natural
+The acceptance section should not feel bolted on.
+It should feel like the natural next step after the strategy.
+
+3. Accepted strategy must become delivery automatically
+Do not let accepted scope die as passive history.
+
+4. Keep the current strategy structure
+No redesign drift.
+Improve the engine, not the skeleton.
+
+Recommended implementation phases
+Phase 1 — Strategy object mapping
+define mapping from current strategy data to every existing page section
+identify missing fields/derived values needed to populate all sections well
+Phase 2 — Public page content hardening
+strengthen page copy and section logic using current structure
+ensure strategy generation produces all necessary section content
+Phase 3 — Acceptance capture
+make the current acceptance section store real accepted scope and notes cleanly
+Phase 4 — Delivery conversion
+convert accepted services into Bullpen work items and specialist ownership automatically
+Success criteria
+This is successful when:
+
+the public strategy URL preserves the current structure and layout
+strategy content is strong enough to help win the deal
+the acceptance section captures real scope decisions
+accepted services automatically become owned delivery work
+the page feels like a polished agency proposal/strategy asset, not just a report
+QA requirements
+Structure
+the public page preserves the current top-to-bottom layout
+no section ordering/hierarchy drift occurs
+Content quality
+hero, roadmap, pillars, reality gap, and momentum moment are commercially useful
+strategy direction and acceptance framing feel persuasive and specific
+Acceptance
+selected services are captured correctly
+accepted state persists and displays correctly
+partial acceptance works if supported
+Delivery conversion
+accepted services generate the correct work items
+owner/supporting roles are assigned correctly
+work starts with strategy context attached
+Bullpen thread/work queue history remains connected
+What good output looks like
+Please return:
+
+strategy object mapping to current page sections
+what content generation changed to strengthen the existing layout
+acceptance capture model
+accepted scope → delivery conversion logic
+any page sections still needing stronger source data or refinement
+What not to do
+do not redesign the public page structure
+do not make a second parallel strategy format
+do not leave accepted scope disconnected from delivery
+do not weaken the commercial flow by treating the page like a static report
+Final product rule
+The current public strategy page structure is the right delivery surface.
+The job now is to make it:
+
+stronger commercially
+shareable publicly
+acceptance-aware
+and directly connected to delivery execution in Bullpen

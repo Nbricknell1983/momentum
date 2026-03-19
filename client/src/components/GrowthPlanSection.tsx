@@ -1442,6 +1442,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
         industry: industry || '',
         location: location || '',
         websiteUrl: websiteUrl || '',
+        phone: lead?.phone || '',
         orgId,
         leadId: lead.id,
         preparedBy: user.displayName || 'Momentum Agent',

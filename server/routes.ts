@@ -6414,9 +6414,26 @@ ${crawledCompsContext}
 
       const socialProfiles = [facebookUrl && 'Facebook', instagramUrl && 'Instagram', linkedinUrl && 'LinkedIn'].filter(Boolean).join(', ');
 
-      const prompt = `You are a senior digital marketing strategist producing a 12-month growth strategy for a sales presentation. This strategy must feel like a strategic advisor wrote it — not an SEO report. Every insight must follow: Evidence → Interpretation → Strategic Implication → Recommended Move.
+      const prompt = `You are a senior digital marketing strategist producing a 12-month Digital Visibility Strategy for a sales presentation. This strategy is the commercial bridge between the agency and the prospect — it must be sharp enough to win the deal, clear enough to discuss on a call, and specific enough to convert into real delivery work.
 
-CRITICAL: If conversation notes or client goals are provided, the strategy narrative must be framed around what the client wants to achieve — not generic SEO tactics. Reference their stated goals throughout.
+COMMERCIAL WRITING RULES (non-negotiable):
+- Every insight follows: Evidence → Interpretation → Strategic Implication → Recommended Move
+- DO NOT write: "improve SEO", "optimise keywords", "build backlinks", "enhance online presence"
+- DO write: "buyers searching for X cannot find this business because Y", "the website signals Z to search engines instead of W"
+- Frame this as a "Digital Visibility Strategy" — NOT an SEO audit or keyword report
+- If conversation notes or client goals are provided, reference their stated goals throughout
+- All numbers and evidence must be grounded in the provided data — no generic filler
+- KEYWORD RULE: Use EXACT uploaded keywords in marketOpportunity.keywords — do not invent
+- VOLUME RULE: totalMonthlySearches = ${totalKwVolume > 0 ? totalKwVolume : 'estimate realistically based on industry/location'}
+
+COMMERCIALLY CRITICAL SECTIONS — write these with particular care:
+- oneSentenceStrategy: This is the strategy's north star. Make it memorable and specific.
+- momentumMoment: This is the emotional turning point. It must create a moment of realisation, not just describe a problem.
+- buyerRealityGap: This is the most persuasive section. Make the gap visceral and specific to this business.
+- growthPhases: Each phase must feel like a consultant's recommendation, not a generic roadmap.
+- growthPillars: Each pillar must name concrete actions a real specialist would do — not vague categories.
+- costOfInaction: Frame this as real ongoing business cost, not abstract SEO loss.
+- scopeFraming: This powers the acceptance section. It must make accepting feel like the obvious next step.
 
 === BUSINESS PROFILE ===
 Business: ${businessName}
@@ -6428,107 +6445,146 @@ Google Reviews: ${reviewCount != null ? reviewCount + ' reviews, ' + rating + '�
 Social: ${socialProfiles || 'None detected'}
 ${strat12SIContext}${strat12ConvContext}${strat12AhrefsContext}${diagContext}${sitemapContext}${competitorContext}
 
-=== DIGITAL VISIBILITY STRATEGY RULES ===
-- Frame ALL insights as: Evidence → Interpretation → Strategic Implication → Recommended Move
-- Frame this as a "Digital Visibility Strategy" — NOT an SEO audit or keyword report
-- KEYWORD RULE: Use EXACT uploaded keywords in marketOpportunity.keywords — do not invent new ones
-- VOLUME RULE: totalMonthlySearches = ${totalKwVolume > 0 ? totalKwVolume : 'sum of uploaded keyword volumes or estimate realistically'}
-- All evidence must be grounded in the provided data — no generic filler
-- Do NOT write: "improve SEO", "optimise keywords", "build backlinks", "enhance online presence"
-- DO write: "buyers searching for X cannot find this business because Y", "the website signals Z to search engines instead of W"
-- The strategy must feel like a senior consultant wrote it, not a marketing report
-
-Respond with this EXACT JSON (be specific and evidence-based in every field):
+Respond with this EXACT JSON — every field must be specific, evidence-based, and commercially sharp:
 {
-  "oneSentenceStrategy": "Under 30 words using business language — position [business] as more discoverable for [service] across [location] by [strategic direction]",
-  "strategyConfidence": { "level": "High|Moderate|Low", "explanation": "1-2 sentences grounded in keyword demand + competition + website readiness signals" },
+  "oneSentenceStrategy": "Under 30 words. Business-language framing: 'Position [business] as the go-to [service] in [location] by [specific strategic direction].' Make it memorable enough to repeat on a call.",
+  "strategyConfidence": { "level": "High|Moderate|Low", "explanation": "1-2 sentences grounded in keyword demand volume, competition level, and current website readiness signals" },
   "digitalVisibilityTriangle": {
-    "relevance": { "score": 0-100, "evidence": "Specific sitemap/page/content evidence about how well search understands what this business does", "interpretation": "What this means for discoverability" },
-    "authority": { "score": 0-100, "evidence": "DR/backlinks/citations/referring domains evidence from provided data", "interpretation": "What this means for ranking trust" },
-    "trust": { "score": 0-100, "evidence": "Reviews/GBP/social proof/testimonials evidence", "interpretation": "What this means for buyer confidence" }
+    "relevance": { "score": 0-100, "evidence": "Specific sitemap page count, service/location page evidence, keyword coverage", "interpretation": "What this means for discoverability right now" },
+    "authority": { "score": 0-100, "evidence": "DR/backlinks/referring domains/citations evidence from data", "interpretation": "What this means for ranking trust vs competitors" },
+    "trust": { "score": 0-100, "evidence": "Reviews count, rating, GBP completeness, social proof signals", "interpretation": "What this means for buyer confidence at decision point" }
   },
   "discoveryPath": [
-    { "stage": "Search Entry", "strength": "strong|partial|weak", "issue": "Specific bottleneck preventing this stage from working well", "impact": "Business impact of this weakness" },
-    { "stage": "Visibility", "strength": "strong|partial|weak", "issue": "...", "impact": "..." },
-    { "stage": "Website Experience", "strength": "strong|partial|weak", "issue": "...", "impact": "..." },
-    { "stage": "Trust Signals", "strength": "strong|partial|weak", "issue": "...", "impact": "..." },
-    { "stage": "Enquiry", "strength": "strong|partial|weak", "issue": "...", "impact": "..." }
+    { "stage": "Search Entry", "strength": "strong|partial|weak", "issue": "Specific keyword or intent gap preventing this stage from working", "impact": "Business impact: how many buyers are lost at this stage" },
+    { "stage": "Visibility", "strength": "strong|partial|weak", "issue": "Specific ranking or Maps Pack gap", "impact": "..." },
+    { "stage": "Website Experience", "strength": "strong|partial|weak", "issue": "Specific UX, content, or conversion signal missing", "impact": "..." },
+    { "stage": "Trust Signals", "strength": "strong|partial|weak", "issue": "Specific review, social proof, or authority gap", "impact": "..." },
+    { "stage": "Enquiry", "strength": "strong|partial|weak", "issue": "Specific friction at the conversion point", "impact": "..." }
   ],
   "buyerRealityGap": {
-    "buyerExpects": ["3-4 things buyers expect when searching for this type of business"],
-    "currentReality": ["3-4 things the current website/presence actually signals to those buyers"],
-    "topGap": "The single most critical gap between buyer expectation and current reality — 1 sentence",
-    "implication": "Why this gap directly costs enquiries — be specific"
+    "buyerExpects": [
+      "4 specific things buyers in this industry/location expect to find when they search — be concrete, not generic (e.g. 'A service page dedicated to [service X] with suburb coverage listed', not 'good content')"
+    ],
+    "currentReality": [
+      "4 specific things the current website/presence actually signals — contrast directly with buyerExpects (e.g. 'The website has one generic Services page with no location or service-specific targeting')"
+    ],
+    "topGap": "The single most commercially damaging gap — 1 sentence, specific to this business and what they are losing because of it",
+    "implication": "Why this gap is costing enquiries RIGHT NOW — connect directly to the search volume data and competitor behaviour"
   },
   "intentGaps": [
-    { "category": "Service Intent", "coverage": "strong|partial|missing", "evidence": "What exists or is missing on the site to address this", "suggestedMove": "Specific recommended action" },
+    { "category": "Service Intent", "coverage": "strong|partial|missing", "evidence": "Specific page or missing page evidence", "suggestedMove": "Exact recommended action: e.g. 'Create dedicated service pages for [service A], [service B], [service C]'" },
     { "category": "Location Intent", "coverage": "strong|partial|missing", "evidence": "...", "suggestedMove": "..." },
     { "category": "Problem/Need Intent", "coverage": "strong|partial|missing", "evidence": "...", "suggestedMove": "..." },
     { "category": "Comparison Intent", "coverage": "strong|partial|missing", "evidence": "...", "suggestedMove": "..." },
     { "category": "Decision Intent", "coverage": "strong|partial|missing", "evidence": "...", "suggestedMove": "..." }
   ],
   "momentumMoment": {
-    "summary": "2-3 sentences: the demand that exists in this market, the current visibility gap, and the competitive opportunity that remains",
-    "clientQuestion": "One NEPQ-style reflective question — helps the client realise: if the opportunity exists, why aren't we capturing more of it? Thoughtful, not salesy"
+    "summary": "3 sentences that create a moment of strategic clarity: (1) name the real-world demand that exists in this market using the keyword volume data, (2) name the exact visibility gap this business has right now with specific evidence, (3) frame the competitive opportunity — what's available to capture if action is taken. This should feel like a senior advisor just told them something they hadn't seen before.",
+    "clientQuestion": "One NEPQ-style reflective question that creates realisation. NOT: 'Would you like to improve your rankings?' DO: Something like 'If [X] people are searching for [service] in [location] every month and your competitors are capturing most of them — what would it mean for your business if even [Y%] of those found you first?' Calibrated, not salesy."
   },
   "growthPhases": [
-    { "phase": "Phase 1 — Foundations", "months": "Month 1–3", "objective": "Specific objective for this phase", "whyMatters": "Why this phase is critical", "whatShifts": "What changes in the market/search/buyer experience", "expectedImpact": "Directional impact at end of phase" },
-    { "phase": "Phase 2 — Visibility Expansion", "months": "Month 4–8", "objective": "...", "whyMatters": "...", "whatShifts": "...", "expectedImpact": "..." },
-    { "phase": "Phase 3 — Market Capture", "months": "Month 9–12", "objective": "...", "whyMatters": "...", "whatShifts": "...", "expectedImpact": "..." }
+    {
+      "phase": "Phase 1 — Foundations",
+      "months": "Month 1–3",
+      "objective": "Specific objective — what is being built and why it matters strategically (not 'build foundation')",
+      "whyMatters": "Why this is the RIGHT first phase for THIS business — reference a specific gap or data point",
+      "whatShifts": "What specifically changes in how search engines or buyers see this business at end of Phase 1",
+      "expectedImpact": "Concrete directional outcome: e.g. 'Service pages indexed and competing for [keyword cluster], GBP showing in Maps Pack for [location]'"
+    },
+    {
+      "phase": "Phase 2 — Visibility Expansion",
+      "months": "Month 4–8",
+      "objective": "...",
+      "whyMatters": "...",
+      "whatShifts": "...",
+      "expectedImpact": "..."
+    },
+    {
+      "phase": "Phase 3 — Market Capture",
+      "months": "Month 9–12",
+      "objective": "...",
+      "whyMatters": "...",
+      "whatShifts": "...",
+      "expectedImpact": "..."
+    }
   ],
   "costOfInaction": {
     "missedMonthlySearches": ${totalKwVolume > 0 ? totalKwVolume : 1000},
-    "missedEnquiriesNote": "At ~2% capture rate, approximately X enquiries per month are currently going to competitors",
-    "competitorNote": "1-2 sentences about how competitor advantage compounds over time if nothing changes",
-    "businessImpact": "Annual revenue opportunity currently being missed — expressed in business terms"
+    "missedEnquiriesNote": "Specific: at the estimated current capture rate, X enquiries/month are going to competitors — use the actual keyword volume to make this concrete",
+    "competitorNote": "Specific: name how competitors who are already ranking will compound their advantage — links, reviews, maps rankings — over the next 6-12 months if nothing changes",
+    "businessImpact": "Express the annual cost in business language: 'Approximately $X in lost project/job revenue annually, based on [Y] missed enquiries/month at an average job value of $Z' — estimate conservatively",
+    "timeline": [
+      { "period": "3 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 3 : 3000}, "estimatedEnquiriesLost": "X–Y", "competitorGain": "What competitors consolidate in this window" },
+      { "period": "6 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 6 : 6000}, "estimatedEnquiriesLost": "X–Y", "competitorGain": "What competitors consolidate in this window" },
+      { "period": "12 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 12 : 12000}, "estimatedEnquiriesLost": "X–Y", "competitorGain": "What competitors consolidate in this window" }
+    ]
   },
   "insightSnapshots": [
-    { "headline": "Concise strategic insight headline", "metric": "Key number or finding", "explanation": "1-2 sentence strategic explanation" },
+    { "headline": "Commercially sharp insight headline — something a business owner would find striking", "metric": "Key number or stat from the data", "explanation": "1-2 sentences of strategic explanation — why this matters commercially" },
+    { "headline": "...", "metric": "...", "explanation": "..." },
     { "headline": "...", "metric": "...", "explanation": "..." },
     { "headline": "...", "metric": "...", "explanation": "..." }
   ],
+  "scopeFraming": {
+    "headline": "A compelling 3-7 word headline for the acceptance section — e.g. 'Choose your starting point' or 'Where do you want to start?'",
+    "leadText": "2 sentences that make accepting feel like the natural next step. Reference the strategy direction and what gets activated when they select services. No pressure language — just clarity and confidence.",
+    "ctaText": "Short active text for the submit button context — e.g. 'Accept and activate delivery' or 'Start with these services'"
+  },
   "executiveSummary": {
     "businessName": "${businessName}",
     "location": "${location || 'Not specified'}",
-    "coreServices": ["3-5 specific services from sitemap/industry"],
-    "currentChallenge": "Core visibility problem in 1-2 sentences",
-    "primaryGoal": "1 clear 12-month goal",
+    "coreServices": ["3-5 specific services from sitemap/industry data"],
+    "currentChallenge": "Core visibility problem in 1-2 sentences — specific to this business",
+    "primaryGoal": "1 clear 12-month goal tied to the strategy direction",
     "growthTarget": "Specific measurable growth target",
-    "primaryChannels": ["relevant channels for this industry"]
+    "primaryChannels": ["channels relevant to this industry and location"]
   },
   "marketOpportunity": {
     "totalMonthlySearches": ${totalKwVolume > 0 ? totalKwVolume : 1200},
-    "currentCapture": "Estimated current capture % based on readiness",
-    "potentialCapture": "Potential capture with key fixes — include lead estimate",
-    "keyInsight": "1 punchy insight the rep can use on the call",
+    "currentCapture": "Estimated current capture % based on readiness score and ranking data",
+    "potentialCapture": "Achievable capture % with key fixes — include estimated lead count per month",
+    "keyInsight": "1 punchy insight the rep can use verbatim on the call — must reference a specific number",
     "keywords": [{ "keyword": "...", "monthlySearches": "...", "currentRank": "...", "opportunity": "high|medium|low", "intent": "commercial|informational" }]
   },
   "digitalAudit": {
-    "website": { "score": 0-100, "strengths": ["specific strengths from sitemap"], "gaps": ["specific gaps from diagnosis data"] },
+    "website": { "score": 0-100, "strengths": ["specific strengths grounded in sitemap and crawl data"], "gaps": ["specific gaps from diagnosis — name actual missing pages or signals"] },
     "gbp": { "score": 0-100, "status": "found|not found", "reviews": ${reviewCount ?? 0}, "rating": ${rating ?? 0}, "strengths": ["..."], "gaps": ["..."] },
-    "authority": { "score": 0-100, "socialProfiles": ${JSON.stringify(socialProfiles ? socialProfiles.split(', ') : [])}, "gaps": ["..."] }
+    "authority": { "score": 0-100, "socialProfiles": ${JSON.stringify(socialProfiles ? socialProfiles.split(', ') : [])}, "gaps": ["specific authority gaps — missing directory listings, no case studies, thin backlink profile, etc."] }
   },
   "growthPillars": [
-    { "number": 1, "title": "Industry-specific pillar title", "goal": "What this achieves", "timeframe": "Month X–X", "actions": [{ "action": "Specific action", "detail": "Why and how", "examples": ["e.g. page-slug"] }] }
+    {
+      "number": 1,
+      "title": "Short, specific pillar name — e.g. 'Service Signal Expansion' or 'Maps Pack Dominance'",
+      "goal": "What this pillar achieves for the business in concrete terms — not 'improve SEO'",
+      "timeframe": "Month X–X",
+      "actions": [
+        { "action": "Specific action a real specialist would take — e.g. 'Create 6 dedicated service pages targeting [keyword cluster]'", "detail": "Why this specific action matters for this business", "examples": ["example-page-slug-1", "example-page-slug-2"] },
+        { "action": "...", "detail": "...", "examples": ["..."] },
+        { "action": "...", "detail": "...", "examples": ["..."] }
+      ]
+    },
+    { "number": 2, "title": "...", "goal": "...", "timeframe": "Month X–X", "actions": [{ "action": "...", "detail": "...", "examples": ["..."] }] },
+    { "number": 3, "title": "...", "goal": "...", "timeframe": "Month X–X", "actions": [{ "action": "...", "detail": "...", "examples": ["..."] }] },
+    { "number": 4, "title": "...", "goal": "...", "timeframe": "Month X–X", "actions": [{ "action": "...", "detail": "...", "examples": ["..."] }] }
   ],
   "projectedOutcomes": [
-    { "month": "Month 3", "estimatedLeads": "5-10", "rankingKeywords": "3-5", "confidence": "low" },
-    { "month": "Month 6", "estimatedLeads": "12-20", "rankingKeywords": "8-12", "confidence": "medium" },
-    { "month": "Month 12", "estimatedLeads": "30-50", "rankingKeywords": "20-30", "confidence": "medium" }
+    { "month": "Month 3", "estimatedLeads": "X–Y", "rankingKeywords": "X–Y", "confidence": "low" },
+    { "month": "Month 6", "estimatedLeads": "X–Y", "rankingKeywords": "X–Y", "confidence": "medium" },
+    { "month": "Month 12", "estimatedLeads": "X–Y", "rankingKeywords": "X–Y", "confidence": "medium" }
   ],
   "kpis": [
-    { "metric": "Inbound Enquiries", "baseline": "current estimate", "target12Month": "target" },
-    { "metric": "Google Ranking Keywords", "baseline": "current", "target12Month": "target" },
-    { "metric": "Maps Pack Appearance", "baseline": "current", "target12Month": "target" },
+    { "metric": "Inbound Enquiries", "baseline": "current estimate based on data", "target12Month": "target" },
+    { "metric": "Google Ranking Keywords", "baseline": "current (from data or estimated)", "target12Month": "target" },
+    { "metric": "Maps Pack Appearance", "baseline": "current status", "target12Month": "target" },
     { "metric": "Google Review Count", "baseline": "${reviewCount ?? 0}", "target12Month": "target" }
   ],
-  "repTalkingPoints": ["3-5 evidence-grounded one-liners for the call"]
+  "repTalkingPoints": ["5 evidence-grounded one-liners the rep can use verbatim on the follow-up call — each tied to a specific number or finding from the strategy"]
 }`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 4000,
+        max_tokens: 5500,
         response_format: { type: "json_object" },
       });
 
@@ -7244,11 +7300,41 @@ Return JSON:
         content: { owner: 'Content Strategist', supporting: ['SEO Specialist'] },
       };
 
+      // Pull strategy context for richer work item diagnosis
+      const strategy = report.strategy || {};
+      const oneSentenceStrategy: string = strategy.oneSentenceStrategy || '';
+      const momentumSummary: string = strategy.momentumMoment?.summary || '';
+      const topGap: string = strategy.buyerRealityGap?.topGap || '';
+      const phase1Objective: string = strategy.growthPhases?.[0]?.objective || '';
+      const acceptedAtFmt = new Date(acceptedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const allAccepted = acceptedServices.join(', ');
+
       const workItemIds: string[] = [];
       if (orgId && firestore) {
         for (const svc of acceptedServices) {
           const key = svc.toLowerCase().trim();
           const roles = DELIVERY_MAP[key] || { owner: 'Strategy Specialist', supporting: ['Operations Specialist'] };
+
+          // Find the matching pillar for this service if available
+          const matchingPillar = (strategy.growthPillars || []).find((p: any) =>
+            p.title?.toLowerCase().includes(key) || key.includes(p.title?.toLowerCase()?.split(' ')[0] || '')
+          );
+          const pillarContext = matchingPillar
+            ? `Strategy pillar: ${matchingPillar.title}. Goal: ${matchingPillar.goal}. Key actions: ${(matchingPillar.actions || []).slice(0, 2).map((a: any) => a.action).join('; ')}.`
+            : '';
+
+          const diagnosis = [
+            `${report.businessName || 'Prospect'} accepted ${svc} as part of their Digital Visibility Strategy on ${acceptedAtFmt}.`,
+            oneSentenceStrategy ? `Strategy direction: ${oneSentenceStrategy}` : '',
+            topGap ? `Primary visibility gap: ${topGap}` : '',
+            pillarContext,
+            momentumSummary ? `Market context: ${momentumSummary}` : '',
+            phase1Objective ? `Phase 1 objective: ${phase1Objective}` : '',
+            `Full scope accepted: ${allAccepted}.`,
+            contactName || contactEmail ? `Contact: ${[contactName, contactEmail].filter(Boolean).join(' — ')}.` : '',
+            notes ? `Client notes: ${notes}` : '',
+          ].filter(Boolean).join(' ');
+
           const ref = firestore.collection('orgs').doc(orgId).collection('bullpenWork').doc();
           const item = {
             id: ref.id, orgId,
@@ -7256,13 +7342,13 @@ Return JSON:
             clientName: report.businessName || null,
             type: 'delivery',
             title: `Deliver ${svc} — ${report.businessName || 'New Client'}`,
-            diagnosis: `Accepted as part of strategy scope. ${report.businessName || 'Prospect'} confirmed ${svc} on ${new Date(acceptedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Contact: ${contactName || contactEmail || 'Not provided'}. ${notes ? 'Client notes: ' + notes : ''}`,
+            diagnosis,
             sourceSignal: `strategy_accepted_${key.replace(/[^a-z0-9]/g, '_')}`,
             priority: 'high',
             status: 'detected',
             owner: roles.owner,
             supporting: roles.supporting,
-            nextAction: `Review accepted strategy scope for ${svc}. Brief the team and initialise delivery workflow.`,
+            nextAction: `Review the accepted strategy scope for ${svc}. Brief the ${roles.owner} and activate the delivery workflow using the strategy context above.`,
             strategyReportId: reportId,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

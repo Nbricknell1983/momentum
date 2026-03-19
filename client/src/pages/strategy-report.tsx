@@ -352,6 +352,7 @@ export default function StrategyReportPage() {
   const mcm = s.marketCaptureMap || null;
   const confidence = s.strategyConfidence || null;
   const oneSentence = s.oneSentenceStrategy || null;
+  const scopeFraming = s.scopeFraming || null;
   const dateStr = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
 
   const confidenceColor = confidence?.level === 'High' ? 'bg-green-500/20 text-green-400 border-green-500/30'
@@ -929,6 +930,40 @@ export default function StrategyReportPage() {
                 </div>
               )}
             </div>
+
+            {/* 3/6/12 month timeline */}
+            {coi.timeline?.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                {coi.timeline.map((t: any, i: number) => {
+                  const intensity = i === 0 ? { bg: 'bg-amber-500/8 border-amber-500/20', label: 'text-amber-400', icon: 'text-amber-300' }
+                    : i === 1 ? { bg: 'bg-orange-500/8 border-orange-500/20', label: 'text-orange-400', icon: 'text-orange-300' }
+                    : { bg: 'bg-red-500/8 border-red-500/20', label: 'text-red-400', icon: 'text-red-300' };
+                  return (
+                    <div key={i} className={`border rounded-2xl p-5 space-y-3 ${intensity.bg}`}>
+                      <div className="flex items-center gap-2">
+                        <Clock className={`h-4 w-4 ${intensity.icon}`} />
+                        <span className={`text-xs font-bold uppercase tracking-wider ${intensity.label}`}>{t.period}</span>
+                      </div>
+                      {t.searchesLost > 0 && (
+                        <div>
+                          <p className={`text-2xl font-black ${intensity.label}`}>{Number(t.searchesLost).toLocaleString()}</p>
+                          <p className="text-xs text-slate-500 font-medium">searches pass to competitors</p>
+                        </div>
+                      )}
+                      {t.estimatedEnquiriesLost && (
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                          <span className="text-white font-semibold">~{t.estimatedEnquiriesLost} enquiries</span> estimated lost
+                        </p>
+                      )}
+                      {t.competitorGain && (
+                        <p className="text-xs text-slate-500 leading-relaxed italic border-l-2 border-white/10 pl-3">{t.competitorGain}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="space-y-3">
               {coi.missedEnquiriesNote && (
                 <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-start gap-3">
@@ -1049,8 +1084,12 @@ export default function StrategyReportPage() {
                   <Sparkles className="h-3.5 w-3.5" />
                   <span>Ready to move forward?</span>
                 </div>
-                <h2 className="text-2xl md:text-4xl font-black text-white mb-3">Choose your starting point</h2>
-                <p className="text-slate-400 max-w-xl mx-auto text-sm">Select the services you want to proceed with. Your account manager will be notified immediately and will activate the right specialists for each one.</p>
+                <h2 className="text-2xl md:text-4xl font-black text-white mb-3">
+                  {scopeFraming?.headline || 'Choose your starting point'}
+                </h2>
+                <p className="text-slate-400 max-w-xl mx-auto text-sm">
+                  {scopeFraming?.leadText || 'Select the services you want to proceed with. Your account manager will be notified immediately and will activate the right specialists for each one.'}
+                </p>
               </div>
 
               {/* Service selection */}
@@ -1141,7 +1180,12 @@ export default function StrategyReportPage() {
                   data-testid="button-accept-strategy"
                 >
                   {isAccepting ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Package className="h-4.5 w-4.5" />}
-                  {isAccepting ? 'Submitting…' : `Accept ${acceptedServices.length > 0 ? acceptedServices.length + ' service' + (acceptedServices.length > 1 ? 's' : '') : 'services'}`}
+                  {isAccepting
+                    ? 'Submitting…'
+                    : acceptedServices.length > 0
+                      ? (scopeFraming?.ctaText || `Accept ${acceptedServices.length} service${acceptedServices.length > 1 ? 's' : ''}`)
+                      : 'Select services above'
+                  }
                 </button>
                 {acceptedServices.length === 0 && (
                   <p className="text-xs text-slate-600">Select at least one service above to proceed</p>
