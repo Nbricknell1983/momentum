@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Switch, Route, useLocation } from 'wouter';
-import { Provider, useDispatch } from 'react-redux';
-import { store, setActivities } from './store';
+import { Provider } from 'react-redux';
+import { store } from './store';
 import { queryClient } from './lib/queryClient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -32,7 +32,6 @@ import MarketingHome from '@/pages/marketing/index';
 import MarketingServices from '@/pages/marketing/services';
 import MarketingAbout from '@/pages/marketing/about';
 import MarketingContact from '@/pages/marketing/contact';
-import { fetchAllActivities } from '@/lib/firestoreService';
 import { useFirestoreSync } from '@/lib/firestoreSync';
 import { Loader2 } from 'lucide-react';
 
@@ -63,7 +62,6 @@ type EngineSection = 'pre_call' | 'objection' | 'follow_up' | 'prospect';
 function AppLayout() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [aiSection, setAiSection] = useState<EngineSection | null>(null);
-  const dispatch = useDispatch();
   const { user, orgId, loading, authReady, membershipReady, orgError, isManager } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -91,22 +89,6 @@ function AppLayout() {
     return () => window.removeEventListener('openAISalesEngine', handler as EventListener);
   }, []);
 
-  useEffect(() => {
-    async function loadActivities() {
-      if (!authReady || !membershipReady || !orgId || !user) return;
-      const userFilter = isManager ? undefined : user.uid;
-      try {
-        const activities = await fetchAllActivities(orgId, true, userFilter);
-        console.log('[App] Fetched', activities.length, 'activities');
-        dispatch(setActivities(activities));
-      } catch (error) {
-        console.error('[App] Error loading activities from Firestore:', error);
-      }
-    }
-    if (authReady && membershipReady && user && orgId) {
-      loadActivities();
-    }
-  }, [dispatch, user, orgId, authReady, membershipReady, isManager]);
 
   if (loading || !authReady) {
     return (

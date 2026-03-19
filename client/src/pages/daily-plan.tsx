@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Target, Clock, CheckCircle2, Sparkles, Play, Lock, MapPin, 
@@ -26,7 +28,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { 
   fetchDailyPlan, upsertDailyPlan, fetchAIBrief, saveAIBrief,
   fetchPlanTasks, fetchActionRecommendations, fetchLeads, fetchClients,
-  fetchAIDebrief, saveAIDebrief, fetchActivities, updatePlanTask
+  fetchAIDebrief, saveAIDebrief, updatePlanTask
 } from '@/lib/firestoreService';
 import GrowthOperatorDailyBrief from '@/components/GrowthOperatorDailyBrief';
 import {
@@ -546,22 +548,17 @@ export default function DailyPlanPage() {
     enabled: !!orgId && !!userId && authReady && membershipReady,
   });
   
-  const { data: activities = [] } = useQuery({
-    queryKey: ['/activities', orgId, selectedDate],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const allActivities = await fetchActivities(orgId, '', authReady);
-      const dateStart = parseDateDDMMYYYY(selectedDate);
-      dateStart.setHours(0, 0, 0, 0);
-      const dateEnd = new Date(dateStart);
-      dateEnd.setHours(23, 59, 59, 999);
-      return allActivities.filter(a => {
-        const actDate = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-        return actDate >= dateStart && actDate <= dateEnd;
-      });
-    },
-    enabled: !!orgId && authReady && membershipReady,
-  });
+  const allReduxActivities = useSelector((state: RootState) => state.app.activities);
+  const activities = useMemo(() => {
+    const dateStart = parseDateDDMMYYYY(selectedDate);
+    dateStart.setHours(0, 0, 0, 0);
+    const dateEnd = new Date(dateStart);
+    dateEnd.setHours(23, 59, 59, 999);
+    return allReduxActivities.filter(a => {
+      const actDate = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+      return actDate >= dateStart && actDate <= dateEnd;
+    });
+  }, [allReduxActivities, selectedDate]);
   
   const timeBlocks = dailyPlan?.timeBlocks || DEFAULT_PLAN_TIME_BLOCKS;
   const targets = dailyPlan?.targets || {

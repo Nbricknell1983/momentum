@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, ArrowLeft, ArrowRight, Phone, Mail, Globe, MapPin, Calendar, User, Loader2, Clock, DollarSign, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,14 +6,15 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '@/store';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateClient } from '@/store';
 import {
   Client, ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, CLIENT_BOARD_STAGE_LABELS,
   CLIENT_BOARD_STAGE_COLORS, HEALTH_STATUS_LABELS, ActivityType,
 } from '@/lib/types';
-import { logClientAction, updateClientInFirestore, fetchClientActivities } from '@/lib/firestoreService';
+import { logClientAction, updateClientInFirestore } from '@/lib/firestoreService';
 import ClientGrowthIntelligencePanel from './ClientGrowthIntelligencePanel';
 import AIClientGrowthEngine from './AIClientGrowthEngine';
 import { format, addWeeks, addMonths } from 'date-fns';
@@ -56,7 +57,15 @@ function ClientLeftPanel({ client }: { client: Client }) {
   const dispatch = useDispatch();
   const { toast } = useToast();
 
-  const [activityCounts, setActivityCounts] = useState<Record<string, number>>({});
+  const allReduxActivities = useSelector((state: RootState) => state.app.activities);
+  const activityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allReduxActivities
+      .filter(a => a.clientId === client.id)
+      .forEach(a => { counts[a.type] = (counts[a.type] || 0) + 1; });
+    return counts;
+  }, [allReduxActivities, client.id]);
+
   const [loggingType, setLoggingType] = useState<ActivityType | null>(null);
   const [updatingStage, setUpdatingStage] = useState(false);
   const [updatingNextContact, setUpdatingNextContact] = useState(false);
@@ -70,15 +79,6 @@ function ClientLeftPanel({ client }: { client: Client }) {
     setLocalNextContact(client.nextContactDate ? new Date(client.nextContactDate) : null);
   }, [client.id, client.boardStage, client.nextContactDate]);
 
-  useEffect(() => {
-    if (!orgId || !authReady) return;
-    fetchClientActivities(orgId, client.id, authReady).then(activities => {
-      const counts: Record<string, number> = {};
-      activities.forEach(a => { counts[a.type] = (counts[a.type] || 0) + 1; });
-      setActivityCounts(counts);
-    });
-  }, [orgId, authReady, client.id]);
-
   const logActivity = useCallback(async (type: ActivityType) => {
     if (!orgId || !authReady || !user) return;
     setLoggingType(type);
@@ -89,7 +89,6 @@ function ClientLeftPanel({ client }: { client: Client }) {
         type,
         clientName: client.businessName,
       }, authReady);
-      setActivityCounts(prev => ({ ...prev, [type]: (prev[type] || 0) + 1 }));
       const now = new Date();
       dispatch(updateClient({ ...client, lastContactDate: now }));
       await updateClientInFirestore(orgId, client.id, { lastContactDate: now }, authReady);

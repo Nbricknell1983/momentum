@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { setLeads, setClients } from '@/store';
-import { db, collection, query, orderBy, where, onSnapshot } from './firebase';
+import { setLeads, setClients, setActivities } from '@/store';
+import { db, collection, query, orderBy, where, onSnapshot, limit } from './firebase';
 import { convertTimestampToDate } from './firestoreService';
 import { calculateClientHealth } from './types';
-import type { Lead, Client } from './types';
+import type { Lead, Client, Activity } from './types';
 
 function normalizeLeadDoc(id: string, data: any): Lead {
   const converted = convertTimestampToDate(data);
@@ -36,6 +36,11 @@ function normalizeClientDoc(id: string, data: any): Client {
   };
 }
 
+function normalizeActivityDoc(id: string, data: any): Activity {
+  const converted = convertTimestampToDate(data);
+  return { ...converted, id } as Activity;
+}
+
 function sortByUpdatedAt<T extends { updatedAt?: Date | null }>(items: T[]): T[] {
   return [...items].sort(
     (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
@@ -63,6 +68,7 @@ export function useFirestoreSync({
 
   const leadsUnsubRef = useRef<(() => void) | null>(null);
   const clientsUnsubRef = useRef<(() => void) | null>(null);
+  const activitiesUnsubRef = useRef<(() => void) | null>(null);
   const activeOrgRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -81,6 +87,10 @@ export function useFirestoreSync({
     if (clientsUnsubRef.current) {
       clientsUnsubRef.current();
       clientsUnsubRef.current = null;
+    }
+    if (activitiesUnsubRef.current) {
+      activitiesUnsubRef.current();
+      activitiesUnsubRef.current = null;
     }
 
     activeOrgRef.current = orgId;
@@ -131,6 +141,26 @@ export function useFirestoreSync({
       }
     );
 
+    // Activities listener — org-scoped, same auth model as leads/clients.
+    // Manager: all org activities (capped at 500 most recent). Member: own activities only.
+    // Activities are stored flat at orgs/{orgId}/activities with leadId/clientId fields.
+    const activitiesRef = collection(db, 'orgs', orgId, 'activities');
+    const activitiesQuery = isManager
+      ? query(activitiesRef, orderBy('createdAt', 'desc'), limit(500))
+      : query(activitiesRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+
+    activitiesUnsubRef.current = onSnapshot(
+      activitiesQuery,
+      (snapshot) => {
+        const activities = snapshot.docs.map((d) => normalizeActivityDoc(d.id, d.data()));
+        console.log('[FirestoreSync] activities snapshot:', activities.length, 'docs');
+        dispatch(setActivities(activities));
+      },
+      (error) => {
+        console.error('[FirestoreSync] activities listener error:', error);
+      }
+    );
+
     return () => {
       console.log('[FirestoreSync] Cleaning up listeners for org:', orgId);
       if (leadsUnsubRef.current) {
@@ -140,6 +170,10 @@ export function useFirestoreSync({
       if (clientsUnsubRef.current) {
         clientsUnsubRef.current();
         clientsUnsubRef.current = null;
+      }
+      if (activitiesUnsubRef.current) {
+        activitiesUnsubRef.current();
+        activitiesUnsubRef.current = null;
       }
       activeOrgRef.current = null;
     };
@@ -154,6 +188,10 @@ export function useFirestoreSync({
       if (clientsUnsubRef.current) {
         clientsUnsubRef.current();
         clientsUnsubRef.current = null;
+      }
+      if (activitiesUnsubRef.current) {
+        activitiesUnsubRef.current();
+        activitiesUnsubRef.current = null;
       }
       activeOrgRef.current = null;
       setLeadsReady(false);

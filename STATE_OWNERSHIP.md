@@ -10,7 +10,7 @@ _Completed: Phase 2 of Live Operational State Reconciliation build brief._
 |---|---|---|
 | `leads[]` | Firestore listener | Populated from `onSnapshot`; do NOT manually persist here |
 | `clients[]` | Firestore listener | Populated from `onSnapshot`; do NOT manually persist here |
-| `activities[]` | One-time fetch | Still loaded at login via `fetchAllActivities`; not real-time |
+| `activities[]` | Firestore listener | Populated from `onSnapshot` in `firestoreSync.ts`; live-fed — do NOT manually persist here |
 | `selectedLeadId` | Redux UI state | Stable across live updates (ID-based selection) |
 | `selectedClientId` | Redux UI state | Stable across live updates |
 | `isDrawerOpen` | Redux UI state | Not affected by snapshots |
@@ -46,6 +46,20 @@ _Completed: Phase 2 of Live Operational State Reconciliation build brief._
 - **Redux update**: `dispatch(setClients([...]))` on every snapshot event
 - **Lifecycle**: Same as leads listener; both listeners start and stop together.
 - **First snapshot**: Replaces the previous `fetchClients` one-time call. `clientsReady` gates the spinner.
+
+### Activities — `orgs/{orgId}/activities`
+
+- **Listener**: Same `useFirestoreSync` hook — third listener added alongside leads and clients
+- **Scope**: org-scoped flat collection. Manager: all activities, ordered by `createdAt desc`, capped at 500 most recent. Non-manager: filtered by `userId == user.uid`, ordered by `createdAt desc`.
+- **Normalizer**: `normalizeActivityDoc` — converts Timestamps to Dates, spreads doc data with the Firestore document ID.
+- **Redux update**: `dispatch(setActivities([...]))` on every snapshot event
+- **Lifecycle**: Attaches and detaches with the leads/clients listeners — same org-switch and logout cleanup. Unsubscribe ref is managed in `activitiesUnsubRef`.
+- **First snapshot**: Replaces the previous one-time `fetchAllActivities` call in `App.tsx`. Activities are no longer pre-loaded at login; the listener populates them on first snapshot arrival.
+- **Consumer reconciliation**:
+  - All `useSelector(state.app.activities)` consumers (LeadFocusView, LeadDrawer, LeadCardExpanded, MomentumCoach, DealIntelligencePanel, nurture, dashboard, bullpen) automatically receive live updates via Redux.
+  - `daily-plan.tsx` replaced its broken `useQuery` (was calling `fetchActivities` with an empty `leadId`) with a `useMemo` filtering the Redux store by selected date.
+  - `ClientFocusView.tsx` replaced its one-time `fetchClientActivities` useEffect with a `useMemo` filtering Redux activities by `clientId`.
+- **Performance note**: The 500-activity cap covers most org operational windows. If an org accumulates very high activity volume, consider paginating or date-windowing the listener in a future sprint.
 
 ---
 
