@@ -1,0 +1,97 @@
+Build Brief — Make the Workforce Visible, Active, and Forward-Moving
+Bullpen still feels too passive.
+
+I do not want a system where the agents sit there waiting for me to press buttons and manually ask them to review things. If these are the workforce, they need to be operating independently and visibly moving Momentum and its clients forward.
+
+Core requirement
+When I open Bullpen, I should be able to immediately see:
+
+what each part of the workforce has been reviewing
+what they found
+what they created or changed
+what is blocked or waiting
+what needs my attention now
+how they are moving the ball forward
+I do not want passive review cards that just say “Run Review” or “No review run yet” unless the system genuinely has never been enabled.
+
+The product model
+The agents are the workforce.
+The workforce should:
+
+wake up on a cadence
+review Momentum and client state
+generate work
+prioritise what matters
+surface progress and blockers
+only require me for approvals, decisions, and exceptions
+Buttons are for override.
+Buttons are not the primary operating model.
+
+Required change
+For each active review/agent area, the UI needs to show operational motion, not just availability.
+
+Each workforce/review card should show:
+What it reviewed
+number of leads / clients / work items / systems checked
+What it found
+top risks
+top opportunities
+key issues detected
+What it did
+work items created
+items escalated
+items updated
+priorities changed
+What is now waiting
+blocked items
+awaiting review
+approvals needed
+unresolved dependencies
+What matters next
+one clear recommended action or focus area
+Example of the standard
+I want output that feels like a real operating team, for example:
+
+reviewed 24 active clients, flagged 3 churn-risk accounts, created 2 intervention items, 1 account needs immediate attention
+reviewed 41 active leads, found 6 stalled in stage, created 4 follow-up actions, 2 require urgent sales movement
+reviewed operational health, detected 1 broken integration, escalated 1 blocker, 2 queue items remain unresolved
+That is the level of visible motion I want.
+
+Required behavior
+once scheduling is enabled, reviews should run automatically
+latest results should be visible by default
+the cards should not sit empty waiting for me to initiate everything
+I should be able to see what changed since the last run
+no fabricated urgency if nothing changed, but also no dead-looking cards if the workforce has in fact been active
+Important distinction
+I do not want generic activity theatre.
+
+I want:
+
+real reviewed scope
+real findings
+real work created
+real blockers
+real next actions
+Everything shown should come from actual system/client/work state.
+
+Scope
+This should apply across:
+
+Momentum operational health
+client review activity
+pipeline review activity
+any other workforce areas already running on schedule
+Success criteria
+This is successful when Bullpen stops feeling like:
+
+a page of buttons and cards
+and starts feeling like:
+
+a real team that has already been at work before I arrived.
+When I open Bullpen, I should instantly understand:
+
+what the workforce did
+what changed
+what matters most now
+where I need to step in

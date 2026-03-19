@@ -3,6 +3,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, patchLead } from '@/store';
 import { X, Sparkles, Loader2, Copy, Check, RotateCcw, Pin, ChevronDown, Phone, Shield, Mail, Users, Search, MessageSquare, FileText, TrendingUp, Mic, MicOff, Upload, AlertTriangle, Clock, Eye, Globe, Monitor, AlertCircle, Lightbulb, Zap, ArrowRight } from 'lucide-react';
 import GrowthPlanSection from '@/components/GrowthPlanSection';
+import { PrepCallPackCard } from '@/components/PrepCallPackCard';
+import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -206,6 +208,32 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
   const [prospectResults, setProspectResults] = useState<ProspectResult[]>([]);
   const [prospectError, setProspectError] = useState<string | null>(null);
   const [prospectInputs, setProspectInputs] = useState({ businessType: '', suburb: '', nearbySuburbs: '' });
+
+  const [prepPackLoading, setPrepPackLoading] = useState(false);
+  const [prepPackError, setPrepPackError] = useState<string | null>(null);
+
+  const handleGeneratePrepPack = useCallback(async (force = false) => {
+    if (!selectedLead || !orgId) return;
+    setPrepPackLoading(true);
+    setPrepPackError(null);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/leads/${selectedLead.id}/generate-prep-pack?orgId=${orgId}${force ? '&force=true' : ''}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) throw new Error('Failed to generate prep pack');
+      const data = await res.json();
+      if (data.prepCallPack) {
+        dispatch(patchLead({ id: selectedLead.id, updates: { prepCallPack: data.prepCallPack } }));
+      }
+    } catch (err: any) {
+      setPrepPackError(err.message || 'Failed to generate prep pack');
+    } finally {
+      setPrepPackLoading(false);
+    }
+  }, [selectedLead, orgId, dispatch]);
 
   // Sync form inputs whenever relevant lead data changes (GBP link, reviews, social, industry, website)
   useEffect(() => {
@@ -633,19 +661,209 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
     </div>
   );
 
+  const EMBEDDED_TABS: { key: EngineSection; short: string; icon: typeof Phone }[] = [
+    { key: 'pre_call', short: 'Prep', icon: Phone },
+    { key: 'objection', short: 'Handle', icon: Shield },
+    { key: 'follow_up', short: 'Follow-Up', icon: Mail },
+    { key: 'growth_plan', short: 'Strategy', icon: TrendingUp },
+    { key: 'prospect', short: 'Prospects', icon: Users },
+  ];
+
   if (embedded) {
+    const prepPack = (selectedLead as any)?.prepCallPack ?? null;
+    const prepGenAt = prepPack?.generatedAt ? new Date(prepPack.generatedAt) : null;
+    const prepLabel = prepGenAt
+      ? prepGenAt.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
+        prepGenAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true })
+      : null;
+
     return (
       <div className="flex flex-col h-full" data-testid="panel-ai-sales-engine-embedded">
-        <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
-          <Sparkles className="h-4 w-4 text-amber-500" />
-          <div>
-            <h3 className="font-semibold text-sm">AI Sales Engine</h3>
-            <p className="text-[11px] text-muted-foreground">Prep. Handle. Follow up. Multiply.</p>
+        <div className="shrink-0 bg-slate-900 dark:bg-slate-950 px-3 pt-2.5 pb-0">
+          <div className="flex items-center gap-2 mb-2.5">
+            <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center shrink-0">
+              <Sparkles className="h-3 w-3 text-white" />
+            </div>
+            <span className="text-xs font-bold text-white tracking-wide">AI Sales Engine</span>
+            {selectedLead && (
+              <span className="ml-auto text-[10px] text-slate-400 truncate max-w-[110px]">{selectedLead.companyName}</span>
+            )}
+          </div>
+          <div className="flex border-b border-slate-700">
+            {EMBEDDED_TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setOpenSection(tab.key)}
+                className={`flex-1 text-[10px] font-semibold py-1.5 transition-all border-b-2 -mb-px ${
+                  openSection === tab.key
+                    ? 'text-amber-400 border-amber-400'
+                    : 'text-slate-500 border-transparent hover:text-slate-300'
+                }`}
+                data-testid={`tab-${tab.key}`}
+              >
+                {tab.short}
+              </button>
+            ))}
           </div>
         </div>
+
         <ScrollArea className="flex-1">
-          <div className="p-3">
-            {sectionContent}
+          <div className="p-3 space-y-3">
+            {openSection === 'pre_call' && (
+              <div className="space-y-3">
+                {prepPack ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      {prepLabel && (
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          <span>Generated {prepLabel}</span>
+                        </div>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleGeneratePrepPack(true)}
+                        disabled={prepPackLoading}
+                        className="h-6 text-[11px] px-2 gap-1 ml-auto"
+                        data-testid="button-regenerate-prep-pack"
+                      >
+                        {prepPackLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                        Regenerate
+                      </Button>
+                    </div>
+                    <PrepCallPackCard pack={prepPack} businessName={selectedLead?.companyName} />
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-dashed border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-5 text-center space-y-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto">
+                        <Phone className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold">Call Prep Pack</p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Auto-generate a prep pack from all available intel — business snapshot, presence gaps, call priorities, discovery questions, and your commercial angle.
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => handleGeneratePrepPack(false)}
+                        disabled={prepPackLoading || !selectedLead}
+                        className="w-full gap-2"
+                        data-testid="button-generate-prep-pack-engine"
+                      >
+                        {prepPackLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        {prepPackLoading ? 'Generating...' : 'Generate Prep Pack'}
+                      </Button>
+                      {!selectedLead && <p className="text-[10px] text-muted-foreground">Select a lead to generate</p>}
+                    </div>
+                    {prepPackError && (
+                      <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-3 space-y-2">
+                        <p className="text-xs text-red-700 dark:text-red-300">{prepPackError}</p>
+                        <Button variant="outline" size="sm" onClick={() => handleGeneratePrepPack(false)} className="h-7 text-xs gap-1">
+                          <RotateCcw className="h-3 w-3" /> Retry
+                        </Button>
+                      </div>
+                    )}
+                    <div className="border-t pt-3">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Or use manual prep</p>
+                      <PreCallSection
+                        inputs={preCallInputs}
+                        setInputs={handlePreCallInputChange}
+                        loading={preCallLoading}
+                        result={preCallResult}
+                        error={preCallError}
+                        onGenerate={handlePreCall}
+                        onSaveToNotes={saveToNotes}
+                        hasLead={!!selectedLead}
+                        generatedAt={selectedLead?.aiCallPrep?.generatedAt}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {openSection === 'objection' && (
+              <div className="space-y-4">
+                <GoogleViewSection lead={selectedLead} onSaveToNotes={saveToNotes} hasLead={!!selectedLead} />
+                <div className="border-t border-dashed pt-4">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                    <Shield className="h-3 w-3" /> NEPQ Objection Handling
+                  </p>
+                  <ObjectionSection
+                    selectedObjections={selectedObjections}
+                    setSelectedObjections={setSelectedObjections}
+                    customObjection={customObjection}
+                    setCustomObjection={setCustomObjection}
+                    loading={objectionLoading}
+                    results={objectionResults}
+                    error={objectionError}
+                    onGenerate={handleObjection}
+                    onSaveToNotes={saveToNotes}
+                    hasLead={!!selectedLead}
+                  />
+                </div>
+              </div>
+            )}
+
+            {openSection === 'follow_up' && (
+              <FollowUpSection
+                inputs={followUpInputs}
+                setInputs={setFollowUpInputs}
+                loading={followUpLoading}
+                result={followUpResult}
+                error={followUpError}
+                onGenerate={handleFollowUp}
+                onSaveToNotes={saveToNotes}
+                hasLead={!!selectedLead}
+                conversationInsights={conversationInsights}
+                onInsightsChange={(insights) => {
+                  setConversationInsights(insights);
+                  if (insights && selectedLead && orgId && authReady) {
+                    const now = new Date();
+                    const aiConversationInsights: AiConversationInsightsOutput = { ...insights, generatedAt: now };
+                    updateLeadInFirestore(orgId, selectedLead.id, {
+                      aiConversationInsights,
+                      lastConversationAt: now,
+                    } as Partial<Lead>, authReady).catch(console.error);
+                    dispatch(patchLead({ id: selectedLead.id, updates: { aiConversationInsights, lastConversationAt: now } }));
+                  }
+                }}
+              />
+            )}
+
+            {openSection === 'growth_plan' && (
+              <GrowthPlanSection
+                lead={selectedLead}
+                onSaveToNotes={saveToNotes}
+                onSaveGrowthPlan={(growthPlanData) => {
+                  if (selectedLead && orgId && authReady) {
+                    const aiGrowthPlan = { ...growthPlanData, generatedAt: new Date() };
+                    updateLeadInFirestore(orgId, selectedLead.id, { aiGrowthPlan } as Partial<Lead>, authReady).catch(console.error);
+                    dispatch(patchLead({ id: selectedLead.id, updates: { aiGrowthPlan } }));
+                  }
+                }}
+                onSaveCompetitorDomains={(domains) => {
+                  if (selectedLead && orgId && authReady) {
+                    const updates: Partial<Lead> = { competitorDomains: domains, updatedAt: new Date() };
+                    updateLeadInFirestore(orgId, selectedLead.id, updates, authReady).catch(console.error);
+                    dispatch(patchLead({ id: selectedLead.id, updates }));
+                  }
+                }}
+              />
+            )}
+
+            {openSection === 'prospect' && (
+              <ProspectSection
+                inputs={prospectInputs}
+                setInputs={setProspectInputs}
+                loading={prospectLoading}
+                results={prospectResults}
+                error={prospectError}
+                onGenerate={handleProspect}
+              />
+            )}
           </div>
         </ScrollArea>
       </div>
