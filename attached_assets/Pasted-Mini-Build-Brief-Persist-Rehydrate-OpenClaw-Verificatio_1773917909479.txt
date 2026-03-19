@@ -1,0 +1,107 @@
+Mini Build Brief — Persist & Rehydrate OpenClaw Verification State
+Goal
+Make the OpenClaw setup screen behave like an operational control surface by preserving and/or refreshing verification state when the user leaves and returns to the tab.
+
+Problem
+The current OpenClaw Setup screen persists:
+
+Base URL
+API key presence/config state
+But does not preserve or rehydrate:
+
+verification result
+So after a successful test, leaving the tab and coming back causes the screen to show:
+
+Verification: Not tested yet
+even though the config is already saved and was previously verified.
+
+This makes the setup feel unstable or incomplete when the real problem is only UI state loss.
+
+Outcome that matters most
+Make verification status behave like real operational state, not temporary in-memory state.
+
+Success means:
+
+revisiting the tab does not make a previously healthy setup look untested
+the page either shows last verified status immediately or auto-rechecks on load
+verification feels reliable and continuous
+Scope
+In scope
+preserve verification state across tab/page revisit
+auto-recheck verification on page load when config exists
+optionally persist last verified status/time
+clear stale verification only when relevant config changes
+Out of scope
+broader OpenClaw setup redesign
+changing the verification contract itself
+provisioning flow redesign
+Recommended implementation approach
+Option A — preferred
+Persist:
+
+lastVerificationStatus
+lastVerificationMessage
+lastVerifiedAt
+Then on page load:
+
+show last known result immediately
+trigger background re-verification
+replace with fresh result when returned
+Option B — minimum acceptable
+If persistence is not implemented yet:
+
+detect saved Base URL + API key on mount
+immediately auto-run verification
+show Checking… instead of Not tested yet
+Recommendation
+Use A + background refresh if practical.
+
+Required behavior
+On initial load with saved config
+If:
+
+base URL exists
+API key is configured
+then:
+
+do not default to “Not tested yet”
+either show last verified state
+or show “Checking…” and auto-verify
+On config change
+If Base URL changes:
+
+clear stale verification state
+require re-verification
+If only returning to the tab without config change:
+
+preserve/reload prior result
+auto-refresh if appropriate
+Risks
+repeated unnecessary verification calls on every render
+stale persisted result without a refresh
+mismatch between displayed saved result and actual current connectivity
+These are manageable by:
+
+verifying on mount only
+storing lastVerifiedAt
+clearing only on config mutation
+QA requirements
+verify healthy config
+leave tab and return
+status should not revert permanently to “Not tested yet”
+page should either show last healthy result or auto-check immediately
+changing Base URL should clear old verification state
+failed recheck after previously healthy should update the UI correctly
+Measurable success criteria
+This task is successful when:
+
+OpenClaw Setup no longer appears untested on every revisit
+healthy config remains visibly healthy or re-checking
+verification state behaves like persistent operational state
+What good output looks like
+Please return:
+
+whether last verification is persisted or only auto-refreshed
+where verification metadata is stored
+how stale verification is cleared
+QA confirmation of revisit behavior

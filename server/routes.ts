@@ -9378,6 +9378,7 @@ Rules:
   });
 
   // GET /api/openclaw/config — validated read
+  // Returns validated control-plane config + lastVerification passthrough (not schema-validated, raw from doc)
   app.get('/api/openclaw/config', requireOrgAccess, async (req: any, res: any) => {
     const orgId = req.trustedOrgId as string;
     if (!firestore) return res.status(503).json({ error: 'Firestore unavailable' });
@@ -9387,19 +9388,16 @@ Rules:
         const result: OpenclawConfigReadResult = { status: 'missing', data: {} };
         return res.json(result);
       }
-      const parsed = OpenclawConfigSchema.safeParse(snap.data());
+      const raw = snap.data() || {};
+      // Pass through lastVerification alongside validated data — not in control-plane schema, so read raw
+      const lastVerification = raw.lastVerification ?? null;
+      const parsed = OpenclawConfigSchema.safeParse(raw);
       if (parsed.success) {
-        const result: OpenclawConfigReadResult = { status: 'valid', data: parsed.data };
-        return res.json(result);
+        return res.json({ status: 'valid', data: parsed.data, lastVerification });
       } else {
         const errors = parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
         console.warn('[settings/openclawConfig] Stored document failed validation:', errors);
-        const result: OpenclawConfigReadResult = {
-          status: 'invalid',
-          data: {},
-          validationErrors: errors,
-        };
-        return res.json(result);
+        return res.json({ status: 'invalid', data: {}, validationErrors: errors, lastVerification });
       }
     } catch (err: any) {
       console.error('[settings/openclawConfig] Read error:', err);
@@ -9412,10 +9410,35 @@ Rules:
   // OpenClaw may be a gateway/dashboard that doesn't expose a REST management API at /api/v1/skills —
   // in that case, reachability + auth acceptance is sufficient for a healthy verdict.
   app.post('/api/openclaw/test-connection', async (req: any, res: any) => {
-    const { baseUrl } = req.body;
+    const { baseUrl, orgId: reqOrgId } = req.body;
     if (!baseUrl) return res.status(400).json({ error: 'baseUrl required' });
+    // orgId is optional — when provided, lastVerification is persisted to Firestore after the result
+    const persistOrgId: string | null = typeof reqOrgId === 'string' && reqOrgId.trim() ? reqOrgId.trim() : null;
 
     const apiKey = process.env.OPENCLAW_API_KEY || '';
+
+    // Intercept res.json to fire-and-forget persist lastVerification to Firestore on every response path.
+    // This means no return point needs to be modified — persistence is transparent.
+    if (persistOrgId && firestore) {
+      const origJson = res.json.bind(res);
+      (res as any).json = (body: any) => {
+        firestore!.collection('orgs').doc(persistOrgId!).collection('settings').doc('openclawConfig').set(
+          {
+            lastVerification: {
+              status: body.status ?? null,
+              message: body.message ?? null,
+              testedUrl: body.testedUrl ?? baseUrl,
+              authValid: body.authValid ?? null,
+              detectedVersion: body.detectedVersion ?? null,
+              probePath: body.probePath ?? null,
+              verifiedAt: new Date().toISOString(),
+            },
+          },
+          { merge: true }
+        ).catch((e: any) => console.warn('[test-connection] lastVerification persist failed:', e.message));
+        return origJson(body);
+      };
+    }
 
     // Gateway probe candidates — tried in order; first to return any HTTP response wins.
     // These are common health/status endpoints that a gateway-style service typically exposes.

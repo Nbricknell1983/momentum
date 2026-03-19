@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'wouter';
@@ -66,8 +66,12 @@ interface ConnectionVerification {
   detectedVersion: string | null;
   message: string;
   httpStatus?: number;
+  probePath?: string;
   testedUrl: string;
   envWarning: string | null;
+  // Set when seeded from persisted lastVerification; cleared on fresh test
+  verifiedAt?: string;
+  isStale?: boolean;
 }
 
 const VERIFICATION_LABELS: Record<VerificationStatus, { label: string; color: string }> = {
@@ -141,7 +145,11 @@ export default function OpenClawSetupPage() {
   const [showKey, setShowKey] = useState(false);
   const [connectionResult, setConnectionResult] = useState<ConnectionVerification | null>(null);
   const [testingConn, setTestingConn] = useState(false);
+  // recheckingConn = silent background recheck running while a prior result is shown
+  const [recheckingConn, setRecheckingConn] = useState(false);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
+  // Prevent double auto-recheck on re-renders
+  const autoCheckedRef = useRef(false);
 
   if (!isManager) {
     return (
@@ -174,13 +182,53 @@ export default function OpenClawSetupPage() {
 
   useEffect(() => {
     const url = (savedConfig as any)?.data?.baseUrl;
+    const lastVerif = (savedConfig as any)?.lastVerification;
     if (url) {
       setBaseUrl(url);
       setSavedBaseUrl(url);
     }
+    // Seed connection result from persisted lastVerification — shown immediately on page load
+    if (lastVerif?.status && lastVerif?.testedUrl) {
+      setConnectionResult({
+        status: lastVerif.status as VerificationStatus,
+        reachable: lastVerif.status !== 'unreachable',
+        authValid: lastVerif.authValid ?? null,
+        requiredEndpoints: lastVerif.requiredEndpoints ?? [],
+        detectedVersion: lastVerif.detectedVersion ?? null,
+        probePath: lastVerif.probePath ?? undefined,
+        message: lastVerif.message ?? '',
+        testedUrl: lastVerif.testedUrl,
+        envWarning: lastVerif.envWarning ?? null,
+        verifiedAt: lastVerif.verifiedAt ?? undefined,
+        isStale: true,
+      });
+    }
   }, [savedConfig]);
 
-  // Clear stale connection result when the URL input changes
+  // Auto-recheck in background on mount when config is present (once per mount)
+  // Shows last known result immediately, then replaces with fresh result when returned
+  useEffect(() => {
+    if (autoCheckedRef.current) return;
+    if (!savedBaseUrl || !manifest?.keyConfigured) return;
+    autoCheckedRef.current = true;
+    // Small delay so the persisted result renders first, then background check fires
+    const timer = setTimeout(async () => {
+      setRecheckingConn(true);
+      try {
+        const r = await apiRequest('POST', '/api/openclaw/test-connection', { baseUrl: savedBaseUrl, orgId });
+        const data: ConnectionVerification = await r.json();
+        setConnectionResult({ ...data, isStale: false });
+      } catch {
+        // If background recheck fails, keep showing the persisted result — don't clear it
+      } finally {
+        setRecheckingConn(false);
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [savedBaseUrl, manifest?.keyConfigured]);
+
+  // Clear connection result when the URL input changes away from the tested URL
+  // (isStale check NOT needed — testedUrl comparison is the correct guard)
   useEffect(() => {
     if (connectionResult && baseUrl.trim() !== connectionResult.testedUrl) {
       setConnectionResult(null);
@@ -195,21 +243,25 @@ export default function OpenClawSetupPage() {
     },
     onSuccess: () => {
       setSavedBaseUrl(baseUrl.trim());
+      // Reset autoChecked so a background recheck triggers for the newly saved URL
+      autoCheckedRef.current = false;
       qc.invalidateQueries({ queryKey: ['/api/openclaw/config', orgId] });
       toast({ title: 'Base URL saved' });
     },
     onError: (err: any) => toast({ title: 'Save failed', description: err.message, variant: 'destructive' }),
   });
 
-  // Test connection — staged verification
+  // Test connection — staged verification (explicit manual test)
+  // Also sends orgId so the result is persisted to Firestore for rehydration on next visit
   const testConnection = async () => {
     if (!baseUrl.trim()) return;
     setTestingConn(true);
+    setRecheckingConn(false);
     setConnectionResult(null);
     try {
-      const r = await apiRequest('POST', '/api/openclaw/test-connection', { baseUrl: baseUrl.trim() });
+      const r = await apiRequest('POST', '/api/openclaw/test-connection', { baseUrl: baseUrl.trim(), orgId });
       const data: ConnectionVerification = await r.json();
-      setConnectionResult(data);
+      setConnectionResult({ ...data, isStale: false });
     } catch (err: any) {
       setConnectionResult({
         status: 'unreachable',
@@ -220,6 +272,7 @@ export default function OpenClawSetupPage() {
         message: `Request failed: ${err.message}`,
         testedUrl: baseUrl.trim(),
         envWarning: null,
+        isStale: false,
       });
     } finally {
       setTestingConn(false);
@@ -351,16 +404,19 @@ export default function OpenClawSetupPage() {
             <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
               <StatusIcon
                 loading={testingConn}
-                ok={connectionResult?.status === 'healthy'}
-                warning={connectionResult != null && connectionResult.status !== 'healthy' && !testingConn}
+                ok={connectionResult?.status === 'healthy' && !recheckingConn}
+                warning={(connectionResult != null && connectionResult.status !== 'healthy' && !testingConn) || recheckingConn}
               />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold">Verification</p>
-                <p className={`text-[11px] ${connectionResult ? VERIFICATION_LABELS[connectionResult.status].color : 'text-muted-foreground'}`}>
+                <p className="text-xs font-semibold flex items-center gap-1.5">
+                  Verification
+                  {recheckingConn && <span className="text-[10px] font-normal text-muted-foreground animate-pulse">Re-checking…</span>}
+                </p>
+                <p className={`text-[11px] ${connectionResult ? VERIFICATION_LABELS[connectionResult.status]?.color : 'text-muted-foreground'}`}>
                   {testingConn
                     ? 'Verifying...'
                     : connectionResult
-                    ? VERIFICATION_LABELS[connectionResult.status].label
+                    ? VERIFICATION_LABELS[connectionResult.status]?.label ?? connectionResult.status
                     : 'Not tested yet'}
                 </p>
               </div>
@@ -376,10 +432,20 @@ export default function OpenClawSetupPage() {
                 ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
                 : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
             }`} data-testid="panel-verification-result">
-              {/* Tested URL */}
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
-                <Globe className="h-3 w-3 shrink-0" />
-                <span className="truncate">{connectionResult.testedUrl}</span>
+              {/* Tested URL + stale/recheck indicator */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono min-w-0">
+                  <Globe className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{connectionResult.testedUrl}</span>
+                </div>
+                {connectionResult.verifiedAt && (
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+                    <Clock className="h-3 w-3" />
+                    <span>
+                      {recheckingConn ? 'Checking…' : `Last checked ${new Date(connectionResult.verifiedAt).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`}
+                    </span>
+                  </div>
+                )}
               </div>
               {/* Status message */}
               <p className="text-[11px] leading-relaxed">{connectionResult.message}</p>
