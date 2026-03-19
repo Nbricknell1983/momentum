@@ -78,100 +78,21 @@ Sitemap: ${siteUrl}/sitemap.xml
   });
 
   // ============================================
-  // Leads API
-  // ============================================
-  
-  app.get("/api/leads", async (req, res) => {
-    try {
-      const userId = req.query.userId as string | undefined;
-      const leads = await storage.getLeads(userId);
-      res.json(leads);
-    } catch (error) {
-      console.error("Error fetching leads:", error);
-      res.status(500).json({ error: "Failed to fetch leads" });
-    }
-  });
-
-  app.get("/api/leads/:id", async (req, res) => {
-    try {
-      const lead = await storage.getLead(req.params.id);
-      if (!lead) {
-        return res.status(404).json({ error: "Lead not found" });
-      }
-      res.json(lead);
-    } catch (error) {
-      console.error("Error fetching lead:", error);
-      res.status(500).json({ error: "Failed to fetch lead" });
-    }
-  });
-
-  app.post("/api/leads", async (req, res) => {
-    try {
-      const parsed = insertLeadSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid lead data", details: parsed.error.errors });
-      }
-      const lead = await storage.createLead(parsed.data);
-      res.status(201).json(lead);
-    } catch (error) {
-      console.error("Error creating lead:", error);
-      res.status(500).json({ error: "Failed to create lead" });
-    }
-  });
-
-  app.put("/api/leads/:id", async (req, res) => {
-    try {
-      const lead = await storage.updateLead(req.params.id, req.body);
-      if (!lead) {
-        return res.status(404).json({ error: "Lead not found" });
-      }
-      res.json(lead);
-    } catch (error) {
-      console.error("Error updating lead:", error);
-      res.status(500).json({ error: "Failed to update lead" });
-    }
-  });
-
-  app.delete("/api/leads/:id", async (req, res) => {
-    try {
-      const deleted = await storage.deleteLead(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Lead not found" });
-      }
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting lead:", error);
-      res.status(500).json({ error: "Failed to delete lead" });
-    }
-  });
-
-  // ============================================
-  // Activities API
+  // Legacy PostgreSQL Leads & Activities API — DISABLED (Phase 5)
+  // These routes backed the original PostgreSQL data layer which is now
+  // orphaned. All lead/activity data lives in Firestore. Returning 410 Gone
+  // prevents any accidental use and surfaces the breakage immediately.
   // ============================================
 
-  app.get("/api/leads/:leadId/activities", async (req, res) => {
-    try {
-      const activities = await storage.getActivities(req.params.leadId);
-      res.json(activities);
-    } catch (error) {
-      console.error("Error fetching activities:", error);
-      res.status(500).json({ error: "Failed to fetch activities" });
-    }
-  });
+  const GONE_MESSAGE = { error: "Gone", detail: "This endpoint is deprecated. All data is managed via Firestore. See TRUST_BOUNDARY.md." };
 
-  app.post("/api/activities", async (req, res) => {
-    try {
-      const parsed = insertActivitySchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid activity data", details: parsed.error.errors });
-      }
-      const activity = await storage.createActivity(parsed.data);
-      res.status(201).json(activity);
-    } catch (error) {
-      console.error("Error creating activity:", error);
-      res.status(500).json({ error: "Failed to create activity" });
-    }
-  });
+  app.get("/api/leads", (_req, res) => res.status(410).json(GONE_MESSAGE));
+  app.get("/api/leads/:id", (_req, res) => res.status(410).json(GONE_MESSAGE));
+  app.post("/api/leads", (_req, res) => res.status(410).json(GONE_MESSAGE));
+  app.put("/api/leads/:id", (_req, res) => res.status(410).json(GONE_MESSAGE));
+  app.delete("/api/leads/:id", (_req, res) => res.status(410).json(GONE_MESSAGE));
+  app.get("/api/leads/:leadId/activities", (_req, res) => res.status(410).json(GONE_MESSAGE));
+  app.post("/api/activities", (_req, res) => res.status(410).json(GONE_MESSAGE));
 
   // ============================================
   // Daily Plan AI Endpoints

@@ -22,10 +22,20 @@ Preferred communication style: Simple, everyday language.
 - **Serving**: Express serves static frontend assets in production.
 
 ### Data Layer
-- **ORM**: Drizzle ORM for PostgreSQL.
+- **ORM**: Drizzle ORM for PostgreSQL (schema defined, but PostgreSQL is orphaned from live runtime).
 - **Schema**: Defined in `shared/schema.ts` and shared between client and server.
-- **Migrations**: Drizzle Kit.
-- **Current Data State**: Uses in-memory mock data, with pending integration to a PostgreSQL database.
+- **Primary Database**: Firebase Firestore — all live application data lives here.
+- **PostgreSQL**: Orphaned; legacy routes (`/api/leads`, `/api/activities`) return `410 Gone`.
+- **Trust Boundary**: See `TRUST_BOUNDARY.md` for full auth flow and route classification.
+
+### Auth & Security
+- **Firebase Authentication**: All user identity comes from Firebase ID tokens verified server-side.
+- **Token Verification**: `server/middleware/auth.ts` — `verifyFirebaseToken` middleware applied globally to all `/api/` routes.
+- **Org Access**: `requireOrgAccess` middleware verifies Firestore membership (`orgs/{orgId}/members/{uid}` with `active == true`).
+- **Manager Gate**: `requireManager` enforces `owner`/`admin` role for sensitive operations.
+- **OpenClaw routes**: Use shared-secret `openclawAuth` instead of Firebase token (whitelisted from global middleware).
+- **Public routes**: GBP OAuth callback, public report URLs, device pairing — whitelisted in `auth.ts`.
+- **Firestore Rules**: Deployed separately via Firebase CLI — see `FIRESTORE_RULES_DEPLOY.md`. Rules cover all org collections including `settings` and `bullpenComms`.
 
 ### Core Features
 - **Pipeline Management**: Kanban board with drag-and-drop lead management and a Lead Focus View (3-column overlay).

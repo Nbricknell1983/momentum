@@ -1,0 +1,330 @@
+                                                                                              
+ Build Brief — Auth & Tenant Verification Hardening                                           
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Close the gap between Momentum’s intended permission model and what is actually enforced at  
+ runtime.                                                                                     
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ The current Express layer has a permission-illusion architecture.                            
+                                                                                              
+ Specifically:                                                                                
+ - live and legacy routes trust orgId from client input                                       
+ - Firebase token verification is not consistently enforced on server routes                  
+ - some routes can be called without meaningful authentication                                
+ - Firestore security rules are managed outside the repo and are not visible or               
+ version-controlled here                                                                      
+ - legacy PostgreSQL REST endpoints remain exposed and create unnecessary attack              
+ surface/confusion                                                                            
+                                                                                              
+ This creates real cross-org access risk and makes the runtime trust model weaker than the UI 
+ suggests.                                                                                    
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make tenant isolation and authorization real on the server.                                  
+                                                                                              
+ Success means:                                                                               
+ - every live org-scoped route requires verified Firebase auth                                
+ - server derives trusted user identity from the Firebase ID token                            
+ - server validates org access from trusted server-side data, not raw client input            
+ - manager-only actions are enforced server-side                                              
+ - Firestore rules are brought into the repo and deployed deliberately                        
+ - exposed legacy Postgres CRUD endpoints are disabled, gated, or removed from the attack     
+ surface                                                                                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Firebase token verification middleware for live Express routes                            
+ 2. Server-side org access validation                                                         
+ 3. Server-side role enforcement for manager-only operations                                  
+ 4. Immediate containment of legacy unauthenticated /api/leads and /api/activities endpoints  
+ 5. Firestore security rules added to the repo and deploy-managed                             
+ 6. Minimal architecture documentation clarifying the runtime trust model                     
+                                                                                              
+ ### Out of scope for this task                                                               
+                                                                                              
+ - AI output versioning/history                                                               
+ - Redux/onSnapshot live state reconciliation                                                 
+ - OpenClaw connection-test redesign                                                          
+ - GBP OAuth account-verification improvements                                                
+ - broad Postgres code removal/refactor beyond containment                                    
+ - Cloud Functions migration                                                                  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Current state                                                                                
+                                                                                              
+ - frontend uses Firebase Auth and isManager = userRole === 'owner' || userRole === 'admin'   
+ - Firestore is the live runtime data store                                                   
+ - server currently trusts orgId from request body/query in many routes                       
+ - Firestore rules are not managed in this repo                                               
+ - legacy /api/leads and /api/activities routes use PostgreSQL and are not used by the live   
+ frontend runtime                                                                             
+ - OpenClaw routes already have auth middleware; most other org-scoped routes do not          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Do not trust client-supplied orgId as authority                                       
+                                                                                              
+ - client may send org context, but server must verify it                                     
+ - verified user identity must come from Firebase ID token                                    
+ - org authorization must be resolved from trusted server-side data                           
+                                                                                              
+ ### 2. Frontend auth is not enforcement                                                      
+                                                                                              
+ - do not rely on isManager or hidden UI controls for security                                
+ - manager/admin checks must exist server-side on protected actions                           
+                                                                                              
+ ### 3. Protect existing working functionality                                                
+                                                                                              
+ - do not rewrite working features unnecessarily                                              
+ - harden the trust boundary with the smallest safe high-impact change                        
+                                                                                              
+ ### 4. Legacy endpoints must not remain open                                                 
+                                                                                              
+ - if /api/leads and /api/activities are not live runtime paths, they must not remain exposed 
+ without auth                                                                                 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Route inventory and classification                                                 
+                                                                                              
+ Create a clear list of:                                                                      
+ - live Firestore-touching routes                                                             
+ - manager-only routes                                                                        
+ - control-plane routes                                                                       
+ - legacy Postgres routes                                                                     
+                                                                                              
+ For each route, identify:                                                                    
+ - current auth state                                                                         
+ - whether it accepts orgId                                                                   
+ - whether it reads/writes Firestore                                                          
+ - whether it should remain live                                                              
+                                                                                              
+ ### Expected output                                                                          
+                                                                                              
+ A route map that separates:                                                                  
+ - live protected routes                                                                      
+ - legacy routes to disable/quarantine                                                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Firebase token verification middleware                                             
+                                                                                              
+ Add middleware to verify Firebase ID tokens on all live protected routes.                    
+                                                                                              
+ ### Minimum requirements                                                                     
+                                                                                              
+ - read bearer token or existing auth header pattern                                          
+ - verify token via Firebase Admin                                                            
+ - attach trusted user identity to request context                                            
+ - reject invalid/expired/missing tokens                                                      
+                                                                                              
+ ### Do not                                                                                   
+                                                                                              
+ - infer identity from request body                                                           
+ - trust frontend state                                                                       
+ - trust raw orgId                                                                            
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Server-side org authorization                                                      
+                                                                                              
+ For every org-scoped route:                                                                  
+ - determine the user’s allowed org membership from trusted server-side data                  
+ - verify the requested org is actually accessible to that user                               
+ - reject mismatches                                                                          
+                                                                                              
+ ### Important note                                                                           
+                                                                                              
+ If org membership is currently stored in Firestore or another trusted source, use that.      
+ Do not rely on an unverified request field as the authority.                                 
+                                                                                              
+ If token custom claims are already used and reliably maintained, they may help, but only if  
+ they are truly authoritative.                                                                
+                                                                                              
+ ### Required result                                                                          
+                                                                                              
+ A caller cannot access another org’s data by changing orgId.                                 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Role enforcement                                                                   
+                                                                                              
+ For manager-only actions:                                                                    
+ - enforce owner/admin access server-side                                                     
+ - do not rely on sidebar visibility or hidden UI controls                                    
+                                                                                              
+ ### Manager definition                                                                       
+                                                                                              
+ isManager = userRole === 'owner' || userRole === 'admin'                                     
+                                                                                              
+ But the check must happen server-side using trusted role data.                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Legacy route containment                                                           
+                                                                                              
+ Contain the legacy PostgreSQL CRUD endpoints immediately.                                    
+                                                                                              
+ ### Targets                                                                                  
+                                                                                              
+ - GET /api/leads                                                                             
+ - GET /api/leads/:id                                                                         
+ - POST /api/leads                                                                            
+ - PATCH /api/leads/:id                                                                       
+ - DELETE /api/leads/:id                                                                      
+ - GET /api/activities/:leadId                                                                
+ - POST /api/activities                                                                       
+ - legacy local auth methods if still exposed anywhere                                        
+                                                                                              
+ ### Acceptable approaches                                                                    
+                                                                                              
+ - disable entirely                                                                           
+ - return explicit deprecation/forbidden response                                             
+ - add strict auth gate and mark as legacy pending removal                                    
+                                                                                              
+ ### Preferred approach                                                                       
+                                                                                              
+ If safe, remove exposure or hard-disable them now.                                           
+ At minimum, they must stop being publicly callable.                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 6 — Firestore rules into repo                                                          
+                                                                                              
+ Bring Firestore security rules under version control.                                        
+                                                                                              
+ ### Required deliverables                                                                    
+                                                                                              
+ - rules file in repo                                                                         
+ - deployment instructions/process for staging and production                                 
+ - clear note on which environment each rules deployment targets                              
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Move from console-only opaque enforcement to reviewable, deployable rules.                   
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 7 — Minimal documentation                                                              
+                                                                                              
+ Add a short architecture/trust-boundary note covering:                                       
+ - Firestore = live runtime state                                                             
+ - Firebase Auth = live auth system                                                           
+ - Express routes require verified Firebase identity                                          
+ - org access is verified server-side                                                         
+ - legacy Postgres CRUD is not part of the live runtime path                                  
+                                                                                              
+ Keep it short and implementation-useful.                                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Technical constraints / non-negotiables                                                      
+                                                                                              
+ - Replit is staging only                                                                     
+ - production uses separate Firebase project and separate secrets                             
+ - do not create environment crossover                                                        
+ - all AI calls continue using the global openai instance only                                
+ - no new OpenAI({ apiKey })                                                                  
+ - maintain multi-tenant isolation                                                            
+ - protect existing working functionality                                                     
+ - prefer extension over rewrite                                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - breaking live routes by applying middleware unevenly                                       
+ - locking out valid users if org membership resolution is wrong                              
+ - inconsistent role mapping between frontend assumptions and backend checks                  
+ - missing hidden routes that still accept orgId                                              
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ Need to use trusted org membership data from the live system.                                
+ If current org membership source is unclear, identify it before finalizing route enforcement 
+ logic.                                                                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test                                                                                
+                                                                                              
+ 1. unauthenticated request to live protected route fails                                     
+ 2. authenticated request with unauthorized org fails                                         
+ 3. authenticated request with authorized org succeeds                                        
+ 4. member cannot perform manager-only action                                                 
+ 5. owner/admin can perform manager-only action                                               
+ 6. Bullpen/OpenClaw/org settings routes are protected correctly                              
+ 7. legacy /api/leads and /api/activities are no longer open                                  
+                                                                                              
+ ### Also test                                                                                
+                                                                                              
+ - staging environment still works with staging Firebase only                                 
+ - no production secret/config assumptions leak into Replit                                   
+ - no regression on valid AI engine or settings workflows                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - all live org-scoped Express routes require verified Firebase auth                          
+ - org authorization is server-validated                                                      
+ - raw client orgId is no longer trusted as authority                                         
+ - manager-only actions are enforced server-side                                              
+ - legacy PostgreSQL CRUD endpoints are no longer exposed as open runtime paths               
+ - Firestore security rules exist in the repo and can be deployed deliberately                
+ - the runtime trust model is clear and reviewable                                            
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. inventory routes                                                                          
+ 2. add Firebase token verification middleware                                                
+ 3. add org authorization checks                                                              
+ 4. add server-side manager-role enforcement                                                  
+ 5. disable/quarantine legacy Postgres endpoints                                              
+ 6. bring Firestore rules into repo                                                           
+ 7. smoke test all critical protected flows                                                   
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - route inventory with protection status                                                     
+ - implementation summary of auth middleware                                                  
+ - org verification approach used                                                             
+ - list of protected manager-only routes                                                      
+ - what happened to legacy Postgres endpoints                                                 
+ - Firestore rules files added and how they are deployed                                      
+ - known risks or follow-up items                                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not rewrite unrelated systems                                                           
+ - do not migrate to Cloud Functions in this task                                             
+ - do not refactor Bullpen/OpenClaw UX yet                                                    
+ - do not expand features before trust boundaries are hardened                                
+ - do not leave legacy unauthenticated endpoints exposed                                      
+                               

@@ -116,6 +116,25 @@ service cloud.firestore {
       match /rejectedBusinesses/{businessId} {
         allow read, write: if isOrgMember(orgId);
       }
+
+      // org-level settings (automationRules, openclawConfig, gbpConfig, etc.)
+      match /settings/{settingId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgManager(orgId);
+      }
+
+      // Bullpen internal comms feed
+      match /bullpenComms/{commId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+        allow update, delete: if isOrgManager(orgId);
+      }
+
+      // Growth plays per client (stored under org for multi-tenant isolation)
+      match /growthPlays/{playId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgMember(orgId);
+      }
     }
     
     match /users/{userId}/settings/{settingId} {
