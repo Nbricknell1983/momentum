@@ -9655,5 +9655,135 @@ Rules:
     res.json({ report, created, failed, exists });
   });
 
+  // ─── Bullpen Command Center — Media Upload ────────────────────────────────
+
+  const bullpenUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = [
+        'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+        'video/mp4', 'video/webm', 'video/quicktime',
+      ];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`Unsupported file type: ${file.mimetype}`));
+      }
+    },
+  });
+
+  app.post('/api/bullpen/upload', requireOrgAccess, requireManager, (req, res, next) => {
+    bullpenUpload.single('file')(req, res, async (err: any) => {
+      if (err) return res.status(400).json({ error: err.message });
+      if (!req.file) return res.status(400).json({ error: 'No file provided' });
+      const { orgId, threadId } = req.body;
+      if (!orgId || !threadId) return res.status(400).json({ error: 'orgId and threadId required' });
+      if (!bucket) return res.status(503).json({ error: 'Firebase Storage not available' });
+
+      try {
+        const { v4: uuidv4 } = await import('uuid');
+        const ext = (req.file.originalname.split('.').pop() || 'bin').toLowerCase();
+        const storagePath = `orgs/${orgId}/bullpen/${threadId}/${uuidv4()}.${ext}`;
+        const downloadToken = uuidv4();
+        const storageFile = bucket.file(storagePath);
+
+        await storageFile.save(req.file.buffer, {
+          metadata: {
+            contentType: req.file.mimetype,
+            metadata: { firebaseStorageDownloadTokens: downloadToken },
+          },
+        });
+
+        const encodedPath = encodeURIComponent(storagePath);
+        const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+        const fileType = req.file.mimetype.startsWith('video') ? 'video' : 'screenshot';
+
+        res.json({ url, name: req.file.originalname, storagePath, type: fileType });
+      } catch (e: any) {
+        console.error('[Bullpen upload] error:', e);
+        res.status(500).json({ error: e.message || 'Upload failed' });
+      }
+    });
+  });
+
+  // ─── Bullpen Command Center — AI Synthesis ────────────────────────────────
+
+  app.post('/api/bullpen/synthesize', requireOrgAccess, requireManager, async (req, res) => {
+    const { orgId, threadContext, message, imageBase64 } = req.body;
+    if (!orgId || !message) return res.status(400).json({ error: 'orgId and message required' });
+
+    const systemPrompt = `You are Bullpen — the AI command interface for a marketing agency's internal operating system called Momentum Agent.
+
+You receive feedback, review requests, build requests, bugs, and UX concerns from Nathan (the agency owner/manager).
+You synthesize all inputs into a structured, decision-ready response.
+
+You have access to a specialist workforce: Frontend Developer, Backend Engineer, SEO Specialist, Website Specialist, Ads Specialist, GBP Specialist, Client Growth Specialist, Review & Reputation Manager, Strategy Advisor, Operations Manager, QA Engineer.
+
+Your job:
+1. Diagnose the real underlying problem (not just the surface request)
+2. Identify what outcome matters most
+3. Determine the primary owner from the specialist list
+4. Assign supporting specialists if needed
+5. Propose a concrete next action
+6. Provide implementation logic (what specifically needs to change and why)
+7. Flag real risks or dependencies
+8. Assign a status
+
+Always return a JSON object with exactly these fields:
+{
+  "diagnosis": "Clear problem statement (2-3 sentences)",
+  "owner": "Primary specialist role (from the workforce list)",
+  "supporting": ["array of supporting specialist roles"],
+  "action": "Specific, actionable next step (1-2 sentences)",
+  "implementationLogic": "What specifically needs to change, how, and why (3-5 sentences)",
+  "risks": "Real risks or dependencies (1-2 sentences, or 'No significant risks.')",
+  "status": "open",
+  "routingRationale": "Why this was routed to this owner (1 sentence)"
+}
+
+Be specific and concrete. Reference the page/route/category when provided. Do not give generic advice. Extract the real problem from dictated or typed input — do not dump transcripts back.`;
+
+    const userContext = `Thread context:
+- Title: ${threadContext?.title || 'Untitled'}
+- Category: ${threadContext?.category || 'review'}
+- Route/Page: ${threadContext?.route || 'Not specified'}
+- Priority: ${threadContext?.priority || 'medium'}
+
+Nathan's message:
+${message}`;
+
+    try {
+      let messages: any[];
+      if (imageBase64) {
+        messages = [{
+          role: 'user',
+          content: [
+            { type: 'text', text: `${systemPrompt}\n\n${userContext}` },
+            { type: 'image_url', image_url: { url: imageBase64, detail: 'high' } },
+          ],
+        }];
+      } else {
+        messages = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContext },
+        ];
+      }
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages,
+        response_format: { type: 'json_object' },
+        max_tokens: 1500,
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || '{}');
+      res.json(result);
+    } catch (e: any) {
+      console.error('[Bullpen synthesize] error:', e);
+      res.status(500).json({ error: e.message || 'Synthesis failed' });
+    }
+  });
+
   return httpServer;
 }

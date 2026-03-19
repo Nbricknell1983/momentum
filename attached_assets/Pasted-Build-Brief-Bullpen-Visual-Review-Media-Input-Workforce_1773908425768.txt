@@ -1,0 +1,628 @@
+Build Brief — Bullpen Visual Review, Media Input & Workforce Orchestration Workflow          
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Turn Bullpen into the native command surface where Nathan can speak to Bullpen, share        
+ screenshots, upload video recordings, dictate feedback, create build/review requests, and    
+ have Bullpen route work to the right specialist agents behind the scenes.                    
+                                                                                              
+ Core product decision                                                                        
+                                                                                              
+ Nathan should talk to Bullpen.                                                               
+                                                                                              
+ Bullpen should:                                                                              
+ - receive the request                                                                        
+ - interpret the problem                                                                      
+ - gather context                                                                             
+ - route work to the correct specialist/workforce roles                                       
+ - synthesize outputs back into one decision-ready response                                   
+                                                                                              
+ The specialist agents should exist as:                                                       
+ - the workforce behind Bullpen                                                               
+ - not the primary interface Nathan has to manually juggle                                    
+                                                                                              
+ This feature is the first practical implementation of that model.                            
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What problem this solves                                                                     
+                                                                                              
+ Right now, there is a gap between:                                                           
+ - how Nathan naturally wants to work                                                         
+ and                                                                                          
+ - what Bullpen can currently accept as input                                                 
+                                                                                              
+ Nathan needs to be able to:                                                                  
+ - show what he is seeing                                                                     
+ - explain what feels wrong                                                                   
+ - provide quick context without typing walls of text                                         
+ - review screens and flows in-context                                                        
+ - submit build and review requests natively inside Momentum                                  
+                                                                                              
+ That means Bullpen needs first-class support for:                                            
+ - screenshots                                                                                
+ - video recordings                                                                           
+ - dictation / voice input                                                                    
+ - structured review/build threads                                                            
+ - workforce routing behind the scenes                                                        
+                                                                                              
+ Without this, Bullpen remains useful as a text command layer, but not yet the natural        
+ operating surface for product iteration and review.                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Desired user experience                                                                      
+                                                                                              
+ Nathan opens Bullpen and can do any of the following in one place:                           
+                                                                                              
+ - type a request                                                                             
+ - upload a screenshot                                                                        
+ - upload a short screen recording                                                            
+ - dictate a voice note                                                                       
+ - attach route/page context                                                                  
+ - describe what feels off                                                                    
+ - ask for:                                                                                   
+ - review                                                                                     
+ - diagnosis                                                                                  
+ - build                                                                                      
+ - redesign                                                                                   
+ - hardening                                                                                  
+ - debugging                                                                                  
+ - prioritisation                                                                             
+                                                                                              
+ Bullpen then:                                                                                
+ 1. identifies the real problem                                                               
+ 2. identifies what outcome matters most                                                      
+ 3. determines which specialist/team owns it                                                  
+ 4. structures the input into a usable work item                                              
+ 5. routes work internally if needed                                                          
+ 6. returns a unified response:                                                               
+ - diagnosis                                                                                  
+ - owner                                                                                      
+ - next action                                                                                
+ - implementation logic                                                                       
+ - risks                                                                                      
+ - status                                                                                     
+ - review outcome                                                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Product principles                                                                           
+                                                                                              
+ 1. One command interface                                                                     
+                                                                                              
+ Nathan talks to Bullpen, not a grid of separate bots.                                        
+                                                                                              
+ 2. Media is first-class input                                                                
+                                                                                              
+ Screenshots, videos, and dictation are not attachments bolted on later.                      
+ They are core input methods.                                                                 
+                                                                                              
+ 3. Bullpen is the interface; specialists are the workforce                                   
+                                                                                              
+ Bullpen owns:                                                                                
+ - conversation                                                                               
+ - diagnosis                                                                                  
+ - prioritisation                                                                             
+ - orchestration                                                                              
+ - synthesis                                                                                  
+                                                                                              
+ Specialists own:                                                                             
+ - focused execution                                                                          
+ - specialist analysis                                                                        
+ - technical or functional output                                                             
+                                                                                              
+ 4. Structured context beats raw dumping                                                      
+                                                                                              
+ Uploads should be paired with useful structure:                                              
+ - route/page                                                                                 
+ - expected outcome                                                                           
+ - what feels off                                                                             
+ - feedback type                                                                              
+ - category                                                                                   
+ - priority if known                                                                          
+                                                                                              
+ 5. Visibility without forcing manual orchestration                                           
+                                                                                              
+ Nathan may inspect owners/status, but Bullpen should do the routing.                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ In scope                                                                                     
+                                                                                              
+ Core interaction layer                                                                       
+                                                                                              
+ 1. Bullpen conversation thread as the main interface                                         
+ 2. structured review/build request creation                                                  
+ 3. workforce routing model inside Bullpen                                                    
+ 4. Bullpen synthesis of specialist outputs                                                   
+                                                                                              
+ Media input layer                                                                            
+                                                                                              
+ 5. screenshot upload                                                                         
+ 6. video upload                                                                              
+ 7. dictation / voice input                                                                   
+ 8. transcription of dictated input into usable text context                                  
+                                                                                              
+ Workflow layer                                                                               
+                                                                                              
+ 9. create review/build threads                                                               
+ 10. attach media and metadata to threads                                                     
+ 11. assign owner/specialist(s)                                                               
+ 12. track status                                                                             
+ 13. return review/build outcomes inside Bullpen                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Out of scope                                                                                 
+                                                                                              
+ - full code execution integration in this task                                               
+ - full repo/Replit build control in Bullpen                                                  
+ - screenshot annotation suite                                                                
+ - deep video commenting/timestamps                                                           
+ - complete before/after diff system                                                          
+ - full task management platform replacement                                                  
+ - direct manual chatting with every specialist as the default UX                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required capabilities                                                                        
+                                                                                              
+ 1. Screenshot support                                                                        
+                                                                                              
+ Nathan must be able to:                                                                      
+ - upload screenshots into Bullpen                                                            
+ - preview them inline                                                                        
+ - attach them to a thread/request                                                            
+ - use them for review/build conversations                                                    
+                                                                                              
+ ### Use cases                                                                                
+                                                                                              
+ - UI critique                                                                                
+ - bug reporting                                                                              
+ - trust/clarity review                                                                       
+ - before/after comparisons later                                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ 2. Video recording support                                                                   
+                                                                                              
+ Nathan must be able to:                                                                      
+ - upload short screen recordings                                                             
+ - preview/play them inside Bullpen                                                           
+ - attach them to review/build threads                                                        
+                                                                                              
+ ### Use cases                                                                                
+                                                                                              
+ - broken interactions                                                                        
+ - loading/state bugs                                                                         
+ - motion/animation issues                                                                    
+ - “this feels wrong in motion”                                                               
+                                                                                              
+ ### Practical note                                                                           
+                                                                                              
+ Keep v1 simple:                                                                              
+ - support common browser-friendly formats                                                    
+ - short recordings only if needed for simplicity                                             
+ - no heavy media processing required unless necessary                                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ 3. Dictation / voice input                                                                   
+                                                                                              
+ Nathan must be able to dictate feedback instead of typing everything.                        
+                                                                                              
+ ### Acceptable v1 implementations                                                            
+                                                                                              
+ Either:                                                                                      
+ - live browser speech-to-text into the composer                                              
+ or                                                                                           
+ - voice note upload + transcription                                                          
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Nathan can speak things like:                                                                
+ - “This is the Client Focus page”                                                            
+ - “The right panel feels too heavy”                                                          
+ - “I want this to feel more command centre and less dashboard”                               
+ - “Review this flow and tell me what’s wrong”                                                
+                                                                                              
+ Bullpen should use the transcript as normal input context.                                   
+                                                                                              
+ ### Important                                                                                
+                                                                                              
+ Bullpen should not just dump a raw transcript back.                                          
+ It should structure the dictation into usable problem context.                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended workflow model                                                                   
+                                                                                              
+ Mode 1 — Direct command                                                                      
+                                                                                              
+ Nathan types or dictates a question/request.                                                 
+ Bullpen answers directly if no deeper routing is needed.                                     
+                                                                                              
+ Example:                                                                                     
+ - “What’s off about this screen?”                                                            
+ - “What should we harden next?”                                                              
+                                                                                              
+ Mode 2 — Review thread                                                                       
+                                                                                              
+ Nathan uploads:                                                                              
+ - screenshot                                                                                 
+ - video                                                                                      
+ - dictated explanation                                                                       
+                                                                                              
+ Bullpen:                                                                                     
+ - diagnoses the issue                                                                        
+ - gives feedback                                                                             
+ - recommends next action                                                                     
+ - optionally routes follow-up work                                                           
+                                                                                              
+ Mode 3 — Build request                                                                       
+                                                                                              
+ Nathan creates a build request with:                                                         
+ - media                                                                                      
+ - typed or dictated context                                                                  
+ - route/page                                                                                 
+ - desired outcome                                                                            
+                                                                                              
+ Bullpen:                                                                                     
+ - identifies owner                                                                           
+ - creates structured work item                                                               
+ - routes to specialist team                                                                  
+ - returns implementation framing                                                             
+                                                                                              
+ Mode 4 — Delivery review                                                                     
+                                                                                              
+ Nathan uploads:                                                                              
+ - before/after screenshots                                                                   
+ - a delivery summary                                                                         
+ - a screen recording                                                                         
+ - dictated commentary                                                                        
+                                                                                              
+ Bullpen:                                                                                     
+ - reviews outcome quality                                                                    
+ - approves or requests changes                                                               
+ - flags risks and regressions                                                                
+ - recommends next step                                                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended UI/UX model                                                                      
+                                                                                              
+ Primary surface                                                                              
+                                                                                              
+ A single Bullpen thread/workspace where Nathan can:                                          
+ - chat                                                                                       
+ - upload media                                                                               
+ - dictate                                                                                    
+ - create requests                                                                            
+ - receive results                                                                            
+                                                                                              
+ Secondary workforce panel                                                                    
+                                                                                              
+ A side panel or section showing:                                                             
+ - primary owner                                                                              
+ - supporting specialists                                                                     
+ - work status                                                                                
+ - blocked/active/review/shipped                                                              
+ - recent outputs                                                                             
+                                                                                              
+ This is for visibility, not the primary required interaction pattern.                        
+                                                                                              
+ Optional specialist drill-down                                                               
+                                                                                              
+ Nathan may inspect a role card or specialist output if useful, but default interaction       
+ remains through Bullpen.                                                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Bullpen review/build threads                                                       
+                                                                                              
+ Build a persistent thread model.                                                             
+                                                                                              
+ ### Each thread should support                                                               
+                                                                                              
+ - title or subject                                                                           
+ - category                                                                                   
+ - review                                                                                     
+ - build request                                                                              
+ - bug                                                                                        
+ - architecture                                                                               
+ - UX                                                                                         
+ - trust/safety                                                                               
+ - other                                                                                      
+ - route/page metadata                                                                        
+ - typed message                                                                              
+ - dictated transcript                                                                        
+ - attachments                                                                                
+ - status                                                                                     
+ - owner                                                                                      
+ - supporting roles                                                                           
+ - timestamps                                                                                 
+ - org scoping                                                                                
+                                                                                              
+ ### Suggested data model                                                                     
+                                                                                              
+ Something like:                                                                              
+ - orgs/{orgId}/bullpenThreads/{threadId}                                                     
+ - messages/subcollection or embedded references                                              
+ - attachment metadata in Firestore                                                           
+ - media binary in storage                                                                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Screenshot upload                                                                  
+                                                                                              
+ Add screenshot upload to Bullpen threads.                                                    
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - inline preview                                                                             
+ - click to enlarge                                                                           
+ - stored securely and org-scoped                                                             
+ - easy attach during message creation                                                        
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Make screen review frictionless.                                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Video upload                                                                       
+                                                                                              
+ Add short video upload to Bullpen threads.                                                   
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - upload                                                                                     
+ - inline preview/playback                                                                    
+ - clear size/format constraints if needed                                                    
+ - org-scoped secure storage                                                                  
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Allow interaction/state problems to be reviewed, not just static layout.                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Dictation / voice capture                                                          
+                                                                                              
+ Add dictation support.                                                                       
+                                                                                              
+ ### Recommended v1                                                                           
+                                                                                              
+ Either:                                                                                      
+ - mic input into message composer                                                            
+ or                                                                                           
+ - audio note upload + server/client transcription                                            
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - transcript saved with the message                                                          
+ - original audio optionally retained if useful                                               
+ - transcript editable before send if possible                                                
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Reduce friction for fast feedback and walkthroughs.                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Structured request framing                                                         
+                                                                                              
+ Before or alongside sending, allow lightweight structured fields:                            
+                                                                                              
+ - Route/page                                                                                 
+ - What I expected                                                                            
+ - What I see                                                                                 
+ - What feels off                                                                             
+ - Feedback wanted                                                                            
+ - UX                                                                                         
+ - layout                                                                                     
+ - copy                                                                                       
+ - trust                                                                                      
+ - conversion                                                                                 
+ - bug                                                                                        
+ - architecture                                                                               
+ - Desired outcome                                                                            
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Turn raw media into implementation-useful context.                                           
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 6 — Workforce orchestration layer                                                      
+                                                                                              
+ Bullpen should be able to route a thread/request internally.                                 
+                                                                                              
+ ### Required behavior                                                                        
+                                                                                              
+ Bullpen decides:                                                                             
+ - answer directly                                                                            
+ - assign one specialist                                                                      
+ - assign multiple specialists                                                                
+ - create tracked work item                                                                   
+                                                                                              
+ ### Minimum visible output                                                                   
+                                                                                              
+ Show:                                                                                        
+ - primary owner                                                                              
+ - supporting roles                                                                           
+ - status                                                                                     
+ - why it was routed                                                                          
+                                                                                              
+ Example:                                                                                     
+ - Primary owner: Frontend Developer                                                          
+ - Supporting: Backend, QA                                                                    
+ - Status: In Review                                                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 7 — Bullpen synthesis layer                                                            
+                                                                                              
+ Specialist outputs should come back through Bullpen.                                         
+                                                                                              
+ Bullpen should return:                                                                       
+ - clear diagnosis                                                                            
+ - recommended owner                                                                          
+ - proposed action                                                                            
+ - implementation logic                                                                       
+ - risks/dependencies                                                                         
+ - QA considerations                                                                          
+ - status/progress                                                                            
+ - completion review                                                                          
+                                                                                              
+ Do not just surface raw bot chatter as the default UX.                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended media/storage model                                                              
+                                                                                              
+ Firestore / metadata                                                                         
+                                                                                              
+ Store:                                                                                       
+ - thread metadata                                                                            
+ - message metadata                                                                           
+ - transcript                                                                                 
+ - attachment metadata                                                                        
+ - route/page/category/status/owner                                                           
+                                                                                              
+ File storage                                                                                 
+                                                                                              
+ Store:                                                                                       
+ - screenshots                                                                                
+ - videos                                                                                     
+ - optional voice notes                                                                       
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - org-scoped access                                                                          
+ - secure URLs/access control                                                                 
+ - metadata linked back to thread/message                                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ Risks                                                                                        
+                                                                                              
+ - turning Bullpen into generic chat instead of an operating workflow                         
+ - weak file upload security                                                                  
+ - storage cost creep for video                                                               
+ - cluttered UI if media handling is poor                                                     
+ - raw transcripts becoming messy if not structured                                           
+ - forcing Nathan to manually orchestrate specialists despite the command-center goal         
+                                                                                              
+ Dependencies                                                                                 
+                                                                                              
+ - storage solution for media                                                                 
+ - transcription approach for dictation                                                       
+ - org-scoped access model                                                                    
+ - existing Bullpen role/status architecture                                                  
+ - clear thread/work-item schema                                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ Must test — screenshots                                                                      
+                                                                                              
+ 1. screenshot uploads successfully                                                           
+ 2. preview renders correctly                                                                 
+ 3. image is attached to the right thread                                                     
+ 4. access remains org-scoped                                                                 
+                                                                                              
+ Must test — video                                                                            
+                                                                                              
+ 5. video uploads successfully                                                                
+ 6. playback works                                                                            
+ 7. file limits/error states are clear                                                        
+ 8. access remains org-scoped                                                                 
+                                                                                              
+ Must test — dictation                                                                        
+                                                                                              
+ 9. voice input can be captured                                                               
+ 10. transcript is usable                                                                     
+ 11. transcript is attached to the right thread                                               
+ 12. transcript can be used in Bullpen replies/work item creation                             
+                                                                                              
+ Must test — workflow                                                                         
+                                                                                              
+ 13. thread can be created with media + text/dictation                                        
+ 14. owner assignment/status works                                                            
+ 15. Bullpen can return a structured response                                                 
+ 16. routed work remains visible through Bullpen, not hidden                                  
+                                                                                              
+ Must test — safety                                                                           
+                                                                                              
+ 17. cross-org media/thread access is denied                                                  
+ 18. stale media/transcript does not attach to the wrong thread                               
+ 19. status/owner state does not drift                                                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - Nathan can create a Bullpen thread with screenshots                                        
+ - Nathan can upload short videos into Bullpen                                                
+ - Nathan can dictate input or attach voice for transcription                                 
+ - Bullpen can use those inputs to provide meaningful review/build responses                  
+ - Bullpen remains the main interface                                                         
+ - specialist routing can happen behind the scenes                                            
+ - the experience feels like a command center, not a novelty multi-bot toy                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. build Bullpen thread model                                                                
+ 2. add screenshot upload + preview                                                           
+ 3. add video upload + preview                                                                
+ 4. add dictation / transcription                                                             
+ 5. add structured request fields                                                             
+ 6. add owner/status/workforce routing model                                                  
+ 7. add Bullpen synthesis output flow                                                         
+ 8. QA upload, transcript, routing, and org safety                                            
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - thread model implemented                                                                   
+ - media types supported                                                                      
+ - dictation/transcription approach chosen                                                    
+ - owner/status/workforce routing behavior added                                              
+ - storage/access model used                                                                  
+ - any size/performance constraints                                                           
+ - follow-up recommendations for annotations, before/after review, or build-request           
+ conversion                                                                                   
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not make the default UX a grid of separate bots Nathan must manually choose from        
+ - do not reduce this to generic chat-with-upload                                             
+ - do not ship screenshots without org-scoped access controls                                 
+ - do not add dictation without making the transcript usable                                  
+ - do not expose raw specialist chatter as the primary response model                         
+ - do not overbuild full multimodal collaboration tooling in v1                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Final product rule                                                                           
+                                                                                              
+ Bullpen is the interface.                                                                    
+ Media is first-class input.                                                                  
+ The agents are the workforce behind the scenes.                                              
+ Nathan should command the system, not orchestrate a robot org chart manually.                
+                                                                              

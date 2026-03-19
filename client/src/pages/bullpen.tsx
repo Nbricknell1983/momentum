@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { RootState } from '@/store';
 import type { Lead, Activity, Client, NBAAction } from '@/lib/types';
 import { db, doc, collection, query, orderBy, limit, onSnapshot } from '@/lib/firebase';
+import BullpenCommandCenter from '@/components/BullpenCommandCenter';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import type { AutomationRulesReadResult } from '@shared/controlPlaneSchemas';
@@ -1816,6 +1817,9 @@ export default function BullpenPage() {
           <SummaryCard label="Completed Today"     value={summaryCompletedToday}    icon={CheckCircle2} color="text-emerald-600 dark:text-emerald-400" />
           <SummaryCard label="AI-Managed Clients"  value={summaryClientsAffected}   icon={Users}        color="text-indigo-600 dark:text-indigo-400" />
         </div>
+
+        {/* ── Command Center ───────────────────────────────────────────────── */}
+        <BullpenCommandCenter />
 
         {/* ── Needs Attention ──────────────────────────────────────────────── */}
         {attentionItems.length > 0 && (
