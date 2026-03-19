@@ -10005,13 +10005,30 @@ Return JSON with exactly these fields:
   // Review actions: approve | request_changes | hold | escalate
   app.patch('/api/bullpen/work-items/:itemId', requireOrgAccess, requireManager, async (req: any, res: any) => {
     const { itemId } = req.params;
-    const { orgId, status, threadId, snooze, dismiss, dismissReason, action, reviewNotes } = req.body;
+    const { orgId, status, threadId, snooze, dismiss, dismissReason, action, reviewNotes,
+            deliverySummary, deliveryType, deliveryEvidence } = req.body;
     if (!orgId || !itemId || !firestore) return res.status(400).json({ error: 'orgId and itemId required' });
     try {
       const ref = firestore.collection('orgs').doc(orgId).collection('bullpenWork').doc(itemId);
       const now = new Date();
       const uid = (req as any).user?.uid ?? 'unknown';
       const updates: Record<string, any> = { updatedAt: now.toISOString() };
+
+      // ── Delivery submission ──────────────────────────────────────────────
+      if (action === 'submit_delivery') {
+        if (!deliverySummary) return res.status(400).json({ error: 'deliverySummary is required' });
+        updates.deliverySummary = deliverySummary;
+        updates.deliveredAt = now.toISOString();
+        updates.deliveredBy = uid;
+        if (deliveryType) updates.deliveryType = deliveryType;
+        if (Array.isArray(deliveryEvidence)) updates.deliveryEvidence = deliveryEvidence;
+        updates.status = 'awaiting_review';
+        // Clear any prior review decision so review panel is fresh
+        updates.reviewDecision = null;
+        updates.reviewNotes = null;
+        updates.reviewedAt = null;
+        updates.reviewedBy = null;
+      }
 
       // ── Review/approval actions ──────────────────────────────────────────
       if (action === 'approve') {

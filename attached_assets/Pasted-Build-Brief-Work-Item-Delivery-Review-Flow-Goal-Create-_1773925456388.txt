@@ -1,0 +1,241 @@
+Build Brief — Work Item → Delivery Review Flow
+Goal
+Create a clean end-to-end path from:
+
+detected issue or review finding
+to
+work item
+to
+Bullpen thread
+to
+delivery result
+to
+review/acceptance
+to
+closure
+So Bullpen can manage not just detection and discussion, but the full loop through verified completion.
+
+Why this matters now
+Bullpen now has:
+
+specialist routing
+work queue
+trigger engine
+approvals / governance
+agent-generated review passes
+thread creation from work items
+That is strong.
+
+The next missing layer is closure quality.
+
+Right now, the system can identify and govern work — but it still needs a better structure for:
+
+attaching a delivered result
+reviewing the actual outcome
+comparing before/after where relevant
+accepting or rejecting delivery
+closing the loop with confidence
+Without this, Bullpen risks being strong at detection and coordination, but weaker at verified completion.
+
+Problem
+A work item can become a thread and move through states, but the system still needs a clearer “delivery review” stage that answers:
+
+what was actually done?
+what changed?
+does the result match the intended fix/action?
+does it need revision?
+can it be accepted and closed?
+Today, some of this may happen informally inside threads, but it needs a more deliberate product flow.
+
+Outcome that matters most
+Make Bullpen capable of carrying work from signal to reviewed delivery and explicit closure.
+
+Success means:
+
+each work item can collect a delivery summary
+delivery evidence can be attached where useful
+Nathan can review the outcome in-context
+Bullpen can support approve / request changes / close based on the delivered result
+closure becomes evidence-based, not assumption-based
+Scope
+In scope
+delivery summary attachment to work item / linked thread
+delivery review state in the lifecycle
+before/after evidence support where practical
+review acceptance / changes requested from delivery context
+final closure workflow
+Out of scope
+full design diff engine
+full code review platform
+automatic merge/deploy integrations
+broad PM replacement
+advanced analytics on delivery outcomes
+Required architecture rules
+1. Completion should be evidence-based
+“Done” should not mean:
+
+someone says it’s done
+It should mean:
+
+there is enough delivery context to review the outcome
+2. Delivery review should sit inside the existing Bullpen workflow
+Do not build a separate disconnected delivery-review subsystem.
+It should connect naturally to:
+
+work item
+thread
+review actions
+closure
+3. Not every item needs a giant review packet
+Keep it proportional.
+Simple fixes may need:
+
+short delivery note
+Complex visual/UX/product changes may need:
+screenshots
+before/after evidence
+richer review
+4. Human approval remains explicit where quality matters
+Delivery review should support:
+
+approve/accept
+request changes
+hold
+close
+Recommended implementation approach
+Phase 1 — Add delivery summary model
+Allow a work item or linked thread to record a structured delivery summary.
+
+Minimum fields
+deliverySummary
+deliveredAt
+deliveredBy
+deliveryType (optional: fix / review / recommendation / implementation / analysis)
+deliveryEvidence (optional references to media/attachments)
+Goal
+Give the work item a formal “this is what changed” layer.
+
+Phase 2 — Add delivery review state
+Introduce a clear step between active work and closure.
+
+Recommended lifecycle interpretation
+A typical path becomes:
+
+detected
+triaged
+in_progress
+awaiting_review
+approved
+delivery_ready or equivalent (optional if needed)
+complete
+Simpler alternative
+If you want fewer states:
+
+use linked delivery summary presence + awaiting_review
+then:
+approve
+request changes
+complete
+Either is acceptable. The key is that delivery is visible and reviewable before closure.
+
+Phase 3 — Add delivery evidence support
+Leverage the media/thread capability already built.
+
+Delivery evidence may include:
+screenshots
+short videos
+written summary
+before/after context
+linked Bullpen thread messages
+Goal
+For UI/product/client-facing work especially, Nathan should be able to review what changed, not guess.
+
+Phase 4 — Add delivery review actions
+From the delivery context, Nathan should be able to:
+
+Accept / Approve
+Request Changes
+Hold
+Mark Complete
+Goal
+Review happens against the actual delivered result, not just the original diagnosis.
+
+Phase 5 — Tighten work item ↔ thread linkage
+If a thread already exists, the delivery review should naturally happen there or from there.
+
+Good behavior
+open work item
+see linked thread
+see delivery summary/evidence
+review
+accept/request changes
+closure updates both queue state and thread history
+Goal
+One coherent operating loop.
+
+Recommended v1 user flow
+Example flow
+trigger or review pass creates work item
+work item creates Bullpen thread
+work progresses
+specialist/Bullpen posts delivery summary into thread
+work item enters review-ready state
+Nathan reviews summary/evidence
+Nathan approves / requests changes / holds
+approved item can be marked complete with confidence
+That is the operating path you want.
+
+Risks and dependencies
+Risks
+overcomplicating simple items
+adding review friction to low-stakes work
+delivery notes becoming generic or low-value
+evidence handling becoming inconsistent
+Dependencies
+existing thread/media system
+current work item lifecycle
+current approval/review controls
+thread linkage already in place
+QA requirements
+Must test — delivery summary
+delivery summary can be attached to a work item or linked thread
+summary persists and is visible after reload
+deliveredBy / deliveredAt are stored correctly
+Must test — delivery review
+review actions work against delivery context
+request changes reopens the item correctly
+accept/approve flows to complete correctly
+thread and queue stay in sync
+Must test — evidence
+screenshots/videos can be reviewed in context where attached
+before/after review is at least manually understandable in v1
+simple items without media still work cleanly
+Measurable success criteria
+This task is successful when:
+
+work items can carry a clear delivery summary
+Nathan can review delivered outcomes in-context
+closure reflects actual reviewed output, not assumption
+queue/thread history remains coherent from signal to closure
+Recommended execution order
+add delivery summary model
+decide delivery-review lifecycle/state handling
+add delivery evidence support via existing thread/media model
+wire review actions to delivery context
+keep queue/thread history in sync
+QA simple vs complex delivery cases
+What good output looks like from this task
+Please return:
+
+delivery summary model added
+delivery review flow chosen
+how evidence is attached
+how queue and thread stay synchronized
+any recommendations for before/after comparison as v2
+What not to do
+do not force heavy delivery packets for trivial work
+do not let items jump to complete with no reviewable result
+do not separate delivery review from the existing Bullpen workflow
+do not create a second disconnected approval system
+Final product rule
+Bullpen should not just detect and route work. It should carry work through reviewed delivery and explicit closure.
