@@ -1,0 +1,26 @@
+Best first task for me                                                                       
+                                                                                              
+ Once that’s ready, send me:                                                                  
+                                                                                              
+ - the repo/project structure                                                                 
+ - what the app currently does                                                                
+ - what the first feature/fix is                                                              
+ - whether I’m working against staging only                                                   
+                                                                                              
+ And I’ll handle it in Bullpen mode:                                                          
+ - diagnosis                                                                                  
+ - owner logic                                                                                
+ - implementation plan                                                                        
+ - risk callouts                                                                              
+ - execution order                                                                            
+ - success criteria                                                                           
+                                                                                              
+ Simple answer                                                                                
+                                                                                              
+ How do you do it?                                                                            
+                                                                                              
+ - connect Replit to a GitHub repo                                                            
+ - create staging and production Firebase environments                                        
+ - use Replit as the build surface, not uncontrolled production                               
+ - give Bullpen structured build requests                                                     
+ - ship through a light QA + release checklist  
