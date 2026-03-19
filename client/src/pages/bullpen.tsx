@@ -23,7 +23,8 @@ import {
   BriefcaseBusiness, Cpu, Eye, Radio, Compass, Bot, Link2, MapPin,
   FileSearch, PlayCircle, Wrench, UserCheck, GitMerge, List,
   Landmark, FlaskConical, Share2, BookOpen, Target, Layers,
-  TrendingDown, ArrowRight, ChevronLeft
+  TrendingDown, ArrowRight, ChevronLeft,
+  Code2, Layout, Server, Workflow, TestTube2, Cloud
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -42,7 +43,7 @@ interface RoleMetrics {
   lastActionLabel?: string;
   detail: string;
   linkedPath?: string;
-  tier?: 'leadership' | 'execution' | 'control';
+  tier?: 'leadership' | 'execution' | 'development' | 'control';
 }
 
 interface AttentionItem {
@@ -85,6 +86,7 @@ interface AutomationRules {
   requireApprovalCampaigns: boolean;
   requireApprovalHighRisk: boolean;
   requireApprovalPublish: boolean;
+  requireApprovalProduction: boolean;
 }
 
 const DEFAULT_RULES: AutomationRules = {
@@ -97,6 +99,7 @@ const DEFAULT_RULES: AutomationRules = {
   requireApprovalCampaigns: true,
   requireApprovalHighRisk: true,
   requireApprovalPublish: true,
+  requireApprovalProduction: true,
 };
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -115,6 +118,12 @@ const ROLE_META: Record<string, { icon: typeof Briefcase; bg: string }> = {
   'Social':      { icon: Share2,            bg: 'bg-pink-500' },
   'Commercial':  { icon: Landmark,          bg: 'bg-teal-600' },
   'Performance': { icon: FlaskConical,      bg: 'bg-rose-600' },
+  'FullStack':   { icon: Code2,             bg: 'bg-cyan-600' },
+  'Frontend':    { icon: Layout,            bg: 'bg-sky-500' },
+  'Backend':     { icon: Server,            bg: 'bg-blue-700' },
+  'CRM':         { icon: Workflow,          bg: 'bg-fuchsia-600' },
+  'QA':          { icon: TestTube2,         bg: 'bg-lime-600' },
+  'DevOps':      { icon: Cloud,             bg: 'bg-slate-500' },
   'Team':        { icon: Users,             bg: 'bg-slate-700' },
 };
 
@@ -124,7 +133,7 @@ interface RoleFramework { name: string; focus: string }
 
 interface RoleConfig {
   id: string;
-  tier: 'leadership' | 'execution' | 'control';
+  tier: 'leadership' | 'execution' | 'development' | 'control';
   roleDescription: string;
   expertFrameworks: RoleFramework[];
   operatingPrinciples: string[];
@@ -365,6 +374,120 @@ const ROLE_CONFIG: Record<string, RoleConfig> = {
     outputTypes: ['affordability mode recommendations', 'budget prioritization', 'ROI framing', 'investment vs opportunity analysis', 'cost of inaction logic'],
     successMetrics: ['commercial recommendation quality', 'allocation soundness', 'trust in strategy economics', 'budget-to-outcome accuracy'],
   },
+  fullstack: {
+    id: 'fullstack', tier: 'development',
+    roleDescription: 'Architecture, implementation, and scalable cross-stack delivery for all client builds and internal platform work.',
+    expertFrameworks: [
+      { name: 'Clean Architecture', focus: 'Separate concerns, keep business logic independent of frameworks and infra' },
+      { name: 'SOLID Principles', focus: 'Maintainable, extensible, testable code across the full stack' },
+      { name: 'Pragmatic Programmer (Hunt & Thomas)', focus: 'Ruthless pragmatism — ship working software, avoid perfectionism' },
+      { name: 'Domain-Driven Design (Evans)', focus: 'Model the business domain in code — ubiquitous language, bounded contexts' },
+    ],
+    operatingPrinciples: [
+      'Unclear scope is a blocker — clarify before building, not after',
+      'Working software ships value; perfect code that isn\'t deployed ships nothing',
+      'Every integration point is a failure point — design for it',
+      'Architecture decisions outlive the sprint — think through the trade-offs',
+    ],
+    inputSignals: ['feature requirements', 'API contracts', 'schema definitions', 'integration specs', 'deployment targets'],
+    outputTypes: ['feature implementations', 'API endpoints', 'data models', 'integration layers', 'architecture decisions'],
+    successMetrics: ['features shipped per sprint', 'defect rate', 'integration reliability', 'build time', 'deploy success rate'],
+  },
+  frontend: {
+    id: 'frontend', tier: 'development',
+    roleDescription: 'UI quality, component architecture, responsive design, user flow clarity, and accessibility across all surfaces.',
+    expertFrameworks: [
+      { name: 'Atomic Design (Brad Frost)', focus: 'Components built from atoms to organisms — consistent, reusable, scalable' },
+      { name: 'Accessibility First (WCAG)', focus: 'Interfaces must work for everyone — keyboard, screen reader, mobile' },
+      { name: 'Performance Budget Thinking', focus: 'Every KB has a cost — load time is UX, not a metric' },
+      { name: 'Design Systems Thinking', focus: 'Consistency through shared tokens, patterns, and component contracts' },
+    ],
+    operatingPrinciples: [
+      'Missing design states are blockers — empty, loading, error, and success must all be defined',
+      'Mobile is not an afterthought — test it first',
+      'UI components must work without data — graceful degradation is required',
+      'Clarity of information beats visual novelty every time',
+    ],
+    inputSignals: ['design specs', 'component requirements', 'user flows', 'responsive breakpoints', 'accessibility requirements'],
+    outputTypes: ['UI components', 'page layouts', 'interactive flows', 'responsive implementations', 'accessibility fixes'],
+    successMetrics: ['UI task completion rate', 'mobile QA pass rate', 'accessibility score', 'component reuse rate', 'visual regression rate'],
+  },
+  backend: {
+    id: 'backend', tier: 'development',
+    roleDescription: 'API design, database logic, third-party integrations, authentication, and backend reliability.',
+    expertFrameworks: [
+      { name: 'REST & API Design (Roy Fielding)', focus: 'Resource-oriented, stateless, predictable — APIs are contracts' },
+      { name: 'Database Design Principles', focus: 'Normalisation, indexing, query efficiency — data structure determines performance' },
+      { name: 'Zero-Trust Security', focus: 'Every input is untrusted, every service is a boundary — validate everywhere' },
+      { name: 'Twelve-Factor App', focus: 'Portable, scalable, maintainable server-side applications' },
+    ],
+    operatingPrinciples: [
+      'Missing auth/env config is a hard blocker — never ship without it',
+      'APIs are contracts — breaking changes require versioning and migration plans',
+      'Schema changes propagate — coordinate frontend and migration before deploying',
+      'Logging and error handling are not optional — silent failures destroy trust',
+    ],
+    inputSignals: ['schema definitions', 'integration credentials', 'API contracts', 'auth requirements', 'performance targets'],
+    outputTypes: ['API endpoints', 'database migrations', 'integration adapters', 'auth flows', 'background jobs'],
+    successMetrics: ['API reliability', 'response time', 'error rate', 'integration uptime', 'auth failure rate'],
+  },
+  crm: {
+    id: 'crm', tier: 'development',
+    roleDescription: 'Custom CRM builds, client-facing widgets, Twilio/SMS workflows, booking/calendar systems, and automation pipelines.',
+    expertFrameworks: [
+      { name: 'Process Mapping First', focus: 'Understand the workflow before automating it — map it, validate it, then build it' },
+      { name: 'Twilio Best Practices', focus: 'Phone number management, opt-in compliance, rate limits, fallback handling' },
+      { name: 'Workflow Automation Principles', focus: 'Idempotent steps, failure recovery, clear success states — automation that can be debugged' },
+      { name: 'CRM Data Modelling', focus: 'Contacts, pipelines, automations — model the business process not the tool' },
+    ],
+    operatingPrinciples: [
+      'Missing workflow rules are blockers — do not automate an undefined process',
+      'Twilio credentials and opt-in compliance must be confirmed before any SMS workflow goes live',
+      'Calendar/booking integrations fail on timezone edge cases — test across timezones',
+      'Every automation must have a manual override path',
+    ],
+    inputSignals: ['workflow requirements', 'Twilio credentials', 'calendar/booking config', 'CRM data model', 'client process maps'],
+    outputTypes: ['CRM builds', 'SMS workflows', 'booking integrations', 'automation pipelines', 'client-facing widgets'],
+    successMetrics: ['workflow completion rate', 'SMS delivery rate', 'booking conversion', 'automation reliability', 'manual override usage'],
+  },
+  qa: {
+    id: 'qa', tier: 'development',
+    roleDescription: 'End-to-end testing, bug validation, user journey QA, regression checks, and acceptance criteria enforcement.',
+    expertFrameworks: [
+      { name: 'Testing Trophy (Kent C. Dodds)', focus: 'Integration tests provide the most confidence per effort — test behaviour not implementation' },
+      { name: 'Acceptance Test–Driven Development', focus: 'Acceptance criteria defined before build — QA is a design activity, not a finishing one' },
+      { name: 'Exploratory Testing (James Bach)', focus: 'Skilled human judgment uncovers what automated tests cannot' },
+      { name: 'Shift Left Testing', focus: 'Find defects early — the cost of a bug grows with distance from its origin' },
+    ],
+    operatingPrinciples: [
+      'Missing acceptance criteria is a blocker — you cannot test what is undefined',
+      'Regression coverage must be maintained on every release — not just new features',
+      'Untestable states must be flagged to the developer before sign-off',
+      'A bug found in QA is a win; a bug found in production is a failure of the process',
+    ],
+    inputSignals: ['acceptance criteria', 'feature specifications', 'test plans', 'regression scope', 'bug reports'],
+    outputTypes: ['test plans', 'bug reports', 'regression results', 'QA sign-offs', 'journey validation reports'],
+    successMetrics: ['bug escape rate', 'regression coverage', 'QA cycle time', 'test pass rate', 'critical defect count'],
+  },
+  devops: {
+    id: 'devops', tier: 'development',
+    roleDescription: 'Deployment pipelines, environment management, CI/CD, uptime monitoring, and infrastructure reliability.',
+    expertFrameworks: [
+      { name: 'DevOps Handbook (Kim, Humble et al.)', focus: 'Flow, feedback, continuous learning — deployment is a capability, not an event' },
+      { name: 'Infrastructure as Code (Kief Morris)', focus: 'Environments defined in code — repeatable, auditable, recoverable' },
+      { name: 'Site Reliability Engineering (Google)', focus: 'Reliability targets, error budgets, on-call discipline — run systems like products' },
+      { name: 'Zero-Downtime Deployment Patterns', focus: 'Blue/green, canary, feature flags — ship without service interruption' },
+    ],
+    operatingPrinciples: [
+      'Every deploy must be reversible — rollback is not optional',
+      'Environment parity between dev/staging/production prevents surprises',
+      'Secrets and config must never live in code — environment variables only',
+      'Monitoring and alerting must be in place before going live — blind production is unacceptable',
+    ],
+    inputSignals: ['deployment targets', 'environment configs', 'infrastructure specs', 'uptime requirements', 'secret/env inventory'],
+    outputTypes: ['deployment pipelines', 'environment configs', 'infrastructure setups', 'monitoring dashboards', 'incident reports'],
+    successMetrics: ['deploy frequency', 'change failure rate', 'mean time to recovery', 'uptime percentage', 'deploy duration'],
+  },
   performance: {
     id: 'performance', tier: 'leadership',
     roleDescription: 'Analyze what worked, compare predictions vs outcomes, detect patterns, feed learning back into the system.',
@@ -425,9 +548,10 @@ function SummaryCard({ label, value, icon: Icon, color }: { label: string; value
 // ─── Role Card ────────────────────────────────────────────────────────────────
 
 const TIER_BADGE: Record<string, string> = {
-  leadership: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400',
-  execution:  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
-  control:    'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  leadership:  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400',
+  execution:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+  development: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400',
+  control:     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
 function RoleCard({ role, onViewIntel }: { role: RoleMetrics; onViewIntel: () => void }) {
@@ -958,6 +1082,46 @@ export default function BullpenPage() {
       });
     }
 
+    // ── Development & Systems technical blockers ──────────────────────────────
+    const clientsMissingEnvConfig = activeClients.filter(c => !c.website && !c.gbpLocationName);
+    if (clientsMissingEnvConfig.length > 2) {
+      items.push({
+        id: 'missing-env-config',
+        title: `${clientsMissingEnvConfig.length} clients missing website and GBP data`,
+        description: 'Backend integrations and environment configs cannot be validated without website URL and GBP connection.',
+        role: 'Backend Developer',
+        severity: 'medium',
+        linkedPath: '/clients',
+        linkedLabel: 'View Clients',
+      });
+    }
+
+    const clientsMissingOnboardingQA = activeClients.filter(c => c.clientOnboarding?.businessContext && !c.websiteEngine && !c.seoEngine);
+    if (clientsMissingOnboardingQA.length > 0) {
+      items.push({
+        id: 'unvalidated-engines',
+        title: `${clientsMissingOnboardingQA.length} client${clientsMissingOnboardingQA.length > 1 ? 's' : ''} with onboarding complete but no engine reports`,
+        description: 'Onboarding context exists but Website and SEO engines have not run. QA journey not yet validated.',
+        role: 'QA / Tester',
+        severity: 'medium',
+        linkedPath: '/clients',
+        linkedLabel: 'View Clients',
+      });
+    }
+
+    const clientsNeedingCRM = activeClients.filter(c => c.healthStatus === 'green' && c.automationMode === 'supervised');
+    if (clientsNeedingCRM.length > 3) {
+      items.push({
+        id: 'crm-workflow-candidates',
+        title: `${clientsNeedingCRM.length} healthy clients eligible for CRM workflow automation`,
+        description: 'Strong account health and supervised mode — CRM workflow builds should be scoped and prioritised.',
+        role: 'CRM & Automation Engineer',
+        severity: 'low',
+        linkedPath: '/clients',
+        linkedLabel: 'View Clients',
+      });
+    }
+
     return items.sort((a, b) => {
       const order = { high: 0, medium: 1, low: 2 };
       return order[a.severity] - order[b.severity];
@@ -1117,8 +1281,56 @@ export default function BullpenPage() {
         currentCount: autonomousClients.length, currentLabel: 'clients on autopilot',
         blockerCount: 0,
         lastActionLabel: autonomousClients.length > 0 ? `${autonomousClients.length} on autonomous mode` : 'All clients in manual mode',
-        detail: 'Orchestration, automation rules, job control, OpenClaw execution',
+        detail: 'Orchestration, automation rules, job control, execution oversight',
         linkedPath: '/clients',
+      },
+      {
+        id: 'fullstack', name: 'Full Stack Developer', icon: Code2, tier: 'development',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'features / builds in progress',
+        blockerCount: 0,
+        lastActionLabel: 'Scaffold structure ready — connect live build data when available',
+        detail: 'Architecture, implementation, scalable cross-stack delivery',
+      },
+      {
+        id: 'frontend', name: 'Frontend Developer', icon: Layout, tier: 'development',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'active UI tasks',
+        blockerCount: 0,
+        lastActionLabel: 'Scaffold structure ready — connect live task data when available',
+        detail: 'UI, responsiveness, components, user flow quality',
+      },
+      {
+        id: 'backend', name: 'Backend Developer', icon: Server, tier: 'development',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'backend tasks in progress',
+        blockerCount: 0,
+        lastActionLabel: 'Scaffold structure ready — connect live task data when available',
+        detail: 'APIs, database logic, integrations, auth, reliability',
+      },
+      {
+        id: 'crm', name: 'CRM & Automation Engineer', icon: Workflow, tier: 'development',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'CRM / workflow builds in progress',
+        blockerCount: 0,
+        lastActionLabel: 'Scaffold structure ready — connect live build data when available',
+        detail: 'Custom CRM builds, widgets, Twilio, calendars, workflow automation',
+      },
+      {
+        id: 'qa', name: 'QA / Tester', icon: TestTube2, tier: 'development',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'features under test',
+        blockerCount: 0,
+        lastActionLabel: 'Scaffold structure ready — connect live test data when available',
+        detail: 'End-to-end testing, bug validation, journey QA, regression checks',
+      },
+      {
+        id: 'devops', name: 'DevOps / Systems Engineer', icon: Cloud, tier: 'development',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'deploy / infrastructure tasks',
+        blockerCount: 0,
+        lastActionLabel: 'Scaffold structure ready — connect live infra data when available',
+        detail: 'Deployment, environments, CI/CD, uptime, infrastructure',
       },
     ];
   }, [
@@ -1705,13 +1917,14 @@ export default function BullpenPage() {
             Workforce — {activeRoles.length} active, {idleRoles.length} idle
           </h2>
 
-          {(['leadership', 'execution', 'control'] as const).map(tier => {
+          {(['leadership', 'execution', 'development', 'control'] as const).map(tier => {
             const tierRoles = roles.filter(r => r.tier === tier);
             if (!tierRoles.length) return null;
             const tierLabel: Record<string, string> = {
-              leadership: 'Leadership & Strategy',
-              execution:  'Execution Specialists',
-              control:    'Control & Orchestration',
+              leadership:  'Leadership & Strategy',
+              execution:   'Execution Specialists',
+              development: 'Development & Systems Team',
+              control:     'Control & Orchestration',
             };
             return (
               <div key={tier} className="mb-6">
@@ -1871,6 +2084,12 @@ export default function BullpenPage() {
                   description="Website, GBP, and content publish actions require confirmation"
                   checked={rules.requireApprovalPublish}
                   onChange={v => patchRule('requireApprovalPublish', v)}
+                />
+                <RuleRow
+                  label="Require approval — production releases"
+                  description="All production deployments and infrastructure changes require manager sign-off"
+                  checked={rules.requireApprovalProduction}
+                  onChange={v => patchRule('requireApprovalProduction', v)}
                 />
               </CardContent>
             </Card>

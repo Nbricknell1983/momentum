@@ -1,0 +1,271 @@
+PROJECT: Momentum / BattleScore
+FEATURE: Bullpen UI Enhancement — Add CRM & Development Team
+PRIORITY: High
+TYPE: Internal-only UI enhancement
+TARGET: Update the existing Bullpen section already built in Momentum
+IMPORTANT: This is an enhancement prompt for the current Bullpen page/section. Do NOT rebuild Bullpen from scratch.
+
+OBJECTIVE:
+Enhance the existing internal-only Bullpen command layer so it reflects a full operating company with:
+1. leadership & strategy
+2. execution specialists
+3. development team
+4. CRM & automation systems team
+5. QA / testing
+6. control / orchestration
+
+The current Bullpen is strong, but it is missing the technical delivery side needed for:
+- custom CRM builds
+- widgets
+- Twilio/SMS workflows
+- calendars / booking systems
+- frontend and backend development
+- QA/testing
+- deployment/infrastructure
+
+This update must preserve the current working Bullpen UI and extend it cleanly.
+
+DO NOT:
+- rebuild the Bullpen from scratch
+- remove current top summary cards
+- remove needs attention
+- remove team comms
+- remove secretary/action briefing
+- remove existing leadership, execution, or control sections
+- make the UI gimmicky or character-based
+- expose Bullpen to clients
+
+DO:
+- preserve the current Bullpen layout and style
+- add a proper development/systems section
+- strengthen the org structure
+- make the page feel like a real internal AI workforce command layer
+
+CURRENT BULLPEN AREAS TO PRESERVE:
+Keep all of the following already visible/working:
+- top summary metrics
+- work-hours active badge
+- needs attention
+- team comms
+- secretary / action briefing
+- workforce grouping
+- automation rules & control
+
+NEW ORG STRUCTURE TO REPRESENT:
+
+1. LEADERSHIP & STRATEGY
+- Client Growth Specialist
+- Strategy Specialist
+- Client Strategist
+- Commercial Intelligence
+- Performance Analyst
+
+2. EXECUTION SPECIALISTS
+- Sales Specialist
+- SEO Specialist
+- Website Specialist
+- Google Ads Specialist
+- GBP Specialist
+- Social Media Specialist
+- Review & Reputation
+
+3. DEVELOPMENT & SYSTEMS TEAM (NEW / ENHANCED)
+- Full Stack Developer
+- Frontend Developer
+- Backend Developer
+- CRM & Automation Engineer
+- QA / Tester
+- DevOps / Systems Engineer
+
+4. CONTROL & ORCHESTRATION
+- Operations Specialist
+
+UI REQUIREMENTS:
+
+A. Preserve current Bullpen top section
+Keep:
+- Active Workloads
+- Queued Actions
+- Awaiting Approval
+- Blocked / At Risk
+- Completed Today
+- AI-Managed Clients
+- Work-hours active badge
+
+B. Preserve near top:
+- Needs Attention
+- Team Comms
+- Secretary / Action Briefing
+
+C. Update WORKFORCE section
+Keep the workforce card layout and current style, but reorganize into 4 clearly labeled groups:
+1. Leadership & Strategy
+2. Execution Specialists
+3. Development & Systems Team
+4. Control & Orchestration
+
+Use the same visual design language as the current cards.
+
+D. Add/Update Development & Systems Team section
+Add the following role cards using the existing Bullpen card style:
+
+1. Full Stack Developer
+Descriptor:
+Architecture, implementation, scalable cross-stack delivery
+
+Suggested metrics:
+- Active: features/builds in progress
+- Blockers: unclear scope, missing requirements, dependency issues
+- Last action: e.g. feature implementation drafted
+
+2. Frontend Developer
+Descriptor:
+UI, responsiveness, components, user flow quality
+
+Suggested metrics:
+- Active: active UI tasks
+- Blockers: missing design states, missing content, layout dependencies
+- Last action: e.g. updated modal/mobile flow
+
+3. Backend Developer
+Descriptor:
+APIs, database logic, integrations, auth, reliability
+
+Suggested metrics:
+- Active: backend tasks in progress
+- Blockers: missing schema, env/auth dependency, integration issue
+- Last action: e.g. updated endpoint logic
+
+4. CRM & Automation Engineer
+Descriptor:
+Custom CRM builds, widgets, Twilio, calendars, workflows, automation systems
+
+Suggested metrics:
+- Active: CRM/workflow builds in progress
+- Blockers: missing workflow rules, missing access/credentials, incomplete process mapping
+- Last action: e.g. widget + Twilio workflow drafted
+
+5. QA / Tester
+Descriptor:
+End-to-end testing, bug validation, journey QA, regression checks
+
+Suggested metrics:
+- Active: features under test
+- Blockers: missing acceptance criteria, untestable states
+- Last action: e.g. regression testing completed
+
+6. DevOps / Systems Engineer
+Descriptor:
+Deployment, environments, CI/CD, uptime, infrastructure
+
+Suggested metrics:
+- Active: deploy/infrastructure tasks
+- Blockers: env/config issues, deploy blockers
+- Last action: e.g. deployment pipeline reviewed
+
+Each card should support:
+- name
+- short descriptor
+- status pill
+- active count
+- blockers count or last action
+- View Records button
+- optional Intel link if already used elsewhere
+
+E. Improve role copy
+Update the short descriptors for all roles so they read like real business functions, not placeholders.
+
+Examples:
+- Sales Specialist → Outreach, follow-up, stage progression, conversion support
+- SEO Specialist → Ranking strategy, intent coverage, content planning, visibility scoring
+- Website Specialist → Conversion clarity, sitemap structure, build readiness
+- CRM & Automation Engineer → Custom CRM builds, widgets, Twilio, calendars, workflow automation
+- QA / Tester → End-to-end testing, bugs, journey validation
+- Operations Specialist → Orchestration, automation rules, job control, execution oversight
+
+F. Extend “Needs Attention” logic for technical/system blockers
+Allow this section to surface technical issues such as:
+- 6 features missing QA validation
+- 4 CRM builds blocked by missing workflow requirements
+- 3 backend integrations missing auth/environment config
+- 2 frontend journeys failing mobile QA
+- 2 automation flows blocked by Twilio/calendar credentials
+
+Keep current styling and severity conventions.
+
+G. Extend “Secretary / Action Briefing” support
+Allow the action briefing section to include technical/system items such as:
+- Clarify CRM workflow requirements for 4 active builds
+- Run regression checks on 3 recently updated journeys
+- Resolve missing Firebase/Twilio/environment config
+- Review deployment readiness for 2 changes
+- Finalise widget + CRM integration scope for client build
+
+Do not remove the current growth-focused items.
+Only extend.
+
+H. Preserve Automation Rules & Control
+Keep this section as-is unless minor copy changes are needed:
+- Work Hours Window
+- Communication Restrictions
+- Approval Requirements
+- System Status
+
+If it fits cleanly, add one more approval item:
+- Require approval — production releases
+
+Do this only if it does not clutter the section.
+
+DATA / LOGIC REQUIREMENTS:
+Extend the current Bullpen workforce role model safely.
+
+Each new technical role should support:
+- status
+- active count
+- blockers
+- last action
+- related records/action link
+
+Do not hardcode fake values permanently.
+If real backend data does not exist yet, scaffold the structure cleanly so live data can be connected later.
+
+If the current Bullpen already uses a workforce role config or role definitions, extend that model instead of creating duplicate structures.
+
+DESIGN GOAL:
+Bullpen should feel like:
+- an AI-run company
+- with clear departments
+- with growth, execution, technical delivery, QA, and orchestration all represented
+- with operational visibility
+- with real accountability
+
+It should NOT feel like:
+- a random list of cards
+- a novelty AI team
+- a disconnected admin prototype
+
+SUCCESS CRITERIA:
+This enhancement is successful when:
+1. The current Bullpen layout remains intact
+2. Existing sections still work
+3. A real Development & Systems Team section exists
+4. CRM / automation delivery is clearly represented
+5. QA / testing is visible as its own function
+6. Internal users can clearly distinguish growth vs execution vs development vs orchestration
+7. No client-facing surfaces are affected
+
+REGRESSION / QA REQUIREMENTS:
+Test for:
+- existing Bullpen page still renders correctly
+- current cards and counts still work
+- needs attention still works for existing roles
+- secretary / action briefing still works
+- new development/system cards render consistently
+- spacing and responsive layout remain clean
+- automation controls still function
+- no exposure in client-facing UI
+
+FINAL INSTRUCTION:
+This is an enhancement to the existing Bullpen UI already built in Momentum.
+Do not redesign everything.
+Preserve the current style and extend it so Bullpen becomes a true internal AI workforce command layer with growth, execution, CRM systems, development, QA, and orchestration represented properly.
