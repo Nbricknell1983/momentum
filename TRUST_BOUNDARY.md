@@ -89,10 +89,16 @@ These routes use `verifyAdminAccessForTeam` (or `requireOrgAccess + requireManag
 
 | Database | Used for | Status |
 |---|---|---|
-| **Firebase Firestore** | All live application data | ✅ Active — primary source of truth |
-| **PostgreSQL** | `users`, `leads`, `activities` tables (original schema) | ❌ Orphaned — routes return 410 Gone |
+| **Firebase Firestore** | All live application data | ✅ Active — sole source of truth |
+| **PostgreSQL** | None | ❌ Removed — no active routes, storage, or ORM usage |
 
-Legacy PostgreSQL routes (`/api/leads`, `/api/activities`) were hard-disabled and return `410 Gone` to prevent accidental use of stale data.
+Legacy PostgreSQL infrastructure has been removed as part of the architecture cleanup:
+- `server/storage.ts` (IStorage / DatabaseStorage) — deleted
+- `server/db.ts` (Drizzle pool) — deleted
+- All `/api/leads*` and `/api/activities` routes — removed (no live callers)
+- `shared/schema.ts` — retained only for `Lead` and `Activity` TypeScript type inference used by `server/nbaEngine.ts`; marked legacy; not a runtime data layer
+
+**Do not build new features against PostgreSQL or the legacy schema types.** All data reads and writes go through Firestore.
 
 ---
 

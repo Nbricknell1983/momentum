@@ -511,7 +511,7 @@ export default function DailyPlanPage() {
   const userFilter = isManager ? undefined : user?.uid;
   
   const { data: leads = [] } = useQuery({
-    queryKey: ['/api/leads', orgId, userFilter],
+    queryKey: ['firestore-leads', orgId, userFilter],
     queryFn: async () => {
       if (!orgId) return [];
       return await fetchLeads(orgId, authReady, userFilter);

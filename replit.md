@@ -22,10 +22,9 @@ Preferred communication style: Simple, everyday language.
 - **Serving**: Express serves static frontend assets in production.
 
 ### Data Layer
-- **ORM**: Drizzle ORM for PostgreSQL (schema defined, but PostgreSQL is orphaned from live runtime).
-- **Schema**: Defined in `shared/schema.ts` and shared between client and server.
-- **Primary Database**: Firebase Firestore — all live application data lives here.
-- **PostgreSQL**: Orphaned; legacy routes (`/api/leads`, `/api/activities`) return `410 Gone`.
+- **Primary Database**: Firebase Firestore — all live application data lives here. Sole source of truth.
+- **PostgreSQL**: Removed. `server/storage.ts`, `server/db.ts`, and all legacy `/api/leads*` / `/api/activities` routes have been deleted. No active Postgres path exists.
+- **Schema**: `shared/schema.ts` is retained only because `server/nbaEngine.ts` imports `Lead` and `Activity` TypeScript types from it. The Postgres tables are not active. Do not build against them.
 - **Trust Boundary**: See `TRUST_BOUNDARY.md` for full auth flow and route classification.
 - **Live State**: Leads and clients are synced via `onSnapshot` listeners (`client/src/lib/firestoreSync.ts` — `useFirestoreSync` hook). Redux `leads[]` and `clients[]` are listener-fed live state, not a stale once-loaded cache. AI engine server writes to client docs appear automatically in the UI without reload. See `STATE_OWNERSHIP.md`.
 - **AI Output Storage**: Engine outputs (websiteEngine, seoEngine, gbpEngine, adsEngine, learningInsight, growthPrescription) are dual-written: latest snapshot on the entity doc + durable history record in `engineHistory/{runId}` subcollection. All outputs carry `runId`, `generatedAt`, `engineType`, `generatedBy`, `modelUsed`. History is immutable. See `AI_OUTPUT_STORAGE.md` and `client/src/lib/engineOutputService.ts`.

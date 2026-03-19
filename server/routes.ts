@@ -1,7 +1,5 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { insertLeadSchema, insertActivitySchema } from "@shared/schema";
 import OpenAI from "openai";
 import { firestore, bucket, isFirebaseAdminReady } from "./firebase";
 import { crawlWebsite } from "./strategyEngine";
@@ -86,23 +84,6 @@ Sitemap: ${siteUrl}/sitemap.xml
     res.header('Content-Type', 'text/plain');
     res.send(robots);
   });
-
-  // ============================================
-  // Legacy PostgreSQL Leads & Activities API — DISABLED (Phase 5)
-  // These routes backed the original PostgreSQL data layer which is now
-  // orphaned. All lead/activity data lives in Firestore. Returning 410 Gone
-  // prevents any accidental use and surfaces the breakage immediately.
-  // ============================================
-
-  const GONE_MESSAGE = { error: "Gone", detail: "This endpoint is deprecated. All data is managed via Firestore. See TRUST_BOUNDARY.md." };
-
-  app.get("/api/leads", (_req, res) => res.status(410).json(GONE_MESSAGE));
-  app.get("/api/leads/:id", (_req, res) => res.status(410).json(GONE_MESSAGE));
-  app.post("/api/leads", (_req, res) => res.status(410).json(GONE_MESSAGE));
-  app.put("/api/leads/:id", (_req, res) => res.status(410).json(GONE_MESSAGE));
-  app.delete("/api/leads/:id", (_req, res) => res.status(410).json(GONE_MESSAGE));
-  app.get("/api/leads/:leadId/activities", (_req, res) => res.status(410).json(GONE_MESSAGE));
-  app.post("/api/activities", (_req, res) => res.status(410).json(GONE_MESSAGE));
 
   // ============================================
   // Daily Plan AI Endpoints

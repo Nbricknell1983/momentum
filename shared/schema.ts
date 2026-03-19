@@ -1,21 +1,20 @@
+// =============================================================================
+// LEGACY POSTGRES SCHEMA — Not the live runtime data layer
+// =============================================================================
+// The live application uses Firebase Firestore for all lead, client, activity,
+// settings, and AI output data. Firebase Auth is the live auth layer.
+//
+// This file is retained ONLY because server/nbaEngine.ts uses the `Lead` and
+// `Activity` TypeScript types for type-safe priority scoring. The Postgres
+// tables are NOT active and no routes write to them.
+//
+// DO NOT build new features against these types or this schema.
+// Firestore is the source of truth. See TRUST_BOUNDARY.md.
+// =============================================================================
+
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, boolean, timestamp, real, pgEnum } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
 
 export const stageEnum = pgEnum('stage', [
   'suspect',
@@ -77,13 +76,6 @@ export const leads = pgTable("leads", {
   nurturePriorityScore: integer("nurture_priority_score").notNull().default(0),
 });
 
-export const insertLeadSchema = createInsertSchema(leads).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertLead = z.infer<typeof insertLeadSchema>;
 export type Lead = typeof leads.$inferSelect;
 
 export const activities = pgTable("activities", {
@@ -97,10 +89,4 @@ export const activities = pgTable("activities", {
   nextContactDate: timestamp("next_contact_date"),
 });
 
-export const insertActivitySchema = createInsertSchema(activities).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertActivity = z.infer<typeof insertActivitySchema>;
 export type Activity = typeof activities.$inferSelect;
