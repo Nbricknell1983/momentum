@@ -362,6 +362,8 @@ export interface Lead {
   aiGrowthPlan?: AiGrowthPlanOutput;
   paidSearchGrowthPlan?: PaidSearchGrowthPlan;
   aiProspects?: AiProspectOutput[];
+  prepCallPack?: any;
+  strategyReportId?: string;
   sitemapUrl?: string;
   sitemapPages?: SitemapPage[];
   sitemapFetchedAt?: Date;

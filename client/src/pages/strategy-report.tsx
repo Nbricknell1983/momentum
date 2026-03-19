@@ -4,7 +4,7 @@ import {
   CheckCircle2, TrendingUp, AlertCircle, ChevronRight, Target, Zap, MapPin,
   BarChart3, Globe, Star, ArrowUpRight, Phone, Mail, XCircle, AlertTriangle,
   Minus, Eye, Shield, Users, Search, Brain, Layers, Flame, Clock, Copy, Check,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Loader2, Sparkles, Package,
 } from 'lucide-react';
 
 interface StrategyReport {
@@ -13,7 +13,25 @@ interface StrategyReport {
   strategyDiagnosis?: any;
   strategy?: any;
   createdAt?: any;
+  orgId?: string;
+  acceptedScope?: {
+    acceptedServices: string[];
+    contactName: string;
+    contactEmail: string;
+    notes: string;
+    acceptedAt: string;
+  };
 }
+
+const STANDARD_SERVICES = [
+  { key: 'Website', label: 'Website', icon: '🌐', description: 'New site or rebuild' },
+  { key: 'SEO', label: 'SEO', icon: '🔍', description: 'Search engine ranking' },
+  { key: 'Google Business Profile', label: 'Google Business Profile', icon: '📍', description: 'GBP optimisation' },
+  { key: 'Google Ads', label: 'Google Ads', icon: '📢', description: 'Paid search campaigns' },
+  { key: 'Social Media', label: 'Social Media', icon: '📱', description: 'Social presence & content' },
+  { key: 'CRM & Automation', label: 'CRM & Automation', icon: '⚙️', description: 'Leads & follow-up systems' },
+  { key: 'Content', label: 'Content', icon: '✍️', description: 'Content strategy & creation' },
+];
 
 function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
   const r = 40; const circ = 2 * Math.PI * r;
@@ -247,6 +265,37 @@ export default function StrategyReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const heroRef = useRef<HTMLDivElement>(null);
+
+  const [acceptedServices, setAcceptedServices] = useState<string[]>([]);
+  const [acceptContactName, setAcceptContactName] = useState('');
+  const [acceptContactEmail, setAcceptContactEmail] = useState('');
+  const [acceptNotes, setAcceptNotes] = useState('');
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [acceptanceResult, setAcceptanceResult] = useState<{ workItemIds: string[] } | null>(null);
+
+  const toggleService = (key: string) => setAcceptedServices(prev =>
+    prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]
+  );
+
+  const handleAccept = async () => {
+    if (!acceptedServices.length || !reportId) return;
+    setIsAccepting(true);
+    try {
+      const res = await fetch(`/api/strategy-reports/${reportId}/accept`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acceptedServices, contactName: acceptContactName, contactEmail: acceptContactEmail, notes: acceptNotes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit');
+      setAcceptanceResult(data);
+      setReport(prev => prev ? { ...prev, acceptedScope: data.acceptedScope } : prev);
+    } catch {
+      alert('Something went wrong. Please try again or contact us directly.');
+    } finally {
+      setIsAccepting(false);
+    }
+  };
 
   useEffect(() => {
     if (!reportId) return;
@@ -960,6 +1009,149 @@ export default function StrategyReportPage() {
           </div>
         </section>
       )}
+
+      {/* ── ACCEPTANCE / SCOPE SELECTION */}
+      <section className="bg-[#080c1a] border-t border-white/5">
+        <div className="max-w-4xl mx-auto px-6 py-16 md:py-20">
+          {(report.acceptedScope || acceptanceResult) ? (
+            /* ── Already accepted ── */
+            <div className="text-center space-y-6">
+              <div className="w-16 h-16 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="h-8 w-8 text-green-400" />
+              </div>
+              <div>
+                <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Strategy Accepted</h2>
+                <p className="text-slate-400 max-w-xl mx-auto">
+                  {report.preparedBy || 'Your account manager'} has been notified and will be in touch shortly to begin delivery.
+                </p>
+              </div>
+              {(report.acceptedScope?.acceptedServices || []).length > 0 && (
+                <div className="inline-flex flex-wrap gap-2 justify-center">
+                  {(report.acceptedScope?.acceptedServices || []).map((svc: string, i: number) => (
+                    <span key={i} className="flex items-center gap-1.5 bg-green-500/15 border border-green-500/30 text-green-300 text-xs font-semibold px-3 py-1.5 rounded-full">
+                      <CheckCircle2 className="h-3 w-3" /> {svc}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {report.acceptedScope?.acceptedAt && (
+                <p className="text-xs text-slate-500">
+                  Accepted {new Date(report.acceptedScope.acceptedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  {report.acceptedScope.contactName && ` by ${report.acceptedScope.contactName}`}
+                </p>
+              )}
+            </div>
+          ) : (
+            /* ── Acceptance form ── */
+            <div className="space-y-8">
+              <div className="text-center">
+                <div className="inline-flex items-center gap-2 bg-blue-500/15 border border-blue-500/30 rounded-full px-4 py-1.5 text-sm text-blue-300 mb-5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Ready to move forward?</span>
+                </div>
+                <h2 className="text-2xl md:text-4xl font-black text-white mb-3">Choose your starting point</h2>
+                <p className="text-slate-400 max-w-xl mx-auto text-sm">Select the services you want to proceed with. Your account manager will be notified immediately and will activate the right specialists for each one.</p>
+              </div>
+
+              {/* Service selection */}
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Select services to accept</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {(() => {
+                    // Use growthPillars from strategy if available, otherwise fall back to standard services
+                    const pillarServices = pillars.map((p: any) => ({ key: p.pillar || p.title, label: p.pillar || p.title, icon: '🎯', description: p.focus || p.description || '' }));
+                    const pillarKeys = new Set(pillarServices.map((s: any) => s.key?.toLowerCase()));
+                    const fallbacks = STANDARD_SERVICES.filter(s => !pillarKeys.has(s.key.toLowerCase()));
+                    const services = pillarServices.length > 0 ? [...pillarServices, ...fallbacks.slice(0, Math.max(0, 7 - pillarServices.length))] : STANDARD_SERVICES;
+                    return services.map((svc: any) => {
+                      const isSelected = acceptedServices.includes(svc.key);
+                      return (
+                        <button
+                          key={svc.key}
+                          onClick={() => toggleService(svc.key)}
+                          data-testid={`button-accept-service-${svc.key.toLowerCase().replace(/\s+/g, '-')}`}
+                          className={`relative text-left p-4 rounded-xl border transition-all ${
+                            isSelected
+                              ? 'bg-blue-600/20 border-blue-500/60 shadow-lg shadow-blue-900/20'
+                              : 'bg-white/3 border-white/10 hover:border-white/25 hover:bg-white/5'
+                          }`}
+                        >
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                              <Check className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                          <div className="text-xl mb-2">{svc.icon}</div>
+                          <p className={`text-sm font-bold leading-tight mb-0.5 ${isSelected ? 'text-blue-200' : 'text-white'}`}>{svc.label}</p>
+                          <p className="text-[10px] text-slate-500 leading-tight">{svc.description}</p>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Contact details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mx-auto w-full">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Your name</label>
+                  <input
+                    type="text"
+                    value={acceptContactName}
+                    onChange={e => setAcceptContactName(e.target.value)}
+                    placeholder="First name"
+                    className="w-full bg-white/5 border border-white/15 text-white placeholder-slate-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500/60 transition-colors"
+                    data-testid="input-accept-name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Email address</label>
+                  <input
+                    type="email"
+                    value={acceptContactEmail}
+                    onChange={e => setAcceptContactEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="w-full bg-white/5 border border-white/15 text-white placeholder-slate-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500/60 transition-colors"
+                    data-testid="input-accept-email"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Notes or questions (optional)</label>
+                  <textarea
+                    value={acceptNotes}
+                    onChange={e => setAcceptNotes(e.target.value)}
+                    placeholder="Anything specific you'd like us to know before we start…"
+                    rows={3}
+                    className="w-full bg-white/5 border border-white/15 text-white placeholder-slate-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500/60 transition-colors resize-none"
+                    data-testid="textarea-accept-notes"
+                  />
+                </div>
+              </div>
+
+              {/* Submit */}
+              <div className="flex flex-col items-center gap-3">
+                <button
+                  onClick={handleAccept}
+                  disabled={isAccepting || acceptedServices.length === 0}
+                  className={`flex items-center gap-2.5 font-bold px-10 py-4 rounded-full text-base transition-all shadow-xl ${
+                    acceptedServices.length > 0 && !isAccepting
+                      ? 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
+                      : 'bg-white/10 text-white/40 cursor-not-allowed'
+                  }`}
+                  data-testid="button-accept-strategy"
+                >
+                  {isAccepting ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Package className="h-4.5 w-4.5" />}
+                  {isAccepting ? 'Submitting…' : `Accept ${acceptedServices.length > 0 ? acceptedServices.length + ' service' + (acceptedServices.length > 1 ? 's' : '') : 'services'}`}
+                </button>
+                {acceptedServices.length === 0 && (
+                  <p className="text-xs text-slate-600">Select at least one service above to proceed</p>
+                )}
+                <p className="text-xs text-slate-600 max-w-sm text-center">No commitment required right now — this lets your account manager know what to prepare for the next conversation.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* ── CTA */}
       <section className="bg-gradient-to-br from-blue-700 via-blue-600 to-violet-700">

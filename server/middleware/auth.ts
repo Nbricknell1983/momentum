@@ -64,6 +64,8 @@ function isPublicPath(path: string): boolean {
   // Public GET for individual reports (not scoped to any org)
   if (/^\/api\/reports\/[^/]+$/.test(path)) return true;
   if (/^\/api\/strategy-reports\/[^/]+$/.test(path)) return true;
+  // Public PATCH for strategy acceptance (prospect-facing — no login required)
+  if (/^\/api\/strategy-reports\/[^/]+\/accept$/.test(path)) return true;
   return false;
 }
 

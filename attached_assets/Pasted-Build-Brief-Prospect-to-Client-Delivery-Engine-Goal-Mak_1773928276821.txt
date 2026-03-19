@@ -1,0 +1,415 @@
+Build Brief — Prospect-to-Client Delivery Engine
+Goal
+Make the agents operate like a real marketing agency from:
+
+research
+prep call
+post-call strategy
+public strategy link
+acceptance
+production delivery
+The system should automatically assemble a commercially useful prep call info pack for every lead, generate a strong post-call strategy, publish that strategy to a public URL using the same structure and layout it currently has, and, when the strategy is accepted, convert the selected scope into real delivery work for the specialist team.
+
+Core outcome
+Momentum should work like a real marketing agency pipeline.
+
+Before the call
+The agents should:
+
+research the business
+pull together available intelligence
+identify what is missing
+produce a usable prep call pack so the call is strong, even if some inputs are incomplete
+After the call
+The agents should:
+
+generate a strategy
+publish it to a public strategy page
+support follow-up designed to help win the deal
+After acceptance
+The system should:
+
+convert accepted strategy items into owned delivery work
+route work to the right specialists
+track implementation through Bullpen
+That is the correct commercial workflow.
+
+Problem
+Right now, too much of the workflow depends on:
+
+manual clicks
+weak or incomplete prep
+strategy generation as a one-off output
+no strong bridge from strategy acceptance into delivery execution
+That means:
+
+prep calls are weaker than they should be
+follow-up is less compelling than it should be
+strategy pages/PDFs are outputs, not part of a commercial system
+accepted work does not automatically become implementation work for the team
+What the system needs to do
+Phase 1 — Automatic Prospect Research & Prep Call Pack
+For every active lead, the agents should proactively assemble a Prep Call Info Pack.
+
+The prep pack should include
+business summary
+industry and business model inference
+website status
+GBP presence and review signals
+social presence
+local/search visibility observations
+likely service offering summary
+competitor snapshot
+major opportunities
+major weaknesses/gaps
+call priorities
+recommended discovery questions
+recommended commercial angle
+confidence markers where needed
+clear missing-input notes where data is incomplete
+Important rule
+If data is missing, the prep pack should still be useful.
+
+Do not make the pack weak just because enrichment is incomplete.
+
+Instead:
+
+include what is known
+include what is inferred
+include what still needs to be asked on the call
+The system should degrade gracefully, not fail weakly.
+
+Phase 2 — Commercial Follow-Up / Win Logic
+After the prep call, the agents should help drive the deal toward a win.
+
+The system should generate
+post-call summary
+strategic diagnosis
+recommended scope
+next best commercial action
+tailored follow-up messaging
+objections/risk framing where relevant
+urgency/relevance framing
+Goal
+The follow-up should help win the work, not just document the conversation.
+
+It should feel like:
+
+a sharp strategist
+a sales operator
+a client growth lead
+working together.
+
+Phase 3 — Public Strategy Page
+The strategy should not just become a PDF.
+It should become a public strategy URL.
+
+Critical requirement
+The public URL must preserve the same structure and layout hierarchy the current strategy already uses.
+
+That means:
+
+same section ordering
+same information hierarchy
+same commercial narrative flow
+same strategic framing
+same layout logic
+The public strategy page should be a web-native rendering of the existing strategy format, not a newly invented structure.
+
+The public page should include
+client/prospect name
+high-level business diagnosis
+opportunity summary
+recommended strategy pillars
+proposed initiatives
+expected outcomes
+optional timeline / roadmap
+optional scope/packages
+CTA / acceptance path
+Important
+The public strategy page should feel like a polished agency artifact:
+
+commercially credible
+easy to share
+easy to discuss
+useful in closing
+PDF can still exist
+But the public page should be a first-class output, not secondary.
+
+And both public URL and PDF should render from the same canonical strategy object.
+
+Phase 4 — Acceptance Workflow
+If the prospect accepts the strategy or selected parts of it, the system should convert that into real delivery work.
+
+Example
+If they accept:
+
+website
+GBP
+SEO
+ads
+onboarding / CRM
+Then the system should:
+
+create delivery work items
+assign owner + supporting roles
+initialize the right delivery workflow
+attach strategy context to the work
+mark the accepted items as implementation-ready scope
+This is the key bridge
+Strategy should become delivery.
+
+Not:
+
+strategy PDF sits in history
+human manually retypes the plan elsewhere
+Phase 5 — Delivery Team Activation
+Once accepted, the specialist workforce should begin implementation work like a real agency team would.
+
+Example mappings
+Website accepted
+owner: Website Specialist / Full Stack Developer
+supporting: Frontend Developer, QA
+SEO accepted
+owner: SEO Specialist
+supporting: Website Specialist, Strategy Specialist
+GBP accepted
+owner: GBP Specialist
+supporting: Review & Reputation Specialist
+Ads accepted
+owner: Google Ads Specialist
+supporting: Strategy Specialist, Website Specialist
+CRM / follow-up automation accepted
+owner: CRM & Automation Engineer
+supporting: Operations Specialist
+Goal
+An accepted strategy should immediately become:
+
+owned work
+sequenced work
+reviewable work
+deliverable work
+Recommended system design
+1. Prep Call Pack as a first-class object
+Create a persistent object for each lead:
+
+prep pack generated at
+last researched at
+confidence notes
+research sources/findings
+call priorities
+missing questions to ask
+commercial angle
+This should not just be an ephemeral button output.
+
+2. Strategy artifact model
+Create a structured strategy object that supports:
+
+internal strategy view
+PDF output
+public strategy page
+Core fields
+diagnosis
+opportunity themes
+strategic recommendations
+initiatives
+expected impact
+selected service lines
+timeline
+CTA / acceptance data
+Important rule
+There should be one canonical strategy object.
+The public URL should render the same strategy structure that the current strategy already uses, not a parallel or simplified version.
+
+3. Acceptance model
+The public strategy page should allow accepted scope to be captured clearly.
+
+At minimum
+accepted / not accepted
+accepted services
+accepted notes / scope modifiers
+accepted date
+follow-up status
+Better
+partial acceptance support
+staged acceptance
+package / scope options
+4. Delivery conversion model
+Accepted services should convert into:
+
+Bullpen work items
+owner/supporting role assignment
+delivery thread(s)
+implementation queue entries
+onboarding state if required
+This is the operational handoff layer.
+
+Required architecture rules
+1. Research first, prep always
+The agent should always try to build a prep pack automatically before the call.
+
+2. Weak data should not mean weak prep
+If data is incomplete, the pack should include:
+
+what is known
+what is inferred
+what must be asked
+3. Strategy must be commercially useful
+This is not an internal memo.
+It should help win the work.
+
+4. Public strategy page must be first-class
+Not just a PDF export afterthought.
+
+5. Public strategy page must preserve the current strategy structure
+Do not redesign the strategy artifact for the public page.
+The public URL should keep the same structure and layout hierarchy the current strategy already has.
+
+6. Acceptance must trigger implementation
+If the client accepts website / SEO / GBP / etc, the work should become real delivery work automatically.
+
+7. Delivery should follow agency logic
+Work must be routed and sequenced like a real marketing agency team.
+
+Recommended implementation phases
+Phase 1 — Prep Call Pack engine
+Build automatic prep packs for all active leads.
+
+Output should include
+business snapshot
+presence snapshot
+opportunity snapshot
+risks/gaps
+call agenda/questions
+commercial angle
+missing-data prompts
+Triggering
+scheduled daily for active leads
+on-demand “Refresh Prep”
+rerun after meaningful lead data changes
+Phase 2 — Post-call strategy generator
+Build strategy generation tied to lead/prospect records.
+
+Outputs
+internal strategy object
+PDF if needed
+public strategy page content
+Important
+The strategy should be good enough to help close.
+
+And it should render into the public page without changing the current strategy structure.
+
+Phase 3 — Public strategy page
+Make the strategy available as a shareable public URL.
+
+Include
+polished narrative
+recommendations
+optional service modules
+CTA / acceptance path
+Critical requirement
+Use the same structure and layout hierarchy as the current strategy output.
+
+Phase 4 — Acceptance capture
+Allow the strategy page/workflow to capture:
+
+accepted scope
+selected service lines
+notes
+follow-up state
+Phase 5 — Convert accepted scope into delivery work
+Generate:
+
+work items
+threads
+owner/supporting roles
+implementation starting points
+What good output looks like
+For each lead
+a real prep call pack exists
+it is useful even if some data is missing
+it shows what to say, ask, and push on the call
+For each post-call lead
+a strategy exists
+it can be shared publicly
+it supports winning the work
+the public URL preserves the current strategy structure/layout
+For each accepted strategy
+scope converts into delivery work
+the right specialists are activated
+implementation begins in Bullpen
+Examples
+Example 1 — weak website prospect
+Before call
+prep pack says website weak, GBP under-optimized, social underutilized
+recommends asking about lead volume, service radius, and current enquiry source
+After call
+strategy recommends website rebuild + GBP optimization + review generation
+Accepted
+website + GBP selected
+System creates
+Website delivery work item
+GBP optimization work item
+owner/supporting roles assigned
+thread created for each or bundled implementation plan
+Example 2 — SEO/ads-ready prospect
+Before call
+prep pack highlights solid brand, weak search capture, no visible paid demand capture
+After call
+strategy recommends SEO + Google Ads + conversion landing page improvements
+Accepted
+SEO only
+System creates
+SEO implementation work
+related supporting website tasks if needed
+Risks and dependencies
+Risks
+generating generic prep packs with low commercial value
+weak strategy pages that don’t help close
+accepted scope not translating cleanly into delivery work
+too much manual intervention still required
+public page drifting from the current strategy structure
+Dependencies
+current enrichment engine
+Bullpen work queue
+thread model
+specialist routing logic
+public strategy page capability
+a way to capture acceptance state
+current strategy structure/layout as the canonical rendering model
+QA requirements
+Prep Call Pack
+every active lead can generate a prep pack
+missing data does not collapse usefulness
+call questions and commercial angle feel relevant
+Strategy
+strategy output is commercially credible
+public page renders cleanly
+strategy can be shared externally
+public page preserves the current strategy structure/layout
+Acceptance
+accepted scope is captured correctly
+partial acceptance works if supported
+accepted services convert into work items
+Delivery conversion
+correct owner/supporting roles are assigned
+work starts from strategy context, not empty generic tasks
+thread/work queue history stays connected
+Measurable success criteria
+This task is successful when:
+
+every active lead can have an automatically generated prep call pack
+post-call strategy can be generated into a public page
+the public page preserves the current strategy structure and layout
+accepted strategy items convert into real implementation work
+the whole flow feels like a competent marketing agency operating system
+Final product rule
+The agents should not stop at:
+
+“here’s some research”
+They should:
+
+prepare the call
+help win the work
+turn the strategy into a public commercial artifact without changing its structure
+and, once accepted, activate the team to deliver it

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, selectLead } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText, Check, AlertCircle, Cloud, Shield, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText, Check, AlertCircle, Cloud, Shield, Users, Zap } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -38,6 +38,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { AIMessageModal } from './AIMessageModal';
 import { OutreachScriptsDialog } from './OutreachScriptsDialog';
+import { PrepCallPackCard } from './PrepCallPackCard';
+import { auth } from '@/lib/firebase';
 
 const NEPQ_LABELS = [
   'Situation Aware',
@@ -220,6 +222,30 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
   const [isSavingDate, setIsSavingDate] = useState(false);
   const [isMarkingNotInterested, setIsMarkingNotInterested] = useState(false);
   const [notInterestedReason, setNotInterestedReason] = useState('');
+  const [isGeneratingPrepPack, setIsGeneratingPrepPack] = useState(false);
+  const [prepPackData, setPrepPackData] = useState<any>(lead.prepCallPack || null);
+  const [showPrepPack, setShowPrepPack] = useState(!!lead.prepCallPack);
+
+  const handleGeneratePrepPack = async (force = false) => {
+    if (!orgId) return;
+    setIsGeneratingPrepPack(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'x-org-id': orgId },
+        body: JSON.stringify({ force }),
+      });
+      if (!res.ok) throw new Error('Failed to generate prep pack');
+      const data = await res.json();
+      setPrepPackData(data.prepCallPack);
+      setShowPrepPack(true);
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to generate prep call pack', variant: 'destructive' });
+    } finally {
+      setIsGeneratingPrepPack(false);
+    }
+  };
 
   const openAiMessageModal = (channel: 'sms' | 'email') => {
     setAiMessageChannel(channel);
@@ -1202,6 +1228,43 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
                 </Button>
               </div>
             </div>
+          </div>
+
+          {/* Prep Call Pack */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Call Prep Pack</span>
+                {prepPackData && (
+                  <button className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={() => setShowPrepPack(v => !v)}>
+                    {showPrepPack ? '▲ collapse' : '▼ expand'}
+                  </button>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 text-xs h-7 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                onClick={() => handleGeneratePrepPack(!!prepPackData)}
+                disabled={isGeneratingPrepPack}
+                data-testid={`button-generate-prep-pack-${lead.id}`}
+              >
+                {isGeneratingPrepPack ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                {isGeneratingPrepPack ? 'Generating…' : prepPackData ? 'Regenerate Pack' : 'Generate Prep Pack'}
+              </Button>
+            </div>
+            {prepPackData && showPrepPack && (
+              <PrepCallPackCard
+                pack={prepPackData}
+                businessName={lead.companyName}
+                onRegenerate={() => handleGeneratePrepPack(true)}
+                isRegenerating={isGeneratingPrepPack}
+              />
+            )}
+            {!prepPackData && !isGeneratingPrepPack && (
+              <p className="text-xs text-muted-foreground">Auto-generate a call prep pack from all available intel on this lead — no manual input required.</p>
+            )}
           </div>
 
           {/* CRM Link */}

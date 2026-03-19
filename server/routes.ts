@@ -7209,6 +7209,207 @@ Return JSON:
     }
   });
 
+  // ── Capture strategy acceptance (public — no auth, prospect-facing) ──────
+  app.patch("/api/strategy-reports/:reportId/accept", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const { reportId } = req.params;
+      const { acceptedServices, contactName, contactEmail, notes } = req.body as {
+        acceptedServices: string[]; contactName?: string; contactEmail?: string; notes?: string;
+      };
+      if (!acceptedServices?.length) return res.status(400).json({ error: "acceptedServices required" });
+
+      const docRef = firestore.collection('strategyReports').doc(reportId);
+      const doc = await docRef.get();
+      if (!doc.exists) return res.status(404).json({ error: "Report not found" });
+      const report = doc.data()!;
+      const orgId: string = report.orgId || '';
+
+      const acceptedAt = new Date().toISOString();
+      const acceptedScope = { acceptedServices, contactName: contactName || '', contactEmail: contactEmail || '', notes: notes || '', acceptedAt };
+      await docRef.update({ acceptedScope });
+
+      // Agency delivery role map
+      const DELIVERY_MAP: Record<string, { owner: string; supporting: string[] }> = {
+        website: { owner: 'Website Specialist', supporting: ['Frontend Developer', 'QA Specialist'] },
+        seo: { owner: 'SEO Specialist', supporting: ['Website Specialist', 'Strategy Specialist'] },
+        gbp: { owner: 'GBP Specialist', supporting: ['Review & Reputation Specialist'] },
+        'google business profile': { owner: 'GBP Specialist', supporting: ['Review & Reputation Specialist'] },
+        ads: { owner: 'Google Ads Specialist', supporting: ['Strategy Specialist', 'Website Specialist'] },
+        'google ads': { owner: 'Google Ads Specialist', supporting: ['Strategy Specialist', 'Website Specialist'] },
+        social: { owner: 'Social Media Specialist', supporting: ['Content Strategist'] },
+        'social media': { owner: 'Social Media Specialist', supporting: ['Content Strategist'] },
+        crm: { owner: 'CRM & Automation Engineer', supporting: ['Operations Specialist'] },
+        'crm & automation': { owner: 'CRM & Automation Engineer', supporting: ['Operations Specialist'] },
+        content: { owner: 'Content Strategist', supporting: ['SEO Specialist'] },
+      };
+
+      const workItemIds: string[] = [];
+      if (orgId && firestore) {
+        for (const svc of acceptedServices) {
+          const key = svc.toLowerCase().trim();
+          const roles = DELIVERY_MAP[key] || { owner: 'Strategy Specialist', supporting: ['Operations Specialist'] };
+          const ref = firestore.collection('orgs').doc(orgId).collection('bullpenWork').doc();
+          const item = {
+            id: ref.id, orgId,
+            clientId: report.leadId || null,
+            clientName: report.businessName || null,
+            type: 'delivery',
+            title: `Deliver ${svc} — ${report.businessName || 'New Client'}`,
+            diagnosis: `Accepted as part of strategy scope. ${report.businessName || 'Prospect'} confirmed ${svc} on ${new Date(acceptedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Contact: ${contactName || contactEmail || 'Not provided'}. ${notes ? 'Client notes: ' + notes : ''}`,
+            sourceSignal: `strategy_accepted_${key.replace(/[^a-z0-9]/g, '_')}`,
+            priority: 'high',
+            status: 'detected',
+            owner: roles.owner,
+            supporting: roles.supporting,
+            nextAction: `Review accepted strategy scope for ${svc}. Brief the team and initialise delivery workflow.`,
+            strategyReportId: reportId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            resolvedAt: null,
+            threadId: null,
+          };
+          await ref.set(item);
+          workItemIds.push(ref.id);
+        }
+      }
+
+      res.json({ success: true, acceptedScope, workItemIds });
+    } catch (err) {
+      console.error("[strategy-reports accept]", err);
+      res.status(500).json({ error: "Failed to capture acceptance" });
+    }
+  });
+
+  // ── Auto-generate Prep Call Pack for a lead ──────────────────────────────
+  app.post("/api/leads/:leadId/generate-prep-pack", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      const orgId: string = req.body?.orgId || req.query?.orgId || (req.headers['x-org-id'] as string) || '';
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      if (!orgId) return res.status(400).json({ error: "orgId required" });
+      const { leadId } = req.params;
+      const { force } = req.body as { force?: boolean };
+
+      const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
+      const leadDoc = await leadRef.get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+      const lead = { id: leadDoc.id, ...leadDoc.data() as any };
+
+      // Skip if fresh (<24h) unless force
+      if (!force && lead.prepCallPack?.generatedAt) {
+        const age = Date.now() - new Date(lead.prepCallPack.generatedAt).getTime();
+        if (age < 86400000) return res.json({ prepCallPack: lead.prepCallPack, skipped: true });
+      }
+
+      // Assemble all available data
+      const src = lead.sourceData || {};
+      const enr = lead.enrichment || {};
+      const si = lead.strategyIntelligence || {};
+      const gp = lead.growthPrescription || null;
+
+      const websiteStr = lead.website || src.googleWebsite || 'None detected';
+      const gbpUrl = src.googleMapsUrl || enr.gbpUrl || 'None detected';
+      const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? null;
+      const rating = src.googleRating ?? enr.rating ?? null;
+      const hasFacebook = !!(lead.facebookUrl || src.businessSignals?.includes('facebook'));
+      const hasInstagram = !!(lead.instagramUrl || src.businessSignals?.includes('instagram'));
+      const hasLinkedIn = !!(lead.linkedinUrl);
+      const socials = [hasFacebook && 'Facebook', hasInstagram && 'Instagram', hasLinkedIn && 'LinkedIn'].filter(Boolean).join(', ') || 'None detected';
+      const daysSinceCreated = lead.createdAt ? Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 86400000) : null;
+      const lastContact = lead.lastContactDate ? new Date(lead.lastContactDate).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never';
+
+      const enrichmentSummary = [
+        enr.industry && `Industry: ${enr.industry}`,
+        enr.businessCategory && `Category: ${enr.businessCategory}`,
+        enr.dealSummary && `Deal context: ${enr.dealSummary}`,
+        enr.nextBestAction && `Suggested next action: ${enr.nextBestAction}`,
+        enr.urgencyLevel && `Urgency: ${enr.urgencyLevel}`,
+        enr.stuckReason && `Stuck reason: ${enr.stuckReason}`,
+        enr.conversionStrategy && `Conversion strategy: ${enr.conversionStrategy}`,
+      ].filter(Boolean).join('\n');
+
+      const siSummary = [
+        si.businessOverview && `Business overview: ${si.businessOverview}`,
+        si.idealCustomer && `Ideal customer: ${si.idealCustomer}`,
+        si.coreServices && `Core services: ${si.coreServices}`,
+        si.targetLocations && `Target locations: ${si.targetLocations}`,
+        si.growthObjective && `Growth objective: ${si.growthObjective}`,
+        si.discoveryNotes && `Discovery notes: ${si.discoveryNotes}`,
+      ].filter(Boolean).join('\n');
+
+      const gpSummary = gp ? `Growth Prescription: ${gp.businessDiagnosis}. Urgency: ${gp.urgencyLevel}. Recommended: ${(gp.recommendedStack || []).slice(0, 3).map((p: any) => p.product).join(', ')}.` : '';
+
+      const prompt = `You are a senior marketing consultant preparing a call brief for an agency sales rep.
+
+PROSPECT DATA:
+Business: ${lead.companyName}
+Industry: ${lead.industry || enr.industry || src.category || 'Unknown — infer from business name and context'}
+Location: ${lead.address || src.googleAddress || lead.territory || 'Not provided'}
+Contact: ${lead.contactName || 'Unknown'}
+Stage: ${lead.stage || 'unknown'}
+Days in pipeline: ${daysSinceCreated !== null ? daysSinceCreated : 'Unknown'}
+Last contact: ${lastContact}
+Website: ${websiteStr}
+GBP/Google Maps: ${gbpUrl}
+Reviews: ${reviewCount !== null ? `${reviewCount} reviews` : 'Unknown'} ${rating !== null ? `| ${rating}/5 stars` : ''}
+Social presence: ${socials}
+Notes from rep: ${lead.notes || 'None'}
+
+${enrichmentSummary ? `INTELLIGENCE ENGINE DATA:\n${enrichmentSummary}` : ''}
+${siSummary ? `STRATEGY INTELLIGENCE:\n${siSummary}` : ''}
+${gpSummary ? `GROWTH PRESCRIPTION:\n${gpSummary}` : ''}
+${src.businessSignals?.length ? `BUSINESS SIGNALS: ${src.businessSignals.join(', ')}` : ''}
+
+INSTRUCTIONS:
+Generate a comprehensive, commercially useful Prep Call Pack for this prospect.
+If data is missing, include what is known, what can be inferred from context, and what must be confirmed on the call.
+Do NOT produce a weak pack because some inputs are missing — graceful degradation, not failure.
+Make the call questions specific to THIS business, not generic.
+The commercial angle should feel like a sharp strategist identified it — specific and relevant.
+
+Return JSON (all fields required):
+{
+  "businessSnapshot": "2-3 sentence business context — what they do, their market position, likely situation",
+  "presenceSnapshot": {
+    "website": "website status note: strong/weak/none + specific observations",
+    "gbp": "GBP presence note: strong/partial/none + review signal interpretation",
+    "social": "social presence note + what it signals",
+    "searchVisibility": "likely search visibility based on all available signals — be specific"
+  },
+  "opportunities": ["up to 4 specific commercial opportunities for THIS prospect"],
+  "gaps": ["up to 4 specific gaps or weaknesses that create the opportunity to sell"],
+  "callPriorities": ["top 3 focus points for THIS specific call — ordered by importance"],
+  "discoveryQuestions": ["5-7 sharp, specific questions to ask on the call"],
+  "commercialAngle": "The single strongest commercial angle — the hook that will resonate with this specific prospect",
+  "missingDataNotes": ["things still unknown that should be confirmed or asked on the call"],
+  "confidence": "high|medium|low"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You produce sharp, commercially useful prep call packs for marketing agency sales reps. Be specific to the business — never generic.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.45,
+        max_tokens: 1200,
+      });
+
+      const raw = response.choices[0]?.message?.content || '{}';
+      const pack = JSON.parse(raw);
+      const prepCallPack = { ...pack, generatedAt: new Date().toISOString(), leadId };
+
+      await leadRef.update({ prepCallPack });
+      res.json({ prepCallPack });
+    } catch (err) {
+      console.error("[generate-prep-pack]", err);
+      res.status(500).json({ error: "Failed to generate prep call pack" });
+    }
+  });
+
   // ============================================
   // Google Business Profile (GBP) OAuth + API
   // ============================================
