@@ -1,0 +1,351 @@
+Build Brief — Bullpen Work Queue Noise Control, Signal Quality & Actionability Hardening
+Goal
+Prevent the new Bullpen work queue from becoming a noisy alert graveyard by improving signal quality, deduplication, suppression, ownership precision, and conversion from work item to real follow-through.
+
+Why this matters now
+The queue is live and useful. That’s good.
+
+The next failure mode is predictable:
+
+too many repetitive items
+stale vs missing signals conflated
+wrong owner assignment on some conditions
+low-value items crowding higher-value work
+items lingering without a practical way to suppress, snooze, or convert into real action
+This task should harden the queue before noise trains users to ignore it.
+
+Problems to fix
+1. Missing vs stale are currently conflated
+Current triggers treat:
+
+generatedAt > threshold
+or missing
+as the same category
+Examples:
+
+seo_engine_stale
+website_engine_stale
+gbp_engine_stale
+ads_engine_stale
+This is weak signal design.
+
+Why it matters
+These are different operating conditions:
+
+missing = never generated / not yet run / setup gap
+stale = once generated, now outdated / maintenance gap
+They require different diagnoses, priorities, owners, and next actions.
+
+2. Some ownership logic is too blunt
+Example:
+
+lead_stuck_in_stage currently routes to Strategy Advisor
+That may be right sometimes, but often:
+
+Sales Specialist should own stage progression
+Client Growth Specialist may own post-sale/account progression
+Operations Specialist may own blocked handoff cases
+Ownership needs to better match the actual bottleneck.
+
+3. Queue noise will build without suppression controls
+Right now you have deduplication for:
+
+same sourceSignal + clientId with non-complete status
+That’s good, but not enough.
+
+You still need:
+
+snooze
+dismiss
+suppress-until-change
+maybe auto-close on condition resolution
+Without these, medium/low-value items will accumulate and reduce trust in the queue.
+
+4. Low-priority stale items may crowd out real work
+Low-priority engine stale items are valid, but they can flood the queue.
+
+Need:
+
+better default filtering
+maybe score/priority weighting
+maybe grouped or collapsed stale maintenance items
+Otherwise:
+
+operational blockers
+get buried under
+“refresh this engine sometime” noise
+5. Work items still need a cleaner path into action
+You already have threadId, which is good.
+
+But queue items should more directly support:
+
+open/create Bullpen thread
+carry diagnosis/context automatically
+move from signal → conversation → action cleanly
+Otherwise the queue becomes informative but not operational enough.
+
+Outcome that matters most
+Improve the Bullpen queue so it surfaces fewer, sharper, more actionable items with clearer ownership and better lifecycle handling.
+
+Success means:
+
+stale vs missing are differentiated
+owner assignment is more accurate
+duplicate/repeat noise is reduced
+users can snooze/dismiss/suppress low-value items
+the queue remains trusted and readable as volume grows
+work items flow naturally into threads and action
+Scope
+In scope
+split missing vs stale signal logic
+refine ownership mapping for ambiguous signals
+add suppression/snooze/dismiss controls
+improve deduplication semantics beyond current simple rule
+improve queue default sorting/filtering for signal quality
+add cleaner open/create-thread flow from work items
+Out of scope
+redesigning the whole queue UI
+building a full project management platform
+adding dozens of new triggers
+deep analytics/trend dashboards
+fully autonomous execution
+Required architecture rules
+1. Signal quality beats signal volume
+The queue should prefer:
+
+fewer meaningful items
+over
+many technically true but operationally weak alerts
+2. Missing and stale must be distinct
+Do not treat absence and expiry as the same condition.
+
+3. Every item should be actionable
+A work item should have:
+
+clear diagnosis
+sensible owner
+appropriate next action
+a path to resolution or suppression
+4. Users need control over recurring noise
+Not every true signal deserves repeated attention every day.
+
+5. Queue state should reflect reality
+If a condition resolves, the queue should resolve or downgrade appropriately.
+If a condition is intentionally deferred, that should be represented explicitly.
+
+Recommended implementation approach
+Phase 1 — Split missing vs stale signals
+Refactor current engine freshness signals into separate types.
+
+Example split
+Instead of:
+
+seo_engine_stale
+create:
+
+seo_engine_missing
+seo_engine_stale
+Do the same for:
+
+website
+GBP
+ads
+any other engine signal where “missing” and “outdated” differ
+Why
+This improves:
+
+diagnosis quality
+owner mapping
+priority accuracy
+next-action usefulness
+Expected logic
+missing = no output exists / output was never generated
+stale = output exists but generatedAt exceeds threshold
+Phase 2 — Improve owner mapping logic
+Review signal → owner assignments, especially for ambiguous commercial workflow cases.
+
+Priority cases to refine
+lead_stuck_in_stage
+onboarding-related triggers
+no recent contact
+client-health-related triggers
+Desired outcome
+Owner should match the actual bottleneck:
+
+Sales Specialist for outreach/follow-up/stage progression issues
+Client Growth Specialist for retention/account-development issues
+Operations Specialist for blocked handoffs/process issues
+Strategy Specialist for diagnosis/prioritisation where the issue is not yet execution-owned
+Important note
+Do not use “strategy” as the default owner for unresolved ambiguity.
+That just hides weak routing.
+
+Phase 3 — Add suppression, snooze, and dismissal controls
+Add a lightweight control layer to prevent recurring low-value noise.
+
+Recommended controls
+Snooze
+e.g. 3 days / 7 days / 14 days
+Dismiss
+closes current item with reason
+Suppress until condition changes
+do not recreate while the underlying condition is materially unchanged
+Suggested fields
+suppressedUntil
+dismissedAt
+dismissedBy
+dismissReason
+suppressionKey or equivalent condition signature
+lastConditionHash if useful
+Goal
+If Nathan intentionally parks something, the queue should respect that.
+
+Phase 4 — Better deduplication semantics
+Current dedupe is:
+
+same sourceSignal + clientId + non-complete → skip
+That’s fine for v1 but too shallow long-term.
+
+Improve it with:
+org-level vs client-level distinction
+condition signature / fingerprint
+suppression awareness
+resolved-state awareness
+Example
+A new item should be created if:
+
+prior item was completed
+and the condition later genuinely recurs
+A new item should not be created if:
+
+the exact same unresolved condition is still active
+or it is currently snoozed/suppressed
+Phase 5 — Improve queue ranking and default visibility
+Not all valid items should have equal visual weight.
+
+Recommended improvements
+default sort by:
+priority
+recency
+blocked/awaiting review prominence
+group or collapse low-priority maintenance items
+separate “operational risk” from “maintenance hygiene”
+Example groups
+Needs action now
+Blocked / awaiting review
+Maintenance / stale outputs
+Completed
+This will keep the queue operational, not cluttered.
+
+Phase 6 — Add thread conversion/open flow
+Work items should connect more directly to Bullpen conversation.
+
+Recommended behavior
+Each work item should support:
+
+Open Thread
+if thread already linked
+Create Thread
+prefilled with:
+title
+diagnosis
+owner
+supporting roles
+client context
+next action
+Goal
+Signal → thread → review/action becomes one smooth path.
+
+This is one of the most important practical gaps to close.
+
+Recommended v1 improvements to current trigger set
+Engine freshness triggers
+Split:
+
+seo_engine_missing / seo_engine_stale
+website_engine_missing / website_engine_stale
+gbp_engine_missing / gbp_engine_stale
+ads_engine_missing / ads_engine_stale
+Ownership review
+Revisit:
+
+lead_stuck_in_stage
+client_no_recent_contact
+onboarding_incomplete
+Priority review
+Likely re-evaluate:
+
+some “low” stale items may be better shown as maintenance rather than main queue items
+some onboarding and contact issues may deserve higher visibility
+Risks and dependencies
+Risks
+overcomplicating the queue too early
+adding too many controls and making triage slower
+inconsistent suppression semantics
+hidden items making users forget real issues
+Dependencies
+existing trigger engine
+existing work item schema
+current Bullpen thread model
+current role routing model
+QA requirements
+Must test — signal splitting
+missing engine output creates missing, not stale
+stale engine output creates stale, not missing
+both produce different diagnosis/next action text where appropriate
+Must test — ownership
+stage-stuck items route to the right owner based on condition logic
+no recent contact routes sensibly
+onboarding incomplete routes sensibly
+Must test — suppression
+snoozed item does not reappear before suppressedUntil
+dismissed item does not immediately reappear unless condition changes
+condition change breaks suppression correctly where intended
+Must test — dedupe
+rerunning scan does not duplicate identical unresolved items
+resolved item can recur if the problem genuinely returns
+similar but materially different conditions do not get incorrectly collapsed
+Must test — thread flow
+Create Thread prepopulates the right context
+Open Thread returns to linked discussion correctly
+thread linkage persists correctly on the work item
+Must test — queue quality
+high-priority operational items are prominent
+low-priority maintenance noise does not dominate the default view
+blocked / awaiting review items remain visible enough
+Measurable success criteria
+This task is successful when:
+
+stale and missing are no longer conflated
+recurring low-value signals are controllable
+duplicate queue noise is materially reduced
+owner assignment is more accurate
+queue defaults better reflect urgency and operational value
+work items convert cleanly into Bullpen threads and action
+Recommended execution order
+split missing vs stale signal logic
+refine owner mapping on ambiguous signals
+add suppression/snooze/dismiss fields + controls
+improve dedupe logic with condition awareness
+improve queue sorting/grouping/default visibility
+add create/open thread flow from work items
+QA queue quality under repeated scans
+What good output looks like from this task
+Please return:
+
+which signals were split or refined
+new suppression/deduplication logic
+owner mapping changes
+queue ranking/grouping changes
+thread conversion/open flow added
+any remaining noise risks or future improvements
+What not to do
+do not add dozens of new triggers before fixing queue quality
+do not keep missing and stale merged
+do not let suppression hide genuinely changed conditions forever
+do not make the queue harder to use in the name of sophistication
+do not leave work items disconnected from actual discussion/action flow
+Final product rule
+A live queue is only valuable if it stays sharp.
+The next stage is not “more alerts.”
+It is better signals, better ownership, less noise, and cleaner conversion into action.

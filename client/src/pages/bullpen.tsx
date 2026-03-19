@@ -1820,7 +1820,9 @@ export default function BullpenPage() {
         </div>
 
         {/* ── Command Center ───────────────────────────────────────────────── */}
-        <BullpenCommandCenter />
+        <div id="bullpen-command-center">
+          <BullpenCommandCenter />
+        </div>
 
         {/* ── Work Queue ───────────────────────────────────────────────────── */}
         <BullpenWorkQueue />

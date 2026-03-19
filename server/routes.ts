@@ -9958,18 +9958,28 @@ Return JSON with exactly these fields:
 
   // Pre-defined trigger ownership map — no GPT call per item, keeps scan fast.
   // owner/supporting match the Bullpen specialist workforce labels.
+  // ─ Engine signals split into _missing (never run) vs _stale (outdated).
+  // ─ lead_stuck_in_stage owner corrected to Sales Specialist (not Strategy Advisor).
   const TRIGGER_OWNERSHIP: Record<string, { owner: string; supporting: string[]; priority: 'high' | 'medium' | 'low' }> = {
-    openclaw_config_invalid:   { owner: 'Operations Manager', supporting: ['Backend Engineer'],          priority: 'high'   },
-    automation_rules_invalid:  { owner: 'Operations Manager', supporting: [],                            priority: 'medium' },
-    gbp_connection_revoked:    { owner: 'GBP Specialist',     supporting: ['Operations Manager'],        priority: 'high'   },
-    gbp_connection_broken:     { owner: 'GBP Specialist',     supporting: ['Operations Manager'],        priority: 'medium' },
-    seo_engine_stale:          { owner: 'SEO Specialist',     supporting: ['Client Growth Specialist'],  priority: 'medium' },
-    website_engine_stale:      { owner: 'Website Specialist', supporting: ['Client Growth Specialist'],  priority: 'low'    },
-    gbp_engine_stale:          { owner: 'GBP Specialist',     supporting: ['Client Growth Specialist'],  priority: 'low'    },
-    ads_engine_stale:          { owner: 'Ads Specialist',     supporting: ['Client Growth Specialist'],  priority: 'low'    },
-    onboarding_incomplete:     { owner: 'Client Growth Specialist', supporting: ['Operations Manager'],  priority: 'medium' },
-    lead_stuck_in_stage:       { owner: 'Strategy Advisor',   supporting: ['Client Growth Specialist'],  priority: 'medium' },
-    client_no_recent_contact:  { owner: 'Client Growth Specialist', supporting: ['Strategy Advisor'],    priority: 'medium' },
+    openclaw_config_invalid:    { owner: 'Operations Manager',       supporting: ['Backend Engineer'],          priority: 'high'   },
+    automation_rules_invalid:   { owner: 'Operations Manager',       supporting: [],                            priority: 'medium' },
+    gbp_connection_revoked:     { owner: 'GBP Specialist',           supporting: ['Operations Manager'],        priority: 'high'   },
+    gbp_connection_broken:      { owner: 'GBP Specialist',           supporting: ['Operations Manager'],        priority: 'medium' },
+    // SEO engine — missing is a setup gap (high), stale is maintenance (medium)
+    seo_engine_missing:         { owner: 'SEO Specialist',           supporting: ['Client Growth Specialist'],  priority: 'high'   },
+    seo_engine_stale:           { owner: 'SEO Specialist',           supporting: ['Client Growth Specialist'],  priority: 'medium' },
+    // Website engine — missing is a setup gap (high), stale is maintenance (low)
+    website_engine_missing:     { owner: 'Website Specialist',       supporting: ['Client Growth Specialist'],  priority: 'high'   },
+    website_engine_stale:       { owner: 'Website Specialist',       supporting: ['Client Growth Specialist'],  priority: 'low'    },
+    // GBP engine — missing is a setup gap (high), stale is maintenance (low)
+    gbp_engine_missing:         { owner: 'GBP Specialist',           supporting: ['Client Growth Specialist'],  priority: 'high'   },
+    gbp_engine_stale:           { owner: 'GBP Specialist',           supporting: ['Client Growth Specialist'],  priority: 'low'    },
+    // Ads engine — missing is a setup gap (medium), stale is maintenance (low)
+    ads_engine_missing:         { owner: 'Ads Specialist',           supporting: ['Client Growth Specialist'],  priority: 'medium' },
+    ads_engine_stale:           { owner: 'Ads Specialist',           supporting: ['Client Growth Specialist'],  priority: 'low'    },
+    onboarding_incomplete:      { owner: 'Client Growth Specialist', supporting: ['Operations Manager'],        priority: 'high'   },
+    lead_stuck_in_stage:        { owner: 'Sales Specialist',         supporting: ['Strategy Advisor'],          priority: 'medium' },
+    client_no_recent_contact:   { owner: 'Client Growth Specialist', supporting: ['Strategy Advisor'],          priority: 'medium' },
   };
 
   // GET /api/bullpen/work-items — return all work items for an org, newest first
@@ -9990,19 +10000,39 @@ Return JSON with exactly these fields:
     }
   });
 
-  // PATCH /api/bullpen/work-items/:itemId — update status / fields
+  // PATCH /api/bullpen/work-items/:itemId — update status / fields / snooze / dismiss / threadId
   app.patch('/api/bullpen/work-items/:itemId', requireOrgAccess, requireManager, async (req: any, res: any) => {
     const { itemId } = req.params;
-    const { orgId, status, threadId } = req.body;
+    const { orgId, status, threadId, snooze, dismiss, dismissReason } = req.body;
     if (!orgId || !itemId || !firestore) return res.status(400).json({ error: 'orgId and itemId required' });
     try {
       const ref = firestore.collection('orgs').doc(orgId).collection('bullpenWork').doc(itemId);
-      const updates: Record<string, any> = { updatedAt: new Date().toISOString() };
+      const now = new Date();
+      const updates: Record<string, any> = { updatedAt: now.toISOString() };
+
+      // Status transition
       if (status) {
         updates.status = status;
-        if (status === 'complete') updates.resolvedAt = new Date().toISOString();
+        if (status === 'complete') updates.resolvedAt = now.toISOString();
       }
-      if (threadId) updates.threadId = threadId;
+      // Thread linkage
+      if (threadId !== undefined) updates.threadId = threadId;
+      // Snooze — set suppressedUntil to N days from now
+      if (snooze) {
+        const days = snooze === '3d' ? 3 : snooze === '7d' ? 7 : snooze === '14d' ? 14 : 0;
+        if (days > 0) {
+          const until = new Date(now.getTime() + days * 86400000);
+          updates.suppressedUntil = until.toISOString();
+        }
+      }
+      // Dismiss — mark with reason + who dismissed
+      if (dismiss) {
+        updates.dismissedAt = now.toISOString();
+        if (dismissReason) updates.dismissReason = dismissReason;
+        const uid = (req as any).user?.uid ?? 'unknown';
+        updates.dismissedBy = uid;
+      }
+
       await ref.update(updates);
       res.json({ ok: true });
     } catch (e: any) {
@@ -10022,14 +10052,25 @@ Return JSON with exactly these fields:
 
     async function existingItemKey(signal: string, clientId?: string): Promise<boolean> {
       // Fetch by sourceSignal only (simple equality — no composite index needed),
-      // then filter status and clientId in code to avoid compound-query index requirements.
+      // then apply all suppression + status checks in code.
       const snap = await firestore!.collection('orgs').doc(orgId).collection('bullpenWork')
         .where('sourceSignal', '==', signal)
         .get();
       return snap.docs.some(d => {
         const data = d.data();
+        // Scope to matching clientId when provided
+        if (clientId && data.clientId !== clientId) return false;
+        // Completed items do NOT block re-creation (condition may genuinely recur)
         if (data.status === 'complete') return false;
-        if (clientId) return data.clientId === clientId;
+        // Dismissed items: allow re-creation after 30 days
+        if (data.dismissedAt) {
+          const dismissedMs = new Date(data.dismissedAt).getTime();
+          const thirtyDays = 30 * 86400000;
+          if (Date.now() - dismissedMs > thirtyDays) return false; // 30 day reset passed → allow new item
+        }
+        // Snoozed items: block re-creation while snooze window is active
+        if (data.suppressedUntil && new Date(data.suppressedUntil).getTime() > Date.now()) return true;
+        // Active non-complete item exists → block
         return true;
       });
     }
@@ -10118,68 +10159,103 @@ Return JSON with exactly these fields:
         });
       }
 
-      // ── Triggers 4-7: Stale engine outputs per client ──────────────────
+      // ── Triggers 4-11: Engine freshness per client — missing vs stale split ──
+      // missing = never generated (setup gap, higher urgency)
+      // stale   = generated but older than threshold (maintenance gap)
       const clientsSnap = await firestore.collection('orgs').doc(orgId).collection('clients').where('archived', '==', false).get();
       const clients = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+
+      function engineAge(generatedAt: any): number {
+        if (!generatedAt) return Infinity;
+        return (now - new Date(generatedAt.toDate?.() ?? generatedAt).getTime()) / msPerDay;
+      }
 
       for (const client of clients) {
         const name: string = client.businessName || client.name || 'Unknown client';
 
-        // Stale SEO engine
-        const seoAge = client.seoEngine?.generatedAt
-          ? (now - new Date(client.seoEngine.generatedAt.toDate?.() ?? client.seoEngine.generatedAt).getTime()) / msPerDay
-          : Infinity;
-        if (seoAge > STALE_ENGINE_DAYS) {
+        // ── SEO engine ──────────────────────────────────────────────────────
+        const seoAge = engineAge(client.seoEngine?.generatedAt);
+        if (seoAge === Infinity) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.seo_engine_missing;
+          await createItem({
+            type: 'client', title: `SEO Intelligence not set up — ${name}`,
+            diagnosis: `SEO engine has never been run for ${name}. Keyword targets, visibility scoring, and content gap analysis are completely absent. This is a setup gap, not just maintenance drift.`,
+            nextAction: `Open ${name}'s Client Growth Intelligence panel and run the SEO Engine for the first time.`,
+            sourceSignal: 'seo_engine_missing', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        } else if (seoAge > STALE_ENGINE_DAYS) {
           const { owner, supporting, priority } = TRIGGER_OWNERSHIP.seo_engine_stale;
           await createItem({
             type: 'client', title: `SEO Intelligence stale — ${name}`,
-            diagnosis: `SEO engine report for ${name} is ${seoAge === Infinity ? 'missing (never run)' : `${Math.round(seoAge)} days old`}. Keyword targets, content gap analysis, and visibility scoring are out of date.`,
-            nextAction: `Run SEO Engine for ${name} from their Client Growth Intelligence panel.`,
+            diagnosis: `SEO engine report for ${name} is ${Math.round(seoAge)} days old. Keyword targets, content gap analysis, and visibility scoring are out of date and may no longer reflect current rankings or competition.`,
+            nextAction: `Re-run SEO Engine for ${name} from their Client Growth Intelligence panel.`,
             sourceSignal: 'seo_engine_stale', clientId: client.id, clientName: name,
             priority, owner, supporting,
           });
         }
 
-        // Stale website engine
-        const webAge = client.websiteEngine?.generatedAt
-          ? (now - new Date(client.websiteEngine.generatedAt.toDate?.() ?? client.websiteEngine.generatedAt).getTime()) / msPerDay
-          : Infinity;
-        if (webAge > STALE_ENGINE_DAYS) {
+        // ── Website engine ──────────────────────────────────────────────────
+        const webAge = engineAge(client.websiteEngine?.generatedAt);
+        if (webAge === Infinity) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.website_engine_missing;
+          await createItem({
+            type: 'client', title: `Website Audit not set up — ${name}`,
+            diagnosis: `Website engine has never been run for ${name}. Conversion scoring, quick-win opportunities, and technical task list are absent. This client has no website baseline on file.`,
+            nextAction: `Open ${name}'s Client Growth Intelligence panel and run the Website Engine for the first time.`,
+            sourceSignal: 'website_engine_missing', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        } else if (webAge > STALE_ENGINE_DAYS) {
           const { owner, supporting, priority } = TRIGGER_OWNERSHIP.website_engine_stale;
           await createItem({
             type: 'client', title: `Website Audit stale — ${name}`,
-            diagnosis: `Website engine report for ${name} is ${webAge === Infinity ? 'missing (never run)' : `${Math.round(webAge)} days old`}. Conversion scoring, quick wins, and task list are outdated.`,
-            nextAction: `Run Website Engine for ${name} from their Client Growth Intelligence panel.`,
+            diagnosis: `Website engine report for ${name} is ${Math.round(webAge)} days old. Conversion scoring, quick wins, and task list may no longer reflect the current site state.`,
+            nextAction: `Re-run Website Engine for ${name} from their Client Growth Intelligence panel.`,
             sourceSignal: 'website_engine_stale', clientId: client.id, clientName: name,
             priority, owner, supporting,
           });
         }
 
-        // Stale GBP engine
-        const gbpEngAge = client.gbpEngine?.generatedAt
-          ? (now - new Date(client.gbpEngine.generatedAt.toDate?.() ?? client.gbpEngine.generatedAt).getTime()) / msPerDay
-          : Infinity;
-        if (gbpEngAge > STALE_ENGINE_DAYS) {
+        // ── GBP engine ──────────────────────────────────────────────────────
+        const gbpEngAge = engineAge(client.gbpEngine?.generatedAt);
+        if (gbpEngAge === Infinity) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.gbp_engine_missing;
+          await createItem({
+            type: 'client', title: `GBP Optimisation not set up — ${name}`,
+            diagnosis: `GBP engine has never been run for ${name}. Profile scoring, review strength analysis, and optimisation tasks are absent. Local search positioning is undiagnosed.`,
+            nextAction: `Open ${name}'s Client Growth Intelligence panel and run the GBP Engine for the first time.`,
+            sourceSignal: 'gbp_engine_missing', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        } else if (gbpEngAge > STALE_ENGINE_DAYS) {
           const { owner, supporting, priority } = TRIGGER_OWNERSHIP.gbp_engine_stale;
           await createItem({
             type: 'client', title: `GBP Optimisation stale — ${name}`,
-            diagnosis: `GBP engine report for ${name} is ${gbpEngAge === Infinity ? 'missing (never run)' : `${Math.round(gbpEngAge)} days old`}. Profile scoring, review strength, and task list are outdated.`,
-            nextAction: `Run GBP Engine for ${name} from their Client Growth Intelligence panel.`,
+            diagnosis: `GBP engine report for ${name} is ${Math.round(gbpEngAge)} days old. Profile scoring, review strength, and task list may no longer reflect the live GBP state.`,
+            nextAction: `Re-run GBP Engine for ${name} from their Client Growth Intelligence panel.`,
             sourceSignal: 'gbp_engine_stale', clientId: client.id, clientName: name,
             priority, owner, supporting,
           });
         }
 
-        // Stale Ads engine
-        const adsAge = client.adsEngine?.generatedAt
-          ? (now - new Date(client.adsEngine.generatedAt.toDate?.() ?? client.adsEngine.generatedAt).getTime()) / msPerDay
-          : Infinity;
-        if (adsAge > STALE_ENGINE_DAYS) {
+        // ── Ads engine ──────────────────────────────────────────────────────
+        const adsAge = engineAge(client.adsEngine?.generatedAt);
+        if (adsAge === Infinity) {
+          const { owner, supporting, priority } = TRIGGER_OWNERSHIP.ads_engine_missing;
+          await createItem({
+            type: 'client', title: `Ads Intelligence not set up — ${name}`,
+            diagnosis: `Ads engine has never been run for ${name}. Readiness score, campaign structure analysis, and CPL estimates are absent. Paid search recommendations cannot be made without this baseline.`,
+            nextAction: `Open ${name}'s Client Growth Intelligence panel and run the Ads Engine for the first time.`,
+            sourceSignal: 'ads_engine_missing', clientId: client.id, clientName: name,
+            priority, owner, supporting,
+          });
+        } else if (adsAge > STALE_ENGINE_DAYS) {
           const { owner, supporting, priority } = TRIGGER_OWNERSHIP.ads_engine_stale;
           await createItem({
             type: 'client', title: `Ads Intelligence stale — ${name}`,
-            diagnosis: `Ads engine report for ${name} is ${adsAge === Infinity ? 'missing (never run)' : `${Math.round(adsAge)} days old`}. Readiness score, campaign structure, and CPL estimates need refreshing.`,
-            nextAction: `Run Ads Engine for ${name} from their Client Growth Intelligence panel.`,
+            diagnosis: `Ads engine report for ${name} is ${Math.round(adsAge)} days old. Readiness score, campaign structure, and CPL estimates need refreshing to remain actionable.`,
+            nextAction: `Re-run Ads Engine for ${name} from their Client Growth Intelligence panel.`,
             sourceSignal: 'ads_engine_stale', clientId: client.id, clientName: name,
             priority, owner, supporting,
           });
