@@ -1,0 +1,296 @@
+Build Brief — Legacy Architecture Cleanup & Postgres Removal                                 
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Remove or clearly quarantine orphaned PostgreSQL and legacy REST architecture so Momentum’s  
+ codebase reflects the actual live runtime model and future development cannot accidentally   
+ build against dead paths.                                                                    
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ The live application now clearly runs on:                                                    
+                                                                                              
+ - Firestore as the runtime data store                                                        
+ - Firebase Auth as the live auth layer                                                       
+ - direct Firestore-backed operational state for leads, clients, settings, and AI outputs     
+                                                                                              
+ But the codebase still contains legacy architecture that no longer represents runtime truth: 
+                                                                                              
+ - server/storage.ts with IStorage                                                            
+ - PostgreSQL-backed users, leads, and activities                                             
+ - old REST endpoints like:                                                                   
+ - /api/leads                                                                                 
+ - /api/leads/:id                                                                             
+ - /api/activities                                                                            
+ - related legacy lead/activity CRUD                                                          
+ - local username/password auth model predating Firebase Auth                                 
+                                                                                              
+ These have already been partially contained, but they still create architectural drag and    
+ false authority.                                                                             
+                                                                                              
+ ### Why this matters                                                                         
+                                                                                              
+ Even when disabled, legacy code that still looks central causes:                             
+ - incorrect implementation choices                                                           
+ - wasted debugging time                                                                      
+ - confusion about source of truth                                                            
+ - accidental extension of dead patterns                                                      
+ - unnecessary review surface and attack surface                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make the codebase reflect reality:                                                           
+                                                                                              
+ - Firestore is the live runtime data layer                                                   
+ - Firebase Auth is the live auth layer                                                       
+ - legacy Postgres CRUD and local auth are no longer active architectural paths               
+ - future work cannot mistakenly attach to dead backend patterns                              
+                                                                                              
+ Success means:                                                                               
+ - orphaned Postgres CRUD is removed or clearly isolated                                      
+ - IStorage is removed or explicitly relegated to non-runtime legacy history                  
+ - dead local auth model is removed                                                           
+ - runtime documentation and code structure match the actual architecture                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Remove or quarantine unused PostgreSQL CRUD routes                                        
+ 2. Remove or quarantine IStorage / storage.ts if no live path depends on it                  
+ 3. Remove legacy local username/password auth path if unused                                 
+ 4. Remove stale imports, dead route wiring, and dead query usage                             
+ 5. Update architecture docs to reflect current runtime truth                                 
+ 6. Add a lightweight deprecation/removal note if any legacy pieces must remain temporarily   
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - replacing Firestore with Postgres                                                          
+ - new backend architecture redesign                                                          
+ - Cloud Functions migration                                                                  
+ - new features                                                                               
+ - broader codebase beautification                                                            
+ - per-client GBP architecture                                                                
+ - activities realtime unless needed only for cleanup verification                            
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Do not preserve dead architecture just because it exists                              
+                                                                                              
+ If a path is no longer used by the live runtime and no meaningful dependency remains, it     
+ should be removed or formally isolated.                                                      
+                                                                                              
+ ### 2. Protect working functionality                                                         
+                                                                                              
+ Do not delete first and hope.                                                                
+ Verify references, then remove safely.                                                       
+                                                                                              
+ ### 3. Runtime truth must be obvious                                                         
+                                                                                              
+ After cleanup, a new developer should be able to tell quickly:                               
+ - what is live                                                                               
+ - what is not                                                                                
+ - what the actual source of truth is                                                         
+                                                                                              
+ ### 4. Prefer removal over permanent “legacy clutter”                                        
+                                                                                              
+ If a component is truly unused, removal is better than endless warning comments.             
+ Use quarantine only where needed to de-risk the cleanup.                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Reference audit                                                                    
+                                                                                              
+ Before deleting anything, verify all references to:                                          
+                                                                                              
+ - server/storage.ts                                                                          
+ - IStorage                                                                                   
+ - PostgreSQL lead/activity/user methods                                                      
+ - legacy /api/leads* and /api/activities* routes                                             
+ - local auth code paths                                                                      
+ - shared/schema.ts pieces that exist only for dead Postgres domains                          
+ - any frontend React Query usage that still references legacy REST paths                     
+ - tests/scripts/admin/debug tools that may still rely on them                                
+                                                                                              
+ ### Deliverable                                                                              
+                                                                                              
+ A clear list of:                                                                             
+ - safe to remove now                                                                         
+ - must keep temporarily                                                                      
+ - unclear / needs follow-up                                                                  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Remove dead runtime wiring                                                         
+                                                                                              
+ If the audit confirms no live dependency:                                                    
+                                                                                              
+ ### Remove:                                                                                  
+                                                                                              
+ - legacy leads/activity CRUD handlers                                                        
+ - local username/password auth path                                                          
+ - dead route registration                                                                    
+ - dead storage method usage                                                                  
+ - dead frontend helpers/query hooks tied to old REST endpoints                               
+                                                                                              
+ ### If temporary retention is needed:                                                        
+                                                                                              
+ Move remaining pieces behind a clearly named legacy boundary rather than leaving them        
+ looking current.                                                                             
+                                                                                              
+ For example:                                                                                 
+ - legacy/                                                                                    
+ - deprecated/                                                                                
+ or explicit file naming                                                                      
+                                                                                              
+ The exact structure is flexible, but the goal is clarity.                                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Remove or isolate IStorage                                                         
+                                                                                              
+ Current diagnosis says:                                                                      
+ - all 9 methods are PostgreSQL-only                                                          
+ - none touch Firestore                                                                       
+ - frontend has moved past them                                                               
+ - legacy REST endpoints are already not live runtime paths                                   
+                                                                                              
+ If confirmed, IStorage should no longer sit at the center of perceived backend design.       
+                                                                                              
+ ### Preferred outcome                                                                        
+                                                                                              
+ - remove storage.ts and related dead abstractions entirely                                   
+                                                                                              
+ ### Acceptable fallback                                                                      
+                                                                                              
+ - isolate it clearly as legacyPostgresStorage or equivalent until full removal is safe       
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ No one should mistake it for the current domain access layer.                                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Clean up shared schema ambiguity                                                   
+                                                                                              
+ If shared/schema.ts or related Drizzle types still imply active ownership of                 
+ leads/users/activities for runtime features, fix that.                                       
+                                                                                              
+ ### Options                                                                                  
+                                                                                              
+ - remove dead schema definitions                                                             
+ - split legacy schema from live shared types                                                 
+ - document clearly which shared types are still relevant and which are not                   
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Source-of-truth ambiguity should disappear from the code structure.                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Documentation cleanup                                                              
+                                                                                              
+ Update docs so they reflect the actual architecture.                                         
+                                                                                              
+ ### At minimum, clarify:                                                                     
+                                                                                              
+ - Firestore = live runtime data layer                                                        
+ - Firebase Auth = live auth                                                                  
+ - legacy Postgres paths have been removed or quarantined                                     
+ - no new work should use old CRUD/storage abstractions                                       
+                                                                                              
+ Relevant docs likely include:                                                                
+ - TRUST_BOUNDARY.md                                                                          
+ - architecture docs                                                                          
+ - any README or delivery notes that still mention old backend patterns                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - hidden scripts/tests still depending on legacy endpoints                                   
+ - removing dead code that is actually used in a non-obvious admin/debug flow                 
+ - leaving behind type/import fragments that break builds                                     
+ - partial cleanup that makes the architecture even more confusing                            
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - accurate reference audit                                                                   
+ - confirmation that no live route or frontend path depends on removed Postgres code          
+ - confirmation that local auth is truly dead                                                 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test                                                                                
+                                                                                              
+ 1. app still builds and runs after cleanup                                                   
+ 2. no live frontend surface references removed legacy endpoints                              
+ 3. no auth flow depends on removed local username/password path                              
+ 4. lead/client/runtime behavior remains intact                                               
+ 5. no server route breaks because of stale imports or route registration assumptions         
+                                                                                              
+ ### Must verify                                                                              
+                                                                                              
+ 6. old /api/leads* and /api/activities* paths are either removed or intentionally retained   
+ as explicit deprecation stubs                                                                
+ 7. developer-facing docs now point to Firestore/Firebase runtime truth                       
+ 8. no remaining code implies PostgreSQL is the active source of truth for live product flows 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - orphaned PostgreSQL runtime paths are removed or clearly isolated                          
+ - IStorage no longer appears to be the live backend access layer                             
+ - local auth legacy code is gone or explicitly quarantined                                   
+ - the codebase points future work toward Firestore/Firebase by default                       
+ - architecture documentation matches runtime reality                                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. run reference audit                                                                       
+ 2. remove dead route wiring and frontend callers                                             
+ 3. remove or isolate IStorage and Postgres CRUD                                              
+ 4. remove dead local auth code                                                               
+ 5. clean shared schema ambiguity                                                             
+ 6. update docs                                                                               
+ 7. run build + regression smoke test                                                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - what was removed                                                                           
+ - what was quarantined and why                                                               
+ - whether IStorage remains or is gone                                                        
+ - whether local auth remains or is gone                                                      
+ - docs updated                                                                               
+ - any residual legacy items that still need future cleanup                                   
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not preserve dead patterns “just in case” without a specific reason                     
+ - do not redesign the whole backend while cleaning legacy code                               
+ - do not mix this with unrelated feature work                                                
+ - do not leave runtime truth ambiguous after the cleanup                                     
+ - do not remove anything without verifying references first                                  
+                                                           
