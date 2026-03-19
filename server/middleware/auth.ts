@@ -76,6 +76,13 @@ export async function verifyFirebaseToken(
 ): Promise<void> {
   if (isPublicPath(req.path)) return next();
 
+  // ── Internal scheduler bypass ────────────────────────────────────────────
+  const schedulerKey = req.headers['x-scheduler-key'];
+  if (schedulerKey && process.env.INTERNAL_SCHEDULER_KEY && schedulerKey === process.env.INTERNAL_SCHEDULER_KEY) {
+    req.firebaseUser = { uid: 'scheduler-system', email: 'system@scheduler.internal' };
+    return next();
+  }
+
   if (!isFirebaseAdminReady()) {
     // Firebase Admin not initialised — fail open in dev if needed, but log it
     console.warn('[auth] Firebase Admin not ready — skipping token verification');
@@ -133,6 +140,13 @@ export async function requireOrgAccess(
   if (!firestore) {
     res.status(503).json({ error: 'Service unavailable — Firestore not ready' });
     return;
+  }
+
+  // Scheduler system user bypasses member check
+  if (firebaseUser.uid === 'scheduler-system') {
+    req.orgRole = 'admin';
+    req.trustedOrgId = orgId;
+    return next();
   }
 
   try {

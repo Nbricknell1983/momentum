@@ -10705,5 +10705,216 @@ ${leadLines}`;
     }
   });
 
+  // ── POST /api/bullpen/daily-run ─────────────────────────────────────────────
+  // Runs the full daily brief: trigger scan + 3 review passes + GPT summary.
+  // Called manually by managers, or automatically by the server-side scheduler.
+  app.post('/api/bullpen/daily-run', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const { orgId, force, scheduled } = req.body;
+    const uid = (req as any).firebaseUser?.uid ?? 'system';
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+
+    try {
+      // ── Already-ran-today guard ────────────────────────────────────────────
+      if (!force) {
+        const schedSnap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('reviewSchedule').get();
+        const sched = schedSnap.data();
+        if (sched?.lastRunAt) {
+          const TZ = 10 * 3600000; // AEST = UTC+10
+          const lastLocal = new Date(new Date(sched.lastRunAt).getTime() + TZ);
+          const nowLocal  = new Date(Date.now() + TZ);
+          if (
+            lastLocal.getUTCFullYear() === nowLocal.getUTCFullYear() &&
+            lastLocal.getUTCMonth()    === nowLocal.getUTCMonth()    &&
+            lastLocal.getUTCDate()     === nowLocal.getUTCDate()
+          ) {
+            return res.json({ skipped: true, reason: 'Already ran today. Pass force:true to override.' });
+          }
+        }
+      }
+
+      const port = process.env.PORT || '5000';
+      const baseUrl = `http://localhost:${port}`;
+      const internalHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-scheduler-key': process.env.INTERNAL_SCHEDULER_KEY || '',
+      };
+
+      // ── Step 1: Trigger scan ──────────────────────────────────────────────
+      let scanResult: any = { created: 0, skipped: 0 };
+      try {
+        const scanResp = await fetch(`${baseUrl}/api/bullpen/trigger-scan`, {
+          method: 'POST', headers: internalHeaders,
+          body: JSON.stringify({ orgId }),
+        });
+        if (scanResp.ok) scanResult = await scanResp.json();
+      } catch (scanErr: any) {
+        console.error('[daily-run] trigger-scan error:', scanErr.message);
+      }
+
+      // ── Step 2: Three review passes ───────────────────────────────────────
+      const reviewResults: Record<string, any> = {};
+      for (const reviewType of ['operations', 'client_health', 'pipeline']) {
+        try {
+          const rResp = await fetch(`${baseUrl}/api/bullpen/review-pass`, {
+            method: 'POST', headers: internalHeaders,
+            body: JSON.stringify({ orgId, reviewType }),
+          });
+          reviewResults[reviewType] = rResp.ok
+            ? await rResp.json()
+            : { summary: 'Review failed.', findings: [], itemsCreated: 0, itemsSkipped: 0 };
+        } catch (reviewErr: any) {
+          console.error(`[daily-run] ${reviewType} review error:`, reviewErr.message);
+          reviewResults[reviewType] = { summary: 'Review failed.', findings: [], itemsCreated: 0, itemsSkipped: 0 };
+        }
+      }
+
+      // ── Step 3: Synthesise daily summary with GPT ─────────────────────────
+      const allFindings: string[] = [
+        ...(reviewResults.operations?.findings ?? []).map((f: any) =>
+          `[Operations] ${(f.priority || 'medium').toUpperCase()}: ${f.title} — ${f.observation ?? ''}`),
+        ...(reviewResults.client_health?.findings ?? []).map((f: any) =>
+          `[Client Health] ${(f.priority || 'medium').toUpperCase()}: ${f.title}${f.clientName ? ` (${f.clientName})` : ''} — ${f.observation ?? ''}`),
+        ...(reviewResults.pipeline?.findings ?? []).map((f: any) =>
+          `[Pipeline] ${(f.priority || 'medium').toUpperCase()}: ${f.title}${f.clientName ? ` (${f.clientName})` : ''} — ${f.observation ?? ''}`),
+      ];
+
+      const totalItemsCreated =
+        (scanResult.created ?? 0) +
+        Object.values(reviewResults).reduce((n: number, r: any) => n + (r.itemsCreated ?? 0), 0);
+
+      const summaryCompletion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 900,
+        temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: `You are the Chief Operating Officer for a marketing agency. Write a morning brief for the agency director based on today's automated agent review results. Be direct. Use the data. If nothing material changed, say so — do not fabricate urgency. Return ONLY JSON:
+{
+  "headline": "one decisive sentence — what matters most today",
+  "noMaterialChange": false,
+  "topRisks": ["up to 3 high-priority risk statements"],
+  "topActions": ["up to 3 specific recommended actions for today"],
+  "operationsSummary": "1-2 sentences on operational state",
+  "clientSummary": "1-2 sentences on client health",
+  "pipelineSummary": "1-2 sentences on pipeline state"
+}`,
+          },
+          {
+            role: 'user',
+            content: `Today's automated review results:\n\nTrigger Scan: ${scanResult.created ?? 0} new work items created, ${scanResult.skipped ?? 0} skipped (dedup)\n\nOperations Review: ${reviewResults.operations?.summary ?? 'Not run'}\nClient Health Review: ${reviewResults.client_health?.summary ?? 'Not run'}\nPipeline Review: ${reviewResults.pipeline?.summary ?? 'Not run'}\n\nAll findings (up to 20):\n${allFindings.length > 0 ? allFindings.slice(0, 20).join('\n') : '(no findings this run)'}`,
+          },
+        ],
+      });
+
+      let summaryData: any;
+      try {
+        summaryData = JSON.parse(summaryCompletion.choices[0]?.message?.content ?? '{}');
+      } catch {
+        summaryData = {
+          headline: 'Daily review complete.',
+          noMaterialChange: false,
+          topRisks: [],
+          topActions: [],
+          operationsSummary: reviewResults.operations?.summary ?? '',
+          clientSummary: reviewResults.client_health?.summary ?? '',
+          pipelineSummary: reviewResults.pipeline?.summary ?? '',
+        };
+      }
+
+      // ── Step 4: Store daily summary ────────────────────────────────────────
+      const now = new Date();
+      // Date key in AEST
+      const tzMs = 10 * 3600000;
+      const localNow = new Date(now.getTime() + tzMs);
+      const dateKey = `${localNow.getUTCFullYear()}-${String(localNow.getUTCMonth() + 1).padStart(2, '0')}-${String(localNow.getUTCDate()).padStart(2, '0')}`;
+
+      const summaryDoc = {
+        date: dateKey,
+        runAt: now.toISOString(),
+        runBy: uid,
+        scheduled: !!scheduled,
+        ...summaryData,
+        scanItemsCreated: scanResult.created ?? 0,
+        scanItemsSkipped: scanResult.skipped ?? 0,
+        totalItemsCreated,
+        reviewSummaries: {
+          operations:    { summary: reviewResults.operations?.summary    ?? '', itemsCreated: reviewResults.operations?.itemsCreated    ?? 0 },
+          client_health: { summary: reviewResults.client_health?.summary ?? '', itemsCreated: reviewResults.client_health?.itemsCreated ?? 0 },
+          pipeline:      { summary: reviewResults.pipeline?.summary      ?? '', itemsCreated: reviewResults.pipeline?.itemsCreated      ?? 0 },
+        },
+      };
+
+      await firestore.collection('orgs').doc(orgId).collection('bullpenSummaries').doc(dateKey).set(summaryDoc, { merge: true });
+
+      // ── Step 5: Update schedule lastRunAt ──────────────────────────────────
+      await firestore.collection('orgs').doc(orgId).collection('settings').doc('reviewSchedule').set(
+        { lastRunAt: now.toISOString(), lastRunSummaryDate: dateKey },
+        { merge: true },
+      );
+
+      res.json(summaryDoc);
+    } catch (e: any) {
+      console.error('[bullpen/daily-run] error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── GET /api/bullpen/daily-summary — latest (or by date) ────────────────────
+  app.get('/api/bullpen/daily-summary', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.query?.orgId as string || req.trustedOrgId;
+    const date  = req.query?.date as string | undefined;
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+
+    try {
+      if (date) {
+        const snap = await firestore.collection('orgs').doc(orgId).collection('bullpenSummaries').doc(date).get();
+        if (!snap.exists) return res.json(null);
+        return res.json({ id: snap.id, ...snap.data() });
+      }
+
+      // Latest: order by date desc, limit 1
+      const snap = await firestore.collection('orgs').doc(orgId).collection('bullpenSummaries')
+        .orderBy('date', 'desc').limit(1).get();
+      if (snap.empty) return res.json(null);
+      const doc = snap.docs[0];
+      return res.json({ id: doc.id, ...doc.data() });
+    } catch (e: any) {
+      console.error('[bullpen/daily-summary] error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── GET /api/bullpen/review-schedule ─────────────────────────────────────────
+  app.get('/api/bullpen/review-schedule', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.query?.orgId as string || req.trustedOrgId;
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+    try {
+      const snap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('reviewSchedule').get();
+      const defaults = { enabled: false, dailyRunHour: 8, clientMode: 'all', lastRunAt: null, lastRunSummaryDate: null };
+      return res.json({ ...defaults, ...(snap.data() ?? {}) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── PATCH /api/bullpen/review-schedule ───────────────────────────────────────
+  app.patch('/api/bullpen/review-schedule', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const { orgId, enabled, dailyRunHour, clientMode } = req.body;
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+    const update: Record<string, any> = {};
+    if (typeof enabled === 'boolean') update.enabled = enabled;
+    if (typeof dailyRunHour === 'number') update.dailyRunHour = Math.max(0, Math.min(23, dailyRunHour));
+    if (clientMode) update.clientMode = clientMode;
+    try {
+      await firestore.collection('orgs').doc(orgId).collection('settings').doc('reviewSchedule').set(update, { merge: true });
+      const snap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('reviewSchedule').get();
+      res.json(snap.data());
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   return httpServer;
 }

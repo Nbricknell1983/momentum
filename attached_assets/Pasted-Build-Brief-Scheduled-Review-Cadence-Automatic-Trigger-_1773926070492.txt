@@ -1,0 +1,281 @@
+Build Brief — Scheduled Review Cadence, Automatic Trigger Scans & Daily Bullpen Summary
+Goal
+Make Bullpen’s agents start working automatically on Momentum and selected clients without waiting for Nathan to manually trigger reviews.
+
+Core outcome
+The agents should begin each day by:
+
+scanning Momentum
+scanning selected client accounts
+generating meaningful work
+prioritising what matters
+surfacing a daily command summary in Bullpen
+This is the step that makes them feel like an active operating team, not just a reactive tool.
+
+Problem
+Bullpen now has:
+
+specialist routing
+work queue
+trigger engine
+approvals
+delivery review
+manual review passes
+That’s enough infrastructure.
+
+But right now the agents still mostly work when:
+
+Nathan asks
+Nathan clicks Run Review
+Nathan manually scans
+If they are going to start working on Momentum and clients, they need:
+
+a schedule
+target scope
+automatic review execution
+automatic work generation
+a daily summary of what they found
+Outcome that matters most
+Make Bullpen proactively generate useful work and summaries on a cadence.
+
+Success means:
+
+trigger scans run automatically
+review passes run automatically
+work items are created where warranted
+selected clients get reviewed proactively
+Bullpen shows a daily summary of what was found and what needs action
+Scope
+In scope
+scheduled trigger scans
+scheduled review passes
+daily Bullpen summary generation
+selected-client review targeting
+controls for which clients are included
+sensible safeguards against queue spam
+Out of scope
+full autonomous execution of tasks
+notifications to external channels unless already trivial
+every client by default if that creates noise
+advanced analytics dashboards
+before/after comparison mode
+Required architecture rules
+1. Start with a controlled cadence
+Do not run everything constantly.
+Start with a predictable, low-noise schedule.
+
+2. Selected clients only where appropriate
+Not every client needs proactive review from day one.
+Allow targeting:
+
+all active clients
+flagged clients
+high-priority clients
+manually selected clients
+3. Reuse existing queue quality controls
+All automatic work generation must respect:
+
+dedupe
+suppression
+snooze
+dismissal
+status rules
+4. Summaries must be decision-useful
+The daily summary should answer:
+
+what matters most today?
+what changed?
+what needs action now?
+which clients need attention?
+5. Avoid alert spam
+If nothing important changed, the daily output should say so cleanly.
+
+Recommended implementation approach
+Phase 1 — Scheduling framework
+Add scheduled execution for:
+
+A. Trigger Scan
+Runs the existing trigger engine automatically.
+
+B. Review Passes
+Runs:
+
+Daily Operations Review
+Client Health Review
+Pipeline Review
+Recommended starting cadence
+once daily in the morning
+optionally an afternoon rerun later if needed
+manual run remains available
+Recommendation
+Start with:
+
+one daily run
+to prove quality before adding more frequency.
+Phase 2 — Client targeting model
+Add a way to decide which clients are included in automatic proactive review.
+
+Recommended v1 targeting options
+all active clients
+priority clients only
+flagged clients only
+manually selected clients
+Best v1 recommendation
+Start with:
+
+all active clients
+or
+priority/flagged clients
+depending on volume
+If client count is already large, prefer:
+
+priority + flagged first
+Suggested config fields
+At org level:
+
+review mode
+included client IDs / tags / filters
+enable/disable per review type
+Phase 3 — Daily Bullpen Summary
+After the scheduled run completes, create a daily summary object/message.
+
+Summary should include
+top operational risks
+top client risks
+top pipeline issues
+work items created
+high-priority items
+blocked or escalated items
+clients needing attention today
+Output locations
+At minimum:
+
+Bullpen page summary card / panel
+stored daily summary record
+optional linked Bullpen thread/message
+Goal
+Nathan can open Bullpen and immediately see what the agents found.
+
+Phase 4 — Work creation rules
+Use the existing review and trigger logic, but only create work when:
+
+it is actionable
+not deduped
+not snoozed/suppressed
+materially important enough
+Important
+Daily review passes should not recreate the same obvious queue noise every morning.
+
+Recommended additions
+record last run timestamp per review type
+compare whether anything materially changed
+include “no meaningful change” outcome when true
+Phase 5 — Momentum-specific proactive work
+The agents should also work on Momentum itself, not only client records.
+
+Recommended system-level daily checks
+OpenClaw config health
+GBP auth health
+invalid control-plane config
+blocked / escalated queue items
+long-lived awaiting_review items
+unhealthy workflow states
+stale unresolved operational items
+Goal
+Bullpen should proactively watch both:
+
+the product/system
+the clients/accounts
+Phase 6 — Safeguards and controls
+Add controls so automation remains useful.
+
+Recommended controls
+enable/disable scheduled reviews
+per-review toggle
+client inclusion mode
+last run time visible
+items created / skipped counts visible
+manual rerun still available
+Optional but good
+“pause automatic reviews” switch
+“dry run” mode for testing
+Recommended v1 schedule
+Daily cadence
+Run once each morning, e.g.:
+
+Daily Operations Review
+Client Health Review
+Pipeline Review
+Trigger scan
+Then produce:
+
+one daily Bullpen summary
+Why this is enough
+It creates the feeling of a team doing a daily standup/review without overwhelming the queue.
+
+Risks and dependencies
+Risks
+too many clients generating too much work
+repetitive summaries with no real change
+queue noise if dedupe/suppression isn’t respected perfectly
+poor client targeting causing wasted review effort
+Dependencies
+existing review passes
+existing trigger engine
+existing work item lifecycle
+existing dedupe/suppression controls
+some config model for scheduled review settings
+QA requirements
+Must test — scheduling
+scheduled runs fire at the intended cadence
+manual runs still work
+repeated daily runs don’t create duplicate noise
+Must test — client targeting
+only the intended clients are included
+excluded clients do not generate findings
+client selection changes are respected on next run
+Must test — summary quality
+daily summary is readable and useful
+no-change days do not produce fake urgency
+high-priority findings are clearly surfaced
+Must test — queue safety
+dedupe/snooze/dismiss rules are respected during scheduled runs
+suppressed items do not reappear prematurely
+actionable new issues still create work when conditions genuinely change
+Must test — system + client coverage
+Momentum/system issues appear in operations summary
+client issues appear in client-health summary
+pipeline issues appear in pipeline summary
+Measurable success criteria
+This task is successful when:
+
+Bullpen runs reviews automatically on a schedule
+selected clients are reviewed without manual prompting
+Momentum/system issues are reviewed proactively too
+meaningful work items are created automatically
+Nathan can open Bullpen and see a daily summary of what the agents found
+the agents begin to feel like an active operating team
+Recommended execution order
+add review scheduling framework
+add client targeting controls
+schedule trigger scan + review passes
+generate/store daily Bullpen summary
+wire summary into Bullpen UI
+QA noise control and client scope
+tune cadence if needed
+What good output looks like from this task
+Please return:
+
+scheduled cadence implemented
+client targeting model chosen
+daily summary structure
+where summaries are stored/displayed
+safeguards against duplicate/noisy work creation
+recommended next refinements after first live runs
+What not to do
+do not run every review constantly
+do not auto-create work for every minor observation
+do not review all clients blindly if volume makes the output useless
+do not ship scheduled reviews without respecting suppression/dedupe
+Final product rule
+The agents start to feel truly alive when they wake up on a cadence, review Momentum and its clients, create owned work, and brief Nathan on what matters today.

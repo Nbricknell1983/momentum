@@ -17,6 +17,7 @@ import { db, doc, collection, query, orderBy, limit, onSnapshot } from '@/lib/fi
 import BullpenCommandCenter from '@/components/BullpenCommandCenter';
 import BullpenWorkQueue from '@/components/BullpenWorkQueue';
 import BullpenReviewPass from '@/components/BullpenReviewPass';
+import BullpenDailyBrief from '@/components/BullpenDailyBrief';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import type { AutomationRulesReadResult } from '@shared/controlPlaneSchemas';
@@ -1823,6 +1824,11 @@ export default function BullpenPage() {
         {/* ── Command Center ───────────────────────────────────────────────── */}
         <div id="bullpen-command-center">
           <BullpenCommandCenter />
+        </div>
+
+        {/* ── Daily Brief ──────────────────────────────────────────────────── */}
+        <div className="rounded-2xl border border-border/40 bg-card p-4">
+          <BullpenDailyBrief />
         </div>
 
         {/* ── Agent Review Passes ──────────────────────────────────────────── */}
