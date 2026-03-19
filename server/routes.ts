@@ -10705,6 +10705,433 @@ ${leadLines}`;
     }
   });
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ENRICHMENT ENGINE — Lead & Client Intelligence Auto-Enrichment
+  // ════════════════════════════════════════════════════════════════════════════
+  //
+  // Three-pass enrichment per record:
+  //   Pass 1 — Identity & Presence   (GPT: industry, category, location, web/social readiness)
+  //   Pass 2 — Strategic Intelligence (GPT: summary, next action, urgency/health)
+  //   Pass 3 — Dependency Check       (deterministic: what's blocked and why)
+  //
+  // Confidence rules:
+  //   ≥ 0.80 → auto-write to record field
+  //   < 0.80 → write to enrichment.* only (suggestion, not truth)
+  //
+  // Skip policy: records enriched within last 7 days are skipped unless force=true.
+  // ════════════════════════════════════════════════════════════════════════════
+
+  const ENRICHMENT_SKIP_DAYS   = 7;
+  const ENRICHMENT_CONFIDENCE  = 0.80;
+
+  // ── Deterministic dependency check ──────────────────────────────────────────
+  async function checkEnrichmentDeps(
+    orgId: string, record: any, type: 'lead' | 'client',
+  ): Promise<Array<{ field: string; reason: string; dependency: string }>> {
+    const blockers: Array<{ field: string; reason: string; dependency: string }> = [];
+
+    // GBP OAuth
+    const gbpSnap = await firestore!.collection('orgs').doc(orgId).collection('settings').doc('gbpConfig').get();
+    const gbpData = gbpSnap.data();
+    if (!gbpData?.tokens?.access_token) {
+      blockers.push({ field: 'gbpData', reason: 'GBP OAuth not connected — GBP performance, reviews and Maps Pack data unavailable', dependency: 'gbp_oauth' });
+    }
+
+    // Ahrefs API
+    if (!process.env.AHREFS_API_KEY) {
+      blockers.push({ field: 'seoBacklinks', reason: 'Ahrefs API not configured — SEO backlink and keyword data unavailable', dependency: 'ahrefs_api' });
+    }
+
+    // Website present?
+    if (!record.website) {
+      blockers.push({ field: 'websiteAnalysis', reason: 'No website URL on record — website, SEO and page performance analysis unavailable', dependency: 'website_field' });
+    }
+
+    // Client: per-client GBP location
+    if (type === 'client' && !record.gbpLocationName) {
+      blockers.push({ field: 'gbpPerformance', reason: 'GBP location not linked for this client — reviews, ranking, and Maps Pack tracking unavailable', dependency: 'gbp_client_link' });
+    }
+
+    // Client: Local Falcon rank tracking
+    if (type === 'client' && !record.localFalconPlaceId) {
+      blockers.push({ field: 'rankTracking', reason: 'Local Falcon place not linked — Maps Pack rank tracking unavailable for this client', dependency: 'local_falcon_place' });
+    }
+
+    return blockers;
+  }
+
+  // ── Pass 1: Identity & Presence (GPT) ────────────────────────────────────────
+  async function runIdentityPass(record: any, type: 'lead' | 'client'): Promise<{
+    industry: string | null; businessCategory: string | null;
+    locationContext: string | null; websiteStatus: 'has_website' | 'no_website' | 'unknown';
+    socialPresence: { facebook: boolean; instagram: boolean; linkedin: boolean };
+    confidence: number; fieldsInferred: string[];
+  }> {
+    const name = record.businessName || record.companyName || record.name || 'Unknown';
+    const lines: string[] = [
+      record.industry          ? `industry: ${record.industry}`         : '',
+      record.website           ? `website: ${record.website}`           : '',
+      record.address           ? `address: ${record.address}`           : '',
+      record.phone             ? `phone: ${record.phone}`               : '',
+      record.notes             ? `notes: ${record.notes?.slice(0, 200)}`: '',
+      record.facebookUrl       ? `facebook: ${record.facebookUrl}`      : '',
+      record.instagramUrl      ? `instagram: ${record.instagramUrl}`    : '',
+      record.linkedinUrl       ? `linkedin: ${record.linkedinUrl}`      : '',
+    ].filter(Boolean);
+
+    try {
+      const cmp = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 350, temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a business intelligence researcher. Infer missing identity fields for a ${type} record. Only infer what you can be reasonably confident about. Do NOT guess blindly.
+Return ONLY JSON:
+{
+  "industry": "inferred industry string or null",
+  "businessCategory": "specific category e.g. 'Dental Practice' or null",
+  "locationContext": "city/state/region string or null",
+  "websiteStatus": "has_website|no_website|unknown",
+  "socialPresence": { "facebook": true/false, "instagram": true/false, "linkedin": true/false },
+  "confidence": 0.0,
+  "fieldsInferred": ["list of fields you inferred with confidence"]
+}`,
+          },
+          { role: 'user', content: `Business: ${name}\nType: ${type}\n${lines.join('\n')}` },
+        ],
+      });
+      return JSON.parse(cmp.choices[0]?.message?.content ?? '{}');
+    } catch {
+      return { industry: null, businessCategory: null, locationContext: null, websiteStatus: 'unknown', socialPresence: { facebook: false, instagram: false, linkedin: false }, confidence: 0, fieldsInferred: [] };
+    }
+  }
+
+  // ── Pass 2a: Lead Strategic Intelligence (GPT) ───────────────────────────────
+  async function runLeadStrategicPass(lead: any): Promise<{
+    dealSummary: string; nextBestAction: string; urgencyLevel: 'high' | 'medium' | 'low';
+    stuckReason: string | null; conversionStrategy: string; confidence: number;
+  }> {
+    const name = lead.businessName || lead.companyName || lead.contactName || 'Unknown';
+    const daysSinceUpdate = lead.updatedAt ? Math.round((Date.now() - new Date(lead.updatedAt).getTime()) / 86400000) : null;
+    const daysSinceActivity = lead.lastActivityAt ? Math.round((Date.now() - new Date(lead.lastActivityAt).getTime()) / 86400000) : null;
+
+    try {
+      const cmp = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 500, temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a Sales Intelligence Specialist for a marketing agency. Analyse this lead and generate actionable sales intelligence.
+Return ONLY JSON:
+{
+  "dealSummary": "2-3 sentence commercial context and opportunity",
+  "nextBestAction": "one specific action to progress this deal",
+  "urgencyLevel": "high|medium|low",
+  "stuckReason": "why this lead may be stalled or null",
+  "conversionStrategy": "brief framing of the most likely path to close",
+  "confidence": 0.0
+}`,
+          },
+          {
+            role: 'user',
+            content: `Lead: ${name} | Stage: ${lead.stage || 'unknown'} | Industry: ${lead.industry || 'unknown'}\nWebsite: ${lead.website || 'none'} | MRR: ${lead.mrr ? '$' + lead.mrr : 'unknown'}\nDays since update: ${daysSinceUpdate ?? 'unknown'} | Days since activity: ${daysSinceActivity ?? 'unknown'}\nNotes: ${lead.notes?.slice(0, 300) || 'none'}`,
+          },
+        ],
+      });
+      return JSON.parse(cmp.choices[0]?.message?.content ?? '{}');
+    } catch {
+      return { dealSummary: '', nextBestAction: '', urgencyLevel: 'medium', stuckReason: null, conversionStrategy: '', confidence: 0 };
+    }
+  }
+
+  // ── Pass 2b: Client Strategic Intelligence (GPT) ─────────────────────────────
+  async function runClientStrategicPass(client: any): Promise<{
+    aiSummary: string; healthContext: string; growthOpportunity: string;
+    nextBestAction: string; deliveryGaps: string[]; confidence: number;
+  }> {
+    const name = client.businessName || client.name || 'Unknown';
+    const seoAge = client.seoEngine?.generatedAt ? Math.round((Date.now() - new Date(client.seoEngine.generatedAt).getTime()) / 86400000) : null;
+    const webAge = client.websiteEngine?.generatedAt ? Math.round((Date.now() - new Date(client.websiteEngine.generatedAt).getTime()) / 86400000) : null;
+    const gbpAge = client.gbpEngine?.generatedAt ? Math.round((Date.now() - new Date(client.gbpEngine.generatedAt).getTime()) / 86400000) : null;
+    const lastContact = client.lastContactDate ? Math.round((Date.now() - new Date(client.lastContactDate).getTime()) / 86400000) : null;
+
+    try {
+      const cmp = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 600, temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a Client Growth Specialist for a marketing agency. Analyse this client and generate actionable intelligence.
+Return ONLY JSON:
+{
+  "aiSummary": "2-3 sentence account overview — health, engagement and key context",
+  "healthContext": "what the current health/delivery status means operationally",
+  "growthOpportunity": "the single biggest growth opportunity for this client right now",
+  "nextBestAction": "specific action to take with this client in the next 7 days",
+  "deliveryGaps": ["list of 0-3 delivery gaps or missing work items"],
+  "confidence": 0.0
+}`,
+          },
+          {
+            role: 'user',
+            content: `Client: ${name} | Health: ${client.healthStatus || 'unknown'} | Delivery: ${client.deliveryStatus || 'unknown'}\nLast contact: ${lastContact !== null ? lastContact + 'd ago' : 'never'} | MRR: ${client.totalMRR ? '$' + client.totalMRR : 'unknown'}\nOnboarded: ${client.clientOnboarding?.strategyOutput ? 'yes' : 'no'}\nSEO engine: ${seoAge !== null ? seoAge + 'd old' : 'missing'} | Website engine: ${webAge !== null ? webAge + 'd old' : 'missing'} | GBP engine: ${gbpAge !== null ? gbpAge + 'd old' : 'missing'}\nNotes: ${client.notes?.slice(0, 300) || 'none'}`,
+          },
+        ],
+      });
+      return JSON.parse(cmp.choices[0]?.message?.content ?? '{}');
+    } catch {
+      return { aiSummary: '', healthContext: '', growthOpportunity: '', nextBestAction: '', deliveryGaps: [], confidence: 0 };
+    }
+  }
+
+  // ── Coverage level calculator ─────────────────────────────────────────────────
+  function computeCoverageLevel(e: any): 'none' | 'partial' | 'good' | 'complete' {
+    const filled = (e.fieldsAutoFilled?.length ?? 0) + (e.dealSummary || e.aiSummary ? 2 : 0);
+    const blocked = e.fieldsBlocked?.length ?? 0;
+    if (filled === 0) return 'none';
+    if (filled >= 4 && blocked === 0) return 'complete';
+    if (filled >= 2) return 'good';
+    return 'partial';
+  }
+
+  // ── Core lead enrichment function ─────────────────────────────────────────────
+  async function enrichLeadRecord(orgId: string, leadId: string, force = false): Promise<{ enriched: boolean; skipped?: boolean; result?: any }> {
+    if (!firestore) return { enriched: false };
+    const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
+    const leadSnap = await leadRef.get();
+    if (!leadSnap.exists) return { enriched: false };
+    const lead = { id: leadId, ...leadSnap.data() as any };
+
+    // Skip if recently enriched
+    if (!force && lead.enrichment?.lastEnrichedAt) {
+      const daysSince = (Date.now() - new Date(lead.enrichment.lastEnrichedAt).getTime()) / 86400000;
+      if (daysSince < ENRICHMENT_SKIP_DAYS) return { enriched: false, skipped: true };
+    }
+
+    const [identity, strategic, blockers] = await Promise.all([
+      runIdentityPass(lead, 'lead'),
+      runLeadStrategicPass(lead),
+      checkEnrichmentDeps(orgId, lead, 'lead'),
+    ]);
+
+    const fieldsAutoFilled: string[] = [];
+    const updates: Record<string, any> = {};
+
+    // Auto-write industry if high confidence and not already set
+    if (!lead.industry && identity.industry && (identity.confidence ?? 0) >= ENRICHMENT_CONFIDENCE) {
+      updates.industry = identity.industry;
+      fieldsAutoFilled.push('industry');
+    }
+
+    const enrichment = {
+      lastEnrichedAt: new Date().toISOString(),
+      version: (lead.enrichment?.version ?? 0) + 1,
+      businessCategory: identity.businessCategory,
+      locationContext: identity.locationContext,
+      websiteStatus: identity.websiteStatus,
+      socialPresence: identity.socialPresence,
+      identityConfidence: identity.confidence,
+      dealSummary: strategic.dealSummary,
+      nextBestAction: strategic.nextBestAction,
+      urgencyLevel: strategic.urgencyLevel,
+      stuckReason: strategic.stuckReason,
+      conversionStrategy: strategic.conversionStrategy,
+      strategicConfidence: strategic.confidence,
+      fieldsAutoFilled,
+      fieldsBlocked: blockers,
+      fieldsNotFound: [],
+      coverageLevel: 'partial',
+    };
+    enrichment.coverageLevel = computeCoverageLevel(enrichment);
+
+    await leadRef.set({ ...updates, enrichment }, { merge: true });
+    return { enriched: true, result: enrichment };
+  }
+
+  // ── Core client enrichment function ──────────────────────────────────────────
+  async function enrichClientRecord(orgId: string, clientId: string, force = false): Promise<{ enriched: boolean; skipped?: boolean; result?: any }> {
+    if (!firestore) return { enriched: false };
+    const clientRef = firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId);
+    const clientSnap = await clientRef.get();
+    if (!clientSnap.exists) return { enriched: false };
+    const client = { id: clientId, ...clientSnap.data() as any };
+
+    if (!force && client.enrichment?.lastEnrichedAt) {
+      const daysSince = (Date.now() - new Date(client.enrichment.lastEnrichedAt).getTime()) / 86400000;
+      if (daysSince < ENRICHMENT_SKIP_DAYS) return { enriched: false, skipped: true };
+    }
+
+    const [identity, strategic, blockers] = await Promise.all([
+      runIdentityPass(client, 'client'),
+      runClientStrategicPass(client),
+      checkEnrichmentDeps(orgId, client, 'client'),
+    ]);
+
+    const fieldsAutoFilled: string[] = [];
+    const updates: Record<string, any> = {};
+
+    if (!client.industry && identity.industry && (identity.confidence ?? 0) >= ENRICHMENT_CONFIDENCE) {
+      updates.industry = identity.industry;
+      fieldsAutoFilled.push('industry');
+    }
+
+    const enrichment = {
+      lastEnrichedAt: new Date().toISOString(),
+      version: (client.enrichment?.version ?? 0) + 1,
+      businessCategory: identity.businessCategory,
+      locationContext: identity.locationContext,
+      websiteStatus: identity.websiteStatus,
+      socialPresence: identity.socialPresence,
+      identityConfidence: identity.confidence,
+      aiSummary: strategic.aiSummary,
+      healthContext: strategic.healthContext,
+      growthOpportunity: strategic.growthOpportunity,
+      nextBestAction: strategic.nextBestAction,
+      deliveryGaps: strategic.deliveryGaps,
+      strategicConfidence: strategic.confidence,
+      fieldsAutoFilled,
+      fieldsBlocked: blockers,
+      fieldsNotFound: [],
+      coverageLevel: 'partial',
+    };
+    enrichment.coverageLevel = computeCoverageLevel(enrichment);
+
+    await clientRef.set({ ...updates, enrichment }, { merge: true });
+    return { enriched: true, result: enrichment };
+  }
+
+  // POST /api/enrichment/run-lead — enrich a single lead record
+  app.post('/api/enrichment/run-lead', requireOrgAccess, async (req: any, res: any) => {
+    const { orgId, leadId, force } = req.body;
+    if (!orgId || !leadId) return res.status(400).json({ error: 'orgId and leadId required' });
+    try {
+      const result = await enrichLeadRecord(orgId, leadId, !!force);
+      res.json(result);
+    } catch (e: any) {
+      console.error('[enrichment/run-lead]', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/enrichment/run-client — enrich a single client record
+  app.post('/api/enrichment/run-client', requireOrgAccess, async (req: any, res: any) => {
+    const { orgId, clientId, force } = req.body;
+    if (!orgId || !clientId) return res.status(400).json({ error: 'orgId and clientId required' });
+    try {
+      const result = await enrichClientRecord(orgId, clientId, !!force);
+      res.json(result);
+    } catch (e: any) {
+      console.error('[enrichment/run-client]', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/enrichment/batch — async batch enrichment for all active leads + clients
+  app.post('/api/enrichment/batch', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const { orgId, force } = req.body;
+    const uid = (req as any).firebaseUser?.uid ?? 'system';
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+
+    // Mark batch as running
+    const batchRef = firestore.collection('orgs').doc(orgId).collection('settings').doc('enrichmentBatch');
+    const startedAt = new Date().toISOString();
+    await batchRef.set({ status: 'running', startedAt, startedBy: uid, completedAt: null, error: null }, { merge: true });
+
+    // Respond immediately — process in background
+    res.json({ started: true, startedAt });
+
+    // Background processing
+    (async () => {
+      try {
+        const BATCH_LIMIT = 25;
+        let enrichedLeads = 0, skippedLeads = 0, enrichedClients = 0, skippedClients = 0;
+        let fieldsAutoFilled = 0;
+        const blockerCounts: Record<string, number> = {};
+
+        // Leads — active pipeline only
+        const leadsSnap = await firestore!.collection('orgs').doc(orgId).collection('leads')
+          .where('stage', 'not-in', ['won', 'lost', 'inactive'])
+          .limit(BATCH_LIMIT).get();
+
+        for (const doc of leadsSnap.docs) {
+          try {
+            const r = await enrichLeadRecord(orgId, doc.id, !!force);
+            if (r.skipped) { skippedLeads++; continue; }
+            if (r.enriched) {
+              enrichedLeads++;
+              fieldsAutoFilled += r.result?.fieldsAutoFilled?.length ?? 0;
+              for (const b of (r.result?.fieldsBlocked ?? [])) {
+                blockerCounts[b.dependency] = (blockerCounts[b.dependency] ?? 0) + 1;
+              }
+            }
+            await new Promise(r => setTimeout(r, 400)); // rate-limit GPT calls
+          } catch (err: any) {
+            console.error(`[enrichment/batch] lead ${doc.id} error:`, err.message);
+          }
+        }
+
+        // Clients — active (not archived)
+        const clientsSnap = await firestore!.collection('orgs').doc(orgId).collection('clients')
+          .where('archived', '==', false)
+          .limit(BATCH_LIMIT).get();
+
+        for (const doc of clientsSnap.docs) {
+          try {
+            const r = await enrichClientRecord(orgId, doc.id, !!force);
+            if (r.skipped) { skippedClients++; continue; }
+            if (r.enriched) {
+              enrichedClients++;
+              fieldsAutoFilled += r.result?.fieldsAutoFilled?.length ?? 0;
+              for (const b of (r.result?.fieldsBlocked ?? [])) {
+                blockerCounts[b.dependency] = (blockerCounts[b.dependency] ?? 0) + 1;
+              }
+            }
+            await new Promise(r => setTimeout(r, 400));
+          } catch (err: any) {
+            console.error(`[enrichment/batch] client ${doc.id} error:`, err.message);
+          }
+        }
+
+        await batchRef.set({
+          status: 'complete',
+          completedAt: new Date().toISOString(),
+          enrichedLeads, skippedLeads,
+          enrichedClients, skippedClients,
+          fieldsAutoFilled,
+          blockerCounts,
+          totalProcessed: enrichedLeads + enrichedClients,
+        }, { merge: true });
+
+        console.log(`[enrichment/batch] complete — ${enrichedLeads}L ${enrichedClients}C enriched, ${skippedLeads + skippedClients} skipped`);
+      } catch (err: any) {
+        console.error('[enrichment/batch] fatal error:', err.message);
+        await firestore!.collection('orgs').doc(orgId).collection('settings').doc('enrichmentBatch')
+          .set({ status: 'error', error: err.message, completedAt: new Date().toISOString() }, { merge: true });
+      }
+    })();
+  });
+
+  // GET /api/enrichment/batch-status — poll enrichment batch progress
+  app.get('/api/enrichment/batch-status', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.query?.orgId as string || req.trustedOrgId;
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+    try {
+      const snap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('enrichmentBatch').get();
+      if (!snap.exists) return res.json({ status: 'idle' });
+      return res.json(snap.data());
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+
   // ── POST /api/bullpen/daily-run ─────────────────────────────────────────────
   // Runs the full daily brief: trigger scan + 3 review passes + GPT summary.
   // Called manually by managers, or automatically by the server-side scheduler.

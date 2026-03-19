@@ -1,0 +1,353 @@
+Build Brief — Lead & Client Intelligence Auto-Enrichment, Research Completion & Dependency Signalling
+Goal
+Make Bullpen’s agents automatically enrich all leads and clients by researching and populating missing intelligence fields where possible, while explicitly flagging any missing dependencies, integrations, or paid data resources required to complete the rest.
+
+Core outcome
+Every lead and client record should move toward being:
+
+more complete
+more useful
+more researched
+more operationally ready
+without relying on Nathan to manually fill obvious fields one by one.
+
+If the agents cannot complete something, they should not leave silent blanks.
+They should explain why and what is needed to unlock it.
+
+Problem
+Momentum now has:
+
+Bullpen threads
+work queue
+specialist routing
+trigger engine
+daily reviews
+approvals
+delivery review
+But a lot of lead/client intelligence still depends on:
+
+manual input
+one-off scans
+disconnected enrichment actions
+empty fields with no explanation
+That means the records are not as operationally rich as they could be.
+
+The agents should be doing the work of:
+
+researching
+inferring
+enriching
+flagging blockers
+keeping records current
+across all leads and clients, not just on-demand one at a time.
+
+Outcome that matters most
+Make lead and client records proactively richer and more actionable.
+
+Success means:
+
+missing fields are auto-filled where confidence is high
+public research is used where appropriate
+strategic sections are generated and refreshed
+blanks are explainable
+dependency/resource requirements are surfaced explicitly
+all active leads and clients can be processed systematically
+Scope
+In scope
+intelligence field coverage map across leads and clients
+automated enrichment/research passes for all leads and clients
+confidence-aware field population
+dependency/resource signalling for blocked fields
+enrichment status visibility per record
+scheduling / batch processing model for all active records
+Out of scope
+guaranteed completion of every field regardless of available data
+blind low-confidence autofill
+immediate integration with every external paid data source
+full custom ETL platform
+rewriting the CRM data model from scratch
+Required architecture rules
+1. No silent blanks
+For each important field, the system should do one of:
+
+populate it automatically
+mark it as suggested / pending review
+mark it as not found
+mark it as blocked by missing dependency/resource
+A blank with no explanation is not acceptable once the enrichment system runs.
+
+2. Confidence must govern write behavior
+High confidence → auto-fill
+Medium confidence → suggestion/review flag if appropriate
+Low confidence → do not write as truth; create note/finding instead
+3. Use specialist ownership by field domain
+Do not let one generic enrichment prompt try to do everything equally well.
+
+4. Batch safely across all leads and clients
+This should work at scale:
+
+all active leads
+all active clients
+without noisy duplication, repeated junk writes, or uncontrolled API cost
+5. Missing resources must become explicit work
+If enrichment is blocked by missing APIs/integrations/tools, create:
+
+dependency note
+work item
+blocker
+rather than silently skipping it
+Field coverage model
+Phase 1 — Create a field coverage map
+For every key intelligence field on lead/client records, define:
+
+field name
+applies to lead / client / both
+source type
+existing internal data
+public web research
+connected integration
+paid external data
+manual-only
+owner role
+auto-fill allowed? yes/no
+confidence threshold
+fallback if unavailable
+Recommended high-priority field groups
+A. Core business identity
+business name
+industry
+website
+phone
+address
+business category
+service area / location context
+Likely owners:
+
+Website Specialist
+GBP Specialist
+Strategy Specialist
+B. Digital presence
+Facebook
+Instagram
+LinkedIn
+Google Business Profile presence
+reviews summary
+local visibility readiness
+sitemap presence / crawlability
+Likely owners:
+
+Social Media Specialist
+GBP Specialist
+Website Specialist
+SEO Specialist
+C. Strategic intelligence
+AI deal/client summary
+strategy intelligence
+growth prescription
+next best action
+priority diagnosis
+commercial opportunity/risk framing
+Likely owners:
+
+Strategy Specialist
+Client Growth Specialist
+Sales Specialist
+Commercial Intelligence
+D. Pipeline / sales context
+progression status
+contact gaps
+stall reasons
+recommended next move
+urgency / deal risk flags
+Likely owners:
+
+Sales Specialist
+Strategy Specialist
+E. Channel / growth readiness
+website engine status
+SEO engine status
+GBP engine status
+ads engine status
+missing vs stale intelligence state
+basic competitor set where possible
+Likely owners:
+
+Website Specialist
+SEO Specialist
+GBP Specialist
+Google Ads Specialist
+Recommended implementation approach
+Phase 2 — Build enrichment passes by domain
+Do not try one monolithic prompt.
+Run specialist-aware enrichment passes.
+
+Recommended first passes
+1. Identity & presence enrichment
+Covers:
+
+industry
+website
+socials
+GBP presence
+sitemap/basic website readiness
+2. Strategic enrichment
+Covers:
+
+summary
+strategy intelligence
+growth prescription
+next best action
+3. Sales/pipeline enrichment
+Covers:
+
+contact gap interpretation
+stuck lead framing
+next step recommendation
+urgency
+Phase 3 — Process all active leads and clients
+Add a batch processing model.
+
+Recommended v1 scope
+all active leads
+all active clients
+Suggested controls
+process in batches
+store last enrichment time per record
+skip recent successful enrichment unless forced
+support manual rerun per record and global rerun
+Goal
+This should be operationally scalable, not one-record-at-a-time only.
+
+Phase 4 — Dependency / resource signalling
+If a field cannot be filled because a resource is missing, make it explicit.
+
+Examples
+Ahrefs/API not connected
+GBP OAuth missing
+Local Falcon not available
+no sitemap found
+no reliable social profile found
+website unreachable
+external lookup quota/tool unavailable
+Required behavior
+Create one of:
+
+enrichment blocker on the record
+Bullpen work item
+dependency note
+status badge on the field cluster
+Example message
+“SEO backlink and keyword intelligence unavailable — Ahrefs integration/API required.”
+
+That is the behavior you asked for.
+
+Phase 5 — Enrichment status per record
+Each lead/client should show something like:
+
+last enriched at
+coverage level
+fields auto-filled
+fields blocked by dependency
+fields not found
+confidence warnings if relevant
+Goal
+Nathan can tell the difference between:
+
+not yet processed
+processed but not found
+blocked by missing resource
+low-confidence/unverified
+complete enough
+Phase 6 — Queue/work item integration
+Use Bullpen’s work system where the enrichment process finds:
+
+important gaps
+blocked dependencies
+strategic issues
+data quality risks
+Important
+Do not create a work item for every blank field.
+Create work only when:
+
+it matters operationally
+it needs a human/integration/resource decision
+it blocks useful execution
+Scheduling model
+Recommended cadence
+nightly or daily enrichment pass across active records
+lighter refresh pass on recent/changed records
+manual “Enrich Now” still available
+Recommendation
+Start with:
+
+one scheduled enrichment cycle daily
+skip records enriched recently unless something changed
+This avoids:
+
+repeated useless reprocessing
+excessive external calls
+noisy queue output
+Risks and dependencies
+Risks
+low-confidence autofill polluting records
+too many external lookups causing cost/rate-limit issues
+creating work item spam from routine missing data
+trying to enrich every field equally instead of focusing on value
+Dependencies
+existing record schemas
+current lead/client pages
+specialist routing logic
+external data sources available today
+policy on what can be auto-written vs suggested
+QA requirements
+Must test — autofill quality
+high-confidence fields are populated correctly
+low-confidence guesses are not written as truth
+missing vs blocked vs not-found are distinguishable
+Must test — scale
+batch processing handles all active leads and clients without duplicate noise
+recent records are not unnecessarily reprocessed
+rerun behavior is controlled
+Must test — dependency handling
+missing integrations/resources create explicit blockers/notes
+blocked fields do not remain silent blanks
+queue/work items are only created where operationally justified
+Must test — UI clarity
+a lead/client clearly shows enrichment state
+last enriched time is visible
+field completeness/explanation is understandable
+Measurable success criteria
+This task is successful when:
+
+all active leads and clients can be processed by the enrichment system
+high-confidence fields are auto-filled across records
+strategic sections are generated where appropriate
+missing data is explained instead of silently blank
+dependency/resource blockers are surfaced explicitly
+the agents materially improve the completeness and usefulness of records without requiring Nathan to fill everything manually
+Recommended execution order
+define field coverage map
+define specialist enrichment passes
+implement batch processing for all active leads/clients
+add confidence-aware write rules
+add dependency/blocker signalling
+add per-record enrichment status UI
+QA quality, scale, and noise control
+What good output looks like from this task
+Please return:
+
+field coverage map
+specialist enrichment passes implemented
+batch processing model
+confidence rules used
+dependency/blocker model
+enrichment status UI added
+any fields still intentionally manual-only
+What not to do
+do not blindly fill low-confidence data
+do not leave silent blanks after enrichment has run
+do not create work items for every trivial missing field
+do not process all records in a way that creates uncontrolled API cost/noise
+do not collapse “not found” and “missing dependency” into the same outcome
+Final product rule
+The agents should act like a research and enrichment workforce for every lead and client record: filling what they can, explaining what they cannot, and escalating what requires real resources or decisions.

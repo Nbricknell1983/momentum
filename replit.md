@@ -50,6 +50,8 @@ Preferred communication style: Simple, everyday language.
 - **Autopilot Execution**: One-click auto-approval for queued AI actions for clients in autonomous mode.
 - **Bullpen**: Internal AI workforce command layer (manager-only) with summary metrics, attention items, workforce roles, and Automation Rules. Supports multimedia uploads, live voice dictation, structured thread creation, and Bullpen AI synthesis responses via specialized GPT calls.
 - **Bullpen Work Queue**: Trigger-driven system scanning Momentum state for signals and creating structured work items for proactive operational management.
+- **Bullpen Daily Brief**: Scheduled daily agent review — trigger scan + 3 review passes (operations, client health, pipeline) + GPT synthesis into a morning brief. Auto-runs on configurable AEST cadence (default 8am). Stored in `orgs/{orgId}/bullpenSummaries/{date}`. Scheduler uses an in-memory key (`INTERNAL_SCHEDULER_KEY`) for safe server-to-server calls.
+- **Intelligence Enrichment Engine**: Three-pass auto-enrichment for all active leads and clients. Pass 1: identity & presence (GPT: industry, category, location). Pass 2: strategic intelligence (GPT: deal/client summary, next action, urgency). Pass 3: deterministic dependency check (GBP OAuth, Ahrefs API, website field, Local Falcon). Confidence ≥ 0.80 → auto-write to record field; below → stored in `enrichment.*` only. 7-day skip policy. Batch endpoint fires async and stores progress at `orgs/{orgId}/settings/enrichmentBatch`.
 
 ## External Dependencies
 
