@@ -16,6 +16,7 @@ import type { Lead, Activity, Client, NBAAction } from '@/lib/types';
 import { db, doc, collection, query, orderBy, limit, onSnapshot } from '@/lib/firebase';
 import BullpenCommandCenter from '@/components/BullpenCommandCenter';
 import BullpenWorkQueue from '@/components/BullpenWorkQueue';
+import BullpenReviewPass from '@/components/BullpenReviewPass';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import type { AutomationRulesReadResult } from '@shared/controlPlaneSchemas';
@@ -1823,6 +1824,9 @@ export default function BullpenPage() {
         <div id="bullpen-command-center">
           <BullpenCommandCenter />
         </div>
+
+        {/* ── Agent Review Passes ──────────────────────────────────────────── */}
+        <BullpenReviewPass />
 
         {/* ── Work Queue ───────────────────────────────────────────────────── */}
         <BullpenWorkQueue />

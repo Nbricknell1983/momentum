@@ -1,0 +1,325 @@
+Build Brief — Agent-Generated Daily / Client Review Passes
+Goal
+Make Bullpen’s agents proactively review Momentum and its clients on a recurring cadence, generating meaningful work items and insights without waiting for Nathan to manually ask every time.
+
+Core product decision
+The agents should not only react to direct prompts and trigger conditions.
+They should also perform structured review passes that simulate how a competent operating team checks the business daily.
+
+This is how the workforce starts to feel continuously active.
+
+Problem
+Bullpen now has:
+
+command threads
+specialist routing
+a live work queue
+trigger-based work creation
+governance / approval states
+That’s strong.
+
+But the system still mostly wakes up because:
+
+Nathan asks something
+or a narrow rule-based trigger fires
+What’s still missing is the equivalent of a leadership/operator routine:
+
+daily review of the business
+client review pass
+backlog/work queue review
+stale-risk scan with judgment, not just threshold checks
+specialist-generated observations that are broader than simple triggers
+Without this, the agents are active, but not yet behaving like a standing operating team.
+
+Outcome that matters most
+Make the agents proactively generate high-value review output and work items on a cadence, with clear ownership and signal quality.
+
+Success means:
+
+Bullpen can run daily/systematic reviews automatically or on demand
+reviews generate useful findings, not noise
+findings become structured Bullpen work items and/or review summaries
+reviews feel like real specialist oversight, not threshold spam
+Scope
+In scope
+daily review pass framework
+client review pass framework
+specialist review prompts for recurring analysis
+work item generation from review findings
+review summary surfaced in Bullpen
+controls for cadence / manual rerun
+Out of scope
+full autonomous execution of recommendations
+full reporting/BI dashboard replacement
+unlimited scheduled jobs
+every possible specialist pass in v1
+external notifications/emailing in this task unless already trivial
+Required architecture rules
+1. Reviews must produce meaningful judgment, not just repeat raw triggers
+A review pass should synthesize signals into useful conclusions, not just re-list threshold breaches.
+
+2. Reviews should complement, not duplicate, trigger logic
+The trigger engine catches direct conditions.
+Review passes should provide:
+
+synthesis
+prioritisation
+cross-signal interpretation
+client/account perspective
+3. Work item creation must stay controlled
+Review-generated work should still respect:
+
+dedupe
+suppression
+existing lifecycle rules
+4. Start with a small number of valuable review passes
+Do not make every role run every hour.
+Start with the highest-value passes.
+
+5. Bullpen remains the command layer
+Review outputs should surface in Bullpen as:
+
+summary cards
+thread messages
+work items
+queue entries
+not as background magic no one can inspect
+Recommended implementation approach
+Phase 1 — Define review pass types
+Start with 2–4 concrete review passes.
+
+Recommended v1 passes
+1. Daily Operations Review
+Primary owner: Operations Specialist
+Supporting: Strategy Specialist, QA Tester where relevant
+
+Purpose
+Review:
+
+open work queue state
+blocked items
+awaiting review items
+stale/incomplete operational issues
+escalation pressure
+Output
+top operational risks
+what needs triage today
+what is blocked
+what should be escalated
+2. Daily Client Health Review
+Primary owner: Client Growth Specialist
+Supporting: Strategy Specialist, relevant channel specialist if needed
+
+Purpose
+Review per-client signals like:
+
+health score movement
+contact inactivity
+onboarding completeness
+stale/missing engines
+broken integrations
+recent activity drop
+Output
+at-risk clients
+clients needing follow-up
+expansion/retention opportunities
+recommended next action per account where relevant
+3. Pipeline Review
+Primary owner: Sales Specialist
+Supporting: Strategy Specialist
+
+Purpose
+Review:
+
+leads stuck in stage
+no recent follow-up
+pipeline aging
+progression risk
+conversion drag
+Output
+deals/leads needing movement
+follow-up priority
+objection/stall risk
+recommended outreach/sequence action
+4. Product / System Review (optional v1 or v2)
+Primary owner: Operations Specialist or QA Tester
+Supporting: Backend / Frontend depending on signal type
+
+Purpose
+Review:
+
+broken configs
+invalid control-plane state
+integration health issues
+recurring regressions
+unhealthy operational systems
+Output
+product/system issues needing attention
+reliability risks
+recommended owner and next action
+Phase 2 — Define review input packs
+Each review pass should consume a structured set of system/client signals.
+
+Example inputs
+current open queue items
+blocked/escalated items
+client records + health
+recent activity windows
+engine freshness metadata
+integration statuses
+onboarding status
+recent review outcomes
+Goal
+Give reviews enough context to make useful judgments, but not so much raw noise that output becomes muddy.
+
+Phase 3 — Specialist review prompts
+Each pass should use role-appropriate context.
+
+Example
+Operations review prompt should think in:
+
+sequencing
+blockers
+governance
+execution risk
+Client health review prompt should think in:
+
+retention
+expansion
+churn prevention
+account risk
+intervention opportunity
+Pipeline review prompt should think in:
+
+stage progression
+outreach
+follow-up
+stall removal
+conversion support
+Goal
+These should feel like specialist-led reviews, not one generic “summarize data” prompt.
+
+Phase 4 — Review outputs
+Each pass should produce two things:
+
+A. Human-readable summary
+Shown in Bullpen as:
+
+daily review card
+summary panel
+thread message
+maybe one summary section per pass
+B. Structured findings
+Converted into:
+
+new work items where warranted
+updated priorities
+maybe summary metrics/counts
+Important
+Not every observation needs a new work item.
+The pass should create work only where it adds operational value.
+
+Phase 5 — Scheduling and manual run controls
+Add support for:
+
+Manual run
+“Run Daily Review”
+“Run Client Review”
+“Run Pipeline Review”
+Optional automatic cadence
+Later or in v1 if easy:
+
+once per day
+on-demand only if automation timing is not ready
+Recommendation
+Start with:
+
+on-demand + optional daily scheduled run
+not high-frequency automation
+Phase 6 — Queue integration
+Review passes should integrate with the queue cleanly.
+
+Rules
+respect dedupe
+do not recreate suppressed items blindly
+create items only when review identifies something actionable
+attach source as:
+daily_operations_review
+client_health_review
+pipeline_review
+etc.
+Goal
+Queue quality stays high.
+
+Recommended v1 output style
+Each review pass should return:
+
+Top findings
+What matters most
+Recommended actions
+Owner / supporting roles
+Items created
+Items skipped due to dedupe/suppression
+Escalations if any
+This keeps the output operator-friendly.
+
+Risks and dependencies
+Risks
+review passes becoming repetitive trigger summaries
+too many low-value work items being created
+schedule noise if cadence is too frequent
+weak prioritisation if context is too broad or too shallow
+Dependencies
+current queue/work item model
+current trigger engine
+current specialist routing model
+enough client/system context in Firestore to support useful review synthesis
+QA requirements
+Must test — review quality
+review pass produces useful findings, not generic filler
+findings differ by review type
+owner/supporting role suggestions are sensible
+Must test — work generation
+actionable findings create work items where appropriate
+dedupe prevents duplicates
+suppressed/dismissed items are respected
+Must test — usability
+review summary is readable in Bullpen
+manual run controls work
+review output does not flood the queue with low-value items
+Must test — cadence
+repeated runs do not create nonsense duplicates
+daily run timing does not produce reprocessing noise if nothing changed
+Measurable success criteria
+This task is successful when:
+
+Bullpen can run a daily/client/pipeline review pass
+review passes generate meaningful specialist-led summaries
+valuable findings become work items with owners
+queue quality stays controlled
+the agents begin to feel continuously active, not just reactive
+Recommended execution order
+define v1 review pass types
+define input packs for each pass
+build specialist review prompts
+surface summary output in Bullpen
+create structured work items from actionable findings
+add manual run controls
+optionally add daily scheduling
+QA for usefulness vs noise
+What good output looks like from this task
+Please return:
+
+which review passes were implemented
+what input signals each uses
+how outputs are surfaced
+how work item creation is controlled
+whether scheduling is included or manual-only
+any observed noise risks / recommended next refinements
+What not to do
+do not run every specialist on every cycle
+do not create work items for every observation
+do not let review passes duplicate the queue mechanically
+do not ship reviews that are just generic summaries with no operational value
+Final product rule
+The agents start to feel alive when they routinely review the business, detect what matters, and turn that into owned work — not only when Nathan asks a question.

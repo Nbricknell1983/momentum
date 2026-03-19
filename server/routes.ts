@@ -10073,6 +10073,336 @@ Return JSON with exactly these fields:
     }
   });
 
+  // ─── Bullpen Review Passes ────────────────────────────────────────────────
+
+  // Shared dedup check for review-pass work item creation (mirrors trigger-scan logic)
+  async function reviewExistingItem(orgId: string, signal: string, clientId?: string): Promise<boolean> {
+    const snap = await firestore!.collection('orgs').doc(orgId).collection('bullpenWork')
+      .where('sourceSignal', '==', signal).get();
+    return snap.docs.some(d => {
+      const data = d.data();
+      if (clientId && data.clientId !== clientId) return false;
+      if (data.status === 'complete') return false;
+      if (data.dismissedAt) {
+        if (Date.now() - new Date(data.dismissedAt).getTime() > 30 * 86400000) return false;
+      }
+      if (data.suppressedUntil && new Date(data.suppressedUntil).getTime() > Date.now()) return true;
+      return true;
+    });
+  }
+
+  // GET /api/bullpen/review-passes — latest review per type
+  app.get('/api/bullpen/review-passes', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const orgId = req.query.orgId as string;
+    if (!orgId || !firestore) return res.status(400).json({ error: 'orgId required' });
+    try {
+      const snap = await firestore.collection('orgs').doc(orgId).collection('bullpenReviews')
+        .orderBy('runAt', 'desc').limit(30).get();
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const latest: Record<string, any> = {};
+      for (const r of all) {
+        const rt = (r as any).reviewType;
+        if (!latest[rt]) latest[rt] = r;
+      }
+      res.json({ reviews: latest });
+    } catch (e: any) {
+      console.error('[bullpen/review-passes] GET error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/bullpen/review-pass — run a specialist review pass
+  app.post('/api/bullpen/review-pass', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const { orgId, reviewType } = req.body;
+    if (!orgId || !reviewType || !firestore) return res.status(400).json({ error: 'orgId and reviewType required' });
+
+    const uid = (req as any).user?.uid ?? 'unknown';
+    const now = Date.now();
+    const msPerDay = 86400000;
+
+    function daysAgo(ts: any): number {
+      if (!ts) return Infinity;
+      return Math.round((now - new Date(ts.toDate?.() ?? ts).getTime()) / msPerDay);
+    }
+
+    try {
+      let systemPrompt = '';
+      let dataPack = '';
+
+      // ── Operations Review ──────────────────────────────────────────────────
+      if (reviewType === 'operations') {
+        systemPrompt = `You are the Operations Manager for a marketing agency's AI workforce. Perform a daily operations review.
+
+Analyse the work queue state and system health. Identify:
+- Top operational risks (blocked items, stale escalations, governance gaps)
+- What needs triage or escalation today
+- Systemic patterns worth flagging
+- Any items that should prompt immediate action
+
+Think in: sequencing, blockers, governance, execution risk. Be specific — reference item titles and client names. Don't re-state obvious counts.
+
+Return ONLY a JSON object:
+{
+  "summary": "2-3 sentence top-level assessment",
+  "findings": [
+    {
+      "title": "short title",
+      "observation": "specific finding in 1-2 sentences",
+      "priority": "high|medium|low",
+      "owner": "Operations Manager",
+      "supporting": ["Backend Engineer"],
+      "nextAction": "specific action",
+      "createWorkItem": false,
+      "sourceSignal": "review_operations_finding"
+    }
+  ]
+}`;
+
+        // Build data pack: work queue state + system health
+        const qSnap = await firestore.collection('orgs').doc(orgId).collection('bullpenWork')
+          .orderBy('createdAt', 'desc').limit(60).get();
+        const qItems = qSnap.docs.map(d => d.data() as any);
+
+        const byStatus: Record<string, any[]> = {};
+        for (const item of qItems) {
+          if (!byStatus[item.status]) byStatus[item.status] = [];
+          byStatus[item.status].push(item);
+        }
+
+        const statusCounts = Object.entries(byStatus)
+          .map(([s, items]) => `${s}: ${items.length}`)
+          .join(', ');
+        const openCount = qItems.filter(i => !['complete'].includes(i.status) && !i.dismissedAt).length;
+
+        const formatItems = (items: any[], max = 5) =>
+          items.slice(0, max).map(i =>
+            `  - "${i.title}" | ${i.priority} priority | ${i.status} | ${daysAgo(i.createdAt)}d old`
+          ).join('\n') || '  (none)';
+
+        // System health
+        const [ocSnap, rulesSnap, gbpSnap] = await Promise.all([
+          firestore.collection('orgs').doc(orgId).collection('settings').doc('openclawConfig').get(),
+          firestore.collection('orgs').doc(orgId).collection('settings').doc('automationRules').get(),
+          firestore.collection('orgs').doc(orgId).collection('settings').doc('gbp').get(),
+        ]);
+        const ocStatus = ocSnap.data()?.lastVerification?.status ?? 'unknown';
+        const rulesValid = rulesSnap.exists;
+        const gbpStatus = gbpSnap.data()?.connectionStatus ?? 'unknown';
+
+        dataPack = `Work Queue (${openCount} open):
+Status breakdown: ${statusCounts}
+
+Blocked items:
+${formatItems(byStatus['blocked'] ?? [])}
+
+Awaiting Review:
+${formatItems(byStatus['awaiting_review'] ?? [])}
+
+Escalated:
+${formatItems(byStatus['escalated'] ?? [])}
+
+Changes Requested:
+${formatItems(byStatus['changes_requested'] ?? [])}
+
+Held:
+${formatItems(byStatus['held'] ?? [])}
+
+System Health:
+- OpenClaw: ${ocStatus}
+- Automation Rules: ${rulesValid ? 'configured' : 'not configured'}
+- GBP Connection: ${gbpStatus}
+
+Recent high-priority items:
+${formatItems(qItems.filter(i => i.priority === 'high' && i.status !== 'complete').slice(0, 6))}`;
+      }
+
+      // ── Client Health Review ───────────────────────────────────────────────
+      else if (reviewType === 'client_health') {
+        systemPrompt = `You are the Client Growth Specialist for a marketing agency. Perform a daily client health review.
+
+Analyse the client portfolio for churn risk, engagement gaps, and operational delays. Identify:
+- Clients at risk of churning or disengaging
+- Accounts where follow-up is overdue
+- Onboarding gaps blocking delivery
+- Missing baselines preventing growth work
+- Expansion or upsell opportunities worth flagging
+
+Think in: retention, churn prevention, account risk, intervention timing, expansion. Reference specific client names. Prioritise accounts needing immediate action.
+
+Return ONLY a JSON object:
+{
+  "summary": "2-3 sentence portfolio overview",
+  "findings": [
+    {
+      "title": "short title",
+      "observation": "specific finding about this client",
+      "priority": "high|medium|low",
+      "owner": "Client Growth Specialist",
+      "supporting": ["relevant specialist"],
+      "nextAction": "specific action",
+      "createWorkItem": false,
+      "sourceSignal": "review_client_health_finding",
+      "clientId": "the-client-id",
+      "clientName": "Client Name"
+    }
+  ]
+}`;
+
+        const clientsSnap = await firestore.collection('orgs').doc(orgId).collection('clients')
+          .where('archived', '==', false).get();
+        const clients = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+
+        const clientLines = clients.map(c => {
+          const name = c.businessName || c.name || 'Unknown';
+          const lastContact = daysAgo(c.lastContactDate || c.updatedAt);
+          const seoDays = c.seoEngine?.generatedAt ? daysAgo(c.seoEngine.generatedAt) : null;
+          const webDays = c.websiteEngine?.generatedAt ? daysAgo(c.websiteEngine.generatedAt) : null;
+          const gbpDays = c.gbpEngine?.generatedAt ? daysAgo(c.gbpEngine.generatedAt) : null;
+          const adsDays = c.adsEngine?.generatedAt ? daysAgo(c.adsEngine.generatedAt) : null;
+          const onboarded = c.clientOnboarding?.strategyOutput ? 'yes' : 'no';
+          return `  - ID:${c.id} | ${name} | ${c.deliveryStatus || 'unknown'} | last contact: ${lastContact === Infinity ? 'never' : lastContact + 'd ago'} | SEO: ${seoDays === null ? 'missing' : seoDays + 'd'} | Web: ${webDays === null ? 'missing' : webDays + 'd'} | GBP: ${gbpDays === null ? 'missing' : gbpDays + 'd'} | Ads: ${adsDays === null ? 'missing' : adsDays + 'd'} | onboarded: ${onboarded}`;
+        }).join('\n');
+
+        dataPack = `Client Portfolio (${clients.length} active clients):
+${clientLines}`;
+      }
+
+      // ── Pipeline Review ────────────────────────────────────────────────────
+      else if (reviewType === 'pipeline') {
+        systemPrompt = `You are the Sales Specialist for a marketing agency. Perform a daily pipeline review.
+
+Analyse the lead pipeline for stuck deals, overdue follow-ups, and conversion risk. Identify:
+- Leads stuck in stage too long without activity
+- Deals at risk of going cold
+- Leads closest to conversion that need a push
+- Follow-up gaps that could cost the close
+
+Think in: stage progression, follow-up timing, stall detection, outreach priority, conversion support. Reference specific lead names and stages. Be direct — no padding.
+
+Return ONLY a JSON object:
+{
+  "summary": "2-3 sentence pipeline overview",
+  "findings": [
+    {
+      "title": "short title",
+      "observation": "specific finding about this lead",
+      "priority": "high|medium|low",
+      "owner": "Sales Specialist",
+      "supporting": ["Strategy Advisor"],
+      "nextAction": "specific action",
+      "createWorkItem": false,
+      "sourceSignal": "review_pipeline_finding",
+      "clientId": "the-lead-id",
+      "clientName": "Lead Name"
+    }
+  ]
+}`;
+
+        const leadsSnap = await firestore.collection('orgs').doc(orgId).collection('leads')
+          .where('stage', 'not-in', ['won', 'lost', 'inactive']).get();
+        const leads = leadsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+
+        const leadLines = leads.map(l => {
+          const name = l.businessName || l.contactName || 'Unknown';
+          const daysSinceUpdate = daysAgo(l.updatedAt);
+          const daysSinceActivity = daysAgo(l.lastActivityAt);
+          return `  - ID:${l.id} | ${name} | stage: ${l.stage} | updated: ${daysSinceUpdate === Infinity ? 'never' : daysSinceUpdate + 'd ago'} | last activity: ${daysSinceActivity === Infinity ? 'never' : daysSinceActivity + 'd ago'}`;
+        }).join('\n');
+
+        dataPack = `Active Pipeline (${leads.length} leads):
+${leadLines}`;
+      } else {
+        return res.status(400).json({ error: 'Invalid reviewType. Use: operations | client_health | pipeline' });
+      }
+
+      // ── GPT call ───────────────────────────────────────────────────────────
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 1500,
+        temperature: 0.3,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Today's data:\n\n${dataPack}` },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content ?? '{}';
+      let parsed: { summary: string; findings: any[] };
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = { summary: 'Review completed.', findings: [] };
+      }
+
+      const findings: any[] = Array.isArray(parsed.findings) ? parsed.findings : [];
+
+      // ── Work item creation for actionable findings ─────────────────────────
+      const TYPE_MAP: Record<string, 'system' | 'client' | 'pipeline'> = {
+        operations:   'system',
+        client_health:'client',
+        pipeline:     'pipeline',
+      };
+      const OWNER_MAP: Record<string, string> = {
+        operations:   'Operations Manager',
+        client_health:'Client Growth Specialist',
+        pipeline:     'Sales Specialist',
+      };
+
+      let itemsCreated = 0;
+      let itemsSkipped = 0;
+
+      for (const f of findings) {
+        if (!f.createWorkItem) continue;
+        const signal = f.sourceSignal || `review_${reviewType}_finding`;
+        const clientId = f.clientId || undefined;
+        const dup = await reviewExistingItem(orgId, signal, clientId);
+        if (dup) { itemsSkipped++; continue; }
+        const itemRef = firestore.collection('orgs').doc(orgId).collection('bullpenWork').doc();
+        await itemRef.set({
+          id: itemRef.id,
+          orgId,
+          type: TYPE_MAP[reviewType] ?? 'system',
+          title: f.title || 'Review finding',
+          diagnosis: f.observation || '',
+          sourceSignal: signal,
+          priority: f.priority || 'medium',
+          status: 'detected',
+          owner: f.owner || OWNER_MAP[reviewType] || 'Operations Manager',
+          supporting: Array.isArray(f.supporting) ? f.supporting : [],
+          nextAction: f.nextAction || '',
+          clientId: f.clientId || null,
+          clientName: f.clientName || null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          resolvedAt: null,
+          threadId: null,
+          reviewGenerated: true,
+        });
+        itemsCreated++;
+      }
+
+      // ── Persist review result ──────────────────────────────────────────────
+      const reviewRef = firestore.collection('orgs').doc(orgId).collection('bullpenReviews').doc();
+      const reviewDoc = {
+        id: reviewRef.id,
+        reviewType,
+        runAt: new Date().toISOString(),
+        runBy: uid,
+        summary: parsed.summary || '',
+        findings,
+        itemsCreated,
+        itemsSkipped,
+      };
+      await reviewRef.set(reviewDoc);
+
+      res.json(reviewDoc);
+    } catch (e: any) {
+      console.error('[bullpen/review-pass] error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // POST /api/bullpen/trigger-scan — scan Momentum state and create work items
   // Deduplication: skip if existing item with same sourceSignal+clientId not in 'complete' status.
   app.post('/api/bullpen/trigger-scan', requireOrgAccess, requireManager, async (req: any, res: any) => {
