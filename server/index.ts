@@ -103,6 +103,7 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
       startBullpenScheduler(port);
+      startPrepReadinessScheduler(port);
     },
   );
 })();
@@ -171,4 +172,70 @@ function startBullpenScheduler(port: number) {
   // Run every 30 minutes
   setInterval(checkAndRun, 30 * 60 * 1000);
   log('Bullpen daily scheduler started (30 min check interval)', 'bullpen-scheduler');
+}
+
+// ── Prep Readiness Scheduler ───────────────────────────────────────────────
+// Fires prep readiness job for all orgs twice daily (6am and 2pm AEST).
+// This ensures active leads are prepped before Nathan opens them.
+function startPrepReadinessScheduler(port: number) {
+  const TZ_OFFSET_MS = 10 * 3600 * 1000; // AEST = UTC+10
+  const RUN_HOURS = [6, 14]; // 6am and 2pm AEST
+
+  async function checkAndRun() {
+    try {
+      const { firestore } = await import('./firebase');
+      if (!firestore) return;
+
+      const nowUtc = new Date();
+      const localMs = nowUtc.getTime() + TZ_OFFSET_MS;
+      const localDate = new Date(localMs);
+      const localHour = localDate.getUTCHours();
+
+      if (!RUN_HOURS.includes(localHour)) return;
+
+      const orgsSnap = await firestore.collection('orgs').get();
+      for (const orgDoc of orgsSnap.docs) {
+        try {
+          // Check last run — skip if ran in this same hour window
+          const statusSnap = await orgDoc.ref.collection('settings').doc('prepReadiness').get();
+          const status = statusSnap.data();
+          if (status?.startedAt) {
+            const lastMs = new Date(status.startedAt).getTime() + TZ_OFFSET_MS;
+            const lastLocal = new Date(lastMs);
+            // Skip if ran in the same hour today
+            if (
+              lastLocal.getUTCFullYear() === localDate.getUTCFullYear() &&
+              lastLocal.getUTCMonth() === localDate.getUTCMonth() &&
+              lastLocal.getUTCDate() === localDate.getUTCDate() &&
+              lastLocal.getUTCHours() === localHour
+            ) continue;
+          }
+
+          log(`[PrepScheduler] Starting prep readiness for org ${orgDoc.id}`, 'prep-scheduler');
+          const resp = await fetch(`http://localhost:${port}/api/orgs/${orgDoc.id}/prep-readiness/run`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-scheduler-key': process.env.INTERNAL_SCHEDULER_KEY || '',
+            },
+            body: JSON.stringify({ batchSize: 25 }),
+          });
+          if (!resp.ok) {
+            const body = await resp.text();
+            log(`[PrepScheduler] run failed for ${orgDoc.id}: ${body}`, 'prep-scheduler');
+          } else {
+            log(`[PrepScheduler] prep readiness started for ${orgDoc.id}`, 'prep-scheduler');
+          }
+        } catch (orgErr: any) {
+          log(`[PrepScheduler] error for org ${orgDoc.id}: ${orgErr.message}`, 'prep-scheduler');
+        }
+      }
+    } catch (err: any) {
+      log(`[PrepScheduler] top-level error: ${err.message}`, 'prep-scheduler');
+    }
+  }
+
+  // Check every 30 minutes (same interval as bullpen scheduler)
+  setInterval(checkAndRun, 30 * 60 * 1000);
+  log('Prep readiness scheduler started (fires at 6am and 2pm AEST)', 'prep-scheduler');
 }

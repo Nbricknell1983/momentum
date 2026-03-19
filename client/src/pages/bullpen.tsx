@@ -19,6 +19,7 @@ import BullpenWorkQueue from '@/components/BullpenWorkQueue';
 import BullpenReviewPass from '@/components/BullpenReviewPass';
 import BullpenDailyBrief from '@/components/BullpenDailyBrief';
 import BullpenEnrichmentPanel from '@/components/BullpenEnrichmentPanel';
+import BullpenPrepReadiness from '@/components/BullpenPrepReadiness';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import type { AutomationRulesReadResult } from '@shared/controlPlaneSchemas';
@@ -1835,6 +1836,11 @@ export default function BullpenPage() {
         {/* ── Intelligence Enrichment ──────────────────────────────────────── */}
         <div className="rounded-2xl border border-border/40 bg-card p-4">
           <BullpenEnrichmentPanel />
+        </div>
+
+        {/* ── Prep Readiness ───────────────────────────────────────────────── */}
+        <div className="rounded-2xl border border-border/40 bg-card p-4">
+          <BullpenPrepReadiness />
         </div>
 
         {/* ── Agent Review Passes ──────────────────────────────────────────── */}

@@ -17,6 +17,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { addDays, addWeeks, addMonths } from 'date-fns';
 import { Lead, Stage, STAGE_LABELS, STAGE_ORDER, ActivityType, getTrafficLightStatus, NURTURE_STATUS_LABELS, calculateNextTouchDate, CONVERSATION_STAGE_LABELS, CONVERSATION_STAGE_COLORS, ConversationStage } from '@/lib/types';
 import { calculateDealMomentumScore, MOMENTUM_STATUS_COLORS } from '@/lib/dealMomentumScore';
+import { PrepReadinessBadge } from './PrepReadinessBadge';
 import { updateLead, updateLeadStage, addActivity, archiveLead, deleteLead, enrollInNurture, removeFromNurture } from '@/store';
 import TrafficLight from './TrafficLight';
 import { format } from 'date-fns';
@@ -771,6 +772,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
                       {CONVERSATION_STAGE_LABELS[lead.conversationStage]}
                     </span>
                   )}
+                  <PrepReadinessBadge prepCallPack={(lead as any).prepCallPack} />
                   <TrafficLight status={trafficStatus} size="sm" />
                 </div>
               </div>

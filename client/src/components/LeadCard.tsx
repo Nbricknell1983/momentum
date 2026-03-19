@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Lead, getTrafficLightStatus, ACTIVITY_LABELS } from '@/lib/types';
 import TrafficLight from './TrafficLight';
+import { PrepReadinessBadge } from './PrepReadinessBadge';
 import { MapPin, Phone, Calendar, DollarSign } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -28,6 +29,7 @@ export default function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
   };
 
   const trafficStatus = getTrafficLightStatus(lead);
+  const pack = (lead as any).prepCallPack;
 
   return (
     <Card
@@ -45,7 +47,10 @@ export default function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
         <h3 className="font-semibold text-base truncate" data-testid={`text-company-${lead.id}`}>
           {lead.companyName}
         </h3>
-        <TrafficLight status={trafficStatus} size="sm" />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <PrepReadinessBadge prepCallPack={pack} />
+          <TrafficLight status={trafficStatus} size="sm" />
+        </div>
       </div>
 
       {lead.contactName && (

@@ -7282,66 +7282,66 @@ Return JSON:
   });
 
   // ── Auto-generate Prep Call Pack for a lead ──────────────────────────────
-  app.post("/api/leads/:leadId/generate-prep-pack", async (req: any, res) => {
-    try {
-      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
-      const uid = req.firebaseUser?.uid;
-      const orgId: string = req.body?.orgId || req.query?.orgId || (req.headers['x-org-id'] as string) || '';
-      if (!uid) return res.status(401).json({ error: "Unauthorised" });
-      if (!orgId) return res.status(400).json({ error: "orgId required" });
-      const { leadId } = req.params;
-      const { force } = req.body as { force?: boolean };
+  // ─────────────────────────────────────────────────────────────────────────
+  // Shared helper: generate (or skip) a prep call pack for a single lead.
+  // Called by the HTTP endpoint AND the scheduled prep-readiness job.
+  // ─────────────────────────────────────────────────────────────────────────
+  async function runPrepPackGeneration(
+    orgId: string,
+    leadId: string,
+    opts: { force?: boolean } = {}
+  ): Promise<{ prepCallPack: any; strategyIntelligence?: any; skipped?: boolean }> {
+    if (!firestore) throw new Error('Firestore not available');
 
-      const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
-      const leadDoc = await leadRef.get();
-      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
-      const lead = { id: leadDoc.id, ...leadDoc.data() as any };
+    const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
+    const leadDoc = await leadRef.get();
+    if (!leadDoc.exists) throw new Error('Lead not found');
+    const lead = { id: leadDoc.id, ...leadDoc.data() as any };
 
-      // Skip if fresh (<24h) unless force
-      if (!force && lead.prepCallPack?.generatedAt) {
-        const age = Date.now() - new Date(lead.prepCallPack.generatedAt).getTime();
-        if (age < 86400000) return res.json({ prepCallPack: lead.prepCallPack, skipped: true });
-      }
+    // Skip if fresh (<24h) unless forced
+    if (!opts.force && lead.prepCallPack?.generatedAt) {
+      const age = Date.now() - new Date(lead.prepCallPack.generatedAt).getTime();
+      if (age < 86400000) return { prepCallPack: lead.prepCallPack, skipped: true };
+    }
 
-      // Assemble all available data
-      const src = lead.sourceData || {};
-      const enr = lead.enrichment || {};
-      const si = lead.strategyIntelligence || {};
-      const gp = lead.growthPrescription || null;
+    const src = lead.sourceData || {};
+    const enr = lead.enrichment || {};
+    const si = lead.strategyIntelligence || {};
+    const gp = lead.growthPrescription || null;
 
-      const websiteStr = lead.website || src.googleWebsite || 'None detected';
-      const gbpUrl = src.googleMapsUrl || enr.gbpUrl || 'None detected';
-      const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? null;
-      const rating = src.googleRating ?? enr.rating ?? null;
-      const hasFacebook = !!(lead.facebookUrl || src.businessSignals?.includes('facebook'));
-      const hasInstagram = !!(lead.instagramUrl || src.businessSignals?.includes('instagram'));
-      const hasLinkedIn = !!(lead.linkedinUrl);
-      const socials = [hasFacebook && 'Facebook', hasInstagram && 'Instagram', hasLinkedIn && 'LinkedIn'].filter(Boolean).join(', ') || 'None detected';
-      const daysSinceCreated = lead.createdAt ? Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 86400000) : null;
-      const lastContact = lead.lastContactDate ? new Date(lead.lastContactDate).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never';
+    const websiteStr = lead.website || src.googleWebsite || 'None detected';
+    const gbpUrl = src.googleMapsUrl || enr.gbpUrl || 'None detected';
+    const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? null;
+    const rating = src.googleRating ?? enr.rating ?? null;
+    const hasFacebook = !!(lead.facebookUrl || src.businessSignals?.includes('facebook'));
+    const hasInstagram = !!(lead.instagramUrl || src.businessSignals?.includes('instagram'));
+    const hasLinkedIn = !!(lead.linkedinUrl);
+    const socials = [hasFacebook && 'Facebook', hasInstagram && 'Instagram', hasLinkedIn && 'LinkedIn'].filter(Boolean).join(', ') || 'None detected';
+    const daysSinceCreated = lead.createdAt ? Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 86400000) : null;
+    const lastContact = lead.lastContactDate ? new Date(lead.lastContactDate).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never';
 
-      const enrichmentSummary = [
-        enr.industry && `Industry: ${enr.industry}`,
-        enr.businessCategory && `Category: ${enr.businessCategory}`,
-        enr.dealSummary && `Deal context: ${enr.dealSummary}`,
-        enr.nextBestAction && `Suggested next action: ${enr.nextBestAction}`,
-        enr.urgencyLevel && `Urgency: ${enr.urgencyLevel}`,
-        enr.stuckReason && `Stuck reason: ${enr.stuckReason}`,
-        enr.conversionStrategy && `Conversion strategy: ${enr.conversionStrategy}`,
-      ].filter(Boolean).join('\n');
+    const enrichmentSummary = [
+      enr.industry && `Industry: ${enr.industry}`,
+      enr.businessCategory && `Category: ${enr.businessCategory}`,
+      enr.dealSummary && `Deal context: ${enr.dealSummary}`,
+      enr.nextBestAction && `Suggested next action: ${enr.nextBestAction}`,
+      enr.urgencyLevel && `Urgency: ${enr.urgencyLevel}`,
+      enr.stuckReason && `Stuck reason: ${enr.stuckReason}`,
+      enr.conversionStrategy && `Conversion strategy: ${enr.conversionStrategy}`,
+    ].filter(Boolean).join('\n');
 
-      const siSummary = [
-        si.businessOverview && `Business overview: ${si.businessOverview}`,
-        si.idealCustomer && `Ideal customer: ${si.idealCustomer}`,
-        si.coreServices && `Core services: ${si.coreServices}`,
-        si.targetLocations && `Target locations: ${si.targetLocations}`,
-        si.growthObjective && `Growth objective: ${si.growthObjective}`,
-        si.discoveryNotes && `Discovery notes: ${si.discoveryNotes}`,
-      ].filter(Boolean).join('\n');
+    const siSummary = [
+      si.businessOverview && `Business overview: ${si.businessOverview}`,
+      si.idealCustomer && `Ideal customer: ${si.idealCustomer}`,
+      si.coreServices && `Core services: ${si.coreServices}`,
+      si.targetLocations && `Target locations: ${si.targetLocations}`,
+      si.growthObjective && `Growth objective: ${si.growthObjective}`,
+      si.discoveryNotes && `Discovery notes: ${si.discoveryNotes}`,
+    ].filter(Boolean).join('\n');
 
-      const gpSummary = gp ? `Growth Prescription: ${gp.businessDiagnosis}. Urgency: ${gp.urgencyLevel}. Recommended: ${(gp.recommendedStack || []).slice(0, 3).map((p: any) => p.product).join(', ')}.` : '';
+    const gpSummary = gp ? `Growth Prescription: ${gp.businessDiagnosis}. Urgency: ${gp.urgencyLevel}. Recommended: ${(gp.recommendedStack || []).slice(0, 3).map((p: any) => p.product).join(', ')}.` : '';
 
-      const prompt = `You are a senior marketing strategist preparing a call brief for an agency sales rep. Act like the agency's strategy team has already researched this business and is briefing the rep before the call. Be specific, commercially sharp, and useful even when data is incomplete.
+    const prompt = `You are a senior marketing strategist preparing a call brief for an agency sales rep. Act like the agency's strategy team has already researched this business and is briefing the rep before the call. Be specific, commercially sharp, and useful even when data is incomplete.
 
 PROSPECT DATA:
 Business: ${lead.companyName}
@@ -7406,50 +7406,225 @@ Return ONLY a JSON object with ALL these fields:
   "confidence": "high|medium|low"
 }`;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a senior marketing strategist producing commercially sharp prep call briefs for agency sales reps. You think like a strategy team that has already researched the business. Be specific to THIS business — never generic. Use what is known and what is inferable. Never let missing data collapse your usefulness.' },
-          { role: 'user', content: prompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.4,
-        max_tokens: 2000,
-      });
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a senior marketing strategist producing commercially sharp prep call briefs for agency sales reps. You think like a strategy team that has already researched the business. Be specific to THIS business — never generic. Use what is known and what is inferable. Never let missing data collapse your usefulness.' },
+        { role: 'user', content: prompt },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.4,
+      max_tokens: 2000,
+    });
 
-      const raw = response.choices[0]?.message?.content || '{}';
-      const pack = JSON.parse(raw);
-      const prepCallPack = { ...pack, generatedAt: new Date().toISOString(), leadId };
+    const raw = response.choices[0]?.message?.content || '{}';
+    const pack = JSON.parse(raw);
+    const prepCallPack = { ...pack, generatedAt: new Date().toISOString(), leadId };
 
-      // Auto-hydrate strategyIntelligence with agent intelligence (only populate empty fields)
-      const existingSI = lead.strategyIntelligence || {};
-      const siPatch: Record<string, string> = {};
-      if (!existingSI.businessOverview?.trim() && pack.businessSnapshot) {
-        siPatch.businessOverview = pack.businessSnapshot;
-      }
-      if (!existingSI.idealCustomer?.trim() && pack.customerProfile?.likelyCustomer) {
-        siPatch.idealCustomer = pack.customerProfile.likelyCustomer;
-      }
-      if (!existingSI.discoveryNotes?.trim() && pack.searchIntentAnalysis?.whyTheySearch) {
-        siPatch.discoveryNotes = [
-          pack.searchIntentAnalysis.whyTheySearch && `Search intent: ${pack.searchIntentAnalysis.whyTheySearch}`,
-          pack.searchIntentAnalysis.conversionBarriers && `Conversion barriers: ${pack.searchIntentAnalysis.conversionBarriers}`,
-        ].filter(Boolean).join('\n\n');
-      }
-      if (!existingSI.growthObjective?.trim() && pack.commercialAngle) {
-        siPatch.growthObjective = pack.commercialAngle;
-      }
+    // Auto-hydrate strategyIntelligence from prep pack (only populate empty fields)
+    const existingSI = lead.strategyIntelligence || {};
+    const siPatch: Record<string, string> = {};
+    if (!existingSI.businessOverview?.trim() && pack.businessSnapshot) {
+      siPatch.businessOverview = pack.businessSnapshot;
+    }
+    if (!existingSI.idealCustomer?.trim() && pack.customerProfile?.likelyCustomer) {
+      siPatch.idealCustomer = pack.customerProfile.likelyCustomer;
+    }
+    if (!existingSI.discoveryNotes?.trim() && pack.searchIntentAnalysis?.whyTheySearch) {
+      siPatch.discoveryNotes = [
+        pack.searchIntentAnalysis.whyTheySearch && `Search intent: ${pack.searchIntentAnalysis.whyTheySearch}`,
+        pack.searchIntentAnalysis.conversionBarriers && `Conversion barriers: ${pack.searchIntentAnalysis.conversionBarriers}`,
+      ].filter(Boolean).join('\n\n');
+    }
+    if (!existingSI.growthObjective?.trim() && pack.commercialAngle) {
+      siPatch.growthObjective = pack.commercialAngle;
+    }
 
-      const updatePayload: Record<string, any> = { prepCallPack };
-      if (Object.keys(siPatch).length > 0) {
-        updatePayload.strategyIntelligence = { ...existingSI, ...siPatch, updatedAt: new Date().toISOString() };
-      }
+    const updatePayload: Record<string, any> = { prepCallPack };
+    if (Object.keys(siPatch).length > 0) {
+      updatePayload.strategyIntelligence = { ...existingSI, ...siPatch, updatedAt: new Date().toISOString() };
+    }
 
-      await leadRef.update(updatePayload);
-      res.json({ prepCallPack, strategyIntelligence: updatePayload.strategyIntelligence });
-    } catch (err) {
+    await leadRef.update(updatePayload);
+    return { prepCallPack, strategyIntelligence: updatePayload.strategyIntelligence };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Prep Call Pack — generate for a single lead (HTTP endpoint)
+  // ─────────────────────────────────────────────────────────────────────────
+  app.post("/api/leads/:leadId/generate-prep-pack", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      const orgId: string = req.body?.orgId || req.query?.orgId || (req.headers['x-org-id'] as string) || '';
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      if (!orgId) return res.status(400).json({ error: "orgId required" });
+      const { leadId } = req.params;
+      const { force } = req.body as { force?: boolean };
+
+      const result = await runPrepPackGeneration(orgId, leadId, { force });
+      res.json(result);
+    } catch (err: any) {
       console.error("[generate-prep-pack]", err);
-      res.status(500).json({ error: "Failed to generate prep call pack" });
+      res.status(500).json({ error: err.message || "Failed to generate prep call pack" });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Prep Readiness — scheduled batch job for all active leads
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Priority score for a lead (higher = needs prep sooner). Returns -1 to skip.
+  function scorePrepPriority(lead: any, nowMs: number): number {
+    const INACTIVE = ['won', 'lost', 'not_interested'];
+    if (INACTIVE.includes(lead.stage || '')) return -1;
+
+    const pack = lead.prepCallPack;
+    const packAgeMs = pack?.generatedAt ? nowMs - new Date(pack.generatedAt).getTime() : Infinity;
+
+    // Skip if pack was generated very recently (less than 6 hours ago, even for scheduled runs)
+    if (packAgeMs < 6 * 3600000) return -1;
+
+    let score = 0;
+
+    // Pack freshness (heaviest weight)
+    if (!pack || packAgeMs === Infinity) score += 40;
+    else if (packAgeMs > 30 * 86400000) score += 35;  // >30 days stale
+    else if (packAgeMs > 14 * 86400000) score += 25;  // >14 days stale
+    else if (packAgeMs > 7 * 86400000)  score += 15;  // >7 days stale
+
+    // Stage commercial importance
+    const stageScore: Record<string, number> = {
+      negotiation: 25, proposal: 22, qualified: 18, discovery: 15, contacted: 10, prospecting: 5,
+    };
+    score += stageScore[lead.stage || ''] || 0;
+
+    // Upcoming contact window (very high priority)
+    if (lead.nextContactDate) {
+      const daysUntil = (new Date(lead.nextContactDate).getTime() - nowMs) / 86400000;
+      if (daysUntil >= 0 && daysUntil <= 2) score += 35;       // contact in next 2 days
+      else if (daysUntil >= 0 && daysUntil <= 7) score += 20;  // contact this week
+    }
+
+    // Recently updated (rep has been working on this lead)
+    if (lead.updatedAt) {
+      const daysSinceUpdate = (nowMs - new Date(lead.updatedAt).getTime()) / 86400000;
+      if (daysSinceUpdate <= 3) score += 12;
+      else if (daysSinceUpdate <= 7) score += 6;
+    }
+
+    // Recent activity signal
+    if (lead.lastActivityAt) {
+      const daysSinceActivity = (nowMs - new Date(lead.lastActivityAt).getTime()) / 86400000;
+      if (daysSinceActivity <= 7) score += 10;
+    }
+
+    return score;
+  }
+
+  app.post("/api/orgs/:orgId/prep-readiness/run", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+
+      // Auth: scheduler key OR firebase user
+      const schedulerKey = req.headers['x-scheduler-key'];
+      const isScheduler = schedulerKey && schedulerKey === process.env.INTERNAL_SCHEDULER_KEY;
+      const uid = req.firebaseUser?.uid;
+      if (!isScheduler && !uid) return res.status(401).json({ error: "Unauthorised" });
+
+      const { orgId } = req.params;
+      const { force = false, batchSize = 20 } = req.body as { force?: boolean; batchSize?: number };
+
+      const statusRef = firestore.collection('orgs').doc(orgId).collection('settings').doc('prepReadiness');
+
+      // Prevent double-run: check if already running
+      const statusSnap = await statusRef.get();
+      const statusData = statusSnap.data();
+      if (statusData?.status === 'running') {
+        const startedAgo = statusData.startedAt ? Date.now() - new Date(statusData.startedAt).getTime() : Infinity;
+        // Allow override if stuck >30 min
+        if (startedAgo < 30 * 60000) {
+          return res.json({ alreadyRunning: true, startedAt: statusData.startedAt });
+        }
+      }
+
+      // Mark as running immediately
+      await statusRef.set({
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        triggeredBy: isScheduler ? 'scheduler' : (uid || 'unknown'),
+        leadsQueued: 0,
+        leadsProcessed: 0,
+        leadsSucceeded: 0,
+        leadsFailed: 0,
+        errors: [],
+      }, { merge: true });
+
+      // Respond immediately — processing continues async
+      res.json({ started: true, orgId });
+
+      // ── Async batch processing ────────────────────────────────────────────
+      const nowMs = Date.now();
+      try {
+        const leadsSnap = await firestore.collection('orgs').doc(orgId).collection('leads').get();
+        const scored = leadsSnap.docs
+          .map((d: any) => ({ lead: { id: d.id, ...d.data() }, score: 0 }))
+          .map((item: any) => ({ ...item, score: scorePrepPriority(item.lead, nowMs) }))
+          .filter((item: any) => item.score > 0)
+          .sort((a: any, b: any) => b.score - a.score)
+          .slice(0, batchSize);
+
+        await statusRef.set({ leadsQueued: scored.length }, { merge: true });
+
+        let processed = 0, succeeded = 0, failed = 0;
+        const errors: string[] = [];
+
+        for (const { lead } of scored) {
+          try {
+            await runPrepPackGeneration(orgId, lead.id, { force });
+            succeeded++;
+          } catch (err: any) {
+            failed++;
+            errors.push(`${lead.id}: ${err.message || 'Unknown error'}`);
+            console.error(`[prep-readiness] Failed for lead ${lead.id}:`, err.message);
+          }
+          processed++;
+          await statusRef.set({ leadsProcessed: processed, leadsSucceeded: succeeded, leadsFailed: failed }, { merge: true });
+          // Pace API calls — 700ms between each lead
+          await new Promise(r => setTimeout(r, 700));
+        }
+
+        await statusRef.set({
+          status: 'completed',
+          completedAt: new Date().toISOString(),
+          leadsQueued: scored.length,
+          leadsProcessed: processed,
+          leadsSucceeded: succeeded,
+          leadsFailed: failed,
+          errors: errors.slice(0, 10),
+        }, { merge: true });
+
+        console.log(`[prep-readiness] Org ${orgId}: ${succeeded}/${processed} leads prepped, ${failed} failed`);
+      } catch (batchErr: any) {
+        console.error('[prep-readiness] Batch error:', batchErr.message);
+        await statusRef.set({ status: 'failed', error: batchErr.message, completedAt: new Date().toISOString() }, { merge: true });
+      }
+    } catch (err: any) {
+      console.error("[prep-readiness/run]", err);
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/orgs/:orgId/prep-readiness/status", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      const { orgId } = req.params;
+      const snap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('prepReadiness').get();
+      res.json(snap.exists ? snap.data() : { status: 'never_run' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
