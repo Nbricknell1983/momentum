@@ -1,0 +1,200 @@
+Build Brief — OpenClaw Task Submission API Feasibility & Integration Assessment
+Goal
+Determine whether Bullpen can dispatch work to actual OpenClaw runtime agents through a supported task submission API, and if so, define the integration contract clearly enough to implement real runtime workforce execution.
+
+Problem
+Bullpen now has real two-stage specialist routing, but it is still implemented entirely through OpenAI API calls inside one orchestration layer.
+
+Current state
+Stage 1: routing decision via OpenAI
+Stage 2: specialist-context prompt via OpenAI
+output quality differs by specialist context
+no actual task is being sent to named OpenClaw runtime agents
+What is missing
+For Bullpen to truly dispatch work to real OpenClaw agents like:
+
+frontend-developer
+backend-developer
+qa-tester
+operations-specialist
+Bullpen would need a supported way to:
+
+target a specific OpenClaw agent ID
+submit a task payload
+receive a result or completion signal
+track status
+The core uncertainty
+Current OpenClaw integration work confirmed:
+
+gateway/dashboard contract exists
+health/identity verification works
+provisioning path is gateway-oriented
+But it is not yet confirmed that OpenClaw exposes a task submission API Bullpen can POST to.
+
+Without that, real runtime dispatch is not implementable.
+
+Outcome that matters most
+Get a definitive answer on whether Bullpen can use actual OpenClaw runtime agents as execution targets.
+
+Success means one of two outcomes:
+
+Outcome A — supported
+OpenClaw exposes a real task submission contract, and you can define:
+
+endpoint(s)
+auth
+payload shape
+targeting by agent ID
+sync/async behavior
+status/result handling
+Outcome B — not supported
+OpenClaw does not currently expose that contract, and the product/docs/UI should continue using specialist-context orchestration instead of pretending runtime dispatch exists.
+
+Both outcomes are useful, as long as they are definitive.
+
+Scope
+In scope
+inspect OpenClaw docs/runtime for task submission capability
+determine whether specific agent IDs can be targeted programmatically
+define request/response contract if supported
+identify sync vs async execution model
+identify auth and gateway requirements
+recommend next implementation step based on findings
+Out of scope
+building a fake dispatch layer
+pretending existing gateway health checks imply task execution support
+broad OpenClaw redesign
+unrelated Bullpen UI work
+Required architecture rules
+1. Do not imply runtime dispatch without a real contract
+No UI copy or implementation should claim “dispatched to real OpenClaw agent” unless the API path actually exists.
+
+2. Health verification is not task execution
+Just because Bullpen can verify the OpenClaw gateway does not mean it can submit work to agents.
+
+3. Agent config existence is not dispatch support
+Just because agents are listed in OpenClaw config/runtime does not mean Bullpen can call them programmatically.
+
+4. Produce a binary answer
+This assessment should end in either:
+
+yes, here is the contract
+or
+no, this is not currently supported / not yet discoverable
+Recommended implementation approach
+Phase 1 — inspect OpenClaw documentation/contract
+Determine whether OpenClaw exposes any endpoint or command path for:
+
+submitting a task
+targeting a specific agent
+receiving a completion/result
+polling status or receiving callbacks
+Look for concepts like
+task
+run
+execute
+session
+submit
+agent invoke
+message send
+workflow/job dispatch
+Deliverable
+A list of any candidate APIs/endpoints/commands and whether they are real, current, and usable.
+
+Phase 2 — inspect connected instance capabilities
+Using the actual connected OpenClaw instance, determine whether:
+
+task submission endpoints exist
+they are reachable through the current gateway/base URL
+agent IDs can be targeted
+auth is accepted for those calls
+Goal
+Move from documentation assumption to actual runtime truth.
+
+Phase 3 — define contract if supported
+If a task submission path exists, define:
+
+Request side
+endpoint
+method
+auth requirements
+agent ID field
+task payload shape
+optional context/metadata/attachments
+sync vs async invocation
+Response side
+immediate result?
+task ID?
+accepted/queued/completed status?
+completion callback?
+polling path?
+error model?
+Goal
+Make implementation-ready integration possible.
+
+Phase 4 — recommend implementation pattern
+If supported, recommend:
+
+how Bullpen should call it
+which requests should dispatch
+how status should be shown
+how results return to Bullpen threads
+whether to start with single-agent runtime dispatch first
+If not supported, recommend:
+
+keep current two-stage specialist-context routing
+adjust wording/documentation
+optionally identify what OpenClaw would need to add in future
+Risks and dependencies
+Risks
+assuming docs reflect current runtime when they do not
+confusing dashboard/gateway functions with task execution support
+finding internal/unsupported endpoints and building on brittle ground
+over-committing the product to runtime dispatch before contract stability exists
+Dependencies
+actual OpenClaw docs/help output
+connected instance behavior
+gateway/auth details
+current allowed capabilities of the OpenClaw deployment
+QA / validation requirements
+Must answer
+is there a supported task submission endpoint?
+can a named agent ID be targeted?
+can the current connected instance accept that call?
+does it return immediate output or async status?
+how does Bullpen know the work is complete?
+Must avoid
+no speculative “probably yes” answers
+no UI/implementation decisions based on undocumented assumptions
+Measurable success criteria
+This assessment is successful when:
+
+there is a definitive yes/no answer on real OpenClaw runtime dispatch capability
+if yes, the contract is concrete enough to implement
+if no, the current specialist-context orchestration model remains the explicit supported path
+Bullpen product language can be kept honest
+Recommended execution order
+inspect OpenClaw docs/help
+inspect connected runtime behavior
+identify candidate task/agent invocation surface if any
+verify actual auth/access
+produce recommendation:
+implement runtime dispatch
+or stay with specialist-context routing for now
+What good output looks like from this task
+Please return:
+
+whether task submission is supported
+exact endpoint/contract if yes
+auth requirements
+agent targeting model
+sync/async behavior
+implementation recommendation for Bullpen
+if unsupported, the explicit reason/runtime limitation
+What not to do
+do not assume health-verified gateway implies task execution support
+do not infer an API contract that isn’t documented or observable
+do not claim runtime dispatch is available unless proven
+do not let UI wording overstate current capability
+Final product rule
+Bullpen should only claim real runtime agent dispatch when a real OpenClaw task submission contract exists and is verified. Until then, specialist-context orchestration remains the honest supported model.
