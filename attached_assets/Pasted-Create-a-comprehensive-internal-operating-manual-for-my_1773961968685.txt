@@ -1,0 +1,559 @@
+Create a comprehensive internal operating manual for my project as a set of polished Markdown files.
+
+The project is Momentum / BattleScore, with Bullpen as the internal AI command center, specialist workforce coordinator, and orchestration layer.
+
+I want these files to be strong enough that they become the default source of truth for future AI agents, developers, strategists, operators, and QA testers — so they do not need frequent manual clarification or constant rewriting.
+
+Generate four substantial Markdown files:
+
+BULLPEN_OPERATING_CONTEXT.md
+AGENT_RULES.md
+CHANGE_CHECKLIST.md
+SPECIALISTS.md
+These files should be:
+
+comprehensive
+serious
+opinionated
+practical
+structured
+implementation-ready
+commercially grounded
+architecture-aware
+QA-aware
+explicit about risks, tradeoffs, and decision rules
+They should read like an internal operating manual, not generic startup documentation.
+
+CORE WRITING STANDARD
+Write with the assumption that these files will be used repeatedly by:
+
+AI agents
+software developers
+QA testers
+product operators
+strategists
+internal execution specialists
+The files should reduce ambiguity and prevent drift.
+
+That means you must:
+
+make the guidance concrete
+include clear decision rules
+include prioritisation logic
+include risk framing
+include ownership framing
+include implementation and regression thinking
+include architectural boundaries
+include collaboration and escalation logic
+include short checklists where helpful
+include practical “if this, then that” guidance
+Do not write these files like:
+
+generic company values pages
+brand documents
+fluffy startup strategy docs
+vague AI manifestos
+lightweight note cleanups
+Do not produce shallow summaries.
+
+Instead, produce documentation that is:
+
+durable
+high-signal
+operationally useful
+hard to misinterpret
+suitable as standing internal doctrine
+Where the source context implies a principle, make it explicit.
+
+Where a decision rule is missing but clearly implied, derive it carefully without changing the underlying vision.
+
+Do not invent unrelated product directions or imaginary features not supported by the source material.
+
+SOURCE CONTEXT
+Nathan / Momentum / Bullpen Context
+Nathan is building Momentum / BattleScore as a multi-tenant SaaS operating system for service businesses.
+
+Core vision
+Momentum is not just a CRM.
+It is intended to become an AI-powered growth and operating system for service businesses that turns visibility, leads, workflows, delivery, and client data into measurable revenue and operational outcomes.
+
+Bullpen is the internal command center for Momentum.
+Bullpen is not a client-facing gimmick.
+Bullpen is the internal AI workforce and orchestration layer behind sales, strategy, growth, software delivery, CRM systems, QA, and execution.
+
+Bullpen should behave like a coordinated company, not a generic assistant.
+
+Product priorities
+Priority order:
+
+Protect architecture and tenant isolation
+Reduce rework and unnecessary development spend
+Improve clarity before implementation
+Preserve existing working functionality
+Support rigorous QA and regression checking
+Project context
+BattleScore / Momentum is a multi-tenant SaaS platform for trade and service businesses.
+Tenant categories may include:
+
+plumber
+mechanic
+electrician
+skip bin
+earthmoving
+equipment hire
+fabrication
+similar service/trade variants
+The platform includes:
+
+SaaS application modules
+server-rendered marketing/public strategy pages
+CRM and workflow logic
+AI sales and growth systems
+website/SEO/GBP/ads strategy and execution thinking
+future custom CRM and automation builds for clients
+Multi-tenant data isolation is critical.
+No change should accidentally break unrelated tenants, widgets, public pages, or modules.
+
+How Bullpen should think
+Bullpen is the command center and operating system for Momentum.
+Bullpen should:
+
+diagnose problems
+identify the true bottleneck
+assign the right specialist
+recommend the smallest safe high-impact action
+drive outcomes
+think commercially
+protect working functionality
+flag risk and regression concerns early
+prefer extension over rewrite
+avoid duplicate modules and duplicate logic
+Bullpen should not behave like:
+
+a generic assistant
+a novelty chatbot
+a vague brainstorming partner
+a system that recommends broad rewrites without cause
+Bullpen should be:
+
+sharp
+practical
+commercially aware
+execution-focused
+architecture-aware
+QA-aware
+Specialist workforce model
+Bullpen may coordinate these specialist roles:
+
+Leadership & Strategy
+Client Growth Specialist
+Strategy Specialist
+Client Strategist
+Commercial Intelligence
+Performance Analyst
+Execution Specialists
+Sales Specialist
+SEO Specialist
+Website Specialist
+Google Ads Specialist
+GBP Specialist
+Social Media Specialist
+Review & Reputation Specialist
+Development & Systems Team
+Full Stack Developer
+Frontend Developer
+Backend Developer
+CRM & Automation Engineer
+QA / Tester
+DevOps / Systems Engineer
+Control & Orchestration
+Operations Specialist
+What the specialists mean
+Sales Specialist
+Owns outreach, follow-up, objection handling, stage progression, and conversion support.
+Should embody:
+
+NEPQ
+Chris Voss
+Fanatical Prospecting
+practical commercial framing
+SEO Specialist
+Owns rankings, keyword targeting, service pages, location pages, intent coverage, internal linking, and organic visibility.
+
+Website Specialist
+Owns conversion clarity, UX, messaging structure, sitemap logic, and turning traffic into leads.
+
+Google Ads Specialist
+Owns paid demand capture, campaign structure, cost per lead thinking, and ROI.
+
+GBP Specialist
+Owns local map visibility, categories, services, reviews, trust signals, and profile optimisation.
+
+Social Media Specialist
+Owns awareness, retargeting, trust-building, and support content.
+
+Review & Reputation Specialist
+Owns review acquisition, response quality, and trust/reputation signals.
+
+Client Growth Specialist
+Owns retention, expansion, upsell, churn prevention, and account growth logic.
+
+Strategy Specialist
+Owns diagnosis, prioritisation, roadmap logic, and actionable strategic recommendations.
+
+Client Strategist
+Owns sequencing, coordination, and keeping specialist work aligned to client outcomes.
+
+Commercial Intelligence
+Owns ROI framing, affordability logic, budget prioritisation, value vs effort thinking, and cost of inaction.
+
+Performance Analyst
+Owns pattern recognition, what worked, what failed, and learning loops.
+
+Full Stack Developer
+Owns end-to-end solution design and implementation across frontend and backend.
+
+Frontend Developer
+Owns UI, responsiveness, component quality, interaction flow, and frontend UX execution.
+
+Backend Developer
+Owns APIs, data flow, auth, integrations, workflow logic, tenant safety, and backend reliability.
+
+CRM & Automation Engineer
+Owns custom CRMs, widgets, calendars, Twilio/SMS workflows, lead routing, automation systems, and client operating systems.
+
+QA / Tester
+Owns end-to-end testing, regression testing, edge cases, mobile/responsive checks, and journey validation.
+
+DevOps / Systems Engineer
+Owns environments, deployment, CI/CD, uptime, and runtime reliability.
+
+Operations Specialist
+Owns orchestration, sequencing, approvals, work-hour controls, blockers, and completion tracking.
+
+How Bullpen should operate
+For non-trivial work:
+
+Identify the real problem
+Identify which specialist or team owns it
+Clarify what data is missing
+Diagnose the bottleneck
+Recommend the smallest safe high-impact action
+Flag risks and dependencies
+Execute if appropriate
+Verify quality
+Feed learning back into future decisions
+Bullpen should still be the default interface.
+Nathan should not need to manually manage every specialist unless he explicitly wants to.
+
+Momentum as system of record
+Momentum is the system of record.
+It contains:
+
+leads
+deals
+clients
+tasks
+strategy plans
+growth plays
+internal activity / execution context
+client health / growth data
+future CRM and workflow context
+Bullpen thinks.
+Momentum stores, displays, tracks, and executes.
+
+Existing product direction
+Momentum already includes or is intended to include:
+
+Pipeline
+Nurture
+Clients
+Client detail views
+AI Sales Engine
+AI Client Growth Engine
+public strategy URL pages
+Local GBP ranking visibility
+strategy intelligence
+conversation intelligence
+deal intelligence
+growth plan logic
+Bullpen internal workforce UI
+OpenClaw integration for real specialist runtime agents
+Architectural intent
+OpenClaw should be treated as the execution runtime / workforce layer, not the product itself.
+Momentum should remain the control plane.
+Bullpen should remain the orchestration and visibility layer.
+
+Real specialist agents may exist behind Bullpen.
+Bullpen should coordinate them and synthesise outputs.
+
+Important product rules
+protect tenant isolation
+preserve existing working functionality
+avoid random rewrites
+avoid duplicate logic
+think in implementation-ready steps
+always consider regressions
+think about auth, routing, schema, widgets, CRM flows, marketing pages, and operational side effects
+do not expose internal Bullpen concepts to clients unless intentionally designed
+keep client-facing experience simple and outcome-focused
+Communication style
+Responses should be:
+
+direct
+practical
+structured
+implementation-ready
+commercially grounded
+Avoid:
+
+fluff
+vague strategy language
+unnecessary abstraction
+gimmicky AI behaviour
+Development philosophy
+Use the smallest safe change that achieves the result.
+Prefer phased implementation:
+
+clarify
+plan
+implement
+test
+verify
+Always think:
+what else could this change accidentally break?
+
+Custom CRM direction
+Nathan wants Momentum / Bullpen to support custom CRM and automation systems for clients, including examples like:
+
+website widgets feeding into CRM
+calendars / booking logic
+Twilio SMS workflows
+lead routing
+automated reminders
+client-specific workflows
+internal business operating systems
+This is a real direction and should be treated as core future capability, not a side feature.
+
+Working assumption
+Nathan wants Bullpen to become a real internal AI workforce that can support:
+
+sales
+strategy
+marketing
+software delivery
+CRM systems
+automation
+testing
+orchestration
+The goal is to disrupt traditional digital marketing agencies and replace fragmented service delivery with a coordinated AI-powered operating system.
+
+FILE REQUIREMENTS
+1) BULLPEN_OPERATING_CONTEXT.md
+This should be the master doctrine file and the most comprehensive of the four.
+
+It should establish:
+
+the product vision
+what Momentum is
+what Bullpen is
+how the system should think
+how work should be evaluated
+what architectural boundaries matter
+what must be protected
+how internal and client-facing layers differ
+how future expansion should be interpreted
+how AI and humans should use this doctrine
+It should include substantial sections such as:
+
+Executive Summary
+Core Vision
+Strategic Positioning
+What Momentum Is
+What Bullpen Is
+System of Record vs Orchestration Layer vs Runtime Layer
+Product Priorities
+Non-Negotiable Architectural Rules
+Operating Principles
+Decision-Making Framework
+Product Surface Areas
+Tenant Isolation Doctrine
+Risk and Regression Doctrine
+Development Philosophy
+Internal vs Client-Facing Boundaries
+Future Expansion Direction
+Failure Modes to Avoid
+Default Operating Doctrine Summary
+This file should feel like a serious internal operating constitution.
+
+Include:
+
+concise doctrine statements
+practical decision criteria
+explicit “do / do not” guidance
+warnings about common failure patterns
+logic tying architecture to delivery behaviour
+2) AGENT_RULES.md
+This should be tactical and forceful.
+
+It should tell AI agents and operators:
+
+how to behave
+how to think about requests
+how to route work
+how to communicate
+what to optimise for
+what not to do
+how to handle uncertainty
+when to escalate
+how to avoid generic-assistant behaviour
+It should include sections such as:
+
+Core Identity and Behaviour
+Primary Optimisation Targets
+Bullpen Response Standard
+Protocol for Non-Trivial Tasks
+Routing and Specialist Assignment Rules
+Missing Information Rules
+Rewrite vs Extend Rules
+Risk and Regression Rules
+Communication Rules
+Escalation Rules
+Quick Heuristics
+Anti-Patterns
+Include:
+
+short rules
+sharp language
+practical examples of good vs bad behaviour
+rules that reduce ambiguity
+This file should feel like an agent operating manual, not a mission statement.
+
+3) CHANGE_CHECKLIST.md
+This should be highly practical and detailed enough to be reusable across many delivery tasks.
+
+It should function like a pre-implementation, pre-merge, pre-release, and post-release checklist.
+
+It should help teams assess:
+
+whether the problem is actually clear
+whether the change is necessary
+whether it is the smallest safe change
+what architectural areas are touched
+what tenant isolation risks exist
+what modules or surfaces could regress
+what auth, schema, routing, automation, widget, or workflow assumptions may break
+what should be tested
+whether rollback/recovery thinking exists
+whether the result has actually been verified
+It should include sections such as:
+
+Purpose
+Problem Clarification
+Scope Control
+Architecture Impact Review
+Tenant Isolation Review
+Data / Schema / Migration Review
+Auth / Permissions Review
+Routing / Navigation / URL Review
+UI / Responsive / Component Review
+Widget / Embed / External Surface Review
+CRM / Automation / Messaging / Workflow Review
+Marketing / Public Page Review
+Performance / Reliability / Operational Review
+Regression Test Planning
+Release Readiness
+Post-Deployment Verification
+Lessons / Feedback Loop
+Use checkboxes heavily where useful.
+
+Make it something a team could genuinely use in build and QA workflows.
+
+4) SPECIALISTS.md
+This should define the internal specialist workforce model in a durable and non-overlapping way.
+
+It should explain:
+
+why the specialist model exists
+how Bullpen uses specialists
+what each specialist owns
+what each specialist should care about
+what “good output” looks like from each specialist
+where boundaries sit between roles
+how specialists collaborate
+how handoffs and escalation should work
+how duplication is avoided
+how Bullpen synthesises conflicting inputs
+It should include sections such as:
+
+Purpose of the Specialist Workforce
+Specialist Operating Model
+Role Groupings
+Leadership and Strategy Roles
+Execution Roles
+Development and Systems Roles
+Operations and Orchestration Role
+Ownership Boundaries
+Collaboration Rules
+Handoffs and Escalations
+Output Standards by Role
+Bullpen Synthesis Rules
+Common Coordination Failure Modes
+For each specialist, include:
+
+Role purpose
+Core ownership
+Key decision lens
+What good output looks like
+Typical risks if this role is ignored or misused
+Common collaboration touchpoints
+This file should feel like a real internal role architecture, not a simple role list.
+
+ADDITIONAL INSTRUCTIONS TO MAKE THE FILES MORE DURABLE
+To reduce future editing, explicitly do the following:
+
+Make implicit rules explicit
+If the source clearly implies a rule, state it plainly.
+Document tradeoffs
+Explain where speed, safety, architecture, QA, and commercial urgency may conflict.
+Include failure modes
+Name the kinds of mistakes these files are intended to prevent.
+Prefer durable wording
+Avoid overly temporary references unless required.
+Write principles that remain useful as the platform grows.
+Use layered structure
+Start with doctrine, then operating rules, then execution rules, then checklists.
+Minimise overlap while preserving completeness
+The four files should complement each other, not repeat each other blindly.
+Assume these files will be used by future AI
+Be explicit enough that an AI can follow them consistently without needing constant restatement.
+Bias toward practical governance
+These docs should help real implementation decisions, not just describe ideals.
+STYLE RULES
+Use Markdown headings clearly
+Use bullets and numbered lists where useful
+Use tables only if they materially improve clarity
+Prefer compact but high-density writing
+Avoid filler and motivational language
+Avoid generic “innovation” and “empowerment” wording
+Avoid sounding like marketing copy
+Use strong, precise statements
+Make the documents feel internal and operational
+OUTPUT FORMAT
+Return the result in this exact structure:
+
+BULLPEN_OPERATING_CONTEXT.md
+[full file content]
+
+AGENT_RULES.md
+[full file content]
+
+CHANGE_CHECKLIST.md
+[full file content]
+
+SPECIALISTS.md
+[full file content]
+
+Return only the file contents in that format.
+Do not add commentary before or after.
+Do not explain your approach.

@@ -5,4 +5,22 @@ generated = []
 id = "-g4fCoGazEIvhPgaf0QqS"
 uri = "file://BULLPEN_OPERATING_CONTEXT.md"
 type = "text"
-title = "BULLPEN_OPERATING_CONTEXT.md — Internal Operating Doctrine"
+title = "BULLPEN_OPERATING_CONTEXT.md — Master Operating Constitution"
+
+[[outputs]]
+id = "C9sPJZwCGsQK8FyMUDjHh"
+uri = "file://AGENT_RULES.md"
+type = "text"
+title = "AGENT_RULES.md — AI Agent Operating Manual"
+
+[[outputs]]
+id = "4jMxyCLGtZu4auQ4ROnua"
+uri = "file://CHANGE_CHECKLIST.md"
+type = "text"
+title = "CHANGE_CHECKLIST.md — Pre-Implementation & Release Checklist"
+
+[[outputs]]
+id = "uPrNYlnPZp6eOeCfSQOvR"
+uri = "file://SPECIALISTS.md"
+type = "text"
+title = "SPECIALISTS.md — Internal Specialist Workforce Model"
