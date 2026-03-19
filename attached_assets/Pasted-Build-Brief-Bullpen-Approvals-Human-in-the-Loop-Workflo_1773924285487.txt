@@ -1,0 +1,257 @@
+Build Brief — Bullpen Approvals & Human-in-the-Loop Workflow
+Goal
+Add a clear approval and review layer to Bullpen so work items, routed threads, and specialist outputs can move through human-controlled decision points instead of stopping at “analysis produced” or “thread exists.”
+
+Why this matters now
+Bullpen now has:
+
+command threads
+specialist routing
+a live work queue
+ownership
+lifecycle states
+thread creation from work items
+The next gap is control.
+
+Right now, the system can:
+
+detect
+assign
+recommend
+discuss
+But it still needs a stronger way to:
+
+approve next action
+hold work
+request changes
+escalate
+confirm completion
+close the loop with human oversight
+Without this, Bullpen risks becoming:
+
+smart
+busy
+but not governed enough
+Problem
+The work queue and threads can now generate diagnosis, ownership, and next actions, but the system still needs a formal human-in-the-loop workflow for decisions such as:
+
+approve this recommended action
+mark this ready for implementation
+request revision
+escalate this risk
+accept this delivery
+reject this as incomplete
+close the work item with confidence
+The current lifecycle is useful, but it is still too generic to support strong operational control.
+
+Outcome that matters most
+Make Bullpen feel like a controlled operating system where human approval, review, and completion quality are explicit.
+
+Success means:
+
+work items and threads can move into review/approval states clearly
+Nathan can approve, reject, hold, or request changes
+agent/specialist recommendations can be governed instead of just observed
+completed work is verified before closure
+the queue reflects true execution state, not just analysis state
+Scope
+In scope
+approval/review actions on work items and/or linked threads
+explicit human-in-the-loop lifecycle states
+approval decision capture
+request-changes / hold / escalate actions
+completion verification state before closure
+visible review history where appropriate
+Out of scope
+full enterprise approval engine
+granular per-role permissions matrix redesign
+automatic execution of approved tasks
+large PM-system replacement
+deep audit/compliance workflow
+Required architecture rules
+1. Human approval should be explicit where it matters
+Not every item needs approval, but meaningful work should have a visible decision point when appropriate.
+
+2. Completion is not the same as quality
+A work item should not jump from “something happened” straight to “complete” without a review path where quality matters.
+
+3. Keep the workflow practical
+This should add control, not bureaucratic drag.
+
+4. Approval state should be visible
+Nathan should be able to tell:
+
+what needs review
+what is approved
+what is blocked
+what was sent back for changes
+5. Preserve momentum
+The system should not force unnecessary approval on trivial items.
+Use the workflow where it adds decision quality.
+
+Recommended implementation approach
+Phase 1 — Extend lifecycle states
+Add explicit approval/review-oriented states on top of the current work lifecycle.
+
+Current states
+detected
+triaged
+in_progress
+blocked
+awaiting_review
+complete
+Recommended additions or interpretations
+Keep the state model simple but clearer:
+
+detected
+triaged
+in_progress
+blocked
+awaiting_review
+changes_requested
+approved
+complete
+Alternative
+If you want to avoid too many states, keep awaiting_review and use a review outcome model instead:
+
+approved
+changes requested
+held
+escalated
+Either is acceptable, but the actions must be explicit.
+
+Phase 2 — Add approval actions
+For work items and/or linked threads, add actions such as:
+
+Approve
+Request Changes
+Hold
+Escalate
+Mark Complete
+Expected behavior
+Approve → item can move forward or toward closure
+Request Changes → item returns to active work with visible feedback
+Hold → pauses action without dismissing it
+Escalate → raises importance/visibility/owner attention
+Mark Complete → only after review or explicit confidence
+Goal
+Human control becomes part of the work loop.
+
+Phase 3 — Capture decision metadata
+Store the decision trail.
+
+Minimum fields
+reviewDecision
+reviewedAt
+reviewedBy
+reviewNotes
+approvalRequired (optional if you want selective use)
+escalatedAt
+heldAt
+This can live on the work item and/or linked thread depending on where you want truth to sit.
+
+Goal
+The system should remember:
+
+what was decided
+by whom
+when
+with what note
+Phase 4 — Improve UI for review state
+Make approval status obvious in the queue/thread experience.
+
+Suggested visual cues
+Awaiting Review badge
+Changes Requested badge
+Approved badge
+Held badge
+Escalated badge
+Queue improvements
+a Needs Review filter should become more meaningful now
+maybe add:
+Held
+Changes Requested
+Approved
+if needed, but don’t over-fragment too early
+Goal
+Review state should be immediately legible.
+
+Phase 5 — Link review to thread discussion
+Where a work item has a linked Bullpen thread:
+
+approval/review actions should be able to carry a note
+review notes should be visible in context
+“Request Changes” should ideally reopen the discussion loop cleanly
+Goal
+Queue state and conversation state should not drift apart.
+
+Recommended v1 operating model
+For lower-stakes items
+triage
+in progress
+complete
+For meaningful items
+triage
+in progress
+awaiting review
+approve / request changes / hold / escalate
+complete
+This keeps the workflow controlled without over-approving everything.
+
+Risks and dependencies
+Risks
+adding too much process friction
+making states confusing or overlapping
+having review actions on the queue but not reflected in threads
+creating “approved but not actually resolved” ambiguity
+Dependencies
+existing work item lifecycle
+existing thread linkage
+current queue filters and status model
+QA requirements
+Must test — review flow
+item can move to awaiting_review
+Approve moves it appropriately
+Request Changes reopens it cleanly
+Hold pauses it without losing context
+Escalate increases visibility/priority correctly if designed that way
+Must test — metadata
+reviewedBy/reviewedAt/reviewNotes persist correctly
+review history remains linked to the correct item/thread
+actions are visible after refresh/revisit
+Must test — UI
+review states are readable in queue cards
+Needs Review filter behaves correctly
+queue and thread do not drift in visible state
+Measurable success criteria
+This task is successful when:
+
+Bullpen work items can enter meaningful review/approval states
+Nathan can explicitly approve, hold, escalate, or request changes
+review decisions are stored and visible
+completion reflects verified closure, not just activity
+the queue becomes a governed workflow, not just an alert list
+Recommended execution order
+extend lifecycle or review-outcome model
+add approval/review actions
+persist review metadata
+update queue UI badges and controls
+connect review actions to linked thread context
+QA status transitions and revisit behavior
+What good output looks like from this task
+Please return:
+
+lifecycle/review model chosen
+actions added
+metadata captured
+queue/thread UI changes
+any recommendations on where approval should be required vs optional
+What not to do
+do not turn every item into a bureaucracy-heavy approval chain
+do not make review state invisible
+do not let “complete” bypass quality/review where it matters
+do not add overlapping ambiguous statuses without clear meaning
+Final product rule
+A real operating system does not just detect and assign work — it governs decisions and verifies completion.
+This step adds the human control layer Bullpen now needs.
+

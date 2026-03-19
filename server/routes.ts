@@ -10000,41 +10000,73 @@ Return JSON with exactly these fields:
     }
   });
 
-  // PATCH /api/bullpen/work-items/:itemId — update status / fields / snooze / dismiss / threadId
+  // PATCH /api/bullpen/work-items/:itemId
+  // Handles: status transitions, snooze, dismiss, thread link, and review actions
+  // Review actions: approve | request_changes | hold | escalate
   app.patch('/api/bullpen/work-items/:itemId', requireOrgAccess, requireManager, async (req: any, res: any) => {
     const { itemId } = req.params;
-    const { orgId, status, threadId, snooze, dismiss, dismissReason } = req.body;
+    const { orgId, status, threadId, snooze, dismiss, dismissReason, action, reviewNotes } = req.body;
     if (!orgId || !itemId || !firestore) return res.status(400).json({ error: 'orgId and itemId required' });
     try {
       const ref = firestore.collection('orgs').doc(orgId).collection('bullpenWork').doc(itemId);
       const now = new Date();
+      const uid = (req as any).user?.uid ?? 'unknown';
       const updates: Record<string, any> = { updatedAt: now.toISOString() };
 
-      // Status transition
+      // ── Review/approval actions ──────────────────────────────────────────
+      if (action === 'approve') {
+        updates.status = 'approved';
+        updates.reviewDecision = 'approved';
+        updates.reviewedAt = now.toISOString();
+        updates.reviewedBy = uid;
+        if (reviewNotes) updates.reviewNotes = reviewNotes;
+      } else if (action === 'request_changes') {
+        updates.status = 'changes_requested';
+        updates.reviewDecision = 'changes_requested';
+        updates.reviewedAt = now.toISOString();
+        updates.reviewedBy = uid;
+        if (reviewNotes) updates.reviewNotes = reviewNotes;
+      } else if (action === 'hold') {
+        updates.status = 'held';
+        updates.heldAt = now.toISOString();
+        if (reviewNotes) updates.reviewNotes = reviewNotes;
+      } else if (action === 'escalate') {
+        updates.status = 'escalated';
+        updates.escalatedAt = now.toISOString();
+        updates.priority = 'high'; // always bump escalated items
+        if (reviewNotes) updates.reviewNotes = reviewNotes;
+      } else if (action === 'resume') {
+        // Return changes_requested / held / escalated items to active work
+        updates.status = 'in_progress';
+        updates.reviewDecision = null;
+      }
+
+      // ── Status transition (generic) ──────────────────────────────────────
       if (status) {
         updates.status = status;
         if (status === 'complete') updates.resolvedAt = now.toISOString();
       }
-      // Thread linkage
+
+      // ── Thread linkage ───────────────────────────────────────────────────
       if (threadId !== undefined) updates.threadId = threadId;
-      // Snooze — set suppressedUntil to N days from now
+
+      // ── Snooze ──────────────────────────────────────────────────────────
       if (snooze) {
         const days = snooze === '3d' ? 3 : snooze === '7d' ? 7 : snooze === '14d' ? 14 : 0;
         if (days > 0) {
-          const until = new Date(now.getTime() + days * 86400000);
-          updates.suppressedUntil = until.toISOString();
+          updates.suppressedUntil = new Date(now.getTime() + days * 86400000).toISOString();
         }
       }
-      // Dismiss — mark with reason + who dismissed
+
+      // ── Dismiss ──────────────────────────────────────────────────────────
       if (dismiss) {
         updates.dismissedAt = now.toISOString();
         if (dismissReason) updates.dismissReason = dismissReason;
-        const uid = (req as any).user?.uid ?? 'unknown';
         updates.dismissedBy = uid;
       }
 
       await ref.update(updates);
-      res.json({ ok: true });
+      res.json({ ok: true, updates });
     } catch (e: any) {
       console.error('[bullpen/work-items] PATCH error:', e);
       res.status(500).json({ error: e.message });
