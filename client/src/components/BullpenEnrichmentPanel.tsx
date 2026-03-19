@@ -128,38 +128,33 @@ export default function BullpenEnrichmentPanel() {
 
         <div className="flex items-center gap-2">
           {hasResult && (
-            <Button
-              size="sm" variant="ghost"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-              onClick={() => runBatch.mutate(true)}
-              disabled={isRunning}
-              data-testid="force-rerun-enrichment-btn"
-              title="Force re-run all (ignores 7-day skip)"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </Button>
+            <>
+              <Button
+                size="sm" variant="ghost"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => runBatch.mutate(true)}
+                disabled={isRunning}
+                data-testid="force-rerun-enrichment-btn"
+                title="Force re-run all (ignores 7-day skip)"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm" variant="outline"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => runBatch.mutate(false)}
+                disabled={isRunning}
+                data-testid="run-enrichment-batch-btn"
+              >
+                {isRunning
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Play className="h-3 w-3" />}
+                {isRunning ? 'Processing…' : 'Re-run'}
+              </Button>
+            </>
           )}
-
-          <Button
-            size="sm" variant="outline"
-            className="h-7 text-xs gap-1.5"
-            onClick={() => runBatch.mutate(false)}
-            disabled={isRunning}
-            data-testid="run-enrichment-batch-btn"
-          >
-            {isRunning
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <Play className="h-3 w-3" />}
-            {isRunning ? 'Processing…' : 'Run Enrichment'}
-          </Button>
         </div>
       </div>
-
-      {/* ── Status description ── */}
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        Automatically enriches all active leads and clients — inferring identity, generating strategic intelligence, and flagging missing integrations or data dependencies.
-        Records enriched in the last 7 days are skipped unless forced.
-      </p>
 
       {/* ── Running indicator ── */}
       {isRunning && (
@@ -279,12 +274,19 @@ export default function BullpenEnrichmentPanel() {
 
       {/* ── Idle state ── */}
       {!isRunning && !hasResult && (
-        <div className="rounded-xl border border-dashed border-border/40 p-5 text-center space-y-2">
-          <Brain className="h-7 w-7 text-muted-foreground/30 mx-auto" />
-          <p className="text-sm text-muted-foreground">No enrichment run yet.</p>
-          <p className="text-xs text-muted-foreground/60">
-            Click Run Enrichment to analyse all active leads and clients — inferring missing intelligence, generating strategic summaries, and surfacing integration blockers.
+        <div className="rounded-xl border border-dashed border-border/40 px-4 py-4 space-y-2">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Enrichment runs automatically before each Daily Brief. Once complete, it will show how many leads and clients were processed, what fields were auto-filled, and what integration gaps are blocking deeper intelligence.
           </p>
+          <Button
+            size="sm" variant="outline"
+            className="h-7 text-xs gap-1.5"
+            onClick={() => runBatch.mutate(false)}
+            disabled={isRunning}
+            data-testid="run-enrichment-batch-btn-idle"
+          >
+            <Play className="h-3 w-3" /> Run Now
+          </Button>
         </div>
       )}
 

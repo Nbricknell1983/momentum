@@ -10432,6 +10432,16 @@ System Health:
 
 Recent high-priority items:
 ${formatItems(qItems.filter(i => i.priority === 'high' && i.status !== 'complete').slice(0, 6))}`;
+
+        (req as any)._reviewScope = {
+          workItemsReviewed: qItems.length,
+          openItems: openCount,
+          blocked: (byStatus['blocked'] ?? []).length,
+          awaitingReview: (byStatus['awaiting_review'] ?? []).length,
+          escalated: (byStatus['escalated'] ?? []).length,
+          ocStatus,
+          gbpStatus,
+        };
       }
 
       // ── Client Health Review ───────────────────────────────────────────────
@@ -10483,6 +10493,17 @@ Return ONLY a JSON object:
 
         dataPack = `Client Portfolio (${clients.length} active clients):
 ${clientLines}`;
+
+        const atRiskCount = clients.filter((c: any) => c.healthStatus === 'red' || c.healthStatus === 'amber').length;
+        const noContactCount = clients.filter((c: any) => {
+          if (!c.lastContactDate && !c.updatedAt) return true;
+          return daysAgo(c.lastContactDate || c.updatedAt) > 14;
+        }).length;
+        (req as any)._reviewScope = {
+          clientsReviewed: clients.length,
+          atRisk: atRiskCount,
+          noRecentContact: noContactCount,
+        };
       }
 
       // ── Pipeline Review ────────────────────────────────────────────────────
@@ -10529,6 +10550,14 @@ Return ONLY a JSON object:
 
         dataPack = `Active Pipeline (${leads.length} leads):
 ${leadLines}`;
+
+        const staleLeads = leads.filter((l: any) => daysAgo(l.lastActivityAt || l.updatedAt) > 14).length;
+        const overdueLeads = leads.filter((l: any) => l.nextContactDate && new Date(l.nextContactDate).getTime() < now).length;
+        (req as any)._reviewScope = {
+          leadsReviewed: leads.length,
+          stalled: staleLeads,
+          overdueFollowUps: overdueLeads,
+        };
       } else {
         return res.status(400).json({ error: 'Invalid reviewType. Use: operations | client_health | pipeline' });
       }
@@ -10611,6 +10640,7 @@ ${leadLines}`;
         findings,
         itemsCreated,
         itemsSkipped,
+        scope: (req as any)._reviewScope ?? null,
       };
       await reviewRef.set(reviewDoc);
 
