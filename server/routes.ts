@@ -7341,7 +7341,7 @@ Return JSON:
 
       const gpSummary = gp ? `Growth Prescription: ${gp.businessDiagnosis}. Urgency: ${gp.urgencyLevel}. Recommended: ${(gp.recommendedStack || []).slice(0, 3).map((p: any) => p.product).join(', ')}.` : '';
 
-      const prompt = `You are a senior marketing consultant preparing a call brief for an agency sales rep.
+      const prompt = `You are a senior marketing strategist preparing a call brief for an agency sales rep. Act like the agency's strategy team has already researched this business and is briefing the rep before the call. Be specific, commercially sharp, and useful even when data is incomplete.
 
 PROSPECT DATA:
 Business: ${lead.companyName}
@@ -7362,40 +7362,59 @@ ${siSummary ? `STRATEGY INTELLIGENCE:\n${siSummary}` : ''}
 ${gpSummary ? `GROWTH PRESCRIPTION:\n${gpSummary}` : ''}
 ${src.businessSignals?.length ? `BUSINESS SIGNALS: ${src.businessSignals.join(', ')}` : ''}
 
-INSTRUCTIONS:
-Generate a comprehensive, commercially useful Prep Call Pack for this prospect.
-If data is missing, include what is known, what can be inferred from context, and what must be confirmed on the call.
-Do NOT produce a weak pack because some inputs are missing — graceful degradation, not failure.
-Make the call questions specific to THIS business, not generic.
-The commercial angle should feel like a sharp strategist identified it — specific and relevant.
+CRITICAL INSTRUCTIONS:
+1. If data is missing, use what is known + what is strongly inferable. Do NOT produce a weak pack because some inputs are missing.
+2. Be commercially specific — not generic. Everything must feel like it was written for THIS specific business.
+3. Think like a strategy team that has already walked into this lead before the rep does.
+4. Separate factual presence data from commercial intelligence. The commercial intelligence is what matters most.
+5. For customer/search intent: think about what drives a customer to search this category — the urgency, emotion, job-to-be-done.
+6. For website analysis: interpret what the site is TRYING to do commercially, who it's built for, and where it fails that customer.
 
-Return JSON (all fields required):
+Return ONLY a JSON object with ALL these fields:
 {
-  "businessSnapshot": "2-3 sentence business context — what they do, their market position, likely situation",
-  "presenceSnapshot": {
-    "website": "website status note: strong/weak/none + specific observations",
-    "gbp": "GBP presence note: strong/partial/none + review signal interpretation",
-    "social": "social presence note + what it signals",
-    "searchVisibility": "likely search visibility based on all available signals — be specific"
+  "businessSnapshot": "2-3 sentence synthesis — what this business does, their market position, their competitive situation, what type of customer they serve",
+  "customerProfile": {
+    "likelyCustomer": "Who the typical customer of this business is — their situation, demographics, mindset",
+    "jobsToBeDone": "What job the customer is hiring this business to do — be specific about the outcome they want",
+    "urgencyEmotion": "The urgency level and emotional state driving this customer's search or enquiry",
+    "trustFactors": "The specific trust and conversion signals that matter most to this customer before they'll contact or buy"
   },
-  "opportunities": ["up to 4 specific commercial opportunities for THIS prospect"],
-  "gaps": ["up to 4 specific gaps or weaknesses that create the opportunity to sell"],
-  "callPriorities": ["top 3 focus points for THIS specific call — ordered by importance"],
-  "discoveryQuestions": ["5-7 sharp, specific questions to ask on the call"],
-  "commercialAngle": "The single strongest commercial angle — the hook that will resonate with this specific prospect",
-  "missingDataNotes": ["things still unknown that should be confirmed or asked on the call"],
+  "searchIntentAnalysis": {
+    "primarySearchTerms": ["2-4 likely search terms this business's customers use"],
+    "whyTheySearch": "Why a customer searches this category — what triggered the search, what problem they need solved right now",
+    "whatTheyNeedToSee": "What this customer needs to see on a website or in search results before they'll contact or convert",
+    "conversionBarriers": "What typically stops this type of customer from converting — what uncertainty or friction they face"
+  },
+  "websiteAnalysis": {
+    "whatItTries": "What the current website appears to be trying to do commercially — its apparent purpose and strategy",
+    "whoItsFor": "Who the site appears to have been built for — the intended audience based on content, language, structure",
+    "keyWeaknesses": ["2-3 specific commercial weaknesses of this website — what it fails to do for the customer"],
+    "missedOpportunity": "The single biggest commercial opportunity this website is failing to capture right now"
+  },
+  "presenceSnapshot": {
+    "website": "Website assessment: status (strong/weak/none) + specific commercial observations",
+    "gbp": "GBP/Maps assessment: presence strength + review signal interpretation + what it means for local trust",
+    "social": "Social assessment: what's detected + what it signals about this business's marketing posture",
+    "searchVisibility": "Search visibility assessment: likely rank/visibility based on all available signals"
+  },
+  "opportunities": ["up to 4 specific commercial opportunities for THIS prospect — concrete, not generic"],
+  "gaps": ["up to 4 specific gaps or weaknesses that create the opening to sell — reference their actual situation"],
+  "callPriorities": ["top 3 things to focus on in THIS specific call — ordered by commercial importance"],
+  "discoveryQuestions": ["5-7 sharp, specific questions designed for THIS business — not generic sales questions"],
+  "commercialAngle": "The single strongest commercial angle — the hook that will resonate with this specific prospect and their situation",
+  "missingDataNotes": ["specific things still unknown that must be confirmed on the call to sharpen the strategy"],
   "confidence": "high|medium|low"
 }`;
 
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You produce sharp, commercially useful prep call packs for marketing agency sales reps. Be specific to the business — never generic.' },
+          { role: 'system', content: 'You are a senior marketing strategist producing commercially sharp prep call briefs for agency sales reps. You think like a strategy team that has already researched the business. Be specific to THIS business — never generic. Use what is known and what is inferable. Never let missing data collapse your usefulness.' },
           { role: 'user', content: prompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.45,
-        max_tokens: 1200,
+        temperature: 0.4,
+        max_tokens: 2000,
       });
 
       const raw = response.choices[0]?.message?.content || '{}';

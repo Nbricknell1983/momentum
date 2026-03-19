@@ -1,0 +1,201 @@
+Build Brief — Agent-Led Deal Intelligence That Actually Prepares the Call and Drives the Win
+The current lead/deal intelligence is still too empty and too passive.
+
+When I open a lead like Panel Beaters Brisbane, I should not be doing the work of figuring out the business manually from a half-empty card. The agents should already have done that work.
+
+Core requirement
+The agents need to take ownership of lead and client intelligence so that when I open a record, I immediately see a commercially useful point of view — not an empty shell with a few fields and buttons.
+
+I want the agents to act like an agency strategy team that has already researched the business and is briefing me before I ever touch the record.
+
+What I want the agents to do
+For every active lead — and later every client where relevant — the agents should automatically pull together:
+
+1. Business understanding
+what the business appears to do
+what services it likely offers
+what type of customer it likely serves
+what geographic/service area it likely targets
+what problem the business is trying to solve for its customers
+2. Customer / search-intent understanding
+For example, if the lead is related to search intent like:
+
+“smash repairs Brisbane”
+the agents should infer and explain:
+
+why a customer searches that phrase
+what job the customer is trying to get done
+what urgency/emotion is likely involved
+what trust/conversion signals matter for that customer
+3. Website / presence interpretation
+Not just whether a website exists.
+
+The agents should explain:
+
+what the current website appears to be trying to do
+who it appears to be for
+where it is weak
+what it is missing
+what opportunity exists commercially
+4. Call preparation
+I want the prep to tell me:
+
+what to ask
+what to test
+what to challenge
+what commercial angle to lead with
+what likely opportunity exists
+what likely gap is costing them leads or trust
+5. Strategy and win logic
+After the prep call, the agents should help:
+
+generate a strong strategy
+frame the opportunity commercially
+support follow-up designed to win the work
+6. Public strategy page
+The strategy should be publishable to a public URL, but it must preserve the same structure and layout hierarchy the current strategy already uses. Do not redesign the strategy format for the public page.
+
+7. Delivery conversion
+If the strategy is accepted:
+
+selected services/scope should automatically convert into real delivery work
+owner and supporting specialists should be assigned
+implementation should begin like a real agency team would handle it
+The real problem to solve
+Right now, the system is still too dependent on:
+
+manual clicks
+weak enrichment
+empty sections
+buttons like “build website” or “upload ahrefs” before the agents have even formed a strong point of view
+That is backwards.
+
+I want the agents to do the research and synthesis first, so the record opens with real intelligence already present.
+
+Required behavior for lead intelligence
+When I open a lead card, the intelligence section should already answer things like:
+
+what this business probably does
+who their likely customers are
+what those customers are looking for
+what the website is trying to do
+whether the website is solving the right problem
+what commercial opportunity is most likely here
+what should happen next
+For example, for Panel Beaters Brisbane, I want the system thinking like this:
+
+this is likely a crash repair / smash repair / body repair business
+the customer is likely distressed, time-sensitive, insurance-involved, and trust-sensitive
+search intent is likely urgent and local
+the website needs to reduce uncertainty and drive contact quickly
+the opportunity is likely around trust, conversion clarity, local visibility, and follow-up
+That kind of reasoning should already exist in the record before I start the call.
+
+Required architecture change
+Shift from:
+
+field-filling and light enrichment
+to:
+
+agent-led commercial interpretation and prep
+The system should not just populate:
+
+website
+socials
+GBP
+category
+It should synthesize those into:
+
+business understanding
+customer understanding
+opportunity understanding
+prep call strategy
+next best action
+Required outputs per lead
+For each active lead, I want a first-class Prep Call Pack that includes:
+
+business snapshot
+likely customer/jobs-to-be-done
+search intent interpretation
+website interpretation
+trust/conversion observations
+local visibility observations
+likely opportunity areas
+recommended discovery questions
+recommended commercial angle
+what is still unknown and should be asked on the call
+Important
+If some hard data is missing, the prep pack should still be strong.
+The agents must use:
+
+what is known
+what is inferable
+what should be asked next
+Do not let missing data collapse the usefulness of the pack.
+
+Required distinction
+The system must separate:
+
+factual fields
+website, socials, location, reviews, etc.
+from
+
+commercial intelligence
+what the business is trying to do
+what the customer is trying to solve
+where the opportunity is
+what should happen on the call
+The second category is the important one.
+
+That is what is currently too weak.
+
+Public strategy requirement
+When a strategy is generated after the call:
+
+it must be publishable to a public URL
+that public page must preserve the same structure and layout hierarchy the current strategy already uses
+the public page should be a shareable web-native version of the current strategy, not a redesigned format
+Acceptance and delivery requirement
+If the strategy is accepted:
+
+website / SEO / GBP / ads / CRM / other accepted scope should convert into real delivery work automatically
+the right specialist owners and supporting roles must be assigned
+Bullpen should begin implementation sequencing
+I do not want:
+
+strategy as a dead-end artifact
+I want:
+
+strategy becoming delivery
+Priority implementation order
+Build this in the right order:
+
+Phase 1
+Strengthen the Prep Call Pack so every active lead opens with real commercial intelligence, not empty sections.
+
+Phase 2
+Generate stronger post-call strategy from that intelligence.
+
+Phase 3
+Publish to public strategy URL using the same current strategy structure/layout.
+
+Phase 4
+Capture acceptance.
+
+Phase 5
+Convert accepted scope into real implementation work.
+
+Success criteria
+This is successful when:
+
+I can open a lead like Panel Beaters Brisbane and immediately get a strong prep-call point of view
+the agents tell me what they think the business does, who it serves, what the website is trying to do, and where the opportunity is
+the prep is useful even if some fields are missing
+the strategy helps win the work
+the public strategy page preserves the current strategy structure
+accepted strategy items become real delivery work automatically
+Final product rule
+The agents should not make me do the thinking first.
+
+They should walk into the lead before I do, research the business, form a commercially useful point of view, prepare the call, help win the work, and then turn accepted strategy into delivery.
+

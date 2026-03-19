@@ -235,6 +235,18 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
     }
   }, [selectedLead, orgId, dispatch]);
 
+  // Auto-trigger prep pack generation when a lead opens with no pack or a stale pack (>7 days)
+  useEffect(() => {
+    if (!selectedLead || !orgId) return;
+    const inactiveStagse = ['won', 'lost', 'not_interested'];
+    if (inactiveStagse.includes(selectedLead.stage || '')) return;
+    const pack = selectedLead.prepCallPack as any;
+    const isStale = !pack || (pack.generatedAt && Date.now() - new Date(pack.generatedAt).getTime() > 7 * 86400000);
+    if (!isStale) return;
+    // Fire silently in background — no force flag, respects 24h server-side skip
+    handleGeneratePrepPack(false);
+  }, [selectedLead?.id]); // only re-run when the selected lead changes
+
   // Sync form inputs whenever relevant lead data changes (GBP link, reviews, social, industry, website)
   useEffect(() => {
     if (selectedLead) {
