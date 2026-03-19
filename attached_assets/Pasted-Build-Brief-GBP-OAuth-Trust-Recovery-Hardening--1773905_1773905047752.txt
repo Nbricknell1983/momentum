@@ -1,0 +1,300 @@
+Build Brief — GBP OAuth Trust & Recovery Hardening                                           
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Make the Google Business Profile connection trustworthy, attributable, and recoverable so    
+ that a connected org can confidently use GBP-dependent features without wrong-account        
+ confusion or silent token failure.                                                           
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ The current GBP OAuth integration is functional but fragile.                                 
+                                                                                              
+ ### Current state                                                                            
+                                                                                              
+ Stored at:                                                                                   
+ - orgs/{orgId}/settings/gbp                                                                  
+                                                                                              
+ Stored fields include:                                                                       
+ - refreshToken                                                                               
+ - accessToken                                                                                
+ - tokenExpiry                                                                                
+ - connectedAt                                                                                
+ - redirectUri                                                                                
+                                                                                              
+ ### Current behavior                                                                         
+                                                                                              
+ - one GBP connection per org                                                                 
+ - all clients in the org share that Google account connection                                
+ - server refresh helper updates token when expired                                           
+ - if refresh fails, the route throws and the caller sees an error                            
+ - no automated reconnect guidance                                                            
+ - no strong wrong-account linkage prevention                                                 
+ - OAuth state carries orgId, but there is no verification that the Google account being      
+ connected is the intended one                                                                
+                                                                                              
+ ### Key risks                                                                                
+                                                                                              
+ 1. wrong Google account can be connected silently                                            
+ 2. one bad/revoked token affects all clients in the org                                      
+ 3. token failure surfaces as route errors rather than managed reconnect flow                 
+ 4. connected-state UX may imply more confidence than the integration deserves                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make GBP connection status mean:                                                             
+ - we know which account is connected                                                         
+ - we know whether it is still usable                                                         
+ - users can see problems early                                                               
+ - reconnect/recovery is clear when auth breaks                                               
+                                                                                              
+ Success means:                                                                               
+ - connected account identity is visible                                                      
+ - wrong-account connection is harder to do silently                                          
+ - refresh/token failure creates a reconnect-required state, not just a thrown error          
+ - the org-scoped nature of the connection is explicit in the UI                              
+ - GBP-dependent features degrade safely when the connection is invalid                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Persist and display connected account identity metadata                                   
+ 2. Add explicit post-connect verification/confirmation of the connected GBP account          
+ 3. Add token-health / reconnect-required state handling                                      
+ 4. Improve connected-status UX and warnings                                                  
+ 5. Document org-scoped connection behavior and recovery flow                                 
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - changing from org-scoped to per-client connections                                         
+ - redesigning all GBP features                                                               
+ - broad review management workflow changes                                                   
+ - major OAuth architecture rewrite                                                           
+ - unrelated integration work                                                                 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Connected should mean identifiable                                                    
+                                                                                              
+ Do not treat “token exists” as sufficient.                                                   
+ The system should know and display what account/location context is connected.               
+                                                                                              
+ ### 2. Wrong-account linkage must become visible                                             
+                                                                                              
+ Even if you can’t fully prevent every mistaken consent flow, the system must make it obvious 
+ when the wrong account has been connected.                                                   
+                                                                                              
+ ### 3. Failure must become a managed state                                                   
+                                                                                              
+ Refresh failures should not remain just opaque route errors.                                 
+ They should produce a usable status such as:                                                 
+ - reconnect required                                                                         
+ - token invalid                                                                              
+ - account access lost                                                                        
+                                                                                              
+ ### 4. The org-scoped blast radius must be explicit                                          
+                                                                                              
+ If one org-level connection powers all clients, the UI should say so clearly.                
+                                                                                              
+ ### 5. Protect existing working functionality                                                
+                                                                                              
+ Do not redesign the whole integration model in this task.                                    
+ Extend and harden the current one.                                                           
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Persist connection identity metadata                                               
+                                                                                              
+ After OAuth completes successfully, fetch and store identifying metadata for the connected   
+ Google/GBP account.                                                                          
+                                                                                              
+ ### At minimum, persist something like:                                                      
+                                                                                              
+ - account email if available                                                                 
+ - account display name if available                                                          
+ - connected GBP profile/location identifiers                                                 
+ - connected account summary                                                                  
+ - last verified at                                                                           
+                                                                                              
+ The exact fields depend on what the Google/GBP APIs expose, but the goal is:                 
+ show the operator what is actually connected.                                                
+                                                                                              
+ ### Store alongside existing GBP settings                                                    
+                                                                                              
+ Keep the current settings doc path unless there is a strong reason to split.                 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Add post-connect verification / confirmation                                       
+                                                                                              
+ After the OAuth flow completes:                                                              
+ - verify what account/business/location was actually connected                               
+ - surface that clearly in the UI                                                             
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ The user should be able to see:                                                              
+ - “You connected account X”                                                                  
+ - “This org will use this GBP connection for all clients”                                    
+                                                                                              
+ ### If practical                                                                             
+                                                                                              
+ Add a confirmation step or confirmation panel that makes the org-wide impact explicit.       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Token health and reconnect-required state                                          
+                                                                                              
+ Improve the refresh lifecycle so failures become status, not just thrown errors.             
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ When token refresh fails:                                                                    
+ - store/update a connection status such as:                                                  
+ - healthy                                                                                    
+ - reconnect_required                                                                         
+ - invalid                                                                                    
+ - revoked                                                                                    
+ - surface this in the UI                                                                     
+ - gate GBP-dependent actions where appropriate                                               
+ - provide a reconnect call-to-action                                                         
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Users should know the connection is broken before they hit random downstream failures.       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Improve connected-state UX                                                         
+                                                                                              
+ Update the GBP-related UI so the status is operationally useful.                             
+                                                                                              
+ ### The UI should clearly communicate:                                                       
+                                                                                              
+ - whether GBP is connected                                                                   
+ - which account is connected                                                                 
+ - when it was last verified/refreshed                                                        
+ - whether reconnect is required                                                              
+ - that the connection is org-scoped and shared across clients                                
+                                                                                              
+ ### Warning copy should be explicit                                                          
+                                                                                              
+ For example:                                                                                 
+ - this org-level GBP connection is shared by all clients in this org                         
+ - reconnect required                                                                         
+ - account identity mismatch suspected                                                        
+ - token expired or revoked                                                                   
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Safe degradation for downstream features                                           
+                                                                                              
+ If GBP auth is unhealthy:                                                                    
+ - affected routes/features should fail clearly                                               
+ - UI should show actionable status                                                           
+ - do not let broken auth look like missing business data or a generic fetch error            
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Differentiate:                                                                               
+ - no GBP data yet                                                                            
+ - GBP connection broken                                                                      
+ - GBP connection healthy but returned no results                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - Google APIs may not expose all ideal identity fields cleanly                               
+ - wrong-account prevention may be partially UX-based rather than absolute                    
+ - org-scoped connection model may still be a structural limitation                           
+ - refresh failure handling may touch multiple downstream call sites                          
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - exact Google/GBP API responses available after OAuth                                       
+ - current token refresh helper and where it is called                                        
+ - existing GBP status UI surfaces                                                            
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test — identity                                                                     
+                                                                                              
+ 1. after connect, account identity metadata is stored                                        
+ 2. UI shows which account/location is connected                                              
+ 3. org-scoped connection warning is visible                                                  
+                                                                                              
+ ### Must test — wrong-account visibility                                                     
+                                                                                              
+ 4. connecting a different Google account results in visibly different account metadata       
+ 5. user can tell they connected the wrong account before using downstream features           
+                                                                                              
+ ### Must test — failure handling                                                             
+                                                                                              
+ 6. revoked/expired token results in reconnect-required or equivalent state                   
+ 7. GBP-dependent actions are blocked or clearly warned when auth is broken                   
+ 8. reconnect flow is understandable                                                          
+                                                                                              
+ ### Must test — healthy path                                                                 
+                                                                                              
+ 9. valid connection remains healthy and usable                                               
+ 10. refresh updates health/verification state correctly                                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - the system can identify which GBP account is connected                                     
+ - users can see the org-scoped connection context clearly                                    
+ - token failure becomes a managed reconnect state                                            
+ - wrong-account linkage is much harder to miss                                               
+ - GBP-dependent features fail in an understandable way when the connection is unhealthy      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. inspect current OAuth callback and refresh flow                                           
+ 2. define connected identity/status fields                                                   
+ 3. persist identity metadata after successful connect                                        
+ 4. add reconnect-required / invalid state handling                                           
+ 5. update GBP status UI and warnings                                                         
+ 6. QA healthy, wrong-account, and revoked-token scenarios                                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - identity/status fields added to GBP settings                                               
+ - post-connect verification behavior added                                                   
+ - reconnect/failure state handling added                                                     
+ - UI/status changes made                                                                     
+ - any limitations that remain because the connection is still org-scoped                     
+ - follow-up recommendation on whether per-client GBP connection should eventually exist      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not redesign the entire GBP architecture into per-client connections in this task       
+ - do not leave wrong-account linkage invisible                                               
+ - do not keep token refresh failure as just a generic thrown error                           
+ - do not imply healthy connection when identity is unknown                                   
+ - do not overbuild review-management features before connection trust is fixed               
+                                                                        
