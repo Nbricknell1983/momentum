@@ -13,12 +13,14 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   RefreshCw, Zap, AlertTriangle, CheckCircle2, Clock, Ban,
   ChevronDown, ChevronUp, Building2, TrendingUp, Settings,
   ArrowRight, CircleDot, Loader2, BellOff, X, MessageSquarePlus,
   ExternalLink, ChevronRight, Wrench, ShieldAlert, ThumbsUp,
   RotateCcw, PauseCircle, ArrowUpCircle, CheckSquare,
+  PackageCheck,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -60,6 +62,12 @@ interface WorkItem {
   reviewNotes?: string | null;
   escalatedAt?: string | null;
   heldAt?: string | null;
+  // Delivery fields
+  deliverySummary?: string | null;
+  deliveredAt?: string | null;
+  deliveredBy?: string | null;
+  deliveryType?: string | null;
+  deliveryEvidence?: string[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -138,6 +146,133 @@ function sortItems(items: WorkItem[]): WorkItem[] {
     if (bS !== aS) return bS - aS;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
+}
+
+const DELIVERY_TYPES = [
+  { value: 'fix',            label: 'Fix / Bug Resolution' },
+  { value: 'implementation', label: 'Implementation' },
+  { value: 'recommendation', label: 'Recommendation' },
+  { value: 'analysis',       label: 'Analysis / Audit' },
+  { value: 'review',         label: 'Review' },
+];
+
+function deliveryTypeLabel(t: string | null | undefined): string {
+  return DELIVERY_TYPES.find(d => d.value === t)?.label ?? t ?? 'Delivery';
+}
+
+// ── DeliveryPanel — shown for active items to capture delivery summary ─────────
+
+function DeliveryPanel({
+  item,
+  onSubmitDelivery,
+  isUpdating,
+}: {
+  item: WorkItem;
+  onSubmitDelivery: (itemId: string, summary: string, type: string, evidence: string) => void;
+  isUpdating: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [type, setType] = useState('implementation');
+  const [evidence, setEvidence] = useState('');
+
+  return (
+    <div className="rounded-lg border border-violet-200 dark:border-violet-800/50 bg-violet-50/30 dark:bg-violet-950/10">
+      <button
+        className="w-full flex items-center gap-2 px-3 py-2 text-left"
+        onClick={() => setOpen(o => !o)}
+      >
+        <PackageCheck className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+        <span className="text-xs font-medium text-violet-700 dark:text-violet-400 flex-1">Submit Delivery for Review</span>
+        {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-2.5 border-t border-violet-200/60 dark:border-violet-800/40 pt-2.5">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Delivery Type</p>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger className="h-7 text-xs" data-testid={`delivery-type-${item.id}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DELIVERY_TYPES.map(d => (
+                  <SelectItem key={d.value} value={d.value} className="text-xs">{d.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">What was delivered? <span className="text-red-500">*</span></p>
+            <Textarea
+              placeholder="Describe what was done, what changed, and the outcome…"
+              value={summary}
+              onChange={e => setSummary(e.target.value)}
+              className="h-20 text-xs resize-none bg-white dark:bg-slate-900"
+              data-testid={`delivery-summary-${item.id}`}
+            />
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Evidence / Before-After Notes <span className="opacity-50">(optional)</span></p>
+            <Textarea
+              placeholder="Links, screenshots references, before/after context…"
+              value={evidence}
+              onChange={e => setEvidence(e.target.value)}
+              className="h-12 text-xs resize-none bg-white dark:bg-slate-900"
+              data-testid={`delivery-evidence-${item.id}`}
+            />
+          </div>
+
+          <Button
+            size="sm"
+            className="h-7 text-xs px-3 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white w-full"
+            onClick={() => {
+              if (!summary.trim()) return;
+              onSubmitDelivery(item.id, summary.trim(), type, evidence.trim());
+              setOpen(false);
+            }}
+            disabled={isUpdating || !summary.trim()}
+            data-testid={`button-submit-delivery-${item.id}`}
+          >
+            {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="h-3.5 w-3.5" />}
+            Submit for Review
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DeliveryContext — shows the delivery summary on items that have one ────────
+
+function DeliveryContext({ item }: { item: WorkItem }) {
+  if (!item.deliverySummary) return null;
+  return (
+    <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/40 dark:bg-violet-950/20 p-3 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <PackageCheck className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+        <p className="text-[10px] font-bold uppercase tracking-wide text-violet-600 dark:text-violet-500">
+          {deliveryTypeLabel(item.deliveryType)}
+        </p>
+        {item.deliveredAt && (
+          <span className="text-[10px] text-muted-foreground ml-auto">
+            {format(new Date(item.deliveredAt), 'dd/MM/yyyy HH:mm')}
+          </span>
+        )}
+      </div>
+      <p className="text-sm text-foreground leading-relaxed">{item.deliverySummary}</p>
+      {item.deliveryEvidence && item.deliveryEvidence.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Evidence</p>
+          {item.deliveryEvidence.map((e, i) => (
+            <p key={i} className="text-xs text-muted-foreground leading-relaxed">{e}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── SpecialistTag ─────────────────────────────────────────────────────────────
@@ -382,6 +517,7 @@ function WorkItemCard({
   onSnooze,
   onDismiss,
   onCreateThread,
+  onSubmitDelivery,
   isUpdating,
 }: {
   item: WorkItem;
@@ -391,6 +527,7 @@ function WorkItemCard({
   onSnooze: (itemId: string, d: '3d' | '7d' | '14d') => void;
   onDismiss: (itemId: string) => void;
   onCreateThread: (item: WorkItem) => void;
+  onSubmitDelivery: (itemId: string, summary: string, type: string, evidence: string) => void;
   isUpdating: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -493,6 +630,9 @@ function WorkItemCard({
             </div>
           </div>
 
+          {/* ── Delivery context (always shown when summary exists) ── */}
+          {item.deliverySummary && <DeliveryContext item={item} />}
+
           {/* ── Review panel (awaiting_review) ── */}
           {item.status === 'awaiting_review' && !isComplete && !dismissed && (
             <ReviewPanel item={item} onReviewAction={onReviewAction} isUpdating={isUpdating} />
@@ -501,6 +641,11 @@ function WorkItemCard({
           {/* ── Review outcome (approved / changes_requested / held / escalated) ── */}
           {(item.status === 'approved' || item.status === 'changes_requested' || item.status === 'held' || item.status === 'escalated') && !dismissed && (
             <ReviewOutcomeCard item={item} onAction={onAction} isUpdating={isUpdating} />
+          )}
+
+          {/* ── Delivery panel (active work states — submit for review) ── */}
+          {['in_progress', 'blocked', 'changes_requested'].includes(item.status) && !dismissed && (
+            <DeliveryPanel item={item} onSubmitDelivery={onSubmitDelivery} isUpdating={isUpdating} />
           )}
 
           {/* ── Generic status transitions (non-review states) ── */}
@@ -615,7 +760,7 @@ function WorkItemCard({
 
 function ItemGroup({
   label, icon: Icon, items, defaultCollapsed = false,
-  onStatusChange, onReviewAction, onAction, onSnooze, onDismiss, onCreateThread, updatingId,
+  onStatusChange, onReviewAction, onAction, onSnooze, onDismiss, onCreateThread, onSubmitDelivery, updatingId,
 }: {
   label: string;
   icon: typeof ShieldAlert;
@@ -627,6 +772,7 @@ function ItemGroup({
   onSnooze: (id: string, d: '3d' | '7d' | '14d') => void;
   onDismiss: (id: string) => void;
   onCreateThread: (item: WorkItem) => void;
+  onSubmitDelivery: (itemId: string, summary: string, type: string, evidence: string) => void;
   updatingId: string | null;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -651,6 +797,7 @@ function ItemGroup({
               onSnooze={onSnooze}
               onDismiss={onDismiss}
               onCreateThread={onCreateThread}
+              onSubmitDelivery={onSubmitDelivery}
               isUpdating={updatingId === item.id}
             />
           ))}
@@ -796,6 +943,28 @@ export default function BullpenWorkQueue() {
     }
   }, [orgId, user, patchMutation, toast]);
 
+  const handleSubmitDelivery = useCallback(async (itemId: string, deliverySummary: string, deliveryType: string, evidence: string) => {
+    setUpdatingId(itemId);
+    const item = data?.items.find(i => i.id === itemId);
+    const evidenceArr = evidence ? [evidence] : [];
+
+    // Post delivery message to linked thread
+    if (item?.threadId && orgId && user) {
+      try {
+        await addDoc(collection(db, 'orgs', orgId, 'bullpenThreads', item.threadId, 'messages'), {
+          role: 'user',
+          text: `**Delivery Submitted for Review**\n\n**Type:** ${deliveryType}\n\n**What was delivered:**\n${deliverySummary}${evidence ? `\n\n**Evidence:**\n${evidence}` : ''}`,
+          createdAt: Timestamp.now(),
+          authorId: user.uid,
+          isDeliverySubmission: true,
+        });
+      } catch {}
+    }
+
+    patchMutation.mutate({ itemId, action: 'submit_delivery', deliverySummary, deliveryType, deliveryEvidence: evidenceArr });
+    toast({ title: 'Delivery submitted for review', description: 'Item is now awaiting review.' });
+  }, [data, orgId, user, patchMutation, toast]);
+
   const items: WorkItem[] = data?.items ?? [];
 
   // ── Filtering ──────────────────────────────────────────────────────────────
@@ -853,6 +1022,7 @@ export default function BullpenWorkQueue() {
     onSnooze: handleSnooze,
     onDismiss: handleDismiss,
     onCreateThread: handleCreateThread,
+    onSubmitDelivery: handleSubmitDelivery,
     updatingId,
   };
 
@@ -957,6 +1127,7 @@ export default function BullpenWorkQueue() {
                   onSnooze={handleSnooze}
                   onDismiss={handleDismiss}
                   onCreateThread={handleCreateThread}
+                  onSubmitDelivery={handleSubmitDelivery}
                   isUpdating={updatingId === item.id}
                 />
               ))}
