@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "-g4fCoGazEIvhPgaf0QqS"
+uri = "file://BULLPEN_OPERATING_CONTEXT.md"
+type = "text"
+title = "BULLPEN_OPERATING_CONTEXT.md — Internal Operating Doctrine"
