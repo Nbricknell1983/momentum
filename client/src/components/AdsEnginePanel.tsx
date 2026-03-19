@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { updateClient } from '@/store/index';
 import { Client, AdsEngineReport, AdsCampaign } from '@/lib/types';
 import { updateClientInFirestore } from '@/lib/firestoreService';
+import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
 import { format } from 'date-fns';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -154,10 +155,12 @@ export default function AdsEnginePanel({ client }: Props) {
       });
       if (!res.ok) throw new Error('Failed to generate Ads plan');
       const data = await res.json();
-      const newReport: AdsEngineReport = { ...data, generatedAt: new Date() };
+      const runId = generateRunId();
+      const newReport: AdsEngineReport = enrichWithMeta(data, 'adsEngine', runId) as AdsEngineReport;
       const updates = { adsEngine: newReport };
       if (orgId && authReady) {
         await updateClientInFirestore(orgId, client.id, updates).catch(console.error);
+        await persistEngineHistory(orgId, 'clients', client.id, runId, { ...newReport, clientId: client.id, orgId });
       }
       dispatch(updateClient({ id: client.id, updates }));
     } catch (err: any) {

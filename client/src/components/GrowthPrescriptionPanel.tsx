@@ -15,6 +15,7 @@ import {
   INVESTMENT_TIER_LABELS, INVESTMENT_TIER_COLORS,
 } from '@/lib/types';
 import { updateLeadInFirestore } from '@/lib/firestoreService';
+import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
 import { format } from 'date-fns';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -163,13 +164,15 @@ export default function GrowthPrescriptionPanel({ lead }: Props) {
 
       if (!res.ok) throw new Error('Failed to generate prescription');
       const data = await res.json();
-      const result: GrowthPrescription = { ...data, generatedAt: new Date() };
+      const runId = generateRunId();
+      const result: GrowthPrescription = enrichWithMeta(data, 'growthPrescription', runId) as GrowthPrescription;
       setPrescription(result);
       setExpanded(true);
 
       if (orgId && authReady) {
         updateLeadInFirestore(orgId, lead.id, { growthPrescription: result } as any, authReady).catch(console.error);
         dispatch(patchLead({ id: lead.id, updates: { growthPrescription: result } as any }));
+        await persistEngineHistory(orgId, 'leads', lead.id, runId, { ...result, leadId: lead.id, orgId });
       }
       toast({ title: 'Growth prescription generated' });
     } catch (err) {

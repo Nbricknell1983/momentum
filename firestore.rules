@@ -66,6 +66,12 @@ service cloud.firestore {
         allow read: if isOrgMember(orgId);
         allow create: if isOrgMember(orgId);
       }
+
+      match /leads/{leadId}/engineHistory/{runId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+        allow update, delete: if false;
+      }
       
       match /activities/{activityId} {
         allow read: if isOrgMember(orgId);
@@ -83,6 +89,12 @@ service cloud.firestore {
       
       match /clients/{clientId}/{subcollection=**} {
         allow read, write: if isOrgMember(orgId);
+      }
+
+      match /clients/{clientId}/engineHistory/{runId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+        allow update, delete: if false;
       }
       
       match /dailyPlans/{planId} {

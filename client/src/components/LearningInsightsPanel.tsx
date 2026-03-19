@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { updateClient } from '@/store/index';
 import { Client, LearningInsight, MomentumStatus, AIAction } from '@/lib/types';
 import { updateClientInFirestore, fetchClientAIActions } from '@/lib/firestoreService';
+import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
 import { format } from 'date-fns';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,16 +125,16 @@ export default function LearningInsightsPanel({ client }: Props) {
       });
       if (!res.ok) throw new Error('Failed to generate learning insights');
       const data = await res.json();
-      const newInsight: LearningInsight = {
-        ...data,
-        approvedActions: approved,
-        rejectedActions: rejected,
-        completedActions: done,
-        generatedAt: new Date(),
-      };
+      const runId = generateRunId();
+      const newInsight: LearningInsight = enrichWithMeta(
+        { ...data, approvedActions: approved, rejectedActions: rejected, completedActions: done },
+        'learningInsight',
+        runId
+      ) as LearningInsight;
       const updates = { learningInsight: newInsight };
       if (orgId && authReady) {
         await updateClientInFirestore(orgId, client.id, updates).catch(console.error);
+        await persistEngineHistory(orgId, 'clients', client.id, runId, { ...newInsight, clientId: client.id, orgId });
       }
       dispatch(updateClient({ id: client.id, updates }));
     } catch (err: any) {

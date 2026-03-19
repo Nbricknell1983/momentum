@@ -15,6 +15,7 @@ import {
   WebsiteTaskCategory, WebsiteTaskEffort, WebsiteHealthLabel,
 } from '@/lib/types';
 import { updateClientInFirestore } from '@/lib/firestoreService';
+import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
 import { format } from 'date-fns';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,10 +146,12 @@ export default function WebsiteEnginePanel({ client }: Props) {
       });
       if (!res.ok) throw new Error('Failed to analyse website');
       const data = await res.json();
-      const report: WebsiteEngineReport = { ...data, generatedAt: new Date() };
+      const runId = generateRunId();
+      const report: WebsiteEngineReport = enrichWithMeta(data, 'websiteEngine', runId) as WebsiteEngineReport;
       const updates = { websiteEngine: report };
       if (orgId && authReady) {
         await updateClientInFirestore(orgId, client.id, updates).catch(console.error);
+        await persistEngineHistory(orgId, 'clients', client.id, runId, { ...report, clientId: client.id, orgId });
       }
       dispatch(updateClient({ id: client.id, updates }));
     } catch (err: any) {

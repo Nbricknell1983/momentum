@@ -28,6 +28,7 @@ Preferred communication style: Simple, everyday language.
 - **PostgreSQL**: Orphaned; legacy routes (`/api/leads`, `/api/activities`) return `410 Gone`.
 - **Trust Boundary**: See `TRUST_BOUNDARY.md` for full auth flow and route classification.
 - **Live State**: Leads and clients are synced via `onSnapshot` listeners (`client/src/lib/firestoreSync.ts` — `useFirestoreSync` hook). Redux `leads[]` and `clients[]` are listener-fed live state, not a stale once-loaded cache. AI engine server writes to client docs appear automatically in the UI without reload. See `STATE_OWNERSHIP.md`.
+- **AI Output Storage**: Engine outputs (websiteEngine, seoEngine, gbpEngine, adsEngine, learningInsight, growthPrescription) are dual-written: latest snapshot on the entity doc + durable history record in `engineHistory/{runId}` subcollection. All outputs carry `runId`, `generatedAt`, `engineType`, `generatedBy`, `modelUsed`. History is immutable. See `AI_OUTPUT_STORAGE.md` and `client/src/lib/engineOutputService.ts`.
 
 ### Auth & Security
 - **Firebase Authentication**: All user identity comes from Firebase ID tokens verified server-side.

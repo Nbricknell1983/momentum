@@ -13,6 +13,7 @@ import {
   Client, GBPEngineReport, GBPTask, GBPTaskCategory, GradeValue,
 } from '@/lib/types';
 import { updateClientInFirestore } from '@/lib/firestoreService';
+import { generateRunId, enrichWithMeta, persistEngineHistory } from '@/lib/engineOutputService';
 import { format } from 'date-fns';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -146,10 +147,12 @@ export default function GBPEnginePanel({ client }: Props) {
       });
       if (!res.ok) throw new Error('Failed to analyse GBP');
       const data = await res.json();
-      const newReport: GBPEngineReport = { ...data, generatedAt: new Date() };
+      const runId = generateRunId();
+      const newReport: GBPEngineReport = enrichWithMeta(data, 'gbpEngine', runId) as GBPEngineReport;
       const updates = { gbpEngine: newReport };
       if (orgId && authReady) {
         await updateClientInFirestore(orgId, client.id, updates).catch(console.error);
+        await persistEngineHistory(orgId, 'clients', client.id, runId, { ...newReport, clientId: client.id, orgId });
       }
       dispatch(updateClient({ id: client.id, updates }));
     } catch (err: any) {

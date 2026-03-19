@@ -1,0 +1,342 @@
+Build Brief — AI Output Metadata & History Hardening                                         
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Turn AI engine outputs from overwrite-only mutable fields into timestamped, traceable        
+ intelligence artifacts while preserving a simple latest-state read path.                     
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ AI outputs are currently stored directly on the client document in Firestore as mutable      
+ current-state blobs.                                                                         
+                                                                                              
+ ### Current state                                                                            
+                                                                                              
+ Path:                                                                                        
+ - orgs/{orgId}/clients/{clientId}                                                            
+                                                                                              
+ Fields written directly on the client doc:                                                   
+ - websiteEngine                                                                              
+ - seoEngine                                                                                  
+ - gbpEngine                                                                                  
+ - adsEngine                                                                                  
+ - growthPrescription                                                                         
+ - learningInsight                                                                            
+ - strategyIntelligence                                                                       
+                                                                                              
+ ### Current behavior                                                                         
+                                                                                              
+ - each engine run overwrites the field directly                                              
+ - previous output is silently lost                                                           
+ - no enforced generatedAt                                                                    
+ - no version ID / run ID                                                                     
+ - no stale/fresh distinction                                                                 
+ - no comparison path                                                                         
+ - no history trail                                                                           
+ - if an output degrades after a rerun, there is no way to inspect what changed               
+                                                                                              
+ Now that live operational reconciliation is in place, this weakness becomes more visible:    
+ - users will see fresh outputs appear live                                                   
+ - but still cannot tell when they were generated                                             
+ - cannot compare runs                                                                        
+ - cannot trust whether a report is current or stale                                          
+ - cannot audit degraded results                                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Keep the current “latest result is easy to read” experience, but add enough metadata and     
+ history to support:                                                                          
+ - freshness                                                                                  
+ - comparison                                                                                 
+ - auditability                                                                               
+ - learning loops                                                                             
+                                                                                              
+ Success means:                                                                               
+ - every engine output has generatedAt                                                        
+ - every engine run produces a durable history record                                         
+ - latest output remains easy for the UI to read                                              
+ - stale outputs are distinguishable from fresh ones                                          
+ - users can compare old and new outputs when needed                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Metadata on all AI output writes                                                          
+ 2. History persistence for each engine run                                                   
+ 3. Latest + history dual-write model                                                         
+ 4. Read path support for latest output without breaking existing UI                          
+ 5. Basic freshness/staleness support                                                         
+ 6. Minimal documentation of AI output storage model                                          
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - full diff/comparison UI                                                                    
+ - major redesign of engine screens                                                           
+ - prompt/model redesign                                                                      
+ - analytics dashboards                                                                       
+ - migration to a new AI service architecture                                                 
+ - broad data model rewrite                                                                   
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Preserve latest-read simplicity                                                       
+                                                                                              
+ Current UI reads engine outputs from fields on the client document.                          
+ Do not break that unless absolutely necessary.                                               
+                                                                                              
+ ### 2. Add history without forcing a rewrite                                                 
+                                                                                              
+ The correct move is:                                                                         
+ - keep latest snapshot on the client doc                                                     
+ - add history alongside it                                                                   
+                                                                                              
+ Not:                                                                                         
+ - move everything into history only                                                          
+ - force all screens to re-query complex structures immediately                               
+                                                                                              
+ ### 3. Metadata is mandatory                                                                 
+                                                                                              
+ Every AI output should carry at minimum:                                                     
+ - generatedAt                                                                                
+ - runId or version ID                                                                        
+ - engine/output type                                                                         
+ - optional actor/source metadata if available                                                
+                                                                                              
+ ### 4. Freshness must be knowable                                                            
+                                                                                              
+ A 6-month-old output should not look identical to one generated 30 seconds ago.              
+                                                                                              
+ ### 5. Protect existing working functionality                                                
+                                                                                              
+ Do not destabilize current engine views.                                                     
+ Extend safely.                                                                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Define metadata contract                                                           
+                                                                                              
+ Define a shared metadata shape for all engine outputs.                                       
+                                                                                              
+ ### Minimum fields                                                                           
+                                                                                              
+ - generatedAt                                                                                
+ - runId                                                                                      
+ - engineType                                                                                 
+ - generatedBy                                                                                
+ - user/system if available                                                                   
+ - optional:                                                                                  
+ - model name                                                                                 
+ - prompt version                                                                             
+ - input fingerprint/hash                                                                     
+ - score summary fields for quick comparison                                                  
+                                                                                              
+ ### Apply to:                                                                                
+                                                                                              
+ - websiteEngine                                                                              
+ - seoEngine                                                                                  
+ - gbpEngine                                                                                  
+ - adsEngine                                                                                  
+ - growthPrescription                                                                         
+ - learningInsight                                                                            
+ - strategyIntelligence                                                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Add history storage                                                                
+                                                                                              
+ For each client, persist every run to a history path.                                        
+                                                                                              
+ ### Recommended shape                                                                        
+                                                                                              
+ One of these patterns is acceptable:                                                         
+                                                                                              
+ #### Option A — per-engine subcollection                                                     
+                                                                                              
+ - orgs/{orgId}/clients/{clientId}/websiteEngineHistory/{runId}                               
+ - .../seoEngineHistory/{runId}                                                               
+ - etc.                                                                                       
+                                                                                              
+ #### Option B — shared engine history collection                                             
+                                                                                              
+ - orgs/{orgId}/clients/{clientId}/engineHistory/{runId}                                      
+ with engineType field                                                                        
+                                                                                              
+ ### Recommendation                                                                           
+                                                                                              
+ Use whichever is simpler to query and reason about in this codebase, but keep it explicit    
+ and tenant-safe.                                                                             
+                                                                                              
+ ### Required data in each history record                                                     
+                                                                                              
+ - full output payload                                                                        
+ - metadata                                                                                   
+ - timestamp                                                                                  
+ - orgId/clientId if useful redundantly                                                       
+ - summary values needed for future comparison                                                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Dual-write latest + history                                                        
+                                                                                              
+ On every engine run:                                                                         
+                                                                                              
+ 1. create a history entry                                                                    
+ 2. update latest snapshot field on the client doc                                            
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ - existing UI still reads the latest field                                                   
+ - history becomes available immediately                                                      
+ - no output is lost on rerun                                                                 
+                                                                                              
+ ### Important                                                                                
+                                                                                              
+ This should be treated as one logical write operation even if implemented as multiple        
+ Firestore writes.                                                                            
+ Handle failure cases thoughtfully.                                                           
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Freshness support                                                                  
+                                                                                              
+ Add enough metadata and helper logic so the system can know:                                 
+ - when the latest result was generated                                                       
+ - whether it is stale by policy                                                              
+                                                                                              
+ ### Minimum requirement                                                                      
+                                                                                              
+ - latest output object includes generatedAt                                                  
+ - UI can display “generated X ago” or similar later                                          
+ - stale threshold can be derived per engine type if needed                                   
+                                                                                              
+ ### Optional but useful                                                                      
+                                                                                              
+ Define a simple stale policy table, for example:                                             
+ - website/SEO/GBP/ads outputs: stale after X days                                            
+ - learning/strategy outputs: stale after Y days                                              
+                                                                                              
+ No need to overbuild the UI in this task, but the data model should support it.              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Compatibility and migration                                                        
+                                                                                              
+ Existing client docs likely contain old engine payloads with no metadata.                    
+                                                                                              
+ ### Required behavior                                                                        
+                                                                                              
+ - old outputs should not break the UI                                                        
+ - existing docs should continue loading                                                      
+ - new runs should write the new enriched format                                              
+                                                                                              
+ ### Optional migration approach                                                              
+                                                                                              
+ - lazy migration on next write                                                               
+ or                                                                                           
+ - compatibility wrapper on read                                                              
+                                                                                              
+ ### Recommendation                                                                           
+                                                                                              
+ Prefer the smallest safe migration path unless a full backfill is clearly justified.         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - breaking engine views if output shape changes too aggressively                             
+ - partial dual-write failures leaving latest/history inconsistent                            
+ - over-nesting or over-fragmenting history storage                                           
+ - expensive writes if payloads are very large                                                
+ - backward-compatibility issues with old documents                                           
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - exact current engine payload shapes                                                        
+ - current write paths in server AI routes                                                    
+ - any UI assumptions that engine payload is a flat object with no metadata wrapper           
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test — latest output                                                                
+                                                                                              
+ 1. each engine run writes generatedAt                                                        
+ 2. each engine run writes runId                                                              
+ 3. latest client document field remains readable by existing UI                              
+ 4. old outputs still load safely                                                             
+                                                                                              
+ ### Must test — history                                                                      
+                                                                                              
+ 5. each rerun creates a new history record                                                   
+ 6. previous history remains intact                                                           
+ 7. correct org/client scoping is preserved                                                   
+ 8. engine type is correctly recorded                                                         
+                                                                                              
+ ### Must test — live visibility                                                              
+                                                                                              
+ 9. latest output still updates live through the existing client snapshot listener            
+ 10. no regression in ClientFocusView / ClientGrowthIntelligencePanel                         
+                                                                                              
+ ### Must test — failure behavior                                                             
+                                                                                              
+ 11. partial failure does not leave system in an ambiguous state without logging              
+ 12. repeated reruns do not overwrite prior history                                           
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - every AI engine output has metadata                                                        
+ - every run creates durable history                                                          
+ - latest output remains easy to read from the client doc                                     
+ - old outputs are still compatible                                                           
+ - reruns no longer destroy prior state                                                       
+ - freshness can be determined from stored data                                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. define metadata contract                                                                  
+ 2. choose history storage shape                                                              
+ 3. update one representative engine write path first                                         
+ 4. validate latest + history dual-write pattern                                              
+ 5. extend to all engine outputs                                                              
+ 6. add compatibility handling for old docs                                                   
+ 7. document the storage model                                                                
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - metadata fields added                                                                      
+ - history storage path chosen                                                                
+ - latest + history write flow implemented                                                    
+ - compatibility strategy for old outputs                                                     
+ - any payload size/performance concerns                                                      
+ - follow-up recommendations for comparison UI or freshness indicators                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not redesign the entire engine UI                                                       
+ - do not block this task on building diff/comparison screens                                 
+ - do not remove latest snapshot fields from the client doc                                   
+ - do not introduce history in a way that breaks current live listeners                       
+ - do not leave metadata optional on new writes 
