@@ -13,8 +13,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import type { RootState } from '@/store';
 import type { Lead, Activity, Client, NBAAction } from '@/lib/types';
-import { db, doc, getDoc, setDoc, collection, query, orderBy, limit, onSnapshot } from '@/lib/firebase';
+import { db, doc, collection, query, orderBy, limit, onSnapshot } from '@/lib/firebase';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import type { AutomationRulesReadResult } from '@shared/controlPlaneSchemas';
 import { differenceInDays, formatDistanceToNow, isToday, format } from 'date-fns';
 import {
   Briefcase, TrendingUp, Globe, Search, BarChart3, Star, Users, Shield,
@@ -905,6 +907,8 @@ export default function BullpenPage() {
   const [rules, setRules] = useState<AutomationRules>(DEFAULT_RULES);
   const [rulesSaving, setRulesSaving] = useState(false);
   const [rulesLoaded, setRulesLoaded] = useState(false);
+  const [rulesConfigStatus, setRulesConfigStatus] = useState<'valid' | 'invalid' | 'missing' | null>(null);
+  const [rulesValidationErrors, setRulesValidationErrors] = useState<string[]>([]);
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
   const [intelRole, setIntelRole] = useState<RoleMetrics | null>(null);
 
@@ -913,27 +917,42 @@ export default function BullpenPage() {
   const [typingAgent, setTypingAgent] = useState<{ from: string; fromBg: string; fromIcon: typeof Briefcase } | null>(null);
   const commsRef = useRef<HTMLDivElement>(null);
 
-  // ── Load automation rules from Firestore ──────────────────────────────────
+  // ── Load automation rules — validated read via API ────────────────────────
   useEffect(() => {
     if (!isManager || !orgId || !authReady) return;
-    const ref = doc(db, 'orgs', orgId, 'settings', 'automationRules');
-    getDoc(ref)
-      .then(snap => {
-        if (snap.exists()) setRules({ ...DEFAULT_RULES, ...(snap.data() as Partial<AutomationRules>) });
+    apiRequest('GET', `/api/settings/automation-rules?orgId=${orgId}`)
+      .then(r => r.json() as Promise<AutomationRulesReadResult>)
+      .then(result => {
+        setRulesConfigStatus(result.status);
+        setRules(result.data);
+        if (result.validationErrors?.length) {
+          setRulesValidationErrors(result.validationErrors);
+          console.warn('[Bullpen] automationRules stored doc is invalid:', result.validationErrors);
+        }
         setRulesLoaded(true);
       })
-      .catch(() => setRulesLoaded(true));
+      .catch(() => {
+        // Network/auth failure — fall back to defaults safely
+        setRules(DEFAULT_RULES);
+        setRulesLoaded(true);
+      });
   }, [orgId, authReady]);
 
   async function saveRules() {
     if (!orgId) return;
     setRulesSaving(true);
     try {
-      const ref = doc(db, 'orgs', orgId, 'settings', 'automationRules');
-      await setDoc(ref, { ...rules, updatedAt: new Date() }, { merge: true });
-      toast({ title: 'Automation rules saved' });
-    } catch {
-      toast({ title: 'Failed to save rules', variant: 'destructive' });
+      const r = await apiRequest('POST', '/api/settings/automation-rules', { orgId, rules });
+      const body = await r.json();
+      setRulesConfigStatus('valid');
+      setRulesValidationErrors([]);
+      if (body.strippedKeys?.length > 0) {
+        toast({ title: 'Automation rules saved', description: `Note: ${body.strippedKeys.join(', ')} removed (unknown fields)` });
+      } else {
+        toast({ title: 'Automation rules saved' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Failed to save rules', description: err.message, variant: 'destructive' });
     } finally {
       setRulesSaving(false);
     }
@@ -1968,6 +1987,27 @@ export default function BullpenPage() {
             <Settings2 className="h-3.5 w-3.5" />
             Automation Rules & Control
           </h2>
+
+          {/* Config status banners */}
+          {rulesConfigStatus === 'invalid' && (
+            <div className="mb-3 p-3 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-start gap-2" data-testid="banner-rules-invalid">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <div>
+                <span className="font-semibold">Stored config is invalid</span> — defaults are in use until you save corrected values.
+                {rulesValidationErrors.length > 0 && (
+                  <ul className="mt-1 list-disc list-inside opacity-80">
+                    {rulesValidationErrors.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+          {rulesConfigStatus === 'missing' && (
+            <div className="mb-3 p-3 rounded-md border border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400 text-xs flex items-center gap-2" data-testid="banner-rules-missing">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              No rules saved yet — showing defaults. Save to persist your configuration.
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 

@@ -35,7 +35,8 @@ Preferred communication style: Simple, everyday language.
 - **Manager Gate**: `requireManager` enforces `owner`/`admin` role for sensitive operations.
 - **OpenClaw routes**: Use shared-secret `openclawAuth` instead of Firebase token (whitelisted from global middleware).
 - **Public routes**: GBP OAuth callback, public report URLs, device pairing — whitelisted in `auth.ts`.
-- **Firestore Rules**: Deployed separately via Firebase CLI — see `FIRESTORE_RULES_DEPLOY.md`. Rules cover all org collections including `settings` and `bullpenComms`.
+- **Firestore Rules**: Deployed separately via Firebase CLI — see `FIRESTORE_RULES_DEPLOY.md`. Rules cover all org collections including `settings`, `bullpenComms`, and `settingsHistory`.
+- **Control-Plane Config**: `automationRules` and `openclawConfig` are validated with Zod (`shared/controlPlaneSchemas.ts`), written only through server routes with audit trail at `orgs/{orgId}/settingsHistory/{type}/entries`. See `CONTROL_PLANE_CONFIG.md`.
 
 ### Core Features
 - **Pipeline Management**: Kanban board with drag-and-drop lead management and a Lead Focus View (3-column overlay).

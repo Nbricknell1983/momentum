@@ -9,6 +9,16 @@ import { registerAiActionRoutes } from "./aiActionRoutes";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import { requireOrgAccess, requireManager } from "./middleware/auth";
+import {
+  AutomationRulesSchema,
+  OpenclawConfigSchema,
+  AUTOMATION_RULES_DEFAULTS,
+  type AutomationRules,
+  type AutomationRulesReadResult,
+  type OpenclawConfigReadResult,
+} from "../shared/controlPlaneSchemas";
+import { writeSettingsAudit } from "./lib/settingsAudit";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -9156,6 +9166,99 @@ Rules:
     },
   ];
 
+  // ============================================
+  // Control-Plane Settings — automationRules
+  // ============================================
+
+  // GET /api/settings/automation-rules — validated read
+  // Returns status: 'valid' | 'invalid' | 'missing' so client can handle bad stored data.
+  app.get('/api/settings/automation-rules', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.trustedOrgId as string;
+    if (!firestore) return res.status(503).json({ error: 'Firestore unavailable' });
+    try {
+      const snap = await firestore
+        .collection('orgs').doc(orgId)
+        .collection('settings').doc('automationRules')
+        .get();
+
+      if (!snap.exists) {
+        const result: AutomationRulesReadResult = { status: 'missing', data: AUTOMATION_RULES_DEFAULTS };
+        return res.json(result);
+      }
+
+      const parsed = AutomationRulesSchema.safeParse(snap.data());
+      if (parsed.success) {
+        const result: AutomationRulesReadResult = { status: 'valid', data: parsed.data };
+        return res.json(result);
+      } else {
+        const errors = parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+        console.warn('[settings/automationRules] Stored document failed validation:', errors);
+        const result: AutomationRulesReadResult = {
+          status: 'invalid',
+          data: AUTOMATION_RULES_DEFAULTS,
+          validationErrors: errors,
+        };
+        return res.json(result);
+      }
+    } catch (err: any) {
+      console.error('[settings/automationRules] Read error:', err);
+      return res.status(500).json({ error: 'Failed to read automation rules' });
+    }
+  });
+
+  // POST /api/settings/automation-rules — validated write with audit trail
+  app.post('/api/settings/automation-rules', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const orgId = req.trustedOrgId as string;
+    const actor = req.firebaseUser as { uid: string; email?: string };
+    if (!firestore) return res.status(503).json({ error: 'Firestore unavailable' });
+
+    // Detect unknown keys before stripping (for audit record)
+    const inputKeys = Object.keys(req.body.rules ?? req.body ?? {});
+    const knownKeys = Object.keys(AUTOMATION_RULES_DEFAULTS);
+    const strippedKeys = inputKeys.filter(k => !knownKeys.includes(k));
+
+    const parsed = AutomationRulesSchema.safeParse(req.body.rules ?? req.body);
+    if (!parsed.success) {
+      const errors = parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+      return res.status(400).json({ error: 'Validation failed', validationErrors: errors });
+    }
+
+    const normalizedValue = parsed.data;
+
+    try {
+      const docRef = firestore.collection('orgs').doc(orgId).collection('settings').doc('automationRules');
+      const prevSnap = await docRef.get();
+      const previousValue = prevSnap.exists ? prevSnap.data() : null;
+
+      await docRef.set(
+        { ...normalizedValue, updatedAt: new Date().toISOString() },
+        { merge: false }, // full replace, never merge — unknown fields must not persist
+      );
+
+      // Write audit entry (non-blocking)
+      await writeSettingsAudit(firestore, {
+        changedAt: new Date().toISOString(),
+        changedByUid: actor.uid,
+        changedByEmail: actor.email ?? null,
+        settingType: 'automationRules',
+        orgId,
+        previousValue,
+        newValue: normalizedValue,
+        strippedKeys,
+        source: 'server-api',
+      });
+
+      if (strippedKeys.length > 0) {
+        console.warn(`[settings/automationRules] Stripped unknown keys for org ${orgId}:`, strippedKeys);
+      }
+
+      return res.json({ ok: true, data: normalizedValue, strippedKeys });
+    } catch (err: any) {
+      console.error('[settings/automationRules] Write error:', err);
+      return res.status(500).json({ error: 'Failed to save automation rules' });
+    }
+  });
+
   // GET /api/openclaw/manifest — return the full skill/agent/cron definitions
   app.get('/api/openclaw/manifest', async (req: any, res: any) => {
     const appUrl = process.env.REPLIT_DOMAINS
@@ -9171,32 +9274,84 @@ Rules:
     });
   });
 
-  // POST /api/openclaw/config — save base URL to Firestore
-  app.post('/api/openclaw/config', async (req: any, res: any) => {
-    const { orgId, baseUrl } = req.body;
-    if (!orgId || !baseUrl) return res.status(400).json({ error: 'orgId and baseUrl required' });
+  // POST /api/openclaw/config — validated write with audit trail
+  app.post('/api/openclaw/config', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    const { baseUrl } = req.body;
+    const orgId = req.trustedOrgId as string;
+    const actor = req.firebaseUser as { uid: string; email?: string };
     if (!firestore) return res.status(503).json({ error: 'Firestore unavailable' });
+
+    // Detect unknown keys before stripping (for audit record)
+    const inputKeys = Object.keys(req.body ?? {}).filter(k => k !== 'orgId');
+    const strippedKeys = inputKeys.filter(k => !['baseUrl'].includes(k));
+
+    const parsed = OpenclawConfigSchema.safeParse({ baseUrl });
+    if (!parsed.success) {
+      const errors = parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+      return res.status(400).json({ error: 'Validation failed', validationErrors: errors });
+    }
+
+    const normalizedValue = parsed.data;
     try {
-      await firestore.collection('orgs').doc(orgId).collection('settings').doc('openclawConfig').set(
-        { baseUrl, updatedAt: new Date().toISOString() },
-        { merge: true }
+      const docRef = firestore.collection('orgs').doc(orgId).collection('settings').doc('openclawConfig');
+      const prevSnap = await docRef.get();
+      const previousValue = prevSnap.exists ? prevSnap.data() : null;
+
+      await docRef.set(
+        { ...normalizedValue, updatedAt: new Date().toISOString() },
+        { merge: false }, // full replace — unknown fields must not persist
       );
-      res.json({ ok: true });
+
+      await writeSettingsAudit(firestore, {
+        changedAt: new Date().toISOString(),
+        changedByUid: actor.uid,
+        changedByEmail: actor.email ?? null,
+        settingType: 'openclawConfig',
+        orgId,
+        previousValue,
+        newValue: normalizedValue,
+        strippedKeys,
+        source: 'server-api',
+      });
+
+      if (strippedKeys.length > 0) {
+        console.warn(`[settings/openclawConfig] Stripped unknown keys for org ${orgId}:`, strippedKeys);
+      }
+
+      return res.json({ ok: true, data: normalizedValue });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error('[settings/openclawConfig] Write error:', err);
+      return res.status(500).json({ error: err.message });
     }
   });
 
-  // GET /api/openclaw/config — load base URL from Firestore
-  app.get('/api/openclaw/config', async (req: any, res: any) => {
-    const { orgId } = req.query;
-    if (!orgId) return res.status(400).json({ error: 'orgId required' });
+  // GET /api/openclaw/config — validated read
+  app.get('/api/openclaw/config', requireOrgAccess, async (req: any, res: any) => {
+    const orgId = req.trustedOrgId as string;
     if (!firestore) return res.status(503).json({ error: 'Firestore unavailable' });
     try {
-      const doc = await firestore.collection('orgs').doc(orgId as string).collection('settings').doc('openclawConfig').get();
-      res.json(doc.exists ? doc.data() : { baseUrl: '' });
+      const snap = await firestore.collection('orgs').doc(orgId).collection('settings').doc('openclawConfig').get();
+      if (!snap.exists) {
+        const result: OpenclawConfigReadResult = { status: 'missing', data: {} };
+        return res.json(result);
+      }
+      const parsed = OpenclawConfigSchema.safeParse(snap.data());
+      if (parsed.success) {
+        const result: OpenclawConfigReadResult = { status: 'valid', data: parsed.data };
+        return res.json(result);
+      } else {
+        const errors = parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+        console.warn('[settings/openclawConfig] Stored document failed validation:', errors);
+        const result: OpenclawConfigReadResult = {
+          status: 'invalid',
+          data: {},
+          validationErrors: errors,
+        };
+        return res.json(result);
+      }
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error('[settings/openclawConfig] Read error:', err);
+      return res.status(500).json({ error: err.message });
     }
   });
 

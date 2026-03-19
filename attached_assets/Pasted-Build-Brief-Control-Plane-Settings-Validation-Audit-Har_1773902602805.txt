@@ -1,0 +1,386 @@
+Build Brief — Control-Plane Settings Validation & Audit Hardening                            
+                                                                                              
+ Goal                                                                                         
+                                                                                              
+ Make Bullpen and OpenClaw control-plane settings trustworthy, validated, and auditable.      
+                                                                                              
+ Problem                                                                                      
+                                                                                              
+ The current control-plane settings model is structurally weak even after auth hardening.     
+                                                                                              
+ Specifically:                                                                                
+                                                                                              
+ ### orgs/{orgId}/settings/automationRules                                                    
+                                                                                              
+ - written client-side with setDoc(docRef, rules)                                             
+ - no Zod validation before write                                                             
+ - read back with permissive merge:                                                           
+ - { ...DEFAULT_RULES, ...(snap.data() as Partial<AutomationRules>) }                         
+ - unknown keys pass through silently                                                         
+ - malformed types can silently persist                                                       
+ - no audit trail                                                                             
+ - no versioning/history                                                                      
+                                                                                              
+ ### orgs/{orgId}/settings/openclawConfig                                                     
+                                                                                              
+ - written client-side as { baseUrl }                                                         
+ - validation is effectively “it is a string”                                                 
+ - read back raw with no shape validation                                                     
+ - no audit trail                                                                             
+ - no versioning/history                                                                      
+                                                                                              
+ These are not ordinary settings. They are control-plane documents.                           
+ A malformed or unsafe write can silently change safety controls, automation behavior,        
+ provisioning targets, or operator assumptions.                                               
+                                                                                              
+ Auth hardening fixed who can write.                                                          
+ This task fixes what can be written, how it is validated, and whether changes are traceable. 
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Outcome that matters most                                                                    
+                                                                                              
+ Make control-plane config safe to trust.                                                     
+                                                                                              
+ Success means:                                                                               
+ - malformed settings cannot be silently persisted                                            
+ - unknown keys are rejected or deliberately stripped                                         
+ - reads are schema-validated, not raw                                                        
+ - changes are attributable and auditable                                                     
+ - control-plane state has explicit defaults and safe fallback behavior                       
+ - Bullpen/OpenClaw settings can be reviewed and rolled back if needed                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Scope                                                                                        
+                                                                                              
+ ### In scope                                                                                 
+                                                                                              
+ 1. Schema validation for automationRules                                                     
+ 2. Schema validation for openclawConfig                                                      
+ 3. Validated write path                                                                      
+ 4. Validated read path                                                                       
+ 5. Audit/history trail for settings changes                                                  
+ 6. Minimal UI-safe handling for invalid or missing config                                    
+ 7. Documentation of control-plane config contract                                            
+                                                                                              
+ ### Out of scope                                                                             
+                                                                                              
+ - redesigning Bullpen UI                                                                     
+ - redesigning OpenClaw connection testing                                                    
+ - broader feature work                                                                       
+ - AI output history/versioning                                                               
+ - GBP OAuth hardening                                                                        
+ - live state sync work                                                                       
+ - broad migration to server-only settings management unless needed for validation/audit      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Current state                                                                                
+                                                                                              
+ - auth and tenant hardening has been completed                                               
+ - manager-only protections now exist at the route/server level                               
+ - but settings writes remain weakly validated                                                
+ - malformed documents can persist without detection                                          
+ - no history exists for settings changes                                                     
+ - wrong dev/prod targets or broken automation flags can be stored without strong safeguards  
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Required architecture rules                                                                  
+                                                                                              
+ ### 1. Control-plane settings must be schema-validated                                       
+                                                                                              
+ No raw write of settings objects.                                                            
+ No permissive merge that hides malformed structure.                                          
+                                                                                              
+ ### 2. Unknown keys must not silently influence behavior                                     
+                                                                                              
+ Either:                                                                                      
+ - reject them                                                                                
+ or                                                                                           
+ - strip them deliberately and log/audit the normalized result                                
+                                                                                              
+ Do not let arbitrary extra fields shape runtime behavior invisibly.                          
+                                                                                              
+ ### 3. Reads must be validated too                                                           
+                                                                                              
+ Stored data can already be malformed.                                                        
+ Validation cannot exist only at write time.                                                  
+                                                                                              
+ ### 4. Control-plane changes must be attributable                                            
+                                                                                              
+ Every meaningful settings change should have:                                                
+ - actor                                                                                      
+ - timestamp                                                                                  
+ - target doc                                                                                 
+ - previous value                                                                             
+ - new value                                                                                  
+ - optional environment/context metadata                                                      
+                                                                                              
+ ### 5. Protect existing working functionality                                                
+                                                                                              
+ Do not rewrite the whole settings architecture unless necessary.                             
+ Prefer the smallest safe hardening path.                                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended implementation approach                                                          
+                                                                                              
+ Phase 1 — Define schemas                                                                     
+                                                                                              
+ ### A. automationRules schema                                                                
+                                                                                              
+ Create a Zod schema that defines:                                                            
+ - exact allowed fields                                                                       
+ - exact types                                                                                
+ - defaults where appropriate                                                                 
+ - optional vs required fields intentionally                                                  
+                                                                                              
+ Also define:                                                                                 
+ - normalization strategy                                                                     
+ - unknown-key strategy (strict, strip, or equivalent — be deliberate)                        
+                                                                                              
+ ### B. openclawConfig schema                                                                 
+                                                                                              
+ At minimum:                                                                                  
+ - object shape                                                                               
+ - baseUrl                                                                                    
+ - non-empty / format validation                                                              
+ - optionally safer URL validation rules if appropriate                                       
+                                                                                              
+ If future fields are expected, structure the schema to allow extension intentionally — not   
+ accidental pass-through.                                                                     
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 2 — Validated write path                                                               
+                                                                                              
+ Replace direct raw writes with validated writes.                                             
+                                                                                              
+ ### Requirements                                                                             
+                                                                                              
+ - validate before write                                                                      
+ - reject invalid payloads with clear errors                                                  
+ - do not allow malformed config to reach Firestore                                           
+ - do not silently accept dangerous shape drift                                               
+                                                                                              
+ ### Important note                                                                           
+                                                                                              
+ If settings are still written from the client, the validation boundary should ideally also   
+ exist in the server/API path where possible.                                                 
+ At minimum, the codebase should have one authoritative schema and one consistent             
+ normalization strategy.                                                                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 3 — Validated read path                                                                
+                                                                                              
+ Current permissive read patterns need to be replaced.                                        
+                                                                                              
+ ### For automationRules                                                                      
+                                                                                              
+ Do not keep:                                                                                 
+ - raw snap.data() cast                                                                       
+ - permissive spread merge that hides corruption                                              
+                                                                                              
+ Instead:                                                                                     
+ - validate stored doc                                                                        
+ - normalize intentionally                                                                    
+ - if invalid:                                                                                
+ - surface error state                                                                        
+ - fall back safely                                                                           
+ - log/audit the issue                                                                        
+                                                                                              
+ ### For openclawConfig                                                                       
+                                                                                              
+ Do not use raw doc.data() as trusted shape.                                                  
+ Validate it.                                                                                 
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Stored malformed config should become visible and controlled, not silently merged into       
+ normal behavior.                                                                             
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 4 — Audit/history trail                                                                
+                                                                                              
+ Add change history for both control-plane docs.                                              
+                                                                                              
+ ### Suggested model                                                                          
+                                                                                              
+ One of:                                                                                      
+ - orgs/{orgId}/settingsHistory/{docType}/entries/{entryId}                                   
+ or                                                                                           
+ - separate subcollections per setting type                                                   
+                                                                                              
+ Examples:                                                                                    
+ - settingsHistory/automationRules/entries/...                                                
+ - settingsHistory/openclawConfig/entries/...                                                 
+                                                                                              
+ ### Each audit record should include                                                         
+                                                                                              
+ - changedAt                                                                                  
+ - changedByUid                                                                               
+ - changedByEmail or display identifier if available                                          
+ - settingType                                                                                
+ - orgId                                                                                      
+ - previous value                                                                             
+ - new value                                                                                  
+ - optional reason/source if available                                                        
+ - optional environment marker                                                                
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ You need traceability and rollback confidence.                                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 5 — Safe fallback behavior                                                             
+                                                                                              
+ Define explicit behavior for invalid or missing config.                                      
+                                                                                              
+ ### automationRules                                                                          
+                                                                                              
+ If stored value is invalid:                                                                  
+ - do not silently continue as if valid                                                       
+ - either:                                                                                    
+ - fail safe to known defaults                                                                
+ - and surface that config was invalid                                                        
+ - or block dangerous behavior until fixed                                                    
+                                                                                              
+ ### openclawConfig                                                                           
+                                                                                              
+ If invalid:                                                                                  
+ - do not present it as healthy/usable config                                                 
+ - surface config-invalid state clearly                                                       
+                                                                                              
+ ### Goal                                                                                     
+                                                                                              
+ Prevent bad config from masquerading as acceptable state.                                    
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Phase 6 — Documentation                                                                      
+                                                                                              
+ Add a short document or expand existing trust/control docs to define:                        
+ - settings document paths                                                                    
+ - schema ownership                                                                           
+ - validation rules                                                                           
+ - audit trail location                                                                       
+ - fallback behavior                                                                          
+ - who can mutate these settings                                                              
+                                                                                              
+ Keep it implementation-useful.                                                               
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Technical constraints / non-negotiables                                                      
+                                                                                              
+ - preserve current working behavior where possible                                           
+ - do not weaken existing auth hardening                                                      
+ - maintain manager-only protection for settings writes                                       
+ - Replit remains staging only                                                                
+ - production settings/secrets remain separate                                                
+ - keep tenant isolation intact                                                               
+ - do not allow unknown keys to shape control-plane behavior silently                         
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Risks and dependencies                                                                       
+                                                                                              
+ ### Risks                                                                                    
+                                                                                              
+ - over-tight validation breaking existing malformed-but-relied-on documents                  
+ - migration pain if current stored docs are inconsistent                                     
+ - UI breakage if read path starts rejecting existing bad data without safe fallback          
+ - history writes failing silently if not handled carefully                                   
+                                                                                              
+ ### Dependencies                                                                             
+                                                                                              
+ - need current exact shape of automationRules                                                
+ - need current exact shape and intended future shape of openclawConfig                       
+ - need to inspect whether any malformed docs already exist in staging                        
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ QA requirements                                                                              
+                                                                                              
+ ### Must test — write path                                                                   
+                                                                                              
+ 1. valid automationRules write succeeds                                                      
+ 2. invalid type in automationRules fails                                                     
+ 3. unknown keys are rejected or stripped intentionally                                       
+ 4. valid openclawConfig write succeeds                                                       
+ 5. invalid baseUrl fails                                                                     
+                                                                                              
+ ### Must test — read path                                                                    
+                                                                                              
+ 6. valid stored config loads normally                                                        
+ 7. malformed stored automationRules does not silently act as valid                           
+ 8. malformed stored openclawConfig surfaces invalid/config error state                       
+ 9. safe fallback behavior works as designed                                                  
+                                                                                              
+ ### Must test — audit                                                                        
+                                                                                              
+ 10. each successful settings change creates history entry                                    
+ 11. history captures actor, time, old value, new value                                       
+ 12. history remains tenant-scoped and queryable                                              
+                                                                                              
+ ### Must test — permissions                                                                  
+                                                                                              
+ 13. member cannot change settings                                                            
+ 14. owner/admin can change settings                                                          
+ 15. cross-org settings write is denied                                                       
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Measurable success criteria                                                                  
+                                                                                              
+ This task is successful when:                                                                
+                                                                                              
+ - automationRules writes are schema-validated                                                
+ - openclawConfig writes are schema-validated                                                 
+ - reads are validated, not raw-cast                                                          
+ - invalid stored config is visible and handled safely                                        
+ - unknown keys no longer silently shape runtime behavior                                     
+ - settings changes are auditable with actor/time/value trace                                 
+ - control-plane config can be trusted operationally                                          
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ Recommended execution order                                                                  
+                                                                                              
+ 1. define schemas                                                                            
+ 2. inspect existing staging docs for compatibility                                           
+ 3. implement validated write path                                                            
+ 4. implement validated read path                                                             
+ 5. add audit trail/history writes                                                            
+ 6. add safe fallback/error handling                                                          
+ 7. QA malformed-config and permission scenarios                                              
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What good output looks like from this task                                                   
+                                                                                              
+ Please return:                                                                               
+ - schema definitions created                                                                 
+ - write path changes made                                                                    
+ - read path changes made                                                                     
+ - unknown-key handling decision                                                              
+ - audit/history model added                                                                  
+ - compatibility issues found in existing staging docs                                        
+ - known follow-up items                                                                      
+                                                                                              
+ ────────────────────────────────────────────────────────────────────────────────             
+                                                                                              
+ What not to do                                                                               
+                                                                                              
+ - do not redesign the entire settings system unnecessarily                                   
+ - do not expand into OpenClaw connection health redesign in this task                        
+ - do not mix this with AI output versioning                                                  
+ - do not silently preserve malformed config behavior for convenience                         
+ - do not leave audit/history as “later” if settings writes are being hardened now            
+                                                                                              
+ ───────────────────────────────────────────────────────────────────────────────

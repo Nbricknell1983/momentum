@@ -129,21 +129,26 @@ export default function OpenClawSetupPage() {
     queryKey: ['/api/openclaw/manifest'],
   });
 
-  // Fetch saved config
+  // Fetch saved config — uses validated read endpoint
   const { data: savedConfig } = useQuery({
     queryKey: ['/api/openclaw/config', orgId],
     queryFn: async () => {
-      if (!orgId) return { baseUrl: '' };
-      const r = await fetch(`/api/openclaw/config?orgId=${orgId}`);
+      if (!orgId) return { status: 'missing' as const, data: {} };
+      const r = await apiRequest('GET', `/api/openclaw/config?orgId=${orgId}`);
       return r.json();
     },
     enabled: !!orgId,
   });
 
+  // configStatus surfaces validation state to the UI
+  const configStatus = (savedConfig as any)?.status as 'valid' | 'invalid' | 'missing' | undefined;
+  const configValidationErrors: string[] = (savedConfig as any)?.validationErrors ?? [];
+
   useEffect(() => {
-    if (savedConfig?.baseUrl) {
-      setBaseUrl(savedConfig.baseUrl);
-      setSavedBaseUrl(savedConfig.baseUrl);
+    const url = (savedConfig as any)?.data?.baseUrl;
+    if (url) {
+      setBaseUrl(url);
+      setSavedBaseUrl(url);
     }
   }, [savedConfig]);
 
@@ -167,11 +172,7 @@ export default function OpenClawSetupPage() {
     setTestingConn(true);
     setConnectionStatus('unknown');
     try {
-      const r = await fetch('/api/openclaw/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseUrl: baseUrl.trim() }),
-      });
+      const r = await apiRequest('POST', '/api/openclaw/test-connection', { baseUrl: baseUrl.trim() });
       const data = await r.json();
       setConnectionStatus(data.connected ? 'ok' : 'failed');
     } catch {
@@ -185,11 +186,7 @@ export default function OpenClawSetupPage() {
   const provision = useMutation({
     mutationFn: async () => {
       if (!orgId || !savedBaseUrl) throw new Error('Save a base URL first');
-      const r = await fetch('/api/openclaw/provision', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId, baseUrl: savedBaseUrl }),
-      });
+      const r = await apiRequest('POST', '/api/openclaw/provision', { orgId, baseUrl: savedBaseUrl });
       return r.json() as Promise<ProvisionResult>;
     },
     onSuccess: (data) => {
@@ -262,6 +259,21 @@ export default function OpenClawSetupPage() {
         </Button>
       </div>
 
+      {/* Config invalid banner */}
+      {configStatus === 'invalid' && (
+        <div className="p-3 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-start gap-2" data-testid="banner-openclaw-config-invalid">
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <div>
+            <span className="font-semibold">Stored OpenClaw config is invalid</span> — please re-enter and save a valid base URL.
+            {configValidationErrors.length > 0 && (
+              <ul className="mt-1 list-disc list-inside opacity-80">
+                {configValidationErrors.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Connection Status ── */}
       <Card className="border" data-testid="card-connection-status">
         <CardHeader className="pb-2 pt-4 px-4">
@@ -283,7 +295,7 @@ export default function OpenClawSetupPage() {
             </div>
             {/* Base URL */}
             <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
-              <StatusIcon ok={baseUrlSaved} />
+              <StatusIcon ok={baseUrlSaved && configStatus !== 'invalid'} warning={configStatus === 'invalid'} />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold">Base URL</p>
                 <p className="text-[11px] text-muted-foreground truncate">

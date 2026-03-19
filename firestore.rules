@@ -135,6 +135,14 @@ service cloud.firestore {
         allow read: if isOrgMember(orgId);
         allow write: if isOrgMember(orgId);
       }
+
+      // Settings change history — written by server (Admin SDK bypasses rules).
+      // Managers can read audit trail. No client-side writes or deletes.
+      match /settingsHistory/{settingType}/entries/{entryId} {
+        allow read: if isOrgManager(orgId);
+        allow create: if false; // server-only via Admin SDK
+        allow update, delete: if false; // audit log is immutable
+      }
     }
     
     match /users/{userId}/settings/{settingId} {
