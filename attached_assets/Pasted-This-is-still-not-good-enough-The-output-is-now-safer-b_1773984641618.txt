@@ -1,0 +1,81 @@
+This is still not good enough.
+
+The output is now safer, but it is still not doing the actual job.
+
+For First Parking, the Presence Snapshot is still saying things like:
+- Website: not yet verified
+- GBP / Maps: not yet verified
+- Social: not yet verified
+
+That is not acceptable for a business with clearly discoverable public presence.
+
+This means the system is still relying too heavily on existing stored lead/enrichment fields and not doing enough ACTIVE DISCOVERY.
+
+What I need fixed now:
+
+1. Presence Snapshot must actively discover obvious public presence
+It should not rely only on fields already stored on the lead.
+
+For a normal business, the system should actively attempt to discover:
+- primary website
+- sitemap
+- crawlable page/content presence
+- social profiles
+- GBP / Maps presence
+- competitor signals where supported
+
+2. Website discovery must improve
+For First Parking, the system should be able to find:
+- https://www.firstparking.com.au/
+- sitemap / sitemap_index.xml
+- page/content presence
+
+Implement or improve active website discovery so Presence Snapshot does not remain “not yet verified” when an obvious company website exists.
+
+3. Social discovery must improve
+The system should not wait for facebookUrl/linkedinUrl to already exist in Firestore if those are publicly discoverable.
+
+At minimum, inspect whether existing crawler/search/enrichment logic can:
+- extract outbound social links from the website
+- detect obvious public social profiles from search/business signals
+- populate stored social fields or a presence snapshot layer accordingly
+
+For this business, LinkedIn and Facebook should be discoverable.
+
+4. GBP / Maps discovery must improve
+“Not yet verified” is still too weak here.
+
+Inspect and improve the current GBP / Maps lookup path so the system can actively identify likely GBP presence for established businesses, especially where multiple locations may exist.
+
+Do not just wait for a pre-linked Place ID if public business presence can be detected more intelligently.
+
+5. Presence Snapshot should stop telling the rep to manually confirm things that the system should already know
+For obvious public data like website/social/basic GBP presence, the system should find it itself.
+The rep should not have to use the client call to compensate for weak enrichment.
+
+6. Search visibility reasoning must improve
+Do not say visibility is low because website/GBP are “unverified” when the system simply failed to discover obvious assets.
+Fix the upstream discovery so search visibility reasoning is based on actual signals.
+
+7. This must be a general fix, not a one-off patch
+Do not hardcode First Parking.
+Improve the active discovery pipeline used by Presence Snapshot.
+
+8. Use the current architecture where possible
+- extend existing enrichment/crawler/search utilities
+- reuse existing APIs/integrations
+- do not create a parallel presence system
+- preserve auth and tenant safety
+- preserve backwards compatibility
+
+Return:
+1. what active discovery is still missing today
+2. what files need to change
+3. exactly how website/social/GBP discovery will be improved
+4. whether the current system is only reading stored fields instead of actively discovering presence
+5. what limitations will remain after the fix
+6. any required APIs or access still missing
+
+IMPORTANT:
+The goal is no longer just “don’t hallucinate absence”.
+The goal is “actively find obvious public presence automatically”.

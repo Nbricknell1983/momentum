@@ -7372,6 +7372,192 @@ Return JSON:
     }
   });
 
+  // ── Shared: scrape social links from a website homepage ──────────────────
+  async function fetchSocialLinksFromWebsite(websiteUrl: string): Promise<{
+    facebookUrl: string | null; instagramUrl: string | null; linkedinUrl: string | null;
+  }> {
+    const FACEBOOK_SKIP = /sharer|share|login|signup|sign-up|dialog|intent|watch|groups\/|events\/|hashtag|photo|video|plugins|pages\/create|business\/|ads\/|help\//i;
+    const INSTAGRAM_SKIP = /explore|reel|story|p\/|tv\/|hashtag|accounts\/login/i;
+    const LINKEDIN_SKIP = /share|login|signup|uas\/login|authwall|feed\/|jobs\/|learning\/|recruiter/i;
+    const isValidFacebook = (url: string) => {
+      try {
+        const u = new URL(url);
+        if (!/(facebook\.com|fb\.com)$/.test(u.hostname)) return false;
+        if (FACEBOOK_SKIP.test(u.pathname)) return false;
+        const parts = u.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+        return parts.length === 1 && parts[0].length > 1;
+      } catch { return false; }
+    };
+    const isValidInstagram = (url: string) => {
+      try {
+        const u = new URL(url);
+        if (!u.hostname.includes('instagram.com')) return false;
+        if (INSTAGRAM_SKIP.test(u.pathname)) return false;
+        const parts = u.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+        return parts.length === 1 && parts[0].length > 1;
+      } catch { return false; }
+    };
+    const isValidLinkedIn = (url: string) => {
+      try {
+        const u = new URL(url);
+        if (!u.hostname.includes('linkedin.com')) return false;
+        if (LINKEDIN_SKIP.test(u.pathname)) return false;
+        return /\/(company|in|school)\//.test(u.pathname);
+      } catch { return false; }
+    };
+    const cleanUrl = (url: string, base: string) => {
+      try { return new URL(url, base).href.split('?')[0].replace(/\/$/, ''); }
+      catch { return url; }
+    };
+    let normalised = websiteUrl.trim();
+    if (!normalised.startsWith('http')) normalised = 'https://' + normalised;
+    let html = '';
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const r = await fetch(normalised, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-AU,en;q=0.9',
+          },
+        });
+        clearTimeout(timeout);
+        if (r.ok) html = await r.text();
+      } catch {
+        clearTimeout(timeout);
+        try {
+          const r2 = await fetch(normalised.replace(/^https:\/\//, 'http://'), {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (r2.ok) html = await r2.text();
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+    if (!html) return { facebookUrl: null, instagramUrl: null, linkedinUrl: null };
+    const hrefRegex = /href=["']([^"']+)["']/gi;
+    const hrefs: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = hrefRegex.exec(html)) !== null) hrefs.push(m[1]);
+    return {
+      facebookUrl: hrefs.map(h => cleanUrl(h, normalised)).find(isValidFacebook) || null,
+      instagramUrl: hrefs.map(h => cleanUrl(h, normalised)).find(isValidInstagram) || null,
+      linkedinUrl: hrefs.map(h => cleanUrl(h, normalised)).find(isValidLinkedIn) || null,
+    };
+  }
+
+  // ── Active presence discovery: runs before prep pack prompt assembly ──────
+  // Calls Google Places API to find website + GBP signals, then scrapes the
+  // homepage for social links. Writes discovered data back to Firestore async.
+  async function activePresenceDiscovery(lead: any, orgId: string): Promise<{
+    websiteUrl: string | null; facebookUrl: string | null; instagramUrl: string | null;
+    linkedinUrl: string | null; gbpRating: number | null; gbpReviewCount: number | null;
+    gbpAddress: string | null; gbpPhone: string | null; gbpMapsUrl: string | null;
+    gbpPlaceId: string | null; gbpCategory: string | null; discoverySource: string[];
+  }> {
+    const result = {
+      websiteUrl: null as string | null, facebookUrl: null as string | null,
+      instagramUrl: null as string | null, linkedinUrl: null as string | null,
+      gbpRating: null as number | null, gbpReviewCount: null as number | null,
+      gbpAddress: null as string | null, gbpPhone: null as string | null,
+      gbpMapsUrl: null as string | null, gbpPlaceId: null as string | null,
+      gbpCategory: null as string | null, discoverySource: [] as string[],
+    };
+    const businessName = lead.businessName || lead.companyName || lead.contactName || '';
+    if (!businessName) return result;
+
+    // ── Step 1: Google Places — discover website + GBP signals ──────────────
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (apiKey) {
+      try {
+        const location = lead.suburb || lead.city || lead.state || lead.address || '';
+        const textQuery = location ? `${businessName} ${location}` : businessName;
+        const placeResp = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.formattedAddress,places.primaryType,places.googleMapsUri',
+          },
+          body: JSON.stringify({ textQuery, languageCode: 'en', regionCode: 'AU', maxResultCount: 3 }),
+        });
+        if (placeResp.ok) {
+          const { places } = await placeResp.json();
+          if (places?.length) {
+            const nameLower = businessName.toLowerCase();
+            const best = places.find((p: any) => {
+              const n = (p.displayName?.text || '').toLowerCase();
+              return n.includes(nameLower) || nameLower.includes(n) ||
+                n.split(' ').some((w: string) => w.length > 3 && nameLower.includes(w));
+            }) || places[0];
+            if (best) {
+              if (best.websiteUri) {
+                result.websiteUrl = best.websiteUri;
+                result.discoverySource.push('google_places_website');
+              }
+              result.gbpRating = best.rating ?? null;
+              result.gbpReviewCount = best.userRatingCount ?? null;
+              result.gbpAddress = best.formattedAddress || null;
+              result.gbpPhone = best.nationalPhoneNumber || null;
+              result.gbpMapsUrl = best.googleMapsUri || null;
+              result.gbpPlaceId = best.id || null;
+              const pt = best.primaryType || null;
+              result.gbpCategory = pt ? pt.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null;
+              result.discoverySource.push('google_places_gbp');
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[active-discovery] Places API error:', e.message);
+      }
+    }
+
+    // ── Step 2: Social scrape — fetch homepage and extract social links ───────
+    const websiteForScrape = result.websiteUrl || lead.website || lead.sourceData?.googleWebsite || null;
+    if (websiteForScrape) {
+      try {
+        const social = await fetchSocialLinksFromWebsite(websiteForScrape);
+        result.facebookUrl = social.facebookUrl;
+        result.instagramUrl = social.instagramUrl;
+        result.linkedinUrl = social.linkedinUrl;
+        if (social.facebookUrl || social.instagramUrl || social.linkedinUrl) {
+          result.discoverySource.push('homepage_social_scrape');
+        }
+      } catch (e: any) {
+        console.warn('[active-discovery] Social scrape error:', e.message);
+      }
+    }
+
+    // ── Step 3: Write back to Firestore async (non-blocking) ─────────────────
+    if (firestore && result.discoverySource.length > 0) {
+      const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(lead.id);
+      const updates: Record<string, any> = {};
+      if (result.websiteUrl && !lead.website) updates.website = result.websiteUrl;
+      if (result.facebookUrl && !lead.facebookUrl) updates.facebookUrl = result.facebookUrl;
+      if (result.instagramUrl && !lead.instagramUrl) updates.instagramUrl = result.instagramUrl;
+      if (result.linkedinUrl && !lead.linkedinUrl) updates.linkedinUrl = result.linkedinUrl;
+      if (result.gbpRating !== null && !lead.sourceData?.googleRating) updates['sourceData.googleRating'] = result.gbpRating;
+      if (result.gbpReviewCount !== null && !lead.sourceData?.googleReviewCount) updates['sourceData.googleReviewCount'] = result.gbpReviewCount;
+      if (result.gbpMapsUrl && !lead.sourceData?.googleMapsUrl) updates['sourceData.googleMapsUrl'] = result.gbpMapsUrl;
+      if (result.gbpPlaceId && !lead.sourceData?.googlePlaceId) updates['sourceData.googlePlaceId'] = result.gbpPlaceId;
+      if (result.gbpAddress && !lead.sourceData?.googleAddress) updates['sourceData.googleAddress'] = result.gbpAddress;
+      if (result.gbpCategory && !lead.sourceData?.googleCategory) updates['sourceData.googleCategory'] = result.gbpCategory;
+      if (result.gbpPhone && !lead.phone) updates.phone = result.gbpPhone;
+      if (Object.keys(updates).length > 0) {
+        leadRef.set(updates, { merge: true }).catch((e: any) =>
+          console.warn('[active-discovery] Firestore write-back error:', e.message)
+        );
+        console.log(`[active-discovery] ${businessName} | wrote back: ${Object.keys(updates).join(', ')}`);
+      }
+    }
+
+    console.log(`[active-discovery] ${businessName} | sources=[${result.discoverySource.join(',')}] website=${result.websiteUrl || 'none'} fb=${result.facebookUrl || 'none'} li=${result.linkedinUrl || 'none'} reviews=${result.gbpReviewCount ?? 'n/a'}`);
+    return result;
+  }
+
   // ── Auto-generate Prep Call Pack for a lead ──────────────────────────────
   // ─────────────────────────────────────────────────────────────────────────
   // Shared helper: generate (or skip) a prep call pack for a single lead.
@@ -7400,13 +7586,17 @@ Return JSON:
     const si = lead.strategyIntelligence || {};
     const gp = lead.growthPrescription || null;
 
-    // ── Website signals: cascade through all available evidence ──────────────
-    const websiteUrlConfirmed = lead.website || src.googleWebsite || null;
+    // ── Active presence discovery: live lookup before prompt assembly ──────────
+    // Calls Google Places API (website + GBP signals) then scrapes homepage for
+    // social links. Results are merged with stored signals below.
+    const discovered = await activePresenceDiscovery(lead, orgId);
+
+    // ── Website signals: cascade stored → discovered → enrichment inference ──
+    const websiteUrlConfirmed = lead.website || src.googleWebsite || discovered.websiteUrl || null;
     const hasSitemap = (lead.sitemapPages?.length ?? 0) > 0;
     const hasCrawl = (lead.crawledPages?.length ?? 0) > 0;
     const sitemapPageCount = lead.sitemapPages?.length ?? 0;
     const crawlPageCount = lead.crawledPages?.filter((p: any) => !p.error).length ?? 0;
-    // Enrichment identity pass writes websiteStatus: 'has_website' | 'no_website' | 'unknown'
     const enrichWebsiteStatus: string = enr.websiteStatus || 'unknown';
     let websiteStr: string;
     if (websiteUrlConfirmed) {
@@ -7416,54 +7606,60 @@ Return JSON:
     } else if (hasSitemap || hasCrawl) {
       websiteStr = `[website confirmed via crawl — ${hasCrawl ? crawlPageCount + ' pages analysed' : sitemapPageCount + ' sitemap pages'}]`;
     } else if (enrichWebsiteStatus === 'has_website') {
-      websiteStr = '[website confirmed by enrichment intelligence — specific URL not yet stored on record]';
+      websiteStr = '[website confirmed by enrichment intelligence — URL not yet stored on record]';
     } else if (enrichWebsiteStatus === 'no_website') {
       websiteStr = '[enrichment indicates no website detected — should be confirmed manually]';
     } else {
-      websiteStr = 'not yet verified — enrichment may be incomplete';
+      websiteStr = 'not yet verified';
     }
 
-    // ── GBP / Maps signals ────────────────────────────────────────────────────
-    const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? null;
-    const rating = src.googleRating ?? enr.rating ?? null;
-    const gbpUrlRaw = src.googleMapsUrl || src.gbpUrl || null;
+    // ── GBP / Maps signals: cascade stored → discovered ───────────────────────
+    const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? discovered.gbpReviewCount ?? null;
+    const rating = src.googleRating ?? enr.rating ?? discovered.gbpRating ?? null;
+    const gbpUrlRaw = src.googleMapsUrl || src.gbpUrl || discovered.gbpMapsUrl || null;
+    const gbpPlaceId = src.googlePlaceId || discovered.gbpPlaceId || null;
+    const gbpAddress = src.googleAddress || discovered.gbpAddress || null;
+    const gbpCategory = src.googleCategory || discovered.gbpCategory || null;
+    const gbpPhone = lead.phone || src.phone || discovered.gbpPhone || null;
     let gbpStr: string;
     if (gbpUrlRaw) {
       gbpStr = gbpUrlRaw;
       if (reviewCount !== null) gbpStr += ` | ${reviewCount} reviews`;
       if (rating !== null) gbpStr += `, ${rating}/5`;
+      if (gbpCategory) gbpStr += ` | Category: ${gbpCategory}`;
     } else if (reviewCount !== null && reviewCount > 0) {
       gbpStr = `[GBP confirmed — ${reviewCount} Google reviews${rating !== null ? `, ${rating}/5 stars` : ''}]`;
-    } else if (src.googlePlaceId) {
-      gbpStr = `[GBP confirmed via Place ID: ${src.googlePlaceId} — review count not yet retrieved]`;
+      if (gbpAddress) gbpStr += ` | Address: ${gbpAddress}`;
+      if (gbpCategory) gbpStr += ` | Category: ${gbpCategory}`;
+    } else if (gbpPlaceId) {
+      gbpStr = `[GBP confirmed via Place ID — review count not yet retrieved]`;
+      if (gbpAddress) gbpStr += ` | Address: ${gbpAddress}`;
     } else if (src.googleBusinessName || src.googleName) {
       gbpStr = `[Google business name found: ${src.googleBusinessName || src.googleName} — Maps presence likely]`;
     } else {
-      gbpStr = 'not yet verified — enrichment may be incomplete';
+      gbpStr = 'not yet verified';
     }
 
-    // ── Social presence: check lead fields + sourceData + enrichment identity pass ──
-    // Enrichment writes socialPresence: { facebook: boolean; instagram: boolean; linkedin: boolean }
+    // ── Social presence: stored → discovered (homepage scrape) → enrichment ───
     const enrichSocial = enr.socialPresence || {};
-    const facebookUrl  = lead.facebookUrl  || src.facebookUrl  || null;
-    const instagramUrl = lead.instagramUrl || src.instagramUrl || null;
-    const linkedinUrl  = lead.linkedinUrl  || src.linkedinUrl  || null;
+    const facebookUrl  = lead.facebookUrl  || src.facebookUrl  || discovered.facebookUrl  || null;
+    const instagramUrl = lead.instagramUrl || src.instagramUrl || discovered.instagramUrl || null;
+    const linkedinUrl  = lead.linkedinUrl  || src.linkedinUrl  || discovered.linkedinUrl  || null;
     const twitterUrl   = lead.twitterUrl   || src.twitterUrl   || null;
-    // Check business signal strings for implicit detections
     const signals: string[] = src.businessSignals || [];
     const sigLower = signals.join(' ').toLowerCase();
     const impliedFacebook  = !facebookUrl  && (sigLower.includes('facebook')  || sigLower.includes('fb') || enrichSocial.facebook === true);
     const impliedInstagram = !instagramUrl && (sigLower.includes('instagram') || enrichSocial.instagram === true);
     const impliedLinkedIn  = !linkedinUrl  && (sigLower.includes('linkedin')  || enrichSocial.linkedin  === true);
     const socialParts: string[] = [];
-    if (facebookUrl)          socialParts.push(`Facebook (${facebookUrl})`);
+    if (facebookUrl)          socialParts.push(`Facebook: ${facebookUrl}`);
     else if (impliedFacebook) socialParts.push('Facebook (presence detected — URL not yet stored)');
-    if (instagramUrl)          socialParts.push(`Instagram (${instagramUrl})`);
+    if (instagramUrl)          socialParts.push(`Instagram: ${instagramUrl}`);
     else if (impliedInstagram) socialParts.push('Instagram (presence detected — URL not yet stored)');
-    if (linkedinUrl)          socialParts.push(`LinkedIn (${linkedinUrl})`);
+    if (linkedinUrl)          socialParts.push(`LinkedIn: ${linkedinUrl}`);
     else if (impliedLinkedIn) socialParts.push('LinkedIn (presence detected — URL not yet stored)');
-    if (twitterUrl)           socialParts.push(`Twitter/X (${twitterUrl})`);
-    const socials = socialParts.length > 0 ? socialParts.join('; ') : 'not yet verified — social enrichment may be incomplete';
+    if (twitterUrl)           socialParts.push(`Twitter/X: ${twitterUrl}`);
+    const socials = socialParts.length > 0 ? socialParts.join('; ') : 'none detected';
 
     // Debug: log assembled presence signals so we can verify correctness
     console.log(`[prep-pack] ${lead.companyName} | website="${websiteStr}" | gbp="${gbpStr}" | socials="${socials}" | reviews=${reviewCount} | rating=${rating}`);
@@ -7674,31 +7870,50 @@ Growth objective: ${si.growthObjective || ''}
 Target locations: ${si.targetLocations || ''}
 Core services: ${si.coreServices || ''}` : '';
 
-      // Build presence signals safely — never collapse unverified data into "None"
-      const nbsWebsite = lead.website || src.googleWebsite || enr.websiteUrl ||
+      // Build presence signals — run active discovery to get live data
+      const nbsDiscovered = await activePresenceDiscovery(lead, orgId);
+
+      const nbsWebsite = lead.website || src.googleWebsite || nbsDiscovered.websiteUrl ||
         ((lead.sitemapPages?.length ?? 0) > 0 ? `[confirmed via sitemap — ${lead.sitemapPages.length} pages]` : null) ||
         ((lead.crawledPages?.length ?? 0) > 0 ? `[confirmed via crawl]` : null) ||
+        (enr.websiteStatus === 'has_website' ? '[website confirmed by enrichment — URL not stored]' : null) ||
         'not yet verified';
-      const nbsGbp = src.googlePlaceId ? `Yes (Place ID: ${src.googlePlaceId})` :
-        (src.googleMapsUrl || enr.gbpUrl) ? `Yes (${src.googleMapsUrl || enr.gbpUrl})` :
-        (src.googleReviewCount > 0 ? `Yes (${src.googleReviewCount} reviews detected)` : 'not yet verified');
-      const nbsReviews = src.googleReviewCount != null ? `${src.googleReviewCount} reviews, ${src.googleRating}★` : 'not yet retrieved';
-      const nbsFb  = lead.facebookUrl  || src.facebookUrl  || enr.facebookUrl;
-      const nbsIg  = lead.instagramUrl || src.instagramUrl || enr.instagramUrl;
-      const nbsLi  = lead.linkedinUrl  || src.linkedinUrl  || enr.linkedinUrl;
-      const nbsSocials = [nbsFb && `Facebook (${nbsFb})`, nbsIg && `Instagram (${nbsIg})`, nbsLi && `LinkedIn (${nbsLi})`].filter(Boolean).join('; ') || 'not yet verified';
+      const nbsReviewCount = src.googleReviewCount ?? nbsDiscovered.gbpReviewCount ?? null;
+      const nbsRating = src.googleRating ?? nbsDiscovered.gbpRating ?? null;
+      const nbsGbpUrl = src.googleMapsUrl || src.gbpUrl || nbsDiscovered.gbpMapsUrl || null;
+      const nbsGbpId = src.googlePlaceId || nbsDiscovered.gbpPlaceId || null;
+      const nbsGbpAddr = src.googleAddress || nbsDiscovered.gbpAddress || null;
+      let nbsGbp: string;
+      if (nbsGbpUrl) {
+        nbsGbp = nbsGbpUrl;
+        if (nbsReviewCount !== null) nbsGbp += ` | ${nbsReviewCount} reviews`;
+        if (nbsRating !== null) nbsGbp += `, ${nbsRating}/5`;
+      } else if (nbsReviewCount !== null && nbsReviewCount > 0) {
+        nbsGbp = `[GBP confirmed — ${nbsReviewCount} Google reviews${nbsRating !== null ? `, ${nbsRating}/5 stars` : ''}]`;
+        if (nbsGbpAddr) nbsGbp += ` | Address: ${nbsGbpAddr}`;
+      } else if (nbsGbpId) {
+        nbsGbp = `[GBP found via Place ID — reviews not yet retrieved]`;
+        if (nbsGbpAddr) nbsGbp += ` | Address: ${nbsGbpAddr}`;
+      } else {
+        nbsGbp = 'not yet verified';
+      }
+      const nbsReviews = nbsReviewCount !== null ? `${nbsReviewCount} reviews${nbsRating !== null ? `, ${nbsRating}★` : ''}` : 'not yet retrieved';
+      const nbsFb  = lead.facebookUrl  || src.facebookUrl  || nbsDiscovered.facebookUrl  || (enr.socialPresence?.facebook  ? '[detected]' : null);
+      const nbsIg  = lead.instagramUrl || src.instagramUrl || nbsDiscovered.instagramUrl || (enr.socialPresence?.instagram ? '[detected]' : null);
+      const nbsLi  = lead.linkedinUrl  || src.linkedinUrl  || nbsDiscovered.linkedinUrl  || (enr.socialPresence?.linkedin  ? '[detected]' : null);
+      const nbsSocials = [nbsFb && `Facebook: ${nbsFb}`, nbsIg && `Instagram: ${nbsIg}`, nbsLi && `LinkedIn: ${nbsLi}`].filter(Boolean).join('; ') || 'none detected';
 
       const presenceCtx = `
 PRESENCE:
 Website: ${nbsWebsite}
-GBP linked: ${nbsGbp}
+GBP/Google Maps: ${nbsGbp}
 Reviews: ${nbsReviews}
 Social: ${nbsSocials}
 Deal stage: ${lead.stage || 'unknown'}
 Next contact: ${lead.nextContactDate ? new Date(lead.nextContactDate).toLocaleDateString('en-AU') : 'Not set'}
 Notes: ${lead.notes || 'None'}
 
-NOTE: "not yet verified" means enrichment has not confirmed this field yet — it does NOT mean the asset is absent. Do not write absence claims for unverified fields.`;
+NOTE: Only state absence if actively confirmed absent. "not yet verified" means data was not retrieved — do not infer the asset does not exist.`;
 
       const prompt = `You are a senior agency sales strategist advising a rep on their NEXT BEST MOVE with a prospect.
 
