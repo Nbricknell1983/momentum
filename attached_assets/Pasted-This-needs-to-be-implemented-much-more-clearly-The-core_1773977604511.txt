@@ -1,0 +1,115 @@
+This needs to be implemented much more clearly.
+
+The core product change is this:
+
+ALL useful functionality currently inside the AI Sales Engine must be merged into the Deal Intelligence section for the current deal/card.
+
+The AI Sales Engine should no longer exist as a separate side panel/tool surface for this workflow.
+
+Instead, that area/functionality should be replaced by a live, card-scoped activity feed that shows the specialist agents working on and discussing THAT specific deal.
+
+What I want:
+
+1. Deal Intelligence becomes the main intelligence workspace
+- It should absorb the useful functionality currently split across the AI Sales Engine
+- There should not be two competing intelligence surfaces on the same screen
+- The user should not need to mentally switch between Deal Intelligence and AI Sales Engine
+
+2. AI Sales Engine functionality should be merged, not duplicated
+Inspect everything currently provided by the AI Sales Engine in this flow, including things like:
+- prep
+- follow-up
+- strategy
+- prospects
+- generated recommendations
+- any actions/content the rep can use
+
+Move or integrate the useful parts into the Deal Intelligence workflow and UI.
+Do not build a second parallel system.
+
+3. Replace the separate AI Sales Engine experience with a live agent feed
+In place of the current separate AI Sales Engine panel, create a live feed for the current deal/card that feels more like a social/comment activity feed.
+
+This feed should show the specialist team working on THAT deal only.
+
+Examples of feed items:
+- Strategy Specialist identified the main growth bottleneck
+- SEO Specialist mapped sitemap and found missing service/location coverage
+- Website Specialist identified conversion friction and trust gaps
+- GBP Specialist found local visibility/review/category opportunities
+- Commercial Intelligence translated findings into business impact
+- Next Best Steps updated after new deal context
+- Strategy page now needs refresh after client note
+- Website recommendation refined using client input
+
+The feed should support:
+- specialist identity
+- timestamp/order
+- status
+- short task summary
+- short finding/update
+- visible handoffs where relevant
+
+4. This feed must be deal-scoped only
+The feed must only show work, findings, and conversation for the current deal/card.
+No global mixed activity.
+No cross-deal contamination.
+
+5. Do NOT implement this as raw agent logs or a chatbot transcript
+I do NOT want:
+- raw tool traces
+- chain-of-thought
+- debug logs
+- generic chat UI
+- fake “AI thinking” text
+
+I DO want:
+- a product-native live feed
+- social/comment-feed inspiration
+- concise specialist updates
+- operational, commercially useful language
+
+6. Next Best Steps must live inside this merged Deal Intelligence experience
+They should:
+- auto-generate
+- update automatically when context changes
+- appear as part of the live workflow
+- not require a separate generate button in the normal workflow
+
+7. User input should refine this same workspace
+The user should be able to add context / ask the team a question about the current deal.
+That input should refine:
+- intelligence
+- next best steps
+- strategy output
+- website recommendation
+- public strategy page readiness
+
+This is deal-scoped only, not a global team chat.
+
+8. Keep what already works and extend it
+Do not throw away the useful improvements already made:
+- auto-running X-Ray / SERP
+- status changes
+- context-triggered NBS refresh
+
+Build on that foundation.
+But complete the real requirement:
+a merged Deal Intelligence workspace with a live specialist feed replacing the separate AI Sales Engine experience.
+
+Implementation expectations:
+- smallest safe change
+- extend existing architecture
+- preserve multi-tenant isolation
+- preserve current auth/manager rules
+- preserve backwards compatibility where possible
+- reuse current engines/routes/prompts/components
+- do not duplicate logic
+
+Return:
+1. what functionality from AI Sales Engine will be merged into Deal Intelligence
+2. what the new merged information architecture will be
+3. what files need to change
+4. how the live specialist feed will be implemented
+5. how existing AI Sales Engine outputs/actions will be represented in the merged Deal Intelligence experience
+6. any blockers or missing infrastructure
