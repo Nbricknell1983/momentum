@@ -7400,14 +7400,63 @@ Return JSON:
     const si = lead.strategyIntelligence || {};
     const gp = lead.growthPrescription || null;
 
-    const websiteStr = lead.website || src.googleWebsite || 'None detected';
-    const gbpUrl = src.googleMapsUrl || enr.gbpUrl || 'None detected';
+    // ── Website signals: cascade through all available evidence ──────────────
+    const websiteUrlConfirmed = lead.website || src.googleWebsite || enr.websiteUrl || null;
+    const hasSitemap = (lead.sitemapPages?.length ?? 0) > 0;
+    const hasCrawl = (lead.crawledPages?.length ?? 0) > 0;
+    const sitemapPageCount = lead.sitemapPages?.length ?? 0;
+    const crawlPageCount = lead.crawledPages?.filter((p: any) => !p.error).length ?? 0;
+    let websiteStr: string;
+    if (websiteUrlConfirmed) {
+      websiteStr = websiteUrlConfirmed;
+      if (hasSitemap) websiteStr += ` | Sitemap found (${sitemapPageCount} pages indexed)`;
+      if (hasCrawl)   websiteStr += ` | Deep crawl complete (${crawlPageCount} pages analysed)`;
+    } else if (hasSitemap || hasCrawl) {
+      // Sitemap/crawl data exists — website must be real even if URL isn't on the record
+      websiteStr = `[confirmed via crawl — ${hasCrawl ? crawlPageCount + ' pages analysed' : sitemapPageCount + ' sitemap pages'}]`;
+    } else {
+      websiteStr = 'not yet verified — enrichment may be incomplete';
+    }
+
+    // ── GBP / Maps signals ────────────────────────────────────────────────────
     const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? null;
     const rating = src.googleRating ?? enr.rating ?? null;
-    const hasFacebook = !!(lead.facebookUrl || src.businessSignals?.includes('facebook'));
-    const hasInstagram = !!(lead.instagramUrl || src.businessSignals?.includes('instagram'));
-    const hasLinkedIn = !!(lead.linkedinUrl);
-    const socials = [hasFacebook && 'Facebook', hasInstagram && 'Instagram', hasLinkedIn && 'LinkedIn'].filter(Boolean).join(', ') || 'None detected';
+    const gbpUrlRaw = src.googleMapsUrl || enr.gbpUrl || src.gbpUrl || null;
+    let gbpStr: string;
+    if (gbpUrlRaw) {
+      gbpStr = gbpUrlRaw;
+      if (reviewCount !== null) gbpStr += ` | ${reviewCount} reviews`;
+      if (rating !== null) gbpStr += `, ${rating}/5`;
+    } else if (reviewCount !== null && reviewCount > 0) {
+      gbpStr = `[GBP confirmed — ${reviewCount} Google reviews${rating !== null ? `, ${rating}/5 stars` : ''}]`;
+    } else if (src.googlePlaceId || enr.gbpPlaceId) {
+      gbpStr = `[GBP confirmed via Place ID — review count not yet retrieved]`;
+    } else if (src.googleBusinessName || src.googleName) {
+      gbpStr = `[Google business name found: ${src.googleBusinessName || src.googleName} — Maps presence likely]`;
+    } else {
+      gbpStr = 'not yet verified — enrichment may be incomplete';
+    }
+
+    // ── Social presence: check lead fields + sourceData + enrichment layer ──
+    const facebookUrl  = lead.facebookUrl  || src.facebookUrl  || enr.facebookUrl  || null;
+    const instagramUrl = lead.instagramUrl || src.instagramUrl || enr.instagramUrl || null;
+    const linkedinUrl  = lead.linkedinUrl  || src.linkedinUrl  || enr.linkedinUrl  || null;
+    const twitterUrl   = lead.twitterUrl   || src.twitterUrl   || enr.twitterUrl   || null;
+    // Also check business signal strings for implicit detections
+    const signals: string[] = src.businessSignals || [];
+    const sigLower = signals.join(' ').toLowerCase();
+    const impliedFacebook  = !facebookUrl  && (sigLower.includes('facebook')  || sigLower.includes('fb'));
+    const impliedInstagram = !instagramUrl && sigLower.includes('instagram');
+    const impliedLinkedIn  = !linkedinUrl  && sigLower.includes('linkedin');
+    const socialParts: string[] = [];
+    if (facebookUrl)       socialParts.push(`Facebook (${facebookUrl})`);
+    else if (impliedFacebook) socialParts.push('Facebook (detected in signals — URL not yet stored)');
+    if (instagramUrl)       socialParts.push(`Instagram (${instagramUrl})`);
+    else if (impliedInstagram) socialParts.push('Instagram (detected in signals — URL not yet stored)');
+    if (linkedinUrl)       socialParts.push(`LinkedIn (${linkedinUrl})`);
+    else if (impliedLinkedIn) socialParts.push('LinkedIn (detected in signals — URL not yet stored)');
+    if (twitterUrl)        socialParts.push(`Twitter/X (${twitterUrl})`);
+    const socials = socialParts.length > 0 ? socialParts.join('; ') : 'not yet verified — social enrichment may be incomplete';
     const daysSinceCreated = lead.createdAt ? Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 86400000) : null;
     const lastContact = lead.lastContactDate ? new Date(lead.lastContactDate).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never';
 
@@ -7443,8 +7492,8 @@ Stage: ${lead.stage || 'unknown'}
 Days in pipeline: ${daysSinceCreated !== null ? daysSinceCreated : 'Unknown'}
 Last contact: ${lastContact}
 Website: ${websiteStr}
-GBP/Google Maps: ${gbpUrl}
-Reviews: ${reviewCount !== null ? `${reviewCount} reviews` : 'Unknown'} ${rating !== null ? `| ${rating}/5 stars` : ''}
+GBP/Google Maps: ${gbpStr}
+Reviews: ${reviewCount !== null ? `${reviewCount} reviews` : 'not yet retrieved'} ${rating !== null ? `| ${rating}/5 stars` : ''}
 Social presence: ${socials}
 Notes from rep: ${lead.notes || 'None'}
 
@@ -7460,6 +7509,16 @@ CRITICAL INSTRUCTIONS:
 4. Separate factual presence data from commercial intelligence. The commercial intelligence is what matters most.
 5. For customer/search intent: think about what drives a customer to search this category — the urgency, emotion, job-to-be-done.
 6. For website analysis: interpret what the site is TRYING to do commercially, who it's built for, and where it fails that customer.
+
+PRESENCE SNAPSHOT — STRICT RULES (non-negotiable):
+- "not yet verified" means the system has not confirmed that asset YET — it does NOT mean the asset is absent. Do not write "no website", "no GBP", "no social" when the field says "not yet verified" or "enrichment may be incomplete".
+- If a URL exists (website, GBP, social), that asset IS PRESENT. Assess it as present and describe its commercial quality. Never flip a confirmed URL into an absence claim.
+- If reviews > 0 or a Place ID or Maps URL exists, GBP IS PRESENT. Assess it accordingly.
+- If sitemap or crawled pages exist, the website IS PRESENT and indexable. Assess it accordingly.
+- If any social URL or social signal is listed, that platform IS ACTIVE. Assess it accordingly.
+- Only write "None" or "absent" if you have a POSITIVE confirmation of absence — which is extremely rare. Absence of data ≠ absence of asset.
+- For any presence dimension where data is genuinely missing or unverified, write: "Not yet verified — [1 sentence on what this means commercially and what to confirm on the call]"
+- The Presence Snapshot must be truthful. False absence claims corrupt the commercial intelligence and mislead the rep.
 
 Return ONLY a JSON object with ALL these fields:
 {
@@ -7483,10 +7542,10 @@ Return ONLY a JSON object with ALL these fields:
     "missedOpportunity": "The single biggest commercial opportunity this website is failing to capture right now"
   },
   "presenceSnapshot": {
-    "website": "Website assessment: status (strong/weak/none) + specific commercial observations",
-    "gbp": "GBP/Maps assessment: presence strength + review signal interpretation + what it means for local trust",
-    "social": "Social assessment: what's detected + what it signals about this business's marketing posture",
-    "searchVisibility": "Search visibility assessment: likely rank/visibility based on all available signals"
+    "website": "Website assessment. If URL or crawl data is confirmed: assess commercial quality (strong/moderate/weak) + specific observations about what the site does and fails to do. If field is 'not yet verified': write 'Not yet verified — confirm URL on the call and note what to look for'",
+    "gbp": "GBP/Maps assessment. If Maps URL, Place ID, or review count confirms GBP: assess review volume, star rating, listing completeness, and local trust signal. If field is 'not yet verified': write 'Not yet verified — check Google Maps for their listing during the call'",
+    "social": "Social presence assessment. List each confirmed platform and assess activity level + commercial signal. If a platform URL is provided, it IS present — do not contradict it. If field is 'not yet verified': write 'Not yet verified — ask which platforms they manage on the call'",
+    "searchVisibility": "Search visibility assessment: synthesise all confirmed presence signals (website, GBP, reviews, social) to assess likely organic and local visibility. Base this only on confirmed signals — do not penalise for unverified data"
   },
   "opportunities": ["up to 4 specific commercial opportunities for THIS prospect — concrete, not generic"],
   "gaps": ["up to 4 specific gaps or weaknesses that create the opening to sell — reference their actual situation"],
@@ -7598,15 +7657,31 @@ Growth objective: ${si.growthObjective || ''}
 Target locations: ${si.targetLocations || ''}
 Core services: ${si.coreServices || ''}` : '';
 
+      // Build presence signals safely — never collapse unverified data into "None"
+      const nbsWebsite = lead.website || src.googleWebsite || enr.websiteUrl ||
+        ((lead.sitemapPages?.length ?? 0) > 0 ? `[confirmed via sitemap — ${lead.sitemapPages.length} pages]` : null) ||
+        ((lead.crawledPages?.length ?? 0) > 0 ? `[confirmed via crawl]` : null) ||
+        'not yet verified';
+      const nbsGbp = src.googlePlaceId ? `Yes (Place ID: ${src.googlePlaceId})` :
+        (src.googleMapsUrl || enr.gbpUrl) ? `Yes (${src.googleMapsUrl || enr.gbpUrl})` :
+        (src.googleReviewCount > 0 ? `Yes (${src.googleReviewCount} reviews detected)` : 'not yet verified');
+      const nbsReviews = src.googleReviewCount != null ? `${src.googleReviewCount} reviews, ${src.googleRating}★` : 'not yet retrieved';
+      const nbsFb  = lead.facebookUrl  || src.facebookUrl  || enr.facebookUrl;
+      const nbsIg  = lead.instagramUrl || src.instagramUrl || enr.instagramUrl;
+      const nbsLi  = lead.linkedinUrl  || src.linkedinUrl  || enr.linkedinUrl;
+      const nbsSocials = [nbsFb && `Facebook (${nbsFb})`, nbsIg && `Instagram (${nbsIg})`, nbsLi && `LinkedIn (${nbsLi})`].filter(Boolean).join('; ') || 'not yet verified';
+
       const presenceCtx = `
 PRESENCE:
-Website: ${lead.website || 'None'}
-GBP linked: ${src.googlePlaceId ? 'Yes' : 'No'}
-Reviews: ${src.googleReviewCount != null ? `${src.googleReviewCount} reviews, ${src.googleRating}★` : 'Unknown'}
-Social: ${[lead.facebookUrl && 'Facebook', lead.instagramUrl && 'Instagram', lead.linkedinUrl && 'LinkedIn'].filter(Boolean).join(', ') || 'None detected'}
+Website: ${nbsWebsite}
+GBP linked: ${nbsGbp}
+Reviews: ${nbsReviews}
+Social: ${nbsSocials}
 Deal stage: ${lead.stage || 'unknown'}
 Next contact: ${lead.nextContactDate ? new Date(lead.nextContactDate).toLocaleDateString('en-AU') : 'Not set'}
-Notes: ${lead.notes || 'None'}`;
+Notes: ${lead.notes || 'None'}
+
+NOTE: "not yet verified" means enrichment has not confirmed this field yet — it does NOT mean the asset is absent. Do not write absence claims for unverified fields.`;
 
       const prompt = `You are a senior agency sales strategist advising a rep on their NEXT BEST MOVE with a prospect.
 

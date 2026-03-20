@@ -1,0 +1,124 @@
+The Presence Snapshot is not working correctly and is currently producing false negative intelligence.
+
+This is not a copy issue. It is a detection/enrichment failure.
+
+Example:
+For First Parking, the system is currently saying things like:
+- no detectable website presence
+- no GBP / Maps presence
+- no social presence
+
+Those statements are wrong.
+
+Known real-world presence for this business includes:
+- Website: https://www.firstparking.com.au/
+- Sitemap: https://www.firstparking.com.au/sitemap_index.xml
+- Website content and indexed pages exist
+- Multiple GBP / Maps profiles exist
+- LinkedIn profile exists: https://www.linkedin.com/company/first-parking?originalSubdomain=au
+- Facebook profile exists: https://www.facebook.com/firstparking/
+- Bing presence exists
+- Competitors exist and should be discoverable / mentionable
+
+The current Presence Snapshot is therefore generating false absence claims, which makes the intelligence unreliable.
+
+I need this fixed properly.
+
+REQUIREMENTS:
+
+1. Fix the presence-detection logic behind Presence Snapshot
+The system must actually attempt to detect and verify:
+- website presence
+- sitemap presence
+- page/content presence
+- GBP / Maps presence
+- social presence
+- search visibility presence
+- competitor presence/signals where supported
+
+2. Stop presenting unsupported “None” conclusions as fact
+If the system has not actually verified absence, it must not say:
+- None
+- no detectable presence
+- no website
+- no social
+- no GBP
+
+Instead, if data is missing or a lookup fails, use a safe degraded state like:
+- not yet verified
+- data unavailable
+- enrichment incomplete
+- unable to confirm
+But do not present false absence as truth.
+
+3. Website checks should include at minimum:
+- primary website URL detection
+- homepage reachable check
+- sitemap discovery attempts
+  - /sitemap.xml
+  - /sitemap_index.xml
+  - robots.txt sitemap reference if already supported
+- page/content presence signals
+- basic indexed/structured presence where current architecture supports it
+
+For this case, firstparking.com.au and sitemap_index.xml should absolutely be detected.
+
+4. GBP / Maps checks need to improve
+The system should not say “None” if Maps/GBP results clearly exist.
+
+Inspect the current GBP / Maps enrichment path and fix:
+- lookup quality
+- query matching
+- handling of multi-location businesses
+- confidence thresholds before declaring absence
+
+For businesses with multiple locations/profiles, Presence Snapshot should reflect that appropriately instead of collapsing to “None”.
+
+5. Social presence checks need to improve
+The system should attempt to detect supported public profile presence such as:
+- LinkedIn
+- Facebook
+- any currently supported social/business profiles
+
+If detected, Presence Snapshot should reflect presence, not absence.
+
+6. Search visibility should not be inferred from false missing-presence assumptions
+Do not set search visibility to “Low because there is no website or GBP presence” when those assets actually exist.
+That logic is wrong if upstream detection is wrong.
+
+7. Competitor awareness should be included where the current system supports it
+If there is already any competitor discovery/search analysis capability, Presence Snapshot or adjacent intelligence should surface at least some competitor context instead of acting like the business exists in a vacuum.
+
+8. Fix the logic, not just this one record
+This must be a general fix to the detection/enrichment pipeline used by Presence Snapshot.
+Do not hardcode First Parking.
+
+9. Safe output rules
+Presence Snapshot must distinguish between:
+- confirmed present
+- confirmed absent
+- not yet verified / incomplete
+- detected but weak
+Do not collapse all uncertainty into “None”.
+
+10. Use the current architecture where possible
+- extend existing enrichment/detection logic
+- reuse existing website/SEO/GBP/search utilities
+- do not build a parallel presence system
+- preserve multi-tenant isolation
+- preserve existing auth and storage rules
+- keep backwards compatibility where possible
+
+DELIVERABLES:
+Return:
+1. what is currently causing the false negatives
+2. what files changed
+3. what detection/enrichment logic was fixed
+4. how website, sitemap, GBP, social, and competitor checks now work
+5. what fallback states are now used when data cannot be confirmed
+6. any missing APIs/access that still limit accuracy
+7. any high-risk notes
+
+IMPORTANT:
+Do not just patch the wording in the UI.
+Fix the underlying presence snapshot detection so the intelligence is trustworthy.
