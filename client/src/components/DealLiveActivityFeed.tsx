@@ -158,10 +158,12 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
 
+  const [prepRunning, setPrepRunning] = useState(false);
   const [xrayRunning, setXrayRunning] = useState(false);
   const [serpRunning, setSerpRunning] = useState(false);
   const [diagRunning, setDiagRunning] = useState(false);
 
+  const autoPrepFired = useRef(false);
   const autoXrayFired = useRef(false);
   const autoSerpFired = useRef(false);
   const autoDiagFired = useRef(false);
@@ -188,6 +190,38 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     updateLeadInFirestore(orgId, lead.id, { aiGrowthPlan } as any, authReady).catch(console.error);
     dispatch(patchLead({ id: lead.id, updates: { aiGrowthPlan } as any }));
   }, [orgId, authReady, lead, dispatch]);
+
+  // Auto-fire Prep Pack on mount — if missing OR stale (>24h)
+  useEffect(() => {
+    if (!orgId || !authReady || autoPrepFired.current) return;
+    if (!businessName) return;
+    const pack = (lead as any).prepCallPack;
+    const isStale = !pack?.generatedAt || (Date.now() - new Date(pack.generatedAt).getTime() > 86400000);
+    const isMissing = !pack?.businessSnapshot;
+    if (!isMissing && !isStale) return;
+    autoPrepFired.current = true;
+    const timer = setTimeout(async () => {
+      setPrepRunning(true);
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ orgId, force: isStale }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.prepCallPack) {
+            dispatch(patchLead({ id: lead.id, updates: { prepCallPack: data.prepCallPack } as any }));
+          }
+        }
+      } catch { /* silent */ } finally {
+        setPrepRunning(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id, orgId, authReady]);
 
   // Auto-fire X-Ray if website URL exists and no cached result
   useEffect(() => {
@@ -297,10 +331,10 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     setContextSaving(false);
   }, [orgId, authReady, dealContext, lead.id, dispatch]);
 
-  const anyRunning = xrayRunning || serpRunning || diagRunning;
+  const anyRunning = prepRunning || xrayRunning || serpRunning || diagRunning;
 
   // Derive statuses
-  const prepStatus: StageStatus = hasPrepPack ? 'complete' : 'pending';
+  const prepStatus: StageStatus = hasPrepPack ? 'complete' : prepRunning ? 'running' : 'pending';
   const prepPack = (lead as any).prepCallPack;
   const prepFinding = hasPrepPack
     ? `${prepPack.businessSnapshot?.slice(0, 100)}${(prepPack.businessSnapshot?.length ?? 0) > 100 ? '…' : ''}`

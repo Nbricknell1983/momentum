@@ -1203,11 +1203,12 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     if (!lead.companyName) return;
     autoNbsFired.current = true;
     setAutoNbsRunning(true);
-    fetch(`/api/leads/${lead.id}/next-best-steps`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orgId }),
-    })
+    (auth.currentUser?.getIdToken() ?? Promise.resolve(null))
+      .then(token => fetch(`/api/leads/${lead.id}/next-best-steps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ orgId }),
+      }))
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.steps) dispatch(patchLead({ id: lead.id, updates: { nextBestSteps: data } as any }));
@@ -1220,9 +1221,10 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     if (!orgId || !authReady) return;
     setGeneratingPrepPack(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ orgId, force: true }),
       });
       if (!res.ok) throw new Error('Failed');
@@ -1233,9 +1235,10 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         toast({ title: 'Agent Intelligence updated', description: 'Fresh analysis complete' });
         // Re-run Next Best Steps with fresh intelligence
         setAutoNbsRunning(true);
+        const nbsToken = await auth.currentUser?.getIdToken();
         fetch(`/api/leads/${lead.id}/next-best-steps`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(nbsToken ? { Authorization: `Bearer ${nbsToken}` } : {}) },
           body: JSON.stringify({ orgId }),
         })
           .then(r => r.ok ? r.json() : null)
