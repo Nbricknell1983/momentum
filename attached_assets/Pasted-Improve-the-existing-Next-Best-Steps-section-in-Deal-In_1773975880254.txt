@@ -1,0 +1,45 @@
+Improve the existing “Next Best Steps” section in Deal Intelligence / Strategy so it no longer relies on a manual generate button.
+
+Requirements:
+- Next Best Steps should auto-generate as part of the existing live deal intelligence workflow
+- The rep should not need to click a button in the normal workflow
+- Keep this scoped to the current deal/card only
+- If the deal intelligence is refreshed or refined with new context, Next Best Steps should update automatically
+- If there is not yet enough information, show a meaningful loading/readiness state instead of an empty panel with a generate button
+- Manual refresh/regenerate can remain as a fallback, but it must not be the primary interaction
+
+UI direction:
+- Render Next Best Steps as a clear visual sequence of recommended actions
+- Use the existing product design system and current Deal Intelligence architecture
+- Do not redesign the whole page
+- Do not copy external mockups literally, but use them as inspiration for a premium step-by-step action flow
+- Each step should be easy to scan and immediately actionable
+
+Each next-best-step item should include:
+- sequence / step order
+- action type
+- plain-language title
+- why this is the right next move
+- drafted content where relevant
+
+Examples:
+- Call → include call prep / talk track
+- Email → include drafted email copy
+- Text → include drafted SMS copy
+- Send strategy page → include public URL and send framing
+- Follow up later → include timing and rationale
+
+Implementation rules:
+- Extend the existing implementation; do not build a parallel Next Best Steps system
+- Reuse existing intelligence outputs and current deal analysis where possible
+- Preserve multi-tenant isolation and existing auth rules
+- Maintain backwards compatibility with existing records
+- Fail safely when data is missing
+
+Return:
+1. summary of current Next Best Steps implementation
+2. files changed
+3. how auto-generation was wired in
+4. what existing logic/components were reused
+5. any new fields/state added
+6. any risks or follow-up suggestions
