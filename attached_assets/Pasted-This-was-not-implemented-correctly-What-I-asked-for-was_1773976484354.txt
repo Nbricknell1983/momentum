@@ -1,0 +1,68 @@
+This was not implemented correctly.
+
+What I asked for was NOT just better generated content inside the existing Prep/Strategy tabs.
+
+The current result still behaves like a static generated pack with regenerate buttons.
+
+What I need is a workflow and UX change:
+
+1. The Deal Intelligence / Strategy experience must feel like a LIVE coordinated workspace
+   - not a static generated panel
+   - not a button-driven tool surface
+   - not just better text blocks
+
+2. The UI must be CARD-SCOPED to the current deal only
+
+3. The system should automatically run the relevant intelligence/enrichment work where safe
+   - instead of relying on manual generation/regeneration as the primary experience
+
+4. I need a visible LIVE SPECIALIST ACTIVITY FEED in the Deal Intelligence / Strategy experience
+   - product-native feed/cards
+   - specialist name
+   - queued / running / completed / blocked
+   - short task description
+   - short finding summary
+   - handoffs where relevant
+   - no raw logs
+   - no chatbot transcript
+   - no fake “thinking”
+
+5. I need NEXT BEST STEPS to auto-generate as part of that workflow
+   - not require a manual button in the normal flow
+   - rendered as a visual action sequence
+   - tied to the current deal/card only
+
+6. I need a deal-scoped “Ask the team / Add context” input
+   - user can add client facts or ask a question about THIS deal only
+   - that input should refine the intelligence, next best steps, strategy output, and website recommendation
+   - this is not a global chat system
+
+7. I need the current intelligence sections to remain, but be fed by the richer automated workflow
+   - Customer Profile
+   - Search Intent
+   - Website Interpretation
+   - Opportunities
+   - Key Gaps
+   - Commercial Angle
+
+IMPORTANT:
+Do not just improve the generated content again.
+Do not just polish the Prep tab.
+Do not give me another static pack with regenerate buttons.
+
+I need you to change the interaction model and UI behaviour so this feels like:
+- a live coordinated workspace
+instead of:
+- a static generated report
+
+Please inspect the current implementation and then make the smallest safe change that introduces:
+A. live specialist feed
+B. auto-generated next best steps
+C. deal-scoped context/question input
+D. tighter integration with strategy/public URL and website recommendation outputs
+
+Return:
+1. what part of the previous implementation missed the requirement
+2. what files need to change for the workflow/UX correction
+3. the exact changes you will make to implement the live workspace model properly
+4. any blockers or missing infrastructure
