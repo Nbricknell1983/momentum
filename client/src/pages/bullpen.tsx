@@ -32,7 +32,8 @@ import {
   FileSearch, PlayCircle, Wrench, UserCheck, GitMerge, List,
   Landmark, FlaskConical, Share2, BookOpen, Target, Layers,
   TrendingDown, ArrowRight, ChevronLeft,
-  Code2, Layout, Server, Workflow, TestTube2, Cloud
+  Code2, Layout, Server, Workflow, TestTube2, Cloud,
+  Tag, PhoneCall, Database, Scale, Lock
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ interface RoleMetrics {
   lastActionLabel?: string;
   detail: string;
   linkedPath?: string;
-  tier?: 'leadership' | 'execution' | 'development' | 'control';
+  tier?: 'leadership' | 'execution' | 'development' | 'control' | 'governance';
 }
 
 interface AttentionItem {
@@ -133,6 +134,11 @@ const ROLE_META: Record<string, { icon: typeof Briefcase; bg: string }> = {
   'QA':          { icon: TestTube2,         bg: 'bg-lime-600' },
   'DevOps':      { icon: Cloud,             bg: 'bg-slate-500' },
   'Team':        { icon: Users,             bg: 'bg-slate-700' },
+  'Offer':       { icon: Tag,              bg: 'bg-amber-600' },
+  'Booking':     { icon: PhoneCall,        bg: 'bg-green-600' },
+  'DataInt':     { icon: Database,         bg: 'bg-blue-800' },
+  'Compliance':  { icon: Scale,            bg: 'bg-orange-700' },
+  'Security':    { icon: Lock,             bg: 'bg-red-700' },
 };
 
 // ─── Role Intelligence Config ─────────────────────────────────────────────────
@@ -141,13 +147,16 @@ interface RoleFramework { name: string; focus: string }
 
 interface RoleConfig {
   id: string;
-  tier: 'leadership' | 'execution' | 'development' | 'control';
+  tier: 'leadership' | 'execution' | 'development' | 'control' | 'governance';
   roleDescription: string;
   expertFrameworks: RoleFramework[];
   operatingPrinciples: string[];
   inputSignals: string[];
   outputTypes: string[];
   successMetrics: string[];
+  roleCategory?: string;
+  governanceRole?: boolean;
+  eventBased?: boolean;
 }
 
 const ROLE_CONFIG: Record<string, RoleConfig> = {
@@ -520,6 +529,103 @@ const ROLE_CONFIG: Record<string, RoleConfig> = {
     outputTypes: ['weekly learnings summary', 'what improved / what failed', 'confidence updates', 'pattern flags', 'playbook update recommendations'],
     successMetrics: ['quality of learnings', 'improvement in prediction accuracy', 'reduction in repeated mistakes', 'stronger future recommendations'],
   },
+  offer: {
+    id: 'offer', tier: 'leadership', roleCategory: 'strategy',
+    roleDescription: 'Offer design, pricing structure, value framing, and conversion leverage. Ensures the commercial proposition is clear, credible, and positioned to convert at the right price point.',
+    expertFrameworks: [
+      { name: 'Value Equation (Alex Hormozi)', focus: 'Dream outcome × perceived likelihood of achievement ÷ time delay × effort — structure the offer around this' },
+      { name: 'Pricing Psychology', focus: 'Anchoring, decoy pricing, framing effect — price presentation shapes perception as much as the number itself' },
+      { name: 'Direct Response Offer Design (Dan Kennedy)', focus: 'Irresistible offer mechanics, risk reversal, urgency framing' },
+      { name: 'Jobs-to-be-Done (Clayton Christensen)', focus: 'Price to the outcome, not the feature — people buy progress, not services' },
+    ],
+    operatingPrinciples: [
+      'A weak offer cannot be saved by better advertising — fix the offer first',
+      'Price is a value communication problem, not just a number decision',
+      'Conversion leverage lives at the offer level, not the channel level',
+      'Risk reversal shifts the burden of proof — use it deliberately',
+    ],
+    inputSignals: ['DVS scope framing', 'investment tiers', 'client industry and business model', 'competitor pricing context', 'objection patterns from Sales'],
+    outputTypes: ['offer structure recommendations', 'pricing tier logic', 'value framing copy', 'risk reversal positioning', 'conversion lever analysis'],
+    successMetrics: ['conversion rate lift', 'proposal acceptance rate', 'average deal value', 'price objection reduction'],
+  },
+  booking: {
+    id: 'booking', tier: 'execution', roleCategory: 'execution',
+    roleDescription: 'Inbound lead capture, missed call recovery, booking flow quality, and future voice AI readiness. Ensures every inbound signal turns into a booked appointment or qualified next step.',
+    expertFrameworks: [
+      { name: 'Speed-to-Lead (MIT Research)', focus: 'Response within 5 minutes increases conversion by 9×. Every minute of delay loses probability.' },
+      { name: 'Missed Call Recovery Logic', focus: 'Missed calls are leads lost — automated SMS recovery within 2 minutes captures a significant percentage' },
+      { name: 'Friction Audit', focus: 'Map every step between "want to book" and "booking confirmed" — eliminate each unnecessary step' },
+      { name: 'Voice AI Readiness', focus: 'Script, routing logic, and objection handling must be ready before voice AI is activated' },
+    ],
+    operatingPrinciples: [
+      'A missed call without recovery is a lead gifted to the competitor',
+      'Booking friction kills conversion — simplify until a confused person can still book',
+      'Speed beats perfection — a fast imperfect response outperforms a slow polished one',
+      'Voice AI readiness is a system design problem, not a technology problem',
+    ],
+    inputSignals: ['inbound call volume', 'missed call rate', 'booking conversion rate', 'lead source data', 'CRM intake fields'],
+    outputTypes: ['missed call recovery workflow', 'booking flow audit', 'intake form recommendations', 'voice AI script brief', 'response speed benchmarks'],
+    successMetrics: ['missed call recovery rate', 'lead-to-booking conversion', 'booking friction score', 'response time to inbound enquiry'],
+  },
+  dataint: {
+    id: 'dataint', tier: 'development', roleCategory: 'development',
+    roleDescription: 'Data accuracy, attribution integrity, deduplication, CRM hygiene, and trustworthiness of signals used by the AI layer. If the data is wrong, every AI output built on it is wrong.',
+    expertFrameworks: [
+      { name: 'Garbage In, Garbage Out', focus: 'AI output quality is bounded by data input quality — data integrity is upstream of everything else' },
+      { name: 'Attribution Discipline', focus: 'Track which signals came from which source — without clean attribution, pattern recognition fails' },
+      { name: 'Deduplication Logic', focus: 'Duplicate records corrupt counts, segment logic, and AI confidence — prevent and detect at ingestion' },
+      { name: 'Data Quality Dimensions', focus: 'Completeness, accuracy, consistency, timeliness, uniqueness — each is a separate failure mode' },
+    ],
+    operatingPrinciples: [
+      'A corrupted data layer is a silent multiplier of every downstream mistake',
+      'Deduplication must happen at ingestion, not after corruption has spread',
+      'Attribution without tracking is assumption — treat it as an unknown, not a fact',
+      'CRM hygiene is not a one-time cleanup; it is an ongoing operational discipline',
+    ],
+    inputSignals: ['Firestore document structure', 'enrichment pass outputs', 'lead and client record completeness', 'duplicate detection signals', 'attribution field coverage'],
+    outputTypes: ['data quality audit', 'deduplication recommendations', 'CRM hygiene actions', 'attribution gap analysis', 'field completeness scoring'],
+    successMetrics: ['duplicate rate', 'field completeness rate', 'attribution coverage', 'AI confidence score improvement', 'enrichment accuracy'],
+  },
+  compliance: {
+    id: 'compliance', tier: 'governance', roleCategory: 'governance',
+    governanceRole: true, eventBased: true,
+    roleDescription: 'Compliance-sensitive review across privacy, marketing claims, legal exposure, WHS, and labour risk where relevant. This is an event-based governance role — activated by specific triggers, not continuously running.',
+    expertFrameworks: [
+      { name: 'Privacy Act & Australian Privacy Principles', focus: 'Data collection, consent, retention, and disclosure obligations for Australian service businesses' },
+      { name: 'Australian Consumer Law (ACL)', focus: 'Misleading representations, guarantee obligations, testimonial and claims standards' },
+      { name: 'Risk-Based Review', focus: 'Prioritise compliance review based on likelihood × consequence — not all risks are equal' },
+      { name: 'Event-Triggered Activation', focus: 'This role activates on specific signals: new automation flow, new marketing claim, data retention policy change, client complaint' },
+    ],
+    operatingPrinciples: [
+      'This role does not run continuously — it activates on defined compliance triggers',
+      'Every automated message sent to a client or prospect must have a confirmed opt-in basis',
+      'Marketing claims must be substantiated — do not approve claims that cannot be supported',
+      'Flag, do not block — except in high-certainty cases, flag for human review rather than auto-rejecting',
+    ],
+    inputSignals: ['new automation workflow activations', 'new marketing copy or claims', 'data retention or privacy-touching config changes', 'client complaints with legal dimension', 'new CRM or messaging integrations'],
+    outputTypes: ['compliance risk flags', 'marketing claim review', 'opt-in coverage audit', 'data handling assessment', 'escalation recommendations'],
+    successMetrics: ['compliance flag response time', 'claims review coverage', 'opt-in confirmation rate', 'zero unreviewed high-risk automations'],
+  },
+  security: {
+    id: 'security', tier: 'governance', roleCategory: 'governance',
+    governanceRole: true,
+    roleDescription: 'Tenant isolation integrity, auth architecture review, secrets handling, API security, and data protection governance. A blocking role — issues identified here must be resolved before affected code ships.',
+    expertFrameworks: [
+      { name: 'Zero-Trust Security Model', focus: 'Assume breach; verify explicitly; grant least privilege — every boundary is a risk point' },
+      { name: 'OWASP Top 10', focus: 'Injection, broken auth, misconfiguration, sensitive data exposure, insecure dependencies — check these on every release' },
+      { name: 'Tenant Isolation as Primary Constraint', focus: 'Multi-tenant SaaS: a tenant isolation breach is a critical incident. All security review starts here.' },
+      { name: 'Secrets Hygiene', focus: 'Secrets in environment variables only — never in code, logs, or client-side bundles. Audit regularly.' },
+    ],
+    operatingPrinciples: [
+      'Tenant isolation is the highest-priority security constraint — a breach here affects every client in the system',
+      'Secrets must never appear in code, logs, frontend bundles, or error messages',
+      'Auth middleware gaps are critical defects — every route touching org data requires requireOrgAccess',
+      'This role has blocking authority — code that fails security review does not ship',
+    ],
+    inputSignals: ['new API routes', 'auth middleware changes', 'new environment variable usage', 'Firestore rule modifications', 'new third-party integrations', 'deployment config changes'],
+    outputTypes: ['tenant isolation review', 'auth middleware audit', 'secrets exposure risk flags', 'OWASP coverage check', 'security sign-off or block recommendation'],
+    successMetrics: ['zero tenant isolation breaches', 'secrets exposure incidents (target: 0)', 'auth middleware coverage', 'security review cycle time', 'zero unreviewed critical auth changes'],
+  },
 };
 
 const STATUS_CONFIG: Record<BullpenStatus, { label: string; color: string; dot: string }> = {
@@ -565,6 +671,7 @@ const TIER_BADGE: Record<string, string> = {
   execution:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
   development: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400',
   control:     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  governance:  'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
 };
 
 function RoleCard({ role, onViewIntel }: { role: RoleMetrics; onViewIntel: () => void }) {
@@ -1362,6 +1469,58 @@ export default function BullpenPage() {
         lastActionLabel: 'Scaffold structure ready — connect live infra data when available',
         detail: 'Deployment, environments, CI/CD, uptime, infrastructure',
       },
+      {
+        id: 'offer', name: 'Offer & Pricing Specialist', icon: Tag, tier: 'leadership',
+        status: clientsWithPrescription.length > 0 ? 'active' : 'idle',
+        currentCount: clientsWithPrescription.length, currentLabel: 'clients with investment tiers assessed',
+        blockerCount: activeClients.filter(c => !c.growthPrescription?.investmentTiers).length,
+        blockerSummary: 'No investment tier structure generated',
+        lastActionLabel: clientsWithPrescription.length > 0 ? `${clientsWithPrescription.length} offer structures active` : undefined,
+        detail: 'Offer design, pricing structure, value framing, conversion leverage',
+        linkedPath: '/clients',
+      },
+      {
+        id: 'booking', name: 'Call & Booking Specialist', icon: PhoneCall, tier: 'execution',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'booking flows configured',
+        blockerCount: 0,
+        lastActionLabel: 'Inbound capture, missed call recovery, booking flow quality',
+        detail: 'Lead capture, missed call recovery, booking flow, voice AI readiness',
+      },
+      {
+        id: 'dataint', name: 'Data Integrity Specialist', icon: Database, tier: 'development',
+        status: (() => {
+          const incompleteCount = activeClients.filter(c => !c.enrichment || Object.keys(c.enrichment || {}).length === 0).length;
+          if (incompleteCount > 3) return 'needs_attention' as const;
+          if (activeClients.length > 0) return 'active' as const;
+          return 'idle' as const;
+        })(),
+        currentCount: activeClients.filter(c => c.enrichment && Object.keys(c.enrichment).length > 0).length,
+        currentLabel: 'clients with enrichment data',
+        blockerCount: activeClients.filter(c => !c.enrichment || Object.keys(c.enrichment || {}).length === 0).length,
+        blockerSummary: 'Records lacking enrichment — accuracy risk',
+        lastActionLabel: 'Data accuracy, attribution, CRM hygiene, signal trustworthiness',
+        detail: 'Data accuracy, deduplication, CRM hygiene, attribution integrity',
+        linkedPath: '/clients',
+      },
+      {
+        id: 'compliance', name: 'Compliance & Risk Specialist', icon: Scale, tier: 'governance',
+        status: 'idle',
+        currentCount: 0, currentLabel: 'compliance reviews triggered',
+        blockerCount: 0,
+        lastActionLabel: 'Event-based — activates on defined compliance triggers',
+        detail: 'Privacy, claims, legal/WHS/labour risk review — event-based governance role',
+      },
+      {
+        id: 'security', name: 'Security & Data Protection', icon: Lock, tier: 'governance',
+        status: (() => {
+          return 'active' as const;
+        })(),
+        currentCount: activeClients.length, currentLabel: 'tenants under isolation governance',
+        blockerCount: 0,
+        lastActionLabel: 'Tenant isolation, auth integrity, secrets handling — always active',
+        detail: 'Tenant isolation, auth integrity, secrets handling, API/data security',
+      },
     ];
   }, [
     openNBA, activities, activeLeads, overdueLeads, activeClients,
@@ -1973,7 +2132,7 @@ export default function BullpenPage() {
             Workforce — {activeRoles.length} active, {idleRoles.length} idle
           </h2>
 
-          {(['leadership', 'execution', 'development', 'control'] as const).map(tier => {
+          {(['leadership', 'execution', 'development', 'control', 'governance'] as const).map(tier => {
             const tierRoles = roles.filter(r => r.tier === tier);
             if (!tierRoles.length) return null;
             const tierLabel: Record<string, string> = {
@@ -1981,6 +2140,7 @@ export default function BullpenPage() {
               execution:   'Execution Specialists',
               development: 'Development & Systems Team',
               control:     'Control & Orchestration',
+              governance:  'System Governance',
             };
             return (
               <div key={tier} className="mb-6">

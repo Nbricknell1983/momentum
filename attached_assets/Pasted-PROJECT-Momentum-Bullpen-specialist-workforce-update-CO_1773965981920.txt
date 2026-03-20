@@ -1,0 +1,147 @@
+PROJECT: Momentum / Bullpen specialist workforce update
+
+CONTEXT:
+We have updated the specialist workforce model in SPECIALISTS.md and Momentum’s Bullpen UI now needs to be brought into alignment.
+
+The current UI already shows specialist cards grouped into sections such as:
+- Leadership & Strategy
+- Execution
+- Development
+- Control / Operations
+
+We have added new specialist roles and governance rules in the updated workforce model.
+This must be implemented as an EXTENSION, not a rewrite.
+
+IMPORTANT RULES:
+- Do not break existing working specialist cards, metrics, grouping logic, or data flows
+- Extend the current system safely
+- Reuse existing card components, section rendering patterns, status badges, and metrics where possible
+- Preserve multi-tenant isolation at all times
+- Do not duplicate specialist logic or create a parallel workforce system
+- Keep backwards compatibility with existing workforce records
+- If a new field is needed, add it safely and make old records render gracefully
+
+OBJECTIVE:
+Update Momentum so the Bullpen workforce model, specialist groupings, and specialist cards reflect the new SPECIALISTS.md structure.
+
+NEW / CHANGED ROLES TO SUPPORT:
+Add these new roles:
+1. Offer & Pricing Specialist
+2. Call & Booking Specialist
+3. Data Integrity Specialist
+4. Compliance & Risk Specialist
+5. Security & Data Protection Specialist
+
+Do not remove existing roles.
+
+ROLE GROUPING TARGET:
+The workforce should now support these top-level groupings:
+- Leadership & Strategy
+- Execution Specialists
+- Development & Systems
+- Operations & Orchestration
+- System Governance
+
+EXPECTED PLACEMENT:
+- Offer & Pricing Specialist → Leadership & Strategy
+- Call & Booking Specialist → Execution Specialists
+- Data Integrity Specialist → Development & Systems
+- Compliance & Risk Specialist → System Governance
+- Security & Data Protection Specialist → System Governance
+
+IMPLEMENTATION TASKS:
+
+1. REVIEW CURRENT WORKFORCE IMPLEMENTATION
+- Find the source of truth for specialist role definitions
+- Find where specialist cards are grouped and rendered in the Bullpen UI
+- Find any existing enums, config arrays, metadata maps, labels, icons, descriptions, or seed data for specialists
+- Find any APIs or Firestore docs that store role names, role counts, or role metrics
+
+2. EXTEND ROLE DEFINITIONS SAFELY
+- Add the 5 new specialist roles to the existing specialist definition system
+- Preserve naming consistency with the current system
+- Add:
+  - display name
+  - group
+  - short description
+  - default status behavior if required by the existing UI
+  - icon mapping if the current UI uses one
+- Do not rename existing roles unless absolutely required
+- If there is a role registry/config object, extend it instead of replacing it
+
+3. ADD SYSTEM GOVERNANCE GROUP
+- Add a new rendered workforce section for “System Governance” if it does not already exist
+- Reuse the existing section layout and card pattern
+- Ensure the new section only appears if roles exist for it, unless the current UX shows empty sections intentionally
+- Keep visual consistency with the existing workforce sections
+
+4. UPDATE CARD CONTENT FOR NEW ROLES
+For each new role, create copy consistent with the existing UI card style:
+
+Offer & Pricing Specialist
+- focus: offer design, pricing structure, value framing, conversion leverage
+
+Call & Booking Specialist
+- focus: inbound lead capture, missed call recovery, booking flow, future voice AI readiness
+
+Data Integrity Specialist
+- focus: data accuracy, attribution, duplicates, CRM hygiene, trustworthiness of signals
+
+Compliance & Risk Specialist
+- focus: compliance-sensitive review, privacy, claims, legal/WHS/labour risk where relevant
+- this is event-based, not always-on
+
+Security & Data Protection Specialist
+- focus: tenant isolation, auth integrity, secrets handling, API/data security
+- this is governance/blocking oriented, not generic execution
+
+5. PRESERVE EXISTING METRICS / RECORDS BEHAVIOR
+- If specialist cards pull counts such as active items, blockers, or last action, make the new roles compatible with the existing metric model
+- If no live data exists yet for a new role, render gracefully with zero/default empty-state values
+- Do not crash or leave blank sections due to missing records
+- Backfill only if the current system requires seeded role entries to render cards
+
+6. ALIGN WITH SPECIALISTS.MD SEMANTICS
+Ensure the implementation reflects these concepts:
+- one owner per work item
+- specialists have boundaries
+- governance roles are not normal execution roles
+- Compliance & Risk Specialist is event-based
+- Security & Data Protection Specialist is a governance/review role
+- Bullpen synthesises outputs; specialists do not need cross-domain ownership
+
+This does NOT require implementing full orchestration logic yet unless it already exists in a lightweight configurable form.
+Focus first on role definitions, grouping, and UI/system alignment.
+
+7. OPTIONAL SAFE EXTENSIONS IF THE ARCHITECTURE ALREADY SUPPORTS THEM
+Only if there is already an existing config/schema for role metadata, add optional metadata fields for:
+- roleCategory
+- governanceRole (boolean)
+- eventBased (boolean)
+- defaultDescription
+These must be added backward-compatibly.
+Do not force a schema rewrite.
+
+8. QA / VERIFICATION
+After implementation, verify:
+- existing specialist cards still render correctly
+- new roles render in the correct groups
+- the new System Governance section renders correctly
+- no existing role disappeared
+- no route/auth breakage occurred
+- old workforce data still renders without migration failure
+- empty/default states for new roles are handled cleanly
+- manager-only access to Bullpen remains intact
+- no Bullpen internal governance terminology leaks to non-manager surfaces
+
+DELIVERABLES:
+Return:
+1. Summary of files changed
+2. What role definitions were extended
+3. Whether any seed/backfill data was needed
+4. Any high-risk areas found
+5. Any follow-up work recommended for deeper orchestration later
+
+CONSTRAINT:
+Smallest safe change only.
+Prefer extending existing maps, registries, sections, and components over creating anything new.
