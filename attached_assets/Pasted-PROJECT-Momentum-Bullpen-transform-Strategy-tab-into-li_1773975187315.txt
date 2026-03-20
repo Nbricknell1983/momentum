@@ -1,0 +1,336 @@
+PROJECT: Momentum / Bullpen — transform Strategy tab into live Deal Intelligence workspace
+
+CONTEXT:
+The current AI Sales Engine / Strategy tab is too button-driven and manual.
+
+Right now it relies on actions like:
+- Analyse Growth Position
+- supporting analysis tool buttons
+- Generate 12-Month Strategy PDF
+- Generate Prospect Strategy Page
+
+This functionality is valuable, but the current UX is static and tool-driven.
+
+We want to improve the EXISTING Strategy / Deal Intelligence experience so it feels like a live intelligence workflow.
+
+IMPORTANT:
+This is NOT a rewrite of the broader system.
+This is an optimisation and upgrade of the existing Strategy / Deal Intelligence functionality.
+
+PRIMARY GOAL:
+Replace the current manual/button-first Strategy experience with a smarter live workspace that:
+1. automatically runs the relevant existing analysis/enrichment tools where safe
+2. shows a live feed of specialist analysis activity in a product-native way
+3. synthesises specialist findings into the existing intelligence outputs
+4. provides rep-ready next best actions
+5. generates/surfaces strategy deliverables like website recommendation, strategy PDF, and public strategy URL
+6. allows the user to add deal-specific context or ask the specialist team a question to refine the intelligence for that specific deal/card
+
+NON-NEGOTIABLE RULES:
+- Reuse the current Strategy / Deal Intelligence architecture where possible
+- Do not create a parallel intelligence system
+- Reuse existing engines, APIs, prompts, and routes
+- Preserve multi-tenant isolation and existing auth/manager gates
+- Do not expose raw internal chain-of-thought, tool logs, or cheesy “agent theatre”
+- Present specialist work in a structured, product-native format
+- Preserve backwards compatibility with existing strategy/deal records where possible
+- Fail safely when data is missing
+- If additional APIs or credentials are needed, report that clearly instead of faking results
+
+--------------------------------------------------
+PART 1 — REVIEW THE CURRENT IMPLEMENTATION
+--------------------------------------------------
+
+First inspect the existing implementation for:
+- the AI Sales Engine Strategy tab
+- Deal Intelligence / Agent Intelligence rendering
+- Analyse Growth Position flow
+- supporting analysis tools
+- strategy PDF generation
+- prospect strategy page generation
+- any website/SEO/GBP/manual enrichment actions already connected
+- any existing async job/status infrastructure
+- any existing Firestore/job/result storage for analysis runs
+
+Document what is already present before changing anything.
+
+--------------------------------------------------
+PART 2 — CHANGE THE UX MODEL
+--------------------------------------------------
+
+The current Strategy area should no longer feel like:
+“press buttons to manually run disconnected tools”
+
+It should feel like:
+“the system is actively analysing this deal/business and showing the work as it happens”
+
+Optimise the Strategy / Deal Intelligence section into:
+
+1. Live Specialist Activity Feed
+2. Synthesised Intelligence Output
+3. Next Best Steps
+4. Deliverables / Client-facing outputs
+5. Deal-scoped team refinement input
+
+Do not redesign the entire page if unnecessary.
+Prefer extending and reorganising the existing Strategy tab.
+
+--------------------------------------------------
+PART 3 — LIVE SPECIALIST ACTIVITY FEED
+--------------------------------------------------
+
+Replace or substantially reduce the current manual analysis panel with a live feed/timeline/card stack that shows specialist progress in a product-native way.
+
+The feed should show activity such as:
+- Strategy Specialist analysing growth position
+- SEO Specialist mapping sitemap / page inventory / keyword coverage
+- Website Specialist interpreting conversion barriers and trust gaps
+- GBP Specialist pulling local visibility/review/category signals
+- Commercial Intelligence translating findings into business impact
+- Bullpen/strategy synthesis combining findings
+
+IMPORTANT:
+Do NOT expose raw tool traces or internal reasoning.
+Do NOT show chatbot-style “thinking…” output.
+
+Instead show structured feed items/status such as:
+- specialist name
+- status (queued / running / completed / blocked)
+- short plain-language task description
+- short finding summary when complete
+- timestamp/order if useful
+- handoff indication where relevant
+
+The feed should feel operational and credible, not theatrical.
+
+This feed must be scoped to the current deal/card only.
+Do not mix activity from other deals, clients, or unrelated records.
+
+--------------------------------------------------
+PART 4 — AUTOMATE EXISTING ANALYSIS
+--------------------------------------------------
+
+Where the current Strategy flow requires manual clicks, convert it into automatic orchestration where safe.
+
+Examples to inspect and auto-run if already supported:
+- growth position analysis
+- website analysis
+- sitemap/page discovery
+- SEO signal extraction
+- customer profile analysis
+- search intent analysis
+- opportunity generation
+- GBP data/API retrieval
+- strategy page preparation
+- website recommendation/mock website generation inputs
+
+Use existing functions/routes/prompts first.
+Do not build duplicates.
+
+Maintain manual retry/refresh capability if helpful, but the default experience should no longer depend on multiple manual clicks.
+
+--------------------------------------------------
+PART 5 — SYNTHESISED INTELLIGENCE OUTPUT
+--------------------------------------------------
+
+Keep and improve the current intelligence sections such as:
+- Customer Profile
+- Search Intent
+- Website Interpretation
+- Opportunities
+- Key Gaps
+- Commercial Angle
+
+These should now be populated by the richer automated analysis pipeline and live specialist feed outputs.
+
+The result should be:
+- more specific
+- more evidence-based
+- more commercially useful
+- less dependent on operator-triggered tools
+
+--------------------------------------------------
+PART 6 — NEXT BEST STEPS FOR THE REP
+--------------------------------------------------
+
+Below the intelligence output, add a “Next Best Steps” section.
+
+This section should generate immediately usable rep actions such as:
+- Call next
+- Email next
+- Text next
+- Follow up later
+- Send strategy page
+- Escalate internally if needed
+
+For each recommended next step, include:
+- action type
+- why it is the best next move
+- drafted content where relevant
+
+Examples:
+- Call → include call prep / talk track
+- Email → include drafted email copy
+- Text → include drafted SMS copy
+- Send strategy page → include public URL and send framing
+- Follow up later → include timing and rationale
+
+The rep should leave this screen knowing exactly what to do next.
+
+--------------------------------------------------
+PART 7 — DEAL-SCOPED “ASK THE TEAM” / “ADD CONTEXT” INPUT
+--------------------------------------------------
+
+Add a deal-scoped refinement input to this workflow.
+
+The user should be able to:
+- ask the specialist team a question about the current deal/card
+- add new client context
+- correct or refine assumptions
+- provide information learned from the client that should improve the intelligence
+
+Examples of useful operator input:
+- “The client only wants higher-value jobs, not more low-ticket work.”
+- “They already tried Google Ads and said the leads were poor quality.”
+- “They mainly service these suburbs.”
+- “The owner answers calls personally and misses a lot after 4pm.”
+- “They want the brand to feel more premium.”
+
+This feature must be scoped to the current deal/card only.
+It must NOT become a cross-deal/global chat system.
+
+Preferred UI framing:
+- Add context
+- Ask the team
+- Refine this deal
+Use product-native wording, not chatbot wording.
+
+IMPLEMENTATION REQUIREMENTS:
+- Store the input against the current deal/card only
+- Allow the system to use this input to refine:
+  - Agent Intelligence
+  - Next Best Steps
+  - Commercial Angle
+  - Website recommendation/build output
+  - Strategy/public URL output where relevant
+- If the new context materially changes outputs, indicate that clearly in the UI
+
+Examples of status/update language:
+- “Commercial Angle updated using client note”
+- “Website recommendation refined from operator context”
+- “Strategy page should be refreshed before sending”
+
+Do not expose raw agent conversation.
+Do not create a theatrical multi-agent chat UI.
+This is a context/refinement mechanism, not a generic chat room.
+
+If helpful, support a lightweight distinction between:
+- question to the team
+- factual client note / refinement
+But only if this is a small safe extension.
+
+--------------------------------------------------
+PART 8 — WEBSITE RECOMMENDATION / BUILD OUTPUT
+--------------------------------------------------
+
+Use the enriched intelligence to improve website output generation.
+
+Based on:
+- customer profile
+- search intent
+- website interpretation
+- opportunities
+- key gaps
+- commercial angle
+- website/SEO/GBP findings
+- operator-added context for this deal/card
+
+generate stronger website output using the existing architecture where possible.
+
+This may include:
+- recommended sitemap
+- page structure
+- messaging hierarchy
+- trust signal recommendations
+- CTA structure
+- service/location structure
+- website build brief
+- existing mock website generator output
+
+Do not create a separate website-generation system if one already exists.
+
+--------------------------------------------------
+PART 9 — STRATEGY DELIVERABLES
+--------------------------------------------------
+
+Tightly integrate the existing strategy deliverables:
+- strategy PDF
+- public strategy page URL
+
+These should be surfaced as outputs of the improved workflow, not as isolated manual actions only.
+
+Where possible:
+- auto-generate when sufficient inputs are available
+- or show clear readiness/progress state
+- surface the strategy page URL directly in the workflow
+
+The system should also be able to recognise when operator-added context means the public strategy page may now be stale and should be refreshed/regenerated before sending.
+
+Do not create a second strategy system.
+
+--------------------------------------------------
+PART 10 — DATA / STORAGE / SAFETY
+--------------------------------------------------
+
+- Maintain org scoping for all data
+- Reuse existing auth and manager gating
+- Preserve approved public strategy page rules
+- Missing enrichment data must degrade gracefully
+- Older strategy/intelligence records must still render safely if new fields are added
+- Use existing API clients/integrations
+- If external API access is missing, stop and report the dependency clearly
+- Avoid unnecessary polling if existing async/job state can be reused
+- Deal-scoped refinement input must remain attached only to the current deal/card unless an explicit future feature promotes it elsewhere
+
+--------------------------------------------------
+PART 11 — UI / PRODUCT CONSTRAINTS
+--------------------------------------------------
+
+The end result should feel like:
+“the current Strategy / Deal Intelligence area, but smarter, more automatic, and more actionable”
+
+It should NOT feel like:
+- a chatbot transcript
+- a developer console
+- raw agent logs
+- a completely different product
+- a generic multi-agent group chat
+
+Prefer:
+- product-native status/feed cards
+- structured specialist updates
+- richer intelligence sections
+- one new Next Best Steps section
+- one deal-scoped context/question input
+- clearer deliverables state
+
+--------------------------------------------------
+PART 12 — DELIVERABLES
+--------------------------------------------------
+
+Return:
+1. summary of current implementation found
+2. files changed
+3. what existing manual actions were automated
+4. how the live specialist activity feed was implemented
+5. how the deal-scoped “Ask the team / Add context” refinement input was implemented
+6. what existing capabilities were reused
+7. what new data structures/fields were added, if any
+8. missing API/access dependencies
+9. high-risk implementation notes
+10. recommended next follow-up phase
+
+CONSTRAINT:
+Smallest safe change only.
+Improve and optimise the existing Strategy / Deal Intelligence functionality.
+Do not replace the whole system.
