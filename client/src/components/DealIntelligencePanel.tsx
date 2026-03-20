@@ -40,6 +40,7 @@ import {
   ScanLine,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Tag,
   Link2,
   Image,
@@ -798,9 +799,13 @@ function StrategyIntelligenceCard({ lead }: { lead: Lead }) {
   );
 }
 
-const NBS_ACTION_ICONS: Record<string, any> = {
-  call: Phone, email: Mail, sms: MessageSquare, strategy_page: Send,
-  follow_up: Calendar, internal_review: Lightbulb,
+const NBS_TYPE_CONFIG: Record<string, { icon: any; color: string; bg: string; label: string }> = {
+  call:            { icon: Phone,         color: 'bg-violet-500',  bg: 'bg-violet-50 dark:bg-violet-950/30',  label: 'Call' },
+  email:           { icon: Mail,          color: 'bg-blue-500',    bg: 'bg-blue-50 dark:bg-blue-950/30',      label: 'Email' },
+  sms:             { icon: MessageSquare, color: 'bg-green-500',   bg: 'bg-green-50 dark:bg-green-950/30',    label: 'SMS' },
+  strategy_page:   { icon: Send,          color: 'bg-indigo-500',  bg: 'bg-indigo-50 dark:bg-indigo-950/30',  label: 'Send Page' },
+  follow_up:       { icon: Calendar,      color: 'bg-amber-500',   bg: 'bg-amber-50 dark:bg-amber-950/30',    label: 'Follow Up' },
+  internal_review: { icon: Lightbulb,     color: 'bg-slate-500',   bg: 'bg-slate-50 dark:bg-slate-800/30',    label: 'Review' },
 };
 const NBS_URGENCY: Record<string, { cls: string; label: string }> = {
   high:   { cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700',     label: 'High' },
@@ -808,18 +813,18 @@ const NBS_URGENCY: Record<string, { cls: string; label: string }> = {
   low:    { cls: 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600', label: 'Low' },
 };
 
-function NextBestStepsCard({ lead }: { lead: Lead }) {
+function NextBestStepsCard({ lead, autoRunning }: { lead: Lead; autoRunning: boolean }) {
   const dispatch = useDispatch();
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
   const [steps, setSteps] = useState<any[]>((lead as any).nextBestSteps?.steps || []);
   const [generating, setGenerating] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const [expandedStep, setExpandedStep] = useState<number | null>(0);
-  const [expanded, setExpanded] = useState(true);
+  const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
     setSteps((lead as any).nextBestSteps?.steps || []);
+    setActiveStep(0);
   }, [(lead as any).nextBestSteps]);
 
   const generate = async () => {
@@ -835,9 +840,8 @@ function NextBestStepsCard({ lead }: { lead: Lead }) {
       const data = await res.json();
       setSteps(data.steps || []);
       dispatch(patchLead({ id: lead.id, updates: { nextBestSteps: data } as any }));
-      toast({ title: 'Next best steps ready', description: `${data.steps?.length || 0} actions generated` });
     } catch {
-      toast({ title: 'Generation failed', description: 'Could not generate next best steps', variant: 'destructive' });
+      toast({ title: 'Generation failed', description: 'Could not prepare next steps', variant: 'destructive' });
     } finally {
       setGenerating(false);
     }
@@ -853,99 +857,188 @@ function NextBestStepsCard({ lead }: { lead: Lead }) {
     ? format(new Date((lead as any).nextBestSteps.generatedAt), 'dd/MM/yyyy HH:mm')
     : null;
 
+  const isLoading = generating || autoRunning;
+  const activeStepData = steps[activeStep];
+
   return (
-    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/30 dark:bg-emerald-950/10 overflow-hidden">
+    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/30 dark:bg-emerald-950/10 overflow-hidden" data-testid="next-best-steps-card">
+      {/* Header */}
       <div className="flex items-center px-3 py-2.5 gap-2 border-b border-emerald-200 dark:border-emerald-800/40">
-        <button
-          className="flex-1 flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
-          onClick={() => setExpanded(v => !v)}
-          data-testid="button-toggle-next-best-steps"
-        >
-          <div className="w-6 h-6 rounded bg-emerald-500 flex items-center justify-center shrink-0">
-            <ArrowRight className="h-3.5 w-3.5 text-white" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">Next Best Steps</p>
-            {genDate && <p className="text-[10px] text-emerald-500 dark:text-emerald-400">{genDate}</p>}
-          </div>
-        </button>
+        <div className="w-6 h-6 rounded bg-emerald-500 flex items-center justify-center shrink-0">
+          <ArrowRight className="h-3.5 w-3.5 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">Next Best Steps</p>
+          {isLoading
+            ? <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Preparing your action plan…</p>
+            : genDate
+              ? <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Updated {genDate}</p>
+              : null}
+        </div>
         <button
           onClick={generate}
-          disabled={generating}
-          className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 disabled:opacity-40 transition-colors px-2 py-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
-          data-testid="button-generate-next-steps"
+          disabled={isLoading}
+          className="shrink-0 text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 disabled:opacity-30 transition-colors p-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+          title={steps.length > 0 ? 'Refresh' : 'Prepare steps'}
+          data-testid="button-refresh-next-steps"
         >
-          {generating ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : steps.length > 0 ? <><RefreshCw className="h-3 w-3" /> Refresh</> : <><Sparkles className="h-3 w-3" /> Generate</>}
-        </button>
-        <button onClick={() => setExpanded(v => !v)} className="shrink-0 text-emerald-400 hover:text-emerald-600 transition-colors">
-          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
         </button>
       </div>
 
-      {expanded && (
-        <div className="px-3 pb-3 pt-3">
-          {steps.length === 0 ? (
-            <div className="text-center py-4">
-              <p className="text-xs text-muted-foreground mb-3">
-                {generating ? 'Analysing lead intelligence…' : 'Generate AI-powered rep-ready actions tailored to this prospect.'}
-              </p>
-              {!generating && (
-                <button
-                  onClick={generate}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition-colors"
-                  data-testid="button-generate-next-steps-empty"
-                >
-                  <Sparkles className="h-3.5 w-3.5" /> Generate Next Best Steps
-                </button>
-              )}
+      <div className="p-3">
+        {/* Auto-generating loading state */}
+        {isLoading && steps.length === 0 && (
+          <div className="py-6 flex flex-col items-center gap-3 text-center">
+            <div className="flex items-center gap-1.5">
+              {[0, 1, 2, 3].map(i => (
+                <div
+                  key={i}
+                  className="h-1.5 w-7 rounded-full bg-emerald-400 dark:bg-emerald-600 animate-pulse"
+                  style={{ animationDelay: `${i * 120}ms`, animationDuration: '1s' }}
+                />
+              ))}
             </div>
-          ) : (
-            <div className="space-y-2">
+            <div>
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Analysing deal intelligence…</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Preparing a personalised action sequence for {lead.companyName || 'this deal'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Not enough data — fallback state */}
+        {!isLoading && steps.length === 0 && (
+          <div className="py-4 text-center space-y-2.5">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Building context — log a conversation or generate call prep to get rep-ready next steps.
+            </p>
+            <button
+              onClick={generate}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition-colors"
+              data-testid="button-generate-next-steps-fallback"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Prepare Action Plan
+            </button>
+          </div>
+        )}
+
+        {/* Step sequence — shown when data is ready */}
+        {steps.length > 0 && (
+          <div className="space-y-3">
+            {/* Horizontal step navigator */}
+            <div className="flex items-end gap-1 overflow-x-auto pb-0.5" data-testid="step-navigator">
               {steps.map((step: any, i: number) => {
-                const ActionIcon = NBS_ACTION_ICONS[step.actionType] || ArrowRight;
-                const urg = NBS_URGENCY[step.urgency] || NBS_URGENCY.medium;
-                const isOpen = expandedStep === i;
+                const cfg = NBS_TYPE_CONFIG[step.actionType] || { icon: ArrowRight, color: 'bg-slate-500', bg: '', label: step.actionType };
+                const Icon = cfg.icon;
+                const isActive = activeStep === i;
                 return (
-                  <div key={i} className="rounded-md border bg-background overflow-hidden" data-testid={`next-step-card-${i}`}>
+                  <div key={i} className="flex items-center gap-0.5 shrink-0">
                     <button
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
-                      onClick={() => setExpandedStep(isOpen ? null : i)}
+                      onClick={() => setActiveStep(i)}
+                      className="flex flex-col items-center gap-1.5 group transition-all min-w-[52px]"
+                      data-testid={`button-step-nav-${i}`}
                     >
-                      <ActionIcon className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                      <span className="flex-1 text-xs font-semibold text-foreground truncate">{step.label || step.actionType}</span>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${urg.cls}`}>{urg.label}</span>
-                      {isOpen ? <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />}
-                    </button>
-                    {isOpen && (
-                      <div className="px-3 pb-3 space-y-2 border-t">
-                        {step.why && (
-                          <p className="text-xs text-muted-foreground pt-2 leading-relaxed">{step.why}</p>
-                        )}
-                        {step.draftContent && (
-                          <div className="rounded bg-muted/40 border p-2 relative">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Draft Content</span>
-                              <button
-                                onClick={() => copyDraft(step.draftContent, i)}
-                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                                data-testid={`button-copy-draft-${i}`}
-                              >
-                                {copiedIdx === i ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                                {copiedIdx === i ? 'Copied' : 'Copy'}
-                              </button>
-                            </div>
-                            <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{step.draftContent}</p>
-                          </div>
-                        )}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ring-2 ring-offset-1 ${isActive ? `${cfg.color} ring-emerald-400 shadow-md` : 'bg-muted/60 ring-transparent hover:ring-muted'}`}>
+                        {isActive
+                          ? <Icon className="h-4.5 w-4.5 text-white" style={{ width: 18, height: 18 }} />
+                          : <span className="text-[11px] font-bold text-muted-foreground">{i + 1}</span>}
                       </div>
+                      <p className={`text-[9px] font-semibold uppercase tracking-wide text-center leading-tight ${isActive ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'}`}>
+                        {cfg.label}
+                      </p>
+                    </button>
+                    {i < steps.length - 1 && (
+                      <ChevronRight className="h-3 w-3 text-muted-foreground/40 mb-5 shrink-0" />
                     )}
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Active step detail panel */}
+            {activeStepData && (() => {
+              const cfg = NBS_TYPE_CONFIG[activeStepData.actionType] || { icon: ArrowRight, color: 'bg-slate-500', bg: 'bg-muted/30', label: activeStepData.actionType };
+              const Icon = cfg.icon;
+              const urg = NBS_URGENCY[activeStepData.urgency] || NBS_URGENCY.medium;
+              const draftLabel =
+                activeStepData.actionType === 'call' ? 'Talk Track' :
+                activeStepData.actionType === 'sms' ? 'SMS Draft' :
+                activeStepData.actionType === 'email' ? 'Email Draft' :
+                'Draft Copy';
+              return (
+                <div className="rounded-lg border bg-background overflow-hidden" data-testid={`active-step-panel-${activeStep}`}>
+                  {/* Step header */}
+                  <div className={`px-3 py-2.5 flex items-center gap-2.5 ${cfg.bg} border-b`}>
+                    <div className={`w-7 h-7 rounded-full ${cfg.color} flex items-center justify-center shrink-0`}>
+                      <Icon className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Step {activeStep + 1} · {cfg.label}
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${urg.cls}`}>{urg.label}</span>
+                      </div>
+                      <p className="text-xs font-semibold text-foreground leading-snug mt-0.5">{activeStepData.label || activeStepData.actionType}</p>
+                    </div>
+                  </div>
+
+                  <div className="px-3 py-2.5 space-y-2.5">
+                    {/* Why this move */}
+                    {activeStepData.why && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Why this move</p>
+                        <p className="text-xs text-foreground/80 leading-relaxed">{activeStepData.why}</p>
+                      </div>
+                    )}
+
+                    {/* Draft content */}
+                    {activeStepData.draftContent && (
+                      <div className="rounded-md bg-muted/40 border p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{draftLabel}</span>
+                          <button
+                            onClick={() => copyDraft(activeStepData.draftContent, activeStep)}
+                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                            data-testid={`button-copy-draft-${activeStep}`}
+                          >
+                            {copiedIdx === activeStep ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                            {copiedIdx === activeStep ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{activeStepData.draftContent}</p>
+                      </div>
+                    )}
+
+                    {/* Step navigation footer */}
+                    <div className="flex items-center justify-between pt-0.5">
+                      <button
+                        onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+                        disabled={activeStep === 0}
+                        className="text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        data-testid="button-step-prev"
+                      >
+                        ← Prev
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">{activeStep + 1} of {steps.length}</span>
+                      <button
+                        onClick={() => setActiveStep(Math.min(steps.length - 1, activeStep + 1))}
+                        disabled={activeStep === steps.length - 1}
+                        className="text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        data-testid="button-step-next"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1072,8 +1165,10 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [mockWebsiteExpanded, setMockWebsiteExpanded] = useState(true);
   const [mockWebsiteModalOpen, setMockWebsiteModalOpen] = useState(false);
   const [generatingPrepPack, setGeneratingPrepPack] = useState(false);
+  const [autoNbsRunning, setAutoNbsRunning] = useState(false);
   const autoEnrichFired = useRef(false);
   const autoPrepFired = useRef(false);
+  const autoNbsFired = useRef(false);
 
   // Auto-enrich silently on panel open if enrichment is stale/missing
   useEffect(() => {
@@ -1101,6 +1196,26 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     }).catch(() => {});
   }, [orgId, authReady, lead.id]);
 
+  // Auto-generate Next Best Steps silently if not yet generated
+  useEffect(() => {
+    if (!orgId || !authReady || autoNbsFired.current) return;
+    if ((lead as any).nextBestSteps?.steps?.length > 0) return;
+    if (!lead.companyName) return;
+    autoNbsFired.current = true;
+    setAutoNbsRunning(true);
+    fetch(`/api/leads/${lead.id}/next-best-steps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.steps) dispatch(patchLead({ id: lead.id, updates: { nextBestSteps: data } as any }));
+      })
+      .catch(() => {})
+      .finally(() => setAutoNbsRunning(false));
+  }, [orgId, authReady, lead.id]);
+
   const handleGeneratePrepPack = useCallback(async () => {
     if (!orgId || !authReady) return;
     setGeneratingPrepPack(true);
@@ -1116,6 +1231,19 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         const updates: Partial<Lead> = { prepCallPack: data.prepCallPack } as any;
         dispatch(patchLead({ id: lead.id, updates }));
         toast({ title: 'Agent Intelligence updated', description: 'Fresh analysis complete' });
+        // Re-run Next Best Steps with fresh intelligence
+        setAutoNbsRunning(true);
+        fetch(`/api/leads/${lead.id}/next-best-steps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId }),
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(nbsData => {
+            if (nbsData?.steps) dispatch(patchLead({ id: lead.id, updates: { nextBestSteps: nbsData } as any }));
+          })
+          .catch(() => {})
+          .finally(() => setAutoNbsRunning(false));
       }
     } catch {
       toast({ title: 'Generation failed', description: 'Could not regenerate agent intelligence', variant: 'destructive' });
@@ -1531,7 +1659,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
 
       <AgentIntelligenceCard lead={lead} onRegenerate={handleGeneratePrepPack} isRegenerating={generatingPrepPack} />
 
-      <NextBestStepsCard lead={lead} />
+      <NextBestStepsCard lead={lead} autoRunning={autoNbsRunning} />
 
       <StrategyUrlCard lead={lead} />
 
