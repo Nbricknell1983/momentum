@@ -660,6 +660,15 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                         const updates: Partial<Lead> = { dealContext: context, updatedAt: new Date() };
                         updateLeadInFirestore(orgId, selectedLead.id, updates as any, authReady).catch(console.error);
                         dispatch(patchLead({ id: selectedLead.id, updates: updates as any }));
+                        auth.currentUser?.getIdToken().then(token => {
+                          fetch(`/api/leads/${selectedLead.id}/next-best-steps`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ orgId }),
+                          }).then(r => r.ok ? r.json() : null).then(data => {
+                            if (data?.steps) dispatch(patchLead({ id: selectedLead.id, updates: { nextBestSteps: data } as any }));
+                          }).catch(() => {});
+                        });
                       }
                     }}
                   />
@@ -877,6 +886,15 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                     const updates: Partial<Lead> = { dealContext: context, updatedAt: new Date() };
                     updateLeadInFirestore(orgId, selectedLead.id, updates as any, authReady).catch(console.error);
                     dispatch(patchLead({ id: selectedLead.id, updates: updates as any }));
+                    auth.currentUser?.getIdToken().then(token => {
+                      fetch(`/api/leads/${selectedLead.id}/next-best-steps`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ orgId }),
+                      }).then(r => r.ok ? r.json() : null).then(data => {
+                        if (data?.steps) dispatch(patchLead({ id: selectedLead.id, updates: { nextBestSteps: data } as any }));
+                      }).catch(() => {});
+                    });
                   }
                 }}
               />

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink, Link, Sparkles, ChevronDown, ChevronRight, Target, Zap, Clock, ScanLine, Plus, Trash2, ChevronUp, Briefcase, MapPin, MessageSquare, FileText } from 'lucide-react';
 import ShareStrategyModal from '@/components/ShareStrategyModal';
 import { Button } from '@/components/ui/button';
@@ -836,7 +836,6 @@ function SpecialistFeed({
       finding: websiteStatus === 'complete' ? `${crawlPageCount} pages audited — X-Ray complete` :
                websiteStatus === 'partial' ? `${crawlPageCount} pages crawled — X-Ray pending` :
                websiteStatus === 'blocked' ? 'No website URL on this lead' : undefined,
-      action: !websiteUrl ? undefined : { label: 'Run X-Ray', onClick: onRunXRay, disabled: !websiteUrl },
     },
     {
       key: 'seo',
@@ -846,7 +845,6 @@ function SpecialistFeed({
       status: seoStatus,
       finding: seoStatus === 'complete' ? `${sitemapPageCount} sitemap pages · SERP analysis done` :
                seoStatus === 'partial' ? `${sitemapPageCount} sitemap pages found — SERP pending` : undefined,
-      action: { label: 'Run SERP', onClick: onRunSerp },
     },
     {
       key: 'growth',
@@ -857,7 +855,6 @@ function SpecialistFeed({
       finding: growthStatus === 'complete' && strategyDiagnosis
         ? `Readiness ${strategyDiagnosis.readinessScore}/100 · ${strategyDiagnosis.insightSentence?.slice(0, 80)}${(strategyDiagnosis.insightSentence?.length ?? 0) > 80 ? '…' : ''}`
         : undefined,
-      action: { label: 'Analyse', onClick: onRunDiagnosis, disabled: !businessName },
     },
     {
       key: 'output',
@@ -870,13 +867,23 @@ function SpecialistFeed({
   ];
 
   const complete = items.filter(i => i.status === 'complete').length;
+  const running = items.filter(i => i.status === 'running').length;
 
   return (
     <div className="space-y-1.5" data-testid="specialist-feed">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Specialist Activity</p>
+          {running > 0 ? (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+            </span>
+          ) : (
+            <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            {running > 0 ? 'Live Specialist Activity' : 'Specialist Activity'}
+          </p>
         </div>
         <p className="text-[10px] text-muted-foreground">{complete}/{items.length} complete</p>
       </div>
@@ -895,25 +902,30 @@ function DealContextInput({ value, onChange, onSave, saved }: {
 }) {
   const hasContent = value.trim().length > 0;
   return (
-    <div className="space-y-1.5" data-testid="deal-context-input">
+    <div className="rounded-lg border border-blue-200 dark:border-blue-800/40 bg-blue-50/40 dark:bg-blue-950/10 p-3 space-y-2" data-testid="deal-context-input">
       <div className="flex items-center gap-2">
-        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Deal Context</p>
-        {hasContent && (
-          <span className="ml-auto text-[10px] text-emerald-600 dark:text-emerald-400">Saved to lead</span>
+        <MessageSquare className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+        <p className="text-xs font-bold text-blue-900 dark:text-blue-200 flex-1">Add context for this deal</p>
+        {saved && (
+          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+            <Check className="h-2.5 w-2.5" /> Refreshing…
+          </span>
+        )}
+        {hasContent && !saved && (
+          <span className="text-[10px] text-blue-500 dark:text-blue-400">Saved · refines NBS + strategy</span>
         )}
       </div>
       <Textarea
         value={value}
         onChange={e => onChange(e.target.value)}
         onBlur={() => { if (value !== undefined) onSave(value); }}
-        placeholder="Add context about this deal — goals discussed, objections, budget range, timeline, specific requirements. Used to refine all AI analysis."
-        className="text-xs min-h-[72px] resize-none"
+        placeholder="Goals discussed, objections, budget range, timeline, specific requirements, or ask the team a question about this deal…"
+        className="text-xs min-h-[64px] resize-none bg-background/80 border-blue-200 dark:border-blue-800/40 focus-visible:ring-blue-400"
         data-testid="textarea-deal-context"
       />
-      {saved && (
-        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-          <Check className="h-2.5 w-2.5" /> Context saved
+      {!hasContent && (
+        <p className="text-[10px] text-blue-500/70 dark:text-blue-400/60 leading-tight">
+          Context is used to refine next best steps, strategy diagnosis, and growth analysis for this specific deal.
         </p>
       )}
     </div>
@@ -959,6 +971,8 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   const [expandedCompetitor, setExpandedCompetitor] = useState<number | null>(null);
   const [dealContext, setDealContext] = useState('');
   const [dealContextSaved, setDealContextSaved] = useState(false);
+  const autoXRayFired = useRef(false);
+  const autoSerpFired = useRef(false);
 
   useEffect(() => {
     if (lead?.aiGrowthPlan) {
@@ -1126,6 +1140,29 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
       const data = await res.json(); setSerpResult(data); saveAll({ serp: data });
     } catch (err: any) { setToolError('serp', err.message); } finally { setToolLoading('serp', false); }
   };
+
+  // Auto-fire X-Ray silently when Strategy workspace opens, if not already cached
+  useEffect(() => {
+    if (!lead?.id || autoXRayFired.current) return;
+    if (lead?.aiGrowthPlan?.xray) return;
+    const url = lead?.website || '';
+    if (!url) return;
+    autoXRayFired.current = true;
+    const timer = setTimeout(() => runXRay(), 900);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
+
+  // Auto-fire SERP silently when Strategy workspace opens, if not already cached
+  useEffect(() => {
+    if (!lead?.id || autoSerpFired.current) return;
+    if (lead?.aiGrowthPlan?.serp) return;
+    if (!lead?.companyName) return;
+    autoSerpFired.current = true;
+    const timer = setTimeout(() => runSerp(), 1500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
 
   const runCompetitorGap = async () => {
     if (!businessName) { toast({ title: 'Business name required', variant: 'destructive' }); return; }
