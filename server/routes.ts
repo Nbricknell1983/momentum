@@ -7401,19 +7401,24 @@ Return JSON:
     const gp = lead.growthPrescription || null;
 
     // ── Website signals: cascade through all available evidence ──────────────
-    const websiteUrlConfirmed = lead.website || src.googleWebsite || enr.websiteUrl || null;
+    const websiteUrlConfirmed = lead.website || src.googleWebsite || null;
     const hasSitemap = (lead.sitemapPages?.length ?? 0) > 0;
     const hasCrawl = (lead.crawledPages?.length ?? 0) > 0;
     const sitemapPageCount = lead.sitemapPages?.length ?? 0;
     const crawlPageCount = lead.crawledPages?.filter((p: any) => !p.error).length ?? 0;
+    // Enrichment identity pass writes websiteStatus: 'has_website' | 'no_website' | 'unknown'
+    const enrichWebsiteStatus: string = enr.websiteStatus || 'unknown';
     let websiteStr: string;
     if (websiteUrlConfirmed) {
       websiteStr = websiteUrlConfirmed;
       if (hasSitemap) websiteStr += ` | Sitemap found (${sitemapPageCount} pages indexed)`;
       if (hasCrawl)   websiteStr += ` | Deep crawl complete (${crawlPageCount} pages analysed)`;
     } else if (hasSitemap || hasCrawl) {
-      // Sitemap/crawl data exists — website must be real even if URL isn't on the record
-      websiteStr = `[confirmed via crawl — ${hasCrawl ? crawlPageCount + ' pages analysed' : sitemapPageCount + ' sitemap pages'}]`;
+      websiteStr = `[website confirmed via crawl — ${hasCrawl ? crawlPageCount + ' pages analysed' : sitemapPageCount + ' sitemap pages'}]`;
+    } else if (enrichWebsiteStatus === 'has_website') {
+      websiteStr = '[website confirmed by enrichment intelligence — specific URL not yet stored on record]';
+    } else if (enrichWebsiteStatus === 'no_website') {
+      websiteStr = '[enrichment indicates no website detected — should be confirmed manually]';
     } else {
       websiteStr = 'not yet verified — enrichment may be incomplete';
     }
@@ -7421,7 +7426,7 @@ Return JSON:
     // ── GBP / Maps signals ────────────────────────────────────────────────────
     const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? null;
     const rating = src.googleRating ?? enr.rating ?? null;
-    const gbpUrlRaw = src.googleMapsUrl || enr.gbpUrl || src.gbpUrl || null;
+    const gbpUrlRaw = src.googleMapsUrl || src.gbpUrl || null;
     let gbpStr: string;
     if (gbpUrlRaw) {
       gbpStr = gbpUrlRaw;
@@ -7429,34 +7434,40 @@ Return JSON:
       if (rating !== null) gbpStr += `, ${rating}/5`;
     } else if (reviewCount !== null && reviewCount > 0) {
       gbpStr = `[GBP confirmed — ${reviewCount} Google reviews${rating !== null ? `, ${rating}/5 stars` : ''}]`;
-    } else if (src.googlePlaceId || enr.gbpPlaceId) {
-      gbpStr = `[GBP confirmed via Place ID — review count not yet retrieved]`;
+    } else if (src.googlePlaceId) {
+      gbpStr = `[GBP confirmed via Place ID: ${src.googlePlaceId} — review count not yet retrieved]`;
     } else if (src.googleBusinessName || src.googleName) {
       gbpStr = `[Google business name found: ${src.googleBusinessName || src.googleName} — Maps presence likely]`;
     } else {
       gbpStr = 'not yet verified — enrichment may be incomplete';
     }
 
-    // ── Social presence: check lead fields + sourceData + enrichment layer ──
-    const facebookUrl  = lead.facebookUrl  || src.facebookUrl  || enr.facebookUrl  || null;
-    const instagramUrl = lead.instagramUrl || src.instagramUrl || enr.instagramUrl || null;
-    const linkedinUrl  = lead.linkedinUrl  || src.linkedinUrl  || enr.linkedinUrl  || null;
-    const twitterUrl   = lead.twitterUrl   || src.twitterUrl   || enr.twitterUrl   || null;
-    // Also check business signal strings for implicit detections
+    // ── Social presence: check lead fields + sourceData + enrichment identity pass ──
+    // Enrichment writes socialPresence: { facebook: boolean; instagram: boolean; linkedin: boolean }
+    const enrichSocial = enr.socialPresence || {};
+    const facebookUrl  = lead.facebookUrl  || src.facebookUrl  || null;
+    const instagramUrl = lead.instagramUrl || src.instagramUrl || null;
+    const linkedinUrl  = lead.linkedinUrl  || src.linkedinUrl  || null;
+    const twitterUrl   = lead.twitterUrl   || src.twitterUrl   || null;
+    // Check business signal strings for implicit detections
     const signals: string[] = src.businessSignals || [];
     const sigLower = signals.join(' ').toLowerCase();
-    const impliedFacebook  = !facebookUrl  && (sigLower.includes('facebook')  || sigLower.includes('fb'));
-    const impliedInstagram = !instagramUrl && sigLower.includes('instagram');
-    const impliedLinkedIn  = !linkedinUrl  && sigLower.includes('linkedin');
+    const impliedFacebook  = !facebookUrl  && (sigLower.includes('facebook')  || sigLower.includes('fb') || enrichSocial.facebook === true);
+    const impliedInstagram = !instagramUrl && (sigLower.includes('instagram') || enrichSocial.instagram === true);
+    const impliedLinkedIn  = !linkedinUrl  && (sigLower.includes('linkedin')  || enrichSocial.linkedin  === true);
     const socialParts: string[] = [];
-    if (facebookUrl)       socialParts.push(`Facebook (${facebookUrl})`);
-    else if (impliedFacebook) socialParts.push('Facebook (detected in signals — URL not yet stored)');
-    if (instagramUrl)       socialParts.push(`Instagram (${instagramUrl})`);
-    else if (impliedInstagram) socialParts.push('Instagram (detected in signals — URL not yet stored)');
-    if (linkedinUrl)       socialParts.push(`LinkedIn (${linkedinUrl})`);
-    else if (impliedLinkedIn) socialParts.push('LinkedIn (detected in signals — URL not yet stored)');
-    if (twitterUrl)        socialParts.push(`Twitter/X (${twitterUrl})`);
+    if (facebookUrl)          socialParts.push(`Facebook (${facebookUrl})`);
+    else if (impliedFacebook) socialParts.push('Facebook (presence detected — URL not yet stored)');
+    if (instagramUrl)          socialParts.push(`Instagram (${instagramUrl})`);
+    else if (impliedInstagram) socialParts.push('Instagram (presence detected — URL not yet stored)');
+    if (linkedinUrl)          socialParts.push(`LinkedIn (${linkedinUrl})`);
+    else if (impliedLinkedIn) socialParts.push('LinkedIn (presence detected — URL not yet stored)');
+    if (twitterUrl)           socialParts.push(`Twitter/X (${twitterUrl})`);
     const socials = socialParts.length > 0 ? socialParts.join('; ') : 'not yet verified — social enrichment may be incomplete';
+
+    // Debug: log assembled presence signals so we can verify correctness
+    console.log(`[prep-pack] ${lead.companyName} | website="${websiteStr}" | gbp="${gbpStr}" | socials="${socials}" | reviews=${reviewCount} | rating=${rating}`);
+
     const daysSinceCreated = lead.createdAt ? Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 86400000) : null;
     const lastContact = lead.lastContactDate ? new Date(lead.lastContactDate).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never';
 
@@ -7559,7 +7570,7 @@ Return ONLY a JSON object with ALL these fields:
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a senior marketing strategist producing commercially sharp prep call briefs for agency sales reps. You think like a strategy team that has already researched the business. Be specific to THIS business — never generic. Use what is known and what is inferable. Never let missing data collapse your usefulness.' },
+        { role: 'system', content: 'You are a senior marketing strategist producing commercially sharp prep call briefs for agency sales reps. You think like a strategy team that has already researched the business. Be specific to THIS business — never generic. Use what is known and what is inferable. Never let missing data collapse your usefulness. IMPORTANT: Any established business with a real name and physical location almost certainly has SOME digital presence — do not assume zero presence. If presence data shows "not yet verified", say so explicitly rather than assuming absence. Your job is to identify WHERE presence is strong or weak, not to fabricate absence where data is simply missing.' },
         { role: 'user', content: prompt },
       ],
       response_format: { type: 'json_object' },
@@ -7569,6 +7580,10 @@ Return ONLY a JSON object with ALL these fields:
 
     const raw = response.choices[0]?.message?.content || '{}';
     const pack = JSON.parse(raw);
+    // Debug: log what GPT returned for Presence Snapshot
+    if (pack.presenceSnapshot) {
+      console.log(`[prep-pack] ${lead.companyName} GPT presenceSnapshot →`, JSON.stringify(pack.presenceSnapshot));
+    }
     const prepCallPack = { ...pack, generatedAt: new Date().toISOString(), leadId };
 
     // Auto-hydrate strategyIntelligence from prep pack (only populate empty fields)
@@ -7640,15 +7655,17 @@ Return ONLY a JSON object with ALL these fields:
       const si = lead.strategyIntelligence || {};
       const src = lead.sourceData || {};
 
+      // Normalise GPT array fields — GPT sometimes returns strings instead of arrays
+      const toArr = (v: any): string[] => Array.isArray(v) ? v : (v ? [String(v)] : []);
       const packContext = pack ? `
 AGENT INTELLIGENCE:
 Business: ${pack.businessSnapshot || ''}
 Commercial angle: ${pack.commercialAngle || ''}
-Opportunities: ${(pack.opportunities || []).slice(0, 3).join('; ')}
-Key gaps: ${(pack.gaps || []).slice(0, 3).join('; ')}
-Call priorities: ${(pack.callPriorities || []).join('; ')}
+Opportunities: ${toArr(pack.opportunities).slice(0, 3).join('; ')}
+Key gaps: ${toArr(pack.gaps).slice(0, 3).join('; ')}
+Call priorities: ${toArr(pack.callPriorities).join('; ')}
 Confidence: ${pack.confidence || 'medium'}
-Missing data: ${(pack.missingDataNotes || []).join('; ')}` : '';
+Missing data: ${toArr(pack.missingDataNotes).join('; ')}` : '';
 
       const siContext = (si.businessOverview || si.growthObjective) ? `
 STRATEGY INTELLIGENCE:

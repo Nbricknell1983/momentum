@@ -200,6 +200,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     const isMissing = !pack?.businessSnapshot;
     if (!isMissing && !isStale) return;
     autoPrepFired.current = true;
+    // Delay long enough for enrichment to run first (enrichment fires at mount and takes ~5s)
     const timer = setTimeout(async () => {
       setPrepRunning(true);
       try {
@@ -218,7 +219,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       } catch { /* silent */ } finally {
         setPrepRunning(false);
       }
-    }, 400);
+    }, 8000);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id, orgId, authReady]);

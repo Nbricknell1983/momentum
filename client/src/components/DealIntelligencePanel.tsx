@@ -1177,11 +1177,12 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     const stale = !lastAt || differenceInDays(new Date(), new Date(lastAt)) >= 7;
     if (!stale) return;
     autoEnrichFired.current = true;
-    fetch('/api/enrichment/run-lead', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orgId, leadId: lead.id }),
-    }).catch(() => {});
+    (auth.currentUser?.getIdToken() ?? Promise.resolve(null))
+      .then(token => fetch('/api/enrichment/run-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ orgId, leadId: lead.id }),
+      })).catch(() => {});
   }, [orgId, authReady, lead.id]);
 
   // Auto-generate prep pack silently if missing and org ready
@@ -1189,11 +1190,12 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     if (!orgId || !authReady || autoPrepFired.current) return;
     if ((lead as any).prepCallPack?.businessSnapshot) return;
     autoPrepFired.current = true;
-    fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orgId, force: false }),
-    }).catch(() => {});
+    (auth.currentUser?.getIdToken() ?? Promise.resolve(null))
+      .then(token => fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ orgId, force: false }),
+      })).catch(() => {});
   }, [orgId, authReady, lead.id]);
 
   // Auto-generate Next Best Steps silently if not yet generated
@@ -2282,7 +2284,8 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     if (locationHint) params.set('location', locationHint);
     if (lead.website) params.set('website', lead.website);
     if (lead.phone) params.set('phone', lead.phone);
-    fetch(`/api/google-places/find?${params}`)
+    (auth.currentUser?.getIdToken() ?? Promise.resolve(null))
+      .then(token => fetch(`/api/google-places/find?${params}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {}))
       .then(r => r.json())
       .then(data => { if (data.results?.length) setSuggestions(data.results.slice(0, 3)); })
       .catch(() => {})
@@ -2325,7 +2328,8 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
       // Pass website and phone as extra fallback hints for the backend
       if (lead.website) params.set('website', lead.website);
       if (lead.phone) params.set('phone', lead.phone);
-      const res = await fetch(`/api/google-places/find?${params}`);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/google-places/find?${params}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Search failed');
       setResults(data.results || []);
@@ -2618,7 +2622,8 @@ function CompetitorCard({
     if (!expanded || gbp || gbpAutoSearched.current || !domainQuery.trim()) return;
     gbpAutoSearched.current = true;
     setGbpSuggestLoading(true);
-    fetch(`/api/google-places/find?query=${encodeURIComponent(domainQuery.trim())}`)
+    (auth.currentUser?.getIdToken() ?? Promise.resolve(null))
+      .then(token => fetch(`/api/google-places/find?query=${encodeURIComponent(domainQuery.trim())}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {}))
       .then(r => r.json())
       .then(data => { if (data.results?.length) setGbpSuggestions(data.results.slice(0, 3)); })
       .catch(() => {})
@@ -2647,7 +2652,8 @@ function CompetitorCard({
     setGbpSearchError(null);
     setGbpResults([]);
     try {
-      const res = await fetch(`/api/google-places/find?query=${encodeURIComponent(gbpQuery.trim())}`);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/google-places/find?query=${encodeURIComponent(gbpQuery.trim())}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Search failed');
       setGbpResults(data.results || []);
