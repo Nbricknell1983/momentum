@@ -26,6 +26,7 @@ import ManagementPage from '@/pages/management';
 import BullpenPage from '@/pages/bullpen';
 import OpenClawSetupPage from '@/pages/openclaw-setup';
 import MyWorkPage from '@/pages/my-work';
+import RoutesOverviewPage from '@/pages/routes-overview';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -65,6 +66,7 @@ function ProtectedRoutes() {
       <Route path="/management" component={ManagementPage} />
       <Route path="/bullpen">{() => <ManagerGate component={BullpenPage} />}</Route>
       <Route path="/openclaw-setup">{() => <ManagerGate component={OpenClawSetupPage} />}</Route>
+      <Route path="/routes">{() => <ManagerGate component={RoutesOverviewPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

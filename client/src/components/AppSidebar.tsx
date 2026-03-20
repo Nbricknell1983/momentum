@@ -14,6 +14,7 @@ import {
   Radio,
   Zap,
   Inbox,
+  Map,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -50,6 +51,7 @@ const managerNavItems = [
   { title: 'Management',     url: '/management',     icon: BarChart3 },
   { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
   { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
+  { title: 'Route Map',      url: '/routes',         icon: Map },
 ];
 
 function useMyWorkCount(orgId: string | null) {
