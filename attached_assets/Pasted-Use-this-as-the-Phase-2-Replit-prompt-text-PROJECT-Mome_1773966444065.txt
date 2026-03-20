@@ -1,0 +1,174 @@
+Use this as the **Phase 2 Replit prompt**:
+
+```text
+PROJECT: Momentum / Bullpen — Phase 2 specialist role signal wiring
+
+CONTEXT:
+Phase 1 is complete:
+- The Bullpen workforce UI now displays the new specialist roles
+- A new “System Governance” section exists
+- New roles render safely with default/empty-state metrics
+
+We now want Phase 2:
+wire the new specialist roles into real Bullpen work / signal counts where appropriate, using the existing bullpenWork / Firestore subscription patterns already used elsewhere in the Bullpen UI.
+
+IMPORTANT:
+This is an EXTENSION, not a rewrite.
+
+Do not break:
+- existing Bullpen UI rendering
+- existing role cards
+- existing Firestore listeners
+- existing multi-tenant isolation
+- existing manager-only access controls
+- existing bullpenWork schemas unless backward-compatible and necessary
+
+GOAL:
+Make the new specialist cards display meaningful live counts where the current architecture safely supports it.
+
+NEW ROLES TO WIRE:
+1. Offer & Pricing Specialist
+2. Call & Booking Specialist
+3. Data Integrity Specialist
+4. Compliance & Risk Specialist
+5. Security & Data Protection Specialist
+
+PRIMARY INSTRUCTION:
+First inspect the current implementation of:
+- bullpenWork Firestore subscriptions
+- role card metrics generation
+- any current mapping from work item type/category/owner to displayed role counts
+- any current trigger logic already used for other specialist cards
+
+Then extend the existing pattern only.
+
+DO NOT invent a parallel metrics pipeline.
+
+IMPLEMENTATION OBJECTIVES:
+
+1. FIND THE CURRENT SOURCE OF LIVE COUNTS
+- Identify how existing specialist cards currently derive:
+  - active items
+  - blockers
+  - last action
+  - queue count
+  - or equivalent metrics
+- Identify whether counts come from:
+  - Firestore subscription(s)
+  - derived local filtering
+  - config mapping
+  - hardcoded/demo fallback
+
+2. ADD ROLE-TO-WORK MAPPING SAFELY
+Create or extend the smallest safe mapping layer so new roles can derive counts from existing bullpenWork records where possible.
+
+If the current schema supports fields like:
+- specialist
+- ownerRole
+- category
+- workType
+- tags
+- detectedBy
+- queueType
+- kind
+
+Use those existing fields.
+Do not force a schema rewrite unless absolutely necessary.
+
+3. WIRE THESE ROLES TO REAL SIGNALS WHERE POSSIBLE
+
+Target examples:
+- Offer & Pricing Specialist
+  Count work tied to offer, pricing, packaging, close-rate improvement, value framing, scope positioning
+
+- Call & Booking Specialist
+  Count work tied to missed calls, booking friction, lead response speed, call handling, inbound follow-up, voice/call workflow issues
+
+- Data Integrity Specialist
+  Count work tied to duplicate leads, missing fields, stale CRM records, attribution gaps, bad sync data, integrity warnings
+
+- Compliance & Risk Specialist
+  Count work tied to compliance review, privacy-sensitive flows, claims/disclaimer review, regulatory/WHS/labour-sensitive operational changes
+  This role is event-based, so zero is a valid normal state
+
+- Security & Data Protection Specialist
+  Count work tied to auth issues, tenant isolation concerns, secret handling, unsafe routes, widget ingestion risk, security review triggers
+  This role is governance-oriented, so zero is also a valid normal state
+
+4. HANDLE ABSENCE OF DATA GRACEFULLY
+If a role has no matching live data:
+- do not error
+- do not render blank/undefined
+- show zero/default state cleanly
+
+If the current dataset does not yet include enough signal detail for some roles:
+- wire what is safely possible now
+- document what additional metadata would be needed later
+- do not fake counts
+
+5. PRESERVE MULTI-TENANT SAFETY
+Any Firestore read must remain correctly org-scoped.
+Do not introduce:
+- new unscoped reads
+- broad collection scans outside current safe patterns
+- new insecure derived queries
+
+Prefer filtering already-subscribed org-scoped data in memory if that matches the current architecture.
+
+6. PRESERVE CURRENT UI / CARD STRUCTURE
+- Reuse existing card metric fields and display shape
+- Do not redesign the Bullpen page
+- Do not rename existing roles unless needed for consistency
+- Keep “System Governance” visually intact
+
+7. BACKWARD-COMPATIBLE OPTIONAL EXTENSION
+If useful and low-risk, add a lightweight mapping/config object for:
+- role id → matching signal keywords/categories/types
+
+Only do this if it cleanly extends the existing architecture.
+
+8. VERIFICATION / QA
+After implementation, verify:
+- existing roles still show their counts correctly
+- new roles now show real live counts where matching work exists
+- new roles show safe zero/default state where no work exists
+- no Firestore permission or tenant-scope regressions occur
+- no manager gating regressions occur
+- no console/runtime errors occur
+- no duplicate counting occurs across roles beyond current intended system behavior
+
+DELIVERABLES:
+Return:
+1. files changed
+2. what live count logic was extended
+3. which new roles now have real signal wiring
+4. which roles still rely on zero/default state due to missing source metadata
+5. any schema or metadata additions recommended for a future phase
+6. any high-risk notes
+
+CONSTRAINT:
+Smallest safe change only.
+Prefer extending current derived filtering / mapping logic over touching backend schemas.
+If backend schema changes appear necessary, stop and explain instead of implementing them blindly.
+```
+
+## What this prompt does
+It tells Replit to:
+- inspect the **existing live count logic**
+- extend it carefully
+- map the new roles to real `bullpenWork` signals where possible
+- avoid inventing a second system
+
+## What success looks like
+After this phase:
+- some new roles may show real counts immediately
+- some governance roles may still show zero, which is fine
+- you’ll know what metadata is missing for later deeper automation
+
+## My recommendation
+Run this exactly as-is.
+
+If you want, after Replit replies, paste the delivery summary here and I’ll tell you:
+- whether it’s solid
+- whether to accept it
+- what the safest Phase 3 would be
