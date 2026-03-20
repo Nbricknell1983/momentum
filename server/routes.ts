@@ -7556,6 +7556,105 @@ Return ONLY a JSON object with ALL these fields:
     }
   });
 
+  // ── Next Best Steps — rep-ready action cards for a specific lead ──────────
+  app.post("/api/leads/:leadId/next-best-steps", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      const orgId: string = req.body?.orgId || req.query?.orgId || (req.headers['x-org-id'] as string) || '';
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      if (!orgId) return res.status(400).json({ error: "orgId required" });
+      const { leadId } = req.params;
+
+      const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
+      const leadDoc = await leadRef.get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+      const lead = { id: leadDoc.id, ...leadDoc.data() as any };
+
+      const pack = lead.prepCallPack || null;
+      const enr = lead.enrichment || {};
+      const si = lead.strategyIntelligence || {};
+      const src = lead.sourceData || {};
+
+      const packContext = pack ? `
+AGENT INTELLIGENCE:
+Business: ${pack.businessSnapshot || ''}
+Commercial angle: ${pack.commercialAngle || ''}
+Opportunities: ${(pack.opportunities || []).slice(0, 3).join('; ')}
+Key gaps: ${(pack.gaps || []).slice(0, 3).join('; ')}
+Call priorities: ${(pack.callPriorities || []).join('; ')}
+Confidence: ${pack.confidence || 'medium'}
+Missing data: ${(pack.missingDataNotes || []).join('; ')}` : '';
+
+      const siContext = (si.businessOverview || si.growthObjective) ? `
+STRATEGY INTELLIGENCE:
+Business overview: ${si.businessOverview || ''}
+Growth objective: ${si.growthObjective || ''}
+Target locations: ${si.targetLocations || ''}
+Core services: ${si.coreServices || ''}` : '';
+
+      const presenceCtx = `
+PRESENCE:
+Website: ${lead.website || 'None'}
+GBP linked: ${src.googlePlaceId ? 'Yes' : 'No'}
+Reviews: ${src.googleReviewCount != null ? `${src.googleReviewCount} reviews, ${src.googleRating}★` : 'Unknown'}
+Social: ${[lead.facebookUrl && 'Facebook', lead.instagramUrl && 'Instagram', lead.linkedinUrl && 'LinkedIn'].filter(Boolean).join(', ') || 'None detected'}
+Deal stage: ${lead.stage || 'unknown'}
+Next contact: ${lead.nextContactDate ? new Date(lead.nextContactDate).toLocaleDateString('en-AU') : 'Not set'}
+Notes: ${lead.notes || 'None'}`;
+
+      const prompt = `You are a senior agency sales strategist advising a rep on their NEXT BEST MOVE with a prospect.
+
+PROSPECT: ${lead.companyName || 'Unknown'}
+INDUSTRY: ${lead.industry || enr.industry || 'Unknown'}
+LOCATION: ${lead.address || src.googleAddress || 'Unknown'}
+${packContext}${siContext}${presenceCtx}
+
+Generate 3-4 rep-ready next best steps for THIS specific prospect. Each step must be:
+- Specific to THIS business (not generic filler)
+- Immediately actionable today
+- Include drafted content the rep can use right now
+
+Return ONLY valid JSON:
+{
+  "steps": [
+    {
+      "actionType": "call|email|sms|strategy_page|follow_up|internal_review",
+      "label": "Short action label (e.g. 'Call now', 'Send intro email', 'Share strategy page')",
+      "urgency": "high|medium|low",
+      "why": "1-2 sentences: why THIS is the right next move for this specific prospect",
+      "draftContent": "Ready-to-use content — call talk track, email copy, SMS, or action note. Specific to this business. For emails include Subject: line. For calls include opening line and 2-3 key points to cover."
+    }
+  ]
+}
+
+Order by urgency (high first). Max 4 steps. Be commercially specific — never generic.`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a senior agency sales strategist. Generate specific, commercially sharp next best steps for a sales rep. Every step must be tailored to the prospect — never generic. Return only JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+        max_tokens: 1800,
+      });
+
+      const raw = response.choices[0]?.message?.content || '{}';
+      let parsed: any = {};
+      try { parsed = JSON.parse(raw); } catch { parsed = { steps: [] }; }
+      const steps: any[] = Array.isArray(parsed.steps) ? parsed.steps : [];
+      const result = { steps, generatedAt: new Date().toISOString() };
+
+      await leadRef.update({ nextBestSteps: result });
+      res.json(result);
+    } catch (err: any) {
+      console.error("[next-best-steps]", err);
+      res.status(500).json({ error: err.message || "Failed to generate next best steps" });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   // Prep Readiness — scheduled batch job for all active leads
   // ─────────────────────────────────────────────────────────────────────────

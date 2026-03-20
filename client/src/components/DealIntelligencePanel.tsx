@@ -58,6 +58,11 @@ import {
   Brain,
   ShieldCheck,
   Monitor,
+  Copy,
+  Send,
+  ArrowRight,
+  HelpCircle,
+  Lightbulb,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin, SiSalesforce } from 'react-icons/si';
 import { Badge } from '@/components/ui/badge';
@@ -69,6 +74,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format, differenceInDays, isPast, isToday } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth } from '@/lib/firebase';
 import { updateLeadInFirestore } from '@/lib/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 
@@ -370,40 +376,97 @@ function SITextArea({ value, onChange, placeholder, rows, fieldLabel, tidyEndpoi
   );
 }
 
-function AgentIntelligenceCard({ lead }: { lead: Lead }) {
+const CONFIDENCE_BADGE: Record<string, { cls: string; label: string }> = {
+  high:   { cls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700', label: 'High confidence' },
+  medium: { cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700', label: 'Medium confidence' },
+  low:    { cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700',             label: 'Low — needs data' },
+};
+
+function AgentIntelligenceCard({ lead, onRegenerate, isRegenerating }: { lead: Lead; onRegenerate?: () => void; isRegenerating?: boolean }) {
   const pack = (lead as any).prepCallPack;
   const [expanded, setExpanded] = useState(true);
+  const [showQuestions, setShowQuestions] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
   if (!pack?.businessSnapshot) return null;
 
   const cp = pack.customerProfile || {};
   const si = pack.searchIntentAnalysis || {};
   const wa = pack.websiteAnalysis || {};
+  const ps = pack.presenceSnapshot || {};
   const hasCP = cp.likelyCustomer || cp.jobsToBeDone || cp.urgencyEmotion || cp.trustFactors;
   const hasSI = si.whyTheySearch || si.whatTheyNeedToSee || (si.primarySearchTerms?.length > 0);
   const hasWA = wa.whatItTries || wa.keyWeaknesses?.length;
   const hasOps = pack.opportunities?.length > 0 || pack.gaps?.length > 0;
+  const hasPS = ps.website || ps.gbp || ps.social || ps.searchVisibility;
+  const hasPriorities = pack.callPriorities?.length > 0;
+  const hasQuestions = pack.discoveryQuestions?.length > 0;
+  const hasMissing = pack.missingDataNotes?.length > 0;
+  const confStyle = CONFIDENCE_BADGE[pack.confidence] || CONFIDENCE_BADGE.medium;
+  const genDate = pack.generatedAt ? format(new Date(pack.generatedAt), 'dd/MM/yyyy HH:mm') : '';
 
   return (
     <div className="rounded-lg border border-violet-200 dark:border-violet-800/40 bg-violet-50/30 dark:bg-violet-950/10 overflow-hidden">
-      <button
-        className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
-        onClick={() => setExpanded(v => !v)}
-        data-testid="button-toggle-agent-intelligence"
-      >
-        <div className="flex items-center gap-2">
+      {/* Header row */}
+      <div className="flex items-center px-3 py-2.5 border-b border-violet-200 dark:border-violet-800/40 gap-2">
+        <button
+          className="flex-1 flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+          onClick={() => setExpanded(v => !v)}
+          data-testid="button-toggle-agent-intelligence"
+        >
           <div className="w-6 h-6 rounded bg-violet-500 flex items-center justify-center shrink-0">
             <Brain className="h-3.5 w-3.5 text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-bold text-violet-900 dark:text-violet-200">Agent Intelligence</p>
-            <p className="text-[10px] text-violet-500 dark:text-violet-400">Commercial point of view · auto-generated</p>
+            {genDate && <p className="text-[10px] text-violet-500 dark:text-violet-400">{genDate}</p>}
           </div>
-        </div>
-        {expanded ? <ChevronUp className="h-3.5 w-3.5 text-violet-400" /> : <ChevronDown className="h-3.5 w-3.5 text-violet-400" />}
-      </button>
+        </button>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${confStyle.cls}`}>{confStyle.label}</span>
+        {onRegenerate && (
+          <button
+            onClick={onRegenerate}
+            disabled={isRegenerating}
+            className="shrink-0 p-1 rounded hover:bg-violet-100 dark:hover:bg-violet-900/40 text-violet-500 hover:text-violet-700 dark:hover:text-violet-300 transition-colors disabled:opacity-40"
+            title="Regenerate Agent Intelligence"
+            data-testid="button-regen-agent-intel"
+          >
+            {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          </button>
+        )}
+        <button onClick={() => setExpanded(v => !v)} className="shrink-0 text-violet-400 hover:text-violet-600 transition-colors">
+          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+      </div>
 
       {expanded && (
-        <div className="px-3 pb-3 space-y-3 border-t border-violet-200 dark:border-violet-800/40 pt-3">
+        <div className="px-3 pb-3 space-y-3 pt-3">
+
+          {/* Business snapshot */}
+          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{pack.businessSnapshot}</p>
+
+          {/* Presence snapshot — 2×2 grid */}
+          {hasPS && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
+                <Globe className="h-3 w-3" /> Presence Snapshot
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { label: 'Website', val: ps.website, icon: Globe },
+                  { label: 'GBP / Maps', val: ps.gbp, icon: MapPin },
+                  { label: 'Social', val: ps.social, icon: Users },
+                  { label: 'Search Visibility', val: ps.searchVisibility, icon: Search },
+                ].map(({ label, val, icon: Icon }) => val ? (
+                  <div key={label} className="rounded border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2 py-1.5 space-y-0.5">
+                    <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                      <Icon className="h-2.5 w-2.5" />{label}
+                    </div>
+                    <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug">{val}</p>
+                  </div>
+                ) : null)}
+              </div>
+            </div>
+          )}
 
           {/* Customer profile */}
           {hasCP && (
@@ -475,8 +538,7 @@ function AgentIntelligenceCard({ lead }: { lead: Lead }) {
                 <ul className="space-y-1">
                   {wa.keyWeaknesses.map((w: string, i: number) => (
                     <li key={i} className="flex items-start gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                      <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
-                      {w}
+                      <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />{w}
                     </li>
                   ))}
                 </ul>
@@ -489,7 +551,7 @@ function AgentIntelligenceCard({ lead }: { lead: Lead }) {
             </div>
           )}
 
-          {/* Opportunities */}
+          {/* Opportunities + Gaps */}
           {hasOps && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {pack.opportunities?.length > 0 && (
@@ -530,6 +592,70 @@ function AgentIntelligenceCard({ lead }: { lead: Lead }) {
                 <Zap className="h-3 w-3" /> Commercial Angle
               </p>
               <p className="text-xs font-medium text-violet-900 dark:text-violet-200 leading-relaxed">{pack.commercialAngle}</p>
+            </div>
+          )}
+
+          {/* Call priorities — numbered list */}
+          {hasPriorities && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <Phone className="h-3 w-3" /> Call Priorities
+              </p>
+              <ol className="space-y-1.5">
+                {pack.callPriorities.map((p: string, i: number) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{p}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Discovery questions — collapsible */}
+          {hasQuestions && (
+            <div>
+              <button
+                className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:opacity-80 transition-opacity"
+                onClick={() => setShowQuestions(v => !v)}
+                data-testid="button-toggle-discovery-questions"
+              >
+                <HelpCircle className="h-3 w-3" />
+                Discovery Questions ({pack.discoveryQuestions.length})
+                {showQuestions ? <ChevronUp className="h-3 w-3 ml-0.5" /> : <ChevronDown className="h-3 w-3 ml-0.5" />}
+              </button>
+              {showQuestions && (
+                <ol className="mt-1.5 space-y-1.5">
+                  {pack.discoveryQuestions.map((q: string, i: number) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+                      <HelpCircle className="h-3 w-3 text-blue-400 mt-0.5 shrink-0" />{q}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
+          {/* Missing data notes — collapsible */}
+          {hasMissing && (
+            <div>
+              <button
+                className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                onClick={() => setShowMissing(v => !v)}
+                data-testid="button-toggle-missing-data-intel"
+              >
+                {showMissing ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                Missing / To Confirm ({pack.missingDataNotes.length})
+              </button>
+              {showMissing && (
+                <ul className="mt-1.5 space-y-1">
+                  {pack.missingDataNotes.map((note: string, i: number) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="w-1 h-1 rounded-full bg-slate-400 mt-1.5 shrink-0" />{note}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
@@ -672,6 +798,258 @@ function StrategyIntelligenceCard({ lead }: { lead: Lead }) {
   );
 }
 
+const NBS_ACTION_ICONS: Record<string, any> = {
+  call: Phone, email: Mail, sms: MessageSquare, strategy_page: Send,
+  follow_up: Calendar, internal_review: Lightbulb,
+};
+const NBS_URGENCY: Record<string, { cls: string; label: string }> = {
+  high:   { cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700',     label: 'High' },
+  medium: { cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700', label: 'Medium' },
+  low:    { cls: 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600', label: 'Low' },
+};
+
+function NextBestStepsCard({ lead }: { lead: Lead }) {
+  const dispatch = useDispatch();
+  const { orgId, authReady } = useAuth();
+  const { toast } = useToast();
+  const [steps, setSteps] = useState<any[]>((lead as any).nextBestSteps?.steps || []);
+  const [generating, setGenerating] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [expandedStep, setExpandedStep] = useState<number | null>(0);
+  const [expanded, setExpanded] = useState(true);
+
+  useEffect(() => {
+    setSteps((lead as any).nextBestSteps?.steps || []);
+  }, [(lead as any).nextBestSteps]);
+
+  const generate = async () => {
+    if (!orgId || !authReady) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/next-best-steps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) throw new Error('Generation failed');
+      const data = await res.json();
+      setSteps(data.steps || []);
+      dispatch(patchLead({ id: lead.id, updates: { nextBestSteps: data } as any }));
+      toast({ title: 'Next best steps ready', description: `${data.steps?.length || 0} actions generated` });
+    } catch {
+      toast({ title: 'Generation failed', description: 'Could not generate next best steps', variant: 'destructive' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copyDraft = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
+  };
+
+  const genDate = (lead as any).nextBestSteps?.generatedAt
+    ? format(new Date((lead as any).nextBestSteps.generatedAt), 'dd/MM/yyyy HH:mm')
+    : null;
+
+  return (
+    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/30 dark:bg-emerald-950/10 overflow-hidden">
+      <div className="flex items-center px-3 py-2.5 gap-2 border-b border-emerald-200 dark:border-emerald-800/40">
+        <button
+          className="flex-1 flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+          onClick={() => setExpanded(v => !v)}
+          data-testid="button-toggle-next-best-steps"
+        >
+          <div className="w-6 h-6 rounded bg-emerald-500 flex items-center justify-center shrink-0">
+            <ArrowRight className="h-3.5 w-3.5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">Next Best Steps</p>
+            {genDate && <p className="text-[10px] text-emerald-500 dark:text-emerald-400">{genDate}</p>}
+          </div>
+        </button>
+        <button
+          onClick={generate}
+          disabled={generating}
+          className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 disabled:opacity-40 transition-colors px-2 py-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+          data-testid="button-generate-next-steps"
+        >
+          {generating ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</> : steps.length > 0 ? <><RefreshCw className="h-3 w-3" /> Refresh</> : <><Sparkles className="h-3 w-3" /> Generate</>}
+        </button>
+        <button onClick={() => setExpanded(v => !v)} className="shrink-0 text-emerald-400 hover:text-emerald-600 transition-colors">
+          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="px-3 pb-3 pt-3">
+          {steps.length === 0 ? (
+            <div className="text-center py-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                {generating ? 'Analysing lead intelligence…' : 'Generate AI-powered rep-ready actions tailored to this prospect.'}
+              </p>
+              {!generating && (
+                <button
+                  onClick={generate}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition-colors"
+                  data-testid="button-generate-next-steps-empty"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Generate Next Best Steps
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {steps.map((step: any, i: number) => {
+                const ActionIcon = NBS_ACTION_ICONS[step.actionType] || ArrowRight;
+                const urg = NBS_URGENCY[step.urgency] || NBS_URGENCY.medium;
+                const isOpen = expandedStep === i;
+                return (
+                  <div key={i} className="rounded-md border bg-background overflow-hidden" data-testid={`next-step-card-${i}`}>
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                      onClick={() => setExpandedStep(isOpen ? null : i)}
+                    >
+                      <ActionIcon className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span className="flex-1 text-xs font-semibold text-foreground truncate">{step.label || step.actionType}</span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${urg.cls}`}>{urg.label}</span>
+                      {isOpen ? <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />}
+                    </button>
+                    {isOpen && (
+                      <div className="px-3 pb-3 space-y-2 border-t">
+                        {step.why && (
+                          <p className="text-xs text-muted-foreground pt-2 leading-relaxed">{step.why}</p>
+                        )}
+                        {step.draftContent && (
+                          <div className="rounded bg-muted/40 border p-2 relative">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Draft Content</span>
+                              <button
+                                onClick={() => copyDraft(step.draftContent, i)}
+                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                data-testid={`button-copy-draft-${i}`}
+                              >
+                                {copiedIdx === i ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                {copiedIdx === i ? 'Copied' : 'Copy'}
+                              </button>
+                            </div>
+                            <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{step.draftContent}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StrategyUrlCard({ lead }: { lead: Lead }) {
+  const dispatch = useDispatch();
+  const { orgId, authReady } = useAuth();
+  const { toast } = useToast();
+  const [creating, setCreating] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const reportId = lead.strategyReportId;
+  const strategyUrl = reportId ? `${window.location.origin}/strategy/${reportId}` : null;
+
+  const createStrategyPage = async () => {
+    if (!orgId || !authReady) return;
+    setCreating(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const si = (lead as any).strategyIntelligence || {};
+      const pack = (lead as any).prepCallPack;
+      const res = await fetch('/api/strategy-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          orgId,
+          businessName: lead.companyName || (lead as any).businessName || 'Business',
+          industry: lead.industry,
+          location: lead.address,
+          website: lead.website,
+          businessOverview: si.businessOverview || pack?.businessSnapshot || '',
+          idealCustomer: si.idealCustomer || pack?.customerProfile?.likelyCustomer || '',
+          coreServices: si.coreServices || '',
+          targetLocations: si.targetLocations || lead.address || '',
+          growthObjective: si.growthObjective || pack?.commercialAngle || '',
+          phone: lead.phone,
+          email: lead.email,
+          logoUrl: '',
+          agencyName: '',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      const updates: Partial<Lead> = { strategyReportId: data.id };
+      dispatch(patchLead({ id: lead.id, updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady);
+      toast({ title: 'Strategy page created', description: 'Share the link with your prospect' });
+    } catch {
+      toast({ title: 'Failed to create strategy page', variant: 'destructive' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const copyUrl = () => {
+    if (!strategyUrl) return;
+    navigator.clipboard.writeText(strategyUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="rounded-lg border border-blue-200 dark:border-blue-800/40 bg-blue-50/30 dark:bg-blue-950/10 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <Send className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+        <span className="text-xs font-semibold text-blue-900 dark:text-blue-200 flex-1">Strategy Page</span>
+        {strategyUrl ? (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={copyUrl}
+              className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors"
+              data-testid="button-copy-strategy-url"
+            >
+              {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+              {copied ? 'Copied!' : 'Copy link'}
+            </button>
+            <a
+              href={strategyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+              data-testid="link-open-strategy"
+            >
+              <ExternalLink className="h-3 w-3" /> View
+            </a>
+          </div>
+        ) : (
+          <button
+            onClick={createStrategyPage}
+            disabled={creating || !authReady}
+            className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 disabled:opacity-40 transition-colors px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40"
+            data-testid="button-create-strategy-page"
+          >
+            {creating ? <><Loader2 className="h-3 w-3 animate-spin" /> Creating…</> : <><Plus className="h-3 w-3" /> Create strategy page</>}
+          </button>
+        )}
+      </div>
+      {strategyUrl && (
+        <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-1 truncate pl-5">{strategyUrl}</p>
+      )}
+    </div>
+  );
+}
+
 export default function DealIntelligencePanel({ lead }: DealIntelligencePanelProps) {
   const activities = useSelector((state: RootState) => state.app.activities);
   const dispatch = useDispatch();
@@ -693,6 +1071,58 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [generatingMockWebsite, setGeneratingMockWebsite] = useState(false);
   const [mockWebsiteExpanded, setMockWebsiteExpanded] = useState(true);
   const [mockWebsiteModalOpen, setMockWebsiteModalOpen] = useState(false);
+  const [generatingPrepPack, setGeneratingPrepPack] = useState(false);
+  const autoEnrichFired = useRef(false);
+  const autoPrepFired = useRef(false);
+
+  // Auto-enrich silently on panel open if enrichment is stale/missing
+  useEffect(() => {
+    if (!orgId || !authReady || autoEnrichFired.current) return;
+    const lastAt = (lead as any).enrichment?.lastEnrichedAt;
+    const stale = !lastAt || differenceInDays(new Date(), new Date(lastAt)) >= 7;
+    if (!stale) return;
+    autoEnrichFired.current = true;
+    fetch('/api/enrichment/run-lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId, leadId: lead.id }),
+    }).catch(() => {});
+  }, [orgId, authReady, lead.id]);
+
+  // Auto-generate prep pack silently if missing and org ready
+  useEffect(() => {
+    if (!orgId || !authReady || autoPrepFired.current) return;
+    if ((lead as any).prepCallPack?.businessSnapshot) return;
+    autoPrepFired.current = true;
+    fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId, force: false }),
+    }).catch(() => {});
+  }, [orgId, authReady, lead.id]);
+
+  const handleGeneratePrepPack = useCallback(async () => {
+    if (!orgId || !authReady) return;
+    setGeneratingPrepPack(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, force: true }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      if (data.prepCallPack) {
+        const updates: Partial<Lead> = { prepCallPack: data.prepCallPack } as any;
+        dispatch(patchLead({ id: lead.id, updates }));
+        toast({ title: 'Agent Intelligence updated', description: 'Fresh analysis complete' });
+      }
+    } catch {
+      toast({ title: 'Generation failed', description: 'Could not regenerate agent intelligence', variant: 'destructive' });
+    } finally {
+      setGeneratingPrepPack(false);
+    }
+  }, [orgId, authReady, lead.id, dispatch, toast]);
 
   // Sanitize stored HTML — replace loremflickr redirecting URLs with picsum.photos
   // (picsum serves images directly with CORS headers, works reliably in srcDoc iframes)
@@ -1099,7 +1529,11 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         )}
       </div>
 
-      <AgentIntelligenceCard lead={lead} />
+      <AgentIntelligenceCard lead={lead} onRegenerate={handleGeneratePrepPack} isRegenerating={generatingPrepPack} />
+
+      <NextBestStepsCard lead={lead} />
+
+      <StrategyUrlCard lead={lead} />
 
       <StrategyIntelligenceCard lead={lead} />
 

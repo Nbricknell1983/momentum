@@ -1,0 +1,247 @@
+PROJECT: Momentum / Bullpen — improve existing Deal Intelligence / Agent Intelligence workflow
+
+CONTEXT:
+The app already has an existing Deal Intelligence / Agent Intelligence experience on the lead/deal surface.
+
+It currently includes useful sections such as:
+- Deal Health
+- AI Deal Summary
+- Agent Intelligence
+- Customer Profile
+- Search Intent
+- Website Interpretation
+- Opportunities
+- Key Gaps
+- Commercial Angle
+
+This existing experience is useful, but it needs to be significantly improved.
+
+IMPORTANT:
+This is NOT a rewrite.
+Do NOT replace the existing Deal Intelligence / Agent Intelligence system with a new one.
+The task is to IMPROVE and EXTEND what is already there.
+
+PRIMARY GOAL:
+Upgrade the existing Deal Intelligence / Agent Intelligence panel so it:
+1. automatically performs more of the available research/enrichment work
+2. produces deeper commercial intelligence
+3. generates rep-ready next best actions beneath the current intelligence
+4. uses the current analysis to generate better website recommendations / mock website output
+5. produces or updates the public strategy URL that can be sent to the client
+
+NON-NEGOTIABLE RULES:
+- Keep and improve the existing Deal Intelligence / Agent Intelligence structure
+- Reuse current UI sections and current analysis capabilities where possible
+- Reuse existing backend analysis/enrichment functionality instead of duplicating it
+- Preserve multi-tenant isolation and current auth / manager gating
+- Do not break current lead/deal flows
+- Do not create a parallel intelligence system
+- Fail safely when data is missing
+- If some data requires additional APIs or permissions, identify that clearly instead of inventing the data
+
+--------------------------------------------------
+PART 1 — INSPECT CURRENT IMPLEMENTATION FIRST
+--------------------------------------------------
+
+Before making changes, inspect and document the current implementation of:
+- Deal Intelligence UI
+- Agent Intelligence rendering
+- AI Deal Summary generation
+- manual enrichment buttons/actions already available in this surface or related tools
+- website analysis tools
+- sitemap/page discovery tools
+- SEO / website content analysis
+- GBP / Google Business Profile integrations
+- DVS / strategy page generation
+- mock website / website generator functionality
+- rep follow-up / call prep / email / SMS generation, if already present elsewhere in the app
+
+Then extend the existing implementation instead of rebuilding it.
+
+--------------------------------------------------
+PART 2 — IMPROVE THE EXISTING AGENT INTELLIGENCE
+--------------------------------------------------
+
+Keep the current sections, but improve their depth and usefulness.
+
+The existing Agent Intelligence should become richer by automatically incorporating more available signals, including where supported:
+- website URL
+- sitemap / page inventory
+- key page content
+- SEO signals
+- current site structure
+- GBP profile data
+- reviews / ratings / categories / service areas / photos / updates
+- broader business-presence signals already supported in the app
+- commercial implications of these findings
+
+Improve the quality of these existing sections:
+- Customer Profile
+- Search Intent
+- Website Interpretation
+- Opportunities
+- Key Gaps
+- Commercial Angle
+
+The goal is to make the existing intelligence:
+- more specific
+- more evidence-based
+- more commercially useful
+- more automatically enriched
+
+Do not remove these sections unless absolutely necessary.
+
+--------------------------------------------------
+PART 3 — AUTOMATE EXISTING MANUAL ENRICHMENT
+--------------------------------------------------
+
+Right now, some of the useful functionality already exists but requires manual button clicks.
+
+Change the flow so Agent Intelligence automatically invokes the relevant existing enrichment/analysis capabilities where safe and appropriate.
+
+Examples of existing/manual capabilities to inspect and potentially auto-run:
+- website analysis
+- sitemap discovery
+- SEO scan / page signal analysis
+- website interpretation
+- customer profile analysis
+- search intent analysis
+- opportunity generation
+- GBP API retrieval
+- mock website generation inputs
+- strategy page generation inputs
+
+IMPORTANT:
+Prefer orchestrating existing functions/routes/prompts.
+Do not create duplicate analysis engines.
+
+If additional APIs or permissions would materially improve enrichment:
+- report what is missing
+- specify what access is needed
+- do not fake data
+
+--------------------------------------------------
+PART 4 — ADD “NEXT BEST STEPS” BELOW AGENT INTELLIGENCE
+--------------------------------------------------
+
+Add a new section beneath the existing Agent Intelligence panel.
+
+Suggested label:
+- Next Best Steps
+or another product-native equivalent if there is already a naming convention.
+
+This section should give the rep immediately usable actions.
+
+For each recommended next action, include:
+- action type
+- why it is the best next move
+- drafted content where relevant
+
+Examples:
+- Call → include call prep / talk track
+- Email → include drafted email copy
+- Text → include drafted SMS copy
+- Follow up later → include timing + rationale
+- Send strategy page → include public URL and framing copy
+- Internal review / escalation → only where appropriate
+
+The goal:
+The rep should be able to leave this screen knowing exactly what to do next, with content already drafted.
+
+--------------------------------------------------
+PART 5 — WEBSITE RECOMMENDATION / BUILD OUTPUT
+--------------------------------------------------
+
+Use the existing Agent Intelligence inputs and enriched data to improve website output generation.
+
+The system should use:
+- Customer Profile
+- Search Intent
+- Website Interpretation
+- Opportunities
+- Key Gaps
+- Commercial Angle
+- website analysis
+- SEO signals
+- page/sitemap discovery
+- GBP/commercial context
+
+to generate a stronger website recommendation.
+
+Where the current architecture supports it, this should produce one or more of:
+- recommended sitemap
+- page structure
+- messaging hierarchy
+- CTA structure
+- trust signal recommendations
+- service/location structure
+- mock website / website build brief
+- existing mock website output using better upstream inputs
+
+IMPORTANT:
+Do not create a separate website generator if one already exists.
+Instead, improve the inputs and orchestration into the current website-generation path.
+
+--------------------------------------------------
+PART 6 — PUBLIC STRATEGY PAGE / URL
+--------------------------------------------------
+
+Where the existing strategy / DVS / public strategy page functionality already exists, integrate it more tightly into this workflow.
+
+Agent Intelligence should be able to:
+- generate or update the public strategy page when appropriate
+- surface the public strategy URL in the UI
+- support a rep action like “Send strategy page”
+
+Do not build a second strategy system.
+Reuse the current public strategy / DVS implementation.
+
+--------------------------------------------------
+PART 7 — UI / UX CONSTRAINTS
+--------------------------------------------------
+
+Do not redesign the whole Deal Intelligence page unless truly necessary.
+
+Prefer:
+- improving existing sections
+- adding one new section below Agent Intelligence for next best steps
+- surfacing strategy URL / website output status in the existing flow
+- preserving the current visual hierarchy
+
+The result should feel like:
+“the current panel, but much smarter and much more actionable”
+
+not:
+“a totally different product”
+
+--------------------------------------------------
+PART 8 — DATA / SAFETY RULES
+--------------------------------------------------
+
+- Maintain org scoping for all tenant data
+- Reuse existing auth and manager gates
+- Preserve current public strategy page rules
+- Do not expose internal Bullpen/orchestration terminology to client-facing or member-facing surfaces
+- Missing enrichment data must degrade gracefully
+- Older records must still render safely if new fields are added
+- Use existing API clients and integrations where possible
+- If additional external APIs need new credentials or setup, stop and report that clearly
+
+--------------------------------------------------
+PART 9 — DELIVERABLES
+--------------------------------------------------
+
+Return:
+1. summary of the current implementation found
+2. files changed
+3. what existing capabilities were reused
+4. what existing manual steps were automated
+5. what new UI sections or fields were added
+6. what missing APIs/access would improve the result further
+7. any high-risk implementation notes
+8. recommended follow-up work
+
+CONSTRAINT:
+Smallest safe change only.
+Improve the current Deal Intelligence / Agent Intelligence workflow.
+Do not replace it.
