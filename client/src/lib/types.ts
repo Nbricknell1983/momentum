@@ -364,6 +364,7 @@ export interface Lead {
   aiProspects?: AiProspectOutput[];
   prepCallPack?: any;
   strategyReportId?: string;
+  dealContext?: string;
   sitemapUrl?: string;
   sitemapPages?: SitemapPage[];
   sitemapFetchedAt?: Date;

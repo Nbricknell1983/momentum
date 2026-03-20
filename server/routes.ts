@@ -5981,7 +5981,7 @@ Rules:
         sitemapPages, hasGBP, gbpLink, reviewCount, rating,
         facebookUrl, instagramUrl, linkedinUrl, crawledPages, crawledCompetitors,
         conversationNotes, conversationInsights, objections,
-        dealStage, mrr, adSpend, ahrefsData, strategyIntelligence,
+        dealStage, mrr, adSpend, ahrefsData, strategyIntelligence, dealContext,
       } = req.body;
 
       if (!businessName) return res.status(400).json({ error: "Business name is required" });
@@ -6099,6 +6099,11 @@ Rules:
         return parts.length > 0 ? `\n=== STRATEGY INTELLIGENCE (direct from discovery conversation) ===\n${parts.join('\n')}\nIMPORTANT: This is what the business owner has told the sales rep directly. Every analysis section must be framed around these stated goals and target customers.\n` : '';
       })();
 
+      // Build deal context (rep's additional notes about this specific deal)
+      const dealContextSection = dealContext?.trim()
+        ? `\n=== DEAL CONTEXT (sales rep notes) ===\n${dealContext.trim()}\nIMPORTANT: Factor these deal-specific notes into your analysis and recommendations. This represents the rep's on-the-ground knowledge of this opportunity.\n`
+        : '';
+
       const prompt = `You are a senior digital visibility strategist with deep expertise in local business SEO and digital marketing. You are producing an evidence-based strategy diagnosis for a sales rep preparing to advise ${businessName} on their digital growth.
 
 CRITICAL INSTRUCTION: Every insight must follow Evidence → Interpretation → Strategic Implication → Recommended Move.
@@ -6121,7 +6126,7 @@ Website: ${websiteUrl || 'Not provided'}
 Google Business Profile: ${hasGBP ? `Yes — ${gbpLink}` : 'Not found'}
 Google Reviews: ${reviewCount != null ? `${reviewCount} reviews, ${rating}★ average` : 'Unknown'}
 Social Profiles: ${socialPlatforms.length > 0 ? socialPlatforms.join(', ') : 'None detected'}
-${siContext}${convIntelContext}${dealIntelContext}${ahrefsContext}
+${siContext}${dealContextSection}${convIntelContext}${dealIntelContext}${ahrefsContext}
 === WEBSITE STRUCTURE (from sitemap) ===
 Total indexed pages: ${pages.length || 0}
 Page classification:

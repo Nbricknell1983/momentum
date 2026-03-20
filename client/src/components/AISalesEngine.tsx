@@ -655,6 +655,13 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                         dispatch(patchLead({ id: selectedLead.id, updates }));
                       }
                     }}
+                    onSaveDealContext={(context) => {
+                      if (selectedLead && orgId && authReady) {
+                        const updates: Partial<Lead> = { dealContext: context, updatedAt: new Date() };
+                        updateLeadInFirestore(orgId, selectedLead.id, updates as any, authReady).catch(console.error);
+                        dispatch(patchLead({ id: selectedLead.id, updates: updates as any }));
+                      }
+                    }}
                   />
                 )}
                 {sectionKey === 'prospect' && (
@@ -863,6 +870,13 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                     const updates: Partial<Lead> = { competitorDomains: domains, updatedAt: new Date() };
                     updateLeadInFirestore(orgId, selectedLead.id, updates, authReady).catch(console.error);
                     dispatch(patchLead({ id: selectedLead.id, updates }));
+                  }
+                }}
+                onSaveDealContext={(context) => {
+                  if (selectedLead && orgId && authReady) {
+                    const updates: Partial<Lead> = { dealContext: context, updatedAt: new Date() };
+                    updateLeadInFirestore(orgId, selectedLead.id, updates as any, authReady).catch(console.error);
+                    dispatch(patchLead({ id: selectedLead.id, updates: updates as any }));
                   }
                 }}
               />

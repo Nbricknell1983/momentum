@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink, Link, Sparkles, ChevronDown, ChevronRight, Target, Zap, Clock, ScanLine, Plus, Trash2, ChevronUp } from 'lucide-react';
+import { Globe, Search, BarChart3, TrendingUp, FileDown, Loader2, RotateCcw, Copy, Check, Pin, AlertTriangle, CheckCircle2, XCircle, Minus, ExternalLink, Link, Sparkles, ChevronDown, ChevronRight, Target, Zap, Clock, ScanLine, Plus, Trash2, ChevronUp, Briefcase, MapPin, MessageSquare, FileText } from 'lucide-react';
 import ShareStrategyModal from '@/components/ShareStrategyModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { auth } from '@/lib/firebase';
@@ -692,15 +693,243 @@ function TrafficForecastView({ result }: { result: ForecastResult }) {
   );
 }
 
+// ── Specialist Activity Feed ─────────────────────────────────────────────────
+
+type SpecialistStatus = 'pending' | 'running' | 'complete' | 'blocked' | 'partial';
+
+function StatusBadge({ status }: { status: SpecialistStatus }) {
+  if (status === 'complete') return <Badge variant="outline" className="text-[9px] px-1 py-0 font-medium border-emerald-400 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30">Complete</Badge>;
+  if (status === 'running') return <Badge variant="outline" className="text-[9px] px-1 py-0 font-medium border-blue-400 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30">Running…</Badge>;
+  if (status === 'partial') return <Badge variant="outline" className="text-[9px] px-1 py-0 font-medium border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">Partial</Badge>;
+  if (status === 'blocked') return <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">Blocked</Badge>;
+  return <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">Pending</Badge>;
+}
+
+interface SpecialistItem {
+  key: string;
+  icon: React.ComponentType<{ className?: string }>;
+  name: string;
+  task: string;
+  status: SpecialistStatus;
+  finding?: string;
+  action?: { label: string; onClick: () => void; disabled?: boolean };
+}
+
+function SpecialistCard({ item }: { item: SpecialistItem }) {
+  const Icon = item.icon;
+  return (
+    <div className="flex items-start gap-2.5 rounded-lg border bg-background px-3 py-2.5" data-testid={`specialist-card-${item.key}`}>
+      <div className="mt-0.5 shrink-0">
+        <div className="h-7 w-7 rounded-md bg-muted/60 flex items-center justify-center">
+          {item.status === 'running' ? <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" /> : <Icon className={`h-3.5 w-3.5 ${item.status === 'complete' ? 'text-emerald-600 dark:text-emerald-400' : item.status === 'blocked' ? 'text-muted-foreground/40' : 'text-muted-foreground'}`} />}
+        </div>
+      </div>
+      <div className="flex-1 min-w-0 space-y-0.5">
+        <div className="flex items-center gap-2">
+          <p className={`text-xs font-semibold leading-tight ${item.status === 'blocked' ? 'text-muted-foreground/60' : ''}`}>{item.name}</p>
+          <StatusBadge status={item.status} />
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-tight">{item.task}</p>
+        {item.finding && item.status === 'complete' && (
+          <p className="text-[11px] text-foreground/80 leading-tight italic mt-0.5">{item.finding}</p>
+        )}
+        {item.finding && item.status === 'partial' && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-tight mt-0.5">{item.finding}</p>
+        )}
+      </div>
+      {item.action && item.status !== 'complete' && item.status !== 'running' && item.status !== 'blocked' && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={item.action.onClick}
+          disabled={item.action.disabled}
+          className="h-6 text-[10px] px-2 shrink-0 mt-0.5"
+          data-testid={`button-specialist-run-${item.key}`}
+        >
+          {item.action.label}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function SpecialistFeed({
+  lead, strategyDiagnosis, diagnosisLoading, xrayResult, serpResult,
+  competitorResult, forecastResult, loading, websiteUrl, businessName,
+  onRunDiagnosis, onRunXRay, onRunSerp, onRunCompetitor, onRunForecast, generatedUrl,
+}: {
+  lead: Lead | null;
+  strategyDiagnosis: StrategyDiagnosis | null;
+  diagnosisLoading: boolean;
+  xrayResult: any;
+  serpResult: any;
+  competitorResult: any;
+  forecastResult: any;
+  loading: Record<string, boolean>;
+  websiteUrl: string;
+  businessName: string;
+  onRunDiagnosis: () => void;
+  onRunXRay: () => void;
+  onRunSerp: () => void;
+  onRunCompetitor: () => void;
+  onRunForecast: () => void;
+  generatedUrl: string | null;
+}) {
+  const hasPrepPack = !!(lead?.prepCallPack);
+  const hasGBP = !!(lead?.sourceData as any)?.googleMapsUrl || !!(lead?.sourceData as any)?.googlePlaceId;
+  const gbpName = (lead?.sourceData as any)?.googleTitle || (lead?.sourceData as any)?.name || null;
+  const gbpRating = (lead?.sourceData as any)?.googleRating ?? null;
+  const gbpReviews = (lead?.sourceData as any)?.googleReviewCount ?? null;
+  const hasSitemap = !!(lead?.sitemapPages?.length);
+  const hasCrawl = !!(lead?.crawledPages?.length);
+  const hasXray = !!xrayResult;
+  const hasSerp = !!serpResult;
+  const hasCompetitor = !!competitorResult;
+  const hasForecast = !!forecastResult;
+  const crawlPageCount = lead?.crawledPages?.length ?? 0;
+  const sitemapPageCount = lead?.sitemapPages?.length ?? 0;
+
+  const websiteStatus: SpecialistStatus =
+    hasXray && hasCrawl ? 'complete' :
+    loading['xray'] ? 'running' :
+    hasCrawl ? 'partial' :
+    !websiteUrl ? 'blocked' : 'pending';
+
+  const seoStatus: SpecialistStatus =
+    hasSerp && hasSitemap ? 'complete' :
+    loading['serp'] ? 'running' :
+    hasSitemap ? 'partial' : 'pending';
+
+  const growthStatus: SpecialistStatus =
+    !!strategyDiagnosis ? 'complete' :
+    diagnosisLoading ? 'running' : 'pending';
+
+  const outputStatus: SpecialistStatus =
+    !!generatedUrl ? 'complete' :
+    !strategyDiagnosis ? 'blocked' : 'pending';
+
+  const items: SpecialistItem[] = [
+    {
+      key: 'intel',
+      icon: Briefcase,
+      name: 'Commercial Intel',
+      task: 'Prep pack, call angles, discovery questions',
+      status: hasPrepPack ? 'complete' : 'pending',
+      finding: hasPrepPack ? 'Prep pack generated — call framing ready' : undefined,
+    },
+    {
+      key: 'gbp',
+      icon: MapPin,
+      name: 'GBP Intelligence',
+      task: 'Google Business Profile presence & review signals',
+      status: hasGBP ? 'complete' : 'partial',
+      finding: hasGBP
+        ? `${gbpName ? gbpName + ' · ' : ''}${gbpRating ? gbpRating + '★' : ''}${gbpReviews ? ' · ' + gbpReviews + ' reviews' : ''}`.replace(/^·\s*|·\s*$/, '').trim() || 'GBP listing found'
+        : 'No GBP listing detected — visibility risk',
+    },
+    {
+      key: 'website',
+      icon: Globe,
+      name: 'Website Analysis',
+      task: 'Site structure, SEO signals, page audit, technical issues',
+      status: websiteStatus,
+      finding: websiteStatus === 'complete' ? `${crawlPageCount} pages audited — X-Ray complete` :
+               websiteStatus === 'partial' ? `${crawlPageCount} pages crawled — X-Ray pending` :
+               websiteStatus === 'blocked' ? 'No website URL on this lead' : undefined,
+      action: !websiteUrl ? undefined : { label: 'Run X-Ray', onClick: onRunXRay, disabled: !websiteUrl },
+    },
+    {
+      key: 'seo',
+      icon: Search,
+      name: 'SEO Signals',
+      task: 'Sitemap structure, keyword presence, SERP position',
+      status: seoStatus,
+      finding: seoStatus === 'complete' ? `${sitemapPageCount} sitemap pages · SERP analysis done` :
+               seoStatus === 'partial' ? `${sitemapPageCount} sitemap pages found — SERP pending` : undefined,
+      action: { label: 'Run SERP', onClick: onRunSerp },
+    },
+    {
+      key: 'growth',
+      icon: Sparkles,
+      name: 'Growth Analyst',
+      task: 'Readiness score, digital visibility, gap analysis, 12-month priorities',
+      status: growthStatus,
+      finding: growthStatus === 'complete' && strategyDiagnosis
+        ? `Readiness ${strategyDiagnosis.readinessScore}/100 · ${strategyDiagnosis.insightSentence?.slice(0, 80)}${(strategyDiagnosis.insightSentence?.length ?? 0) > 80 ? '…' : ''}`
+        : undefined,
+      action: { label: 'Analyse', onClick: onRunDiagnosis, disabled: !businessName },
+    },
+    {
+      key: 'output',
+      icon: FileText,
+      name: 'Strategy Output',
+      task: 'Public strategy page + 12-month PDF deliverable',
+      status: outputStatus,
+      finding: outputStatus === 'complete' ? 'Strategy page generated — ready to share' : undefined,
+    },
+  ];
+
+  const complete = items.filter(i => i.status === 'complete').length;
+
+  return (
+    <div className="space-y-1.5" data-testid="specialist-feed">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Specialist Activity</p>
+        </div>
+        <p className="text-[10px] text-muted-foreground">{complete}/{items.length} complete</p>
+      </div>
+      {items.map(item => <SpecialistCard key={item.key} item={item} />)}
+    </div>
+  );
+}
+
+// ── Deal Context Input ────────────────────────────────────────────────────────
+
+function DealContextInput({ value, onChange, onSave, saved }: {
+  value: string;
+  onChange: (v: string) => void;
+  onSave: (v: string) => void;
+  saved: boolean;
+}) {
+  const hasContent = value.trim().length > 0;
+  return (
+    <div className="space-y-1.5" data-testid="deal-context-input">
+      <div className="flex items-center gap-2">
+        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Deal Context</p>
+        {hasContent && (
+          <span className="ml-auto text-[10px] text-emerald-600 dark:text-emerald-400">Saved to lead</span>
+        )}
+      </div>
+      <Textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={() => { if (value !== undefined) onSave(value); }}
+        placeholder="Add context about this deal — goals discussed, objections, budget range, timeline, specific requirements. Used to refine all AI analysis."
+        className="text-xs min-h-[72px] resize-none"
+        data-testid="textarea-deal-context"
+      />
+      {saved && (
+        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+          <Check className="h-2.5 w-2.5" /> Context saved
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 type ActiveTool = null | 'xray' | 'serp' | 'competitor' | 'forecast';
 
-export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPlan, onSaveCompetitorDomains }: {
+export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPlan, onSaveCompetitorDomains, onSaveDealContext }: {
   lead: Lead | null;
   onSaveToNotes: (text: string) => void;
   onSaveGrowthPlan?: (data: { xray?: any; serp?: any; competitor?: any; forecast?: any; strategyDiagnosis?: any }) => void;
   onSaveCompetitorDomains?: (domains: string[]) => void;
+  onSaveDealContext?: (context: string) => void;
 }) {
   const { toast } = useToast();
   const { orgId } = useAuth();
@@ -728,6 +957,8 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
   const [crawledCompetitors, setCrawledCompetitors] = useState<CompetitorAnalysis[]>([]);
   const [competitorAnalysisLoading, setCompetitorAnalysisLoading] = useState(false);
   const [expandedCompetitor, setExpandedCompetitor] = useState<number | null>(null);
+  const [dealContext, setDealContext] = useState('');
+  const [dealContextSaved, setDealContextSaved] = useState(false);
 
   useEffect(() => {
     if (lead?.aiGrowthPlan) {
@@ -745,13 +976,19 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     if (lead?.competitorDomains?.length) {
       setCompetitorInput(lead.competitorDomains.join(', '));
     }
+    // Restore deal context
+    if ((lead as any)?.dealContext) {
+      setDealContext((lead as any).dealContext);
+    } else {
+      setDealContext('');
+    }
   }, [lead?.id]);
 
-  // Auto-trigger strategy diagnosis when sitemap data is available and no cached result
+  // Auto-trigger strategy diagnosis when business name is set and no cached result
   useEffect(() => {
     if (
       lead?.id &&
-      lead?.sitemapPages?.length &&
+      (lead?.companyName || lead?.sitemapPages?.length) &&
       !lead?.aiGrowthPlan?.strategyDiagnosis &&
       !diagnosisLoading
     ) {
@@ -803,6 +1040,7 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
           adSpend: adSpendData,
           ahrefsData: lead?.ahrefsData || null,
           strategyIntelligence: lead?.strategyIntelligence || null,
+          dealContext: dealContext || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to generate strategy analysis');
@@ -1485,23 +1723,41 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
     <>
     <div className="space-y-3" data-testid="growth-plan-section">
 
-      {/* ── AI Strategy Engine ─────────────────────────────────── */}
-      {!strategyDiagnosis && !diagnosisLoading && (
-        <div className="border border-dashed rounded-lg p-4 text-center space-y-2 bg-muted/10">
-          <div className="flex items-center justify-center gap-2 text-muted-foreground">
-            <Sparkles className="h-4 w-4" />
-            <p className="text-sm font-medium">Generate AI Strategy Analysis</p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            AI will analyse the website structure, service/location signals, GBP, reviews, and competitors to show where {businessName || 'this business'} is today and where it could be.
-          </p>
-          <Button onClick={runStrategyDiagnosis} disabled={!businessName} className="gap-2 h-8 text-sm" data-testid="button-generate-strategy">
-            <Sparkles className="h-3.5 w-3.5" /> Analyse Growth Position
-          </Button>
-          {diagnosisError && <InlineError error={diagnosisError} onRetry={runStrategyDiagnosis} />}
-        </div>
-      )}
+      {/* ── Specialist Activity Feed ────────────────────────────── */}
+      <SpecialistFeed
+        lead={lead}
+        strategyDiagnosis={strategyDiagnosis}
+        diagnosisLoading={diagnosisLoading}
+        xrayResult={xrayResult}
+        serpResult={serpResult}
+        competitorResult={competitorResult}
+        forecastResult={forecastResult}
+        loading={loading}
+        websiteUrl={websiteUrl}
+        businessName={businessName}
+        onRunDiagnosis={runStrategyDiagnosis}
+        onRunXRay={runXRay}
+        onRunSerp={runSerp}
+        onRunCompetitor={runCompetitorGap}
+        onRunForecast={runForecast}
+        generatedUrl={generatedUrl}
+      />
 
+      {/* ── Deal Context ────────────────────────────────────────── */}
+      <DealContextInput
+        value={dealContext}
+        onChange={setDealContext}
+        onSave={(ctx) => {
+          onSaveDealContext?.(ctx);
+          setDealContextSaved(true);
+          setTimeout(() => setDealContextSaved(false), 2000);
+        }}
+        saved={dealContextSaved}
+      />
+
+      <Separator />
+
+      {/* ── Growth Analysis Results ─────────────────────────────── */}
       {diagnosisLoading && (
         <div className="border rounded-lg p-6 text-center space-y-3">
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
@@ -1516,18 +1772,18 @@ export default function GrowthPlanSection({ lead, onSaveToNotes, onSaveGrowthPla
         <StrategyDiagnosisView diagnosis={strategyDiagnosis} onRegenerate={runStrategyDiagnosis} loading={diagnosisLoading} />
       )}
 
-      {diagnosisError && strategyDiagnosis && <InlineError error={diagnosisError} onRetry={runStrategyDiagnosis} />}
+      {diagnosisError && <InlineError error={diagnosisError} onRetry={runStrategyDiagnosis} />}
 
       <Separator />
 
-      {/* ── Supporting Analysis Tools ──────────────────────────── */}
+      {/* ── Deep Analysis Tools ─────────────────────────────────── */}
       <button
         onClick={() => setToolsExpanded(p => !p)}
         className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
         data-testid="button-toggle-tools"
       >
         {toolsExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span className="font-medium">Supporting Analysis Tools</span>
+        <span className="font-medium">Deep Analysis Results</span>
         <span className="ml-auto text-[10px]">{tools.filter(t => t.hasResult).length}/{tools.length} run</span>
       </button>
 
