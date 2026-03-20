@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import type { RootState } from '@/store';
 import type { Lead, Activity, Client, NBAAction } from '@/lib/types';
-import { db, doc, collection, query, orderBy, limit, onSnapshot } from '@/lib/firebase';
+import { db, doc, collection, query, where, orderBy, limit, onSnapshot } from '@/lib/firebase';
 import BullpenCommandCenter from '@/components/BullpenCommandCenter';
 import BullpenWorkQueue from '@/components/BullpenWorkQueue';
 import BullpenReviewPass from '@/components/BullpenReviewPass';
@@ -628,6 +628,31 @@ const ROLE_CONFIG: Record<string, RoleConfig> = {
   },
 };
 
+// ─── Role → Work Item Signal Matcher ─────────────────────────────────────────
+// Maps new specialist role IDs to pattern strings matched against bullpenWork
+// `owner` (lowercased) and `sourceSignal` (lowercased) fields.
+// Extend this as new trigger types are added to TRIGGER_OWNERSHIP in routes.ts.
+
+interface WorkMatcher { ownerPatterns: string[]; signalPatterns: string[] }
+
+const ROLE_WORK_MATCHER: Record<string, WorkMatcher> = {
+  offer:      { ownerPatterns: ['offer', 'pricing'],           signalPatterns: ['offer', 'pricing', 'packaging', 'close_rate', 'value_framing', 'scope_position'] },
+  booking:    { ownerPatterns: ['booking', 'call & booking'],  signalPatterns: ['booking', 'missed_call', 'inbound', 'lead_response', 'voice', 'call_handling'] },
+  dataint:    { ownerPatterns: ['data integrity'],             signalPatterns: ['integrity', 'duplicate', 'stale', 'attribution', 'missing_field', 'crm_hygiene', 'bad_sync'] },
+  compliance: { ownerPatterns: ['compliance', 'risk'],         signalPatterns: ['compliance', 'privacy', 'claims', 'regulatory', 'whs', 'labour', 'disclaimer'] },
+  security:   { ownerPatterns: ['security', 'data protection'],signalPatterns: ['security', 'auth', 'tenant', 'secret', 'isolation', 'permission', 'unsafe_route'] },
+};
+
+function matchesWorkItem(item: Record<string, any>, matcher: WorkMatcher): boolean {
+  const owner   = (item.owner  || '').toLowerCase();
+  const signal  = (item.sourceSignal || '').toLowerCase();
+  const title   = (item.title  || '').toLowerCase();
+  return (
+    matcher.ownerPatterns.some(p  => owner.includes(p))  ||
+    matcher.signalPatterns.some(p => signal.includes(p) || title.includes(p))
+  );
+}
+
 const STATUS_CONFIG: Record<BullpenStatus, { label: string; color: string; dot: string }> = {
   active:            { label: 'Active',            color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400', dot: 'bg-emerald-500' },
   idle:              { label: 'Idle',              color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',            dot: 'bg-slate-400' },
@@ -1030,6 +1055,22 @@ export default function BullpenPage() {
   const [typingAgent, setTypingAgent] = useState<{ from: string; fromBg: string; fromIcon: typeof Briefcase } | null>(null);
   const commsRef = useRef<HTMLDivElement>(null);
 
+  // ── Live bullpenWork items — org-scoped onSnapshot for role signal wiring ─
+  const [workItems, setWorkItems] = useState<Record<string, any>[]>([]);
+  useEffect(() => {
+    if (!orgId || !isManager) return;
+    const q = query(
+      collection(db, 'orgs', orgId, 'bullpenWork'),
+      where('status', '!=', 'resolved'),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setWorkItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {
+      // Firestore read failure — fail silently, roles render with zero counts
+    });
+    return () => unsub();
+  }, [orgId, isManager]);
+
   // ── Load automation rules — validated read via API ────────────────────────
   useEffect(() => {
     if (!isManager || !orgId || !authReady) return;
@@ -1095,6 +1136,14 @@ export default function BullpenPage() {
   const clientsWithAds     = useMemo(() => activeClients.filter(c => c.adsEngine), [activeClients]);
   const clientsWithGBPAuth = useMemo(() => activeClients.filter(c => c.gbpLocationName), [activeClients]);
   const clientsWithPrescription = useMemo(() => activeLeads.filter(l => (l as any).growthPrescription), [activeLeads]);
+
+  // ── Data Integrity signals — derived from Redux for Data Integrity Specialist
+  const leadsWithMissingFields = useMemo(() =>
+    activeLeads.filter(l => !l.businessName || !l.phone || !l.email || !l.stage),
+  [activeLeads]);
+  const clientsWithNoEnrichment = useMemo(() =>
+    activeClients.filter(c => !c.enrichment || Object.keys(c.enrichment || {}).length === 0),
+  [activeClients]);
 
   const mostRecentActivity = useMemo(() => {
     if (!activities.length) return null;
@@ -1469,64 +1518,85 @@ export default function BullpenPage() {
         lastActionLabel: 'Scaffold structure ready — connect live infra data when available',
         detail: 'Deployment, environments, CI/CD, uptime, infrastructure',
       },
-      {
-        id: 'offer', name: 'Offer & Pricing Specialist', icon: Tag, tier: 'leadership',
-        status: clientsWithPrescription.length > 0 ? 'active' : 'idle',
-        currentCount: clientsWithPrescription.length, currentLabel: 'clients with investment tiers assessed',
-        blockerCount: activeClients.filter(c => !c.growthPrescription?.investmentTiers).length,
-        blockerSummary: 'No investment tier structure generated',
-        lastActionLabel: clientsWithPrescription.length > 0 ? `${clientsWithPrescription.length} offer structures active` : undefined,
-        detail: 'Offer design, pricing structure, value framing, conversion leverage',
-        linkedPath: '/clients',
-      },
-      {
-        id: 'booking', name: 'Call & Booking Specialist', icon: PhoneCall, tier: 'execution',
-        status: 'idle',
-        currentCount: 0, currentLabel: 'booking flows configured',
-        blockerCount: 0,
-        lastActionLabel: 'Inbound capture, missed call recovery, booking flow quality',
-        detail: 'Lead capture, missed call recovery, booking flow, voice AI readiness',
-      },
-      {
-        id: 'dataint', name: 'Data Integrity Specialist', icon: Database, tier: 'development',
-        status: (() => {
-          const incompleteCount = activeClients.filter(c => !c.enrichment || Object.keys(c.enrichment || {}).length === 0).length;
-          if (incompleteCount > 3) return 'needs_attention' as const;
-          if (activeClients.length > 0) return 'active' as const;
-          return 'idle' as const;
-        })(),
-        currentCount: activeClients.filter(c => c.enrichment && Object.keys(c.enrichment).length > 0).length,
-        currentLabel: 'clients with enrichment data',
-        blockerCount: activeClients.filter(c => !c.enrichment || Object.keys(c.enrichment || {}).length === 0).length,
-        blockerSummary: 'Records lacking enrichment — accuracy risk',
-        lastActionLabel: 'Data accuracy, attribution, CRM hygiene, signal trustworthiness',
-        detail: 'Data accuracy, deduplication, CRM hygiene, attribution integrity',
-        linkedPath: '/clients',
-      },
-      {
-        id: 'compliance', name: 'Compliance & Risk Specialist', icon: Scale, tier: 'governance',
-        status: 'idle',
-        currentCount: 0, currentLabel: 'compliance reviews triggered',
-        blockerCount: 0,
-        lastActionLabel: 'Event-based — activates on defined compliance triggers',
-        detail: 'Privacy, claims, legal/WHS/labour risk review — event-based governance role',
-      },
-      {
-        id: 'security', name: 'Security & Data Protection', icon: Lock, tier: 'governance',
-        status: (() => {
-          return 'active' as const;
-        })(),
-        currentCount: activeClients.length, currentLabel: 'tenants under isolation governance',
-        blockerCount: 0,
-        lastActionLabel: 'Tenant isolation, auth integrity, secrets handling — always active',
-        detail: 'Tenant isolation, auth integrity, secrets handling, API/data security',
-      },
+      (() => {
+        const offerItems = workItems.filter(w => matchesWorkItem(w, ROLE_WORK_MATCHER.offer));
+        const offerBlockers = offerItems.filter(w => w.priority === 'high');
+        return {
+          id: 'offer', name: 'Offer & Pricing Specialist', icon: Tag, tier: 'leadership' as const,
+          status: offerItems.length > 0 ? 'active' as const : clientsWithPrescription.length > 0 ? 'active' as const : 'idle' as const,
+          currentCount: offerItems.length > 0 ? offerItems.length : clientsWithPrescription.length,
+          currentLabel: offerItems.length > 0 ? 'offer / pricing work items open' : 'clients with investment tiers assessed',
+          blockerCount: offerBlockers.length,
+          blockerSummary: offerBlockers.length ? `${offerBlockers.length} high-priority offer signal${offerBlockers.length > 1 ? 's' : ''}` : undefined,
+          lastActionLabel: offerItems.length > 0 ? `${offerItems.length} active signal${offerItems.length > 1 ? 's' : ''} — offer / pricing` : clientsWithPrescription.length > 0 ? `${clientsWithPrescription.length} offer structures active` : undefined,
+          detail: 'Offer design, pricing structure, value framing, conversion leverage',
+          linkedPath: '/clients',
+        };
+      })(),
+      (() => {
+        const bookingItems = workItems.filter(w => matchesWorkItem(w, ROLE_WORK_MATCHER.booking));
+        const bookingBlockers = bookingItems.filter(w => w.priority === 'high');
+        return {
+          id: 'booking', name: 'Call & Booking Specialist', icon: PhoneCall, tier: 'execution' as const,
+          status: bookingItems.length > 0 ? 'active' as const : 'idle' as const,
+          currentCount: bookingItems.length,
+          currentLabel: bookingItems.length > 0 ? 'call / booking work items open' : 'booking flows configured',
+          blockerCount: bookingBlockers.length,
+          blockerSummary: bookingBlockers.length ? `${bookingBlockers.length} high-priority booking signal${bookingBlockers.length > 1 ? 's' : ''}` : undefined,
+          lastActionLabel: bookingItems.length > 0 ? `${bookingItems.length} active signal${bookingItems.length > 1 ? 's' : ''} — call / booking` : 'Inbound capture, missed call recovery, booking flow quality',
+          detail: 'Lead capture, missed call recovery, booking flow, voice AI readiness',
+        };
+      })(),
+      (() => {
+        const diItems = workItems.filter(w => matchesWorkItem(w, ROLE_WORK_MATCHER.dataint));
+        const totalGaps = leadsWithMissingFields.length + clientsWithNoEnrichment.length;
+        const hasSignal  = diItems.length > 0 || totalGaps > 0;
+        return {
+          id: 'dataint', name: 'Data Integrity Specialist', icon: Database, tier: 'development' as const,
+          status: (diItems.length > 0 || totalGaps > 3) ? 'needs_attention' as const : totalGaps > 0 ? 'active' as const : 'idle' as const,
+          currentCount: diItems.length > 0 ? diItems.length : totalGaps,
+          currentLabel: diItems.length > 0 ? 'integrity work items open' : 'records with missing or unenriched data',
+          blockerCount: leadsWithMissingFields.length,
+          blockerSummary: leadsWithMissingFields.length ? `${leadsWithMissingFields.length} lead${leadsWithMissingFields.length > 1 ? 's' : ''} missing critical fields` : undefined,
+          lastActionLabel: hasSignal
+            ? `${leadsWithMissingFields.length} leads + ${clientsWithNoEnrichment.length} clients with data gaps`
+            : 'Data accuracy, attribution, CRM hygiene, signal trustworthiness',
+          detail: 'Data accuracy, deduplication, CRM hygiene, attribution integrity',
+          linkedPath: '/clients',
+        };
+      })(),
+      (() => {
+        const compItems = workItems.filter(w => matchesWorkItem(w, ROLE_WORK_MATCHER.compliance));
+        return {
+          id: 'compliance', name: 'Compliance & Risk Specialist', icon: Scale, tier: 'governance' as const,
+          status: compItems.length > 0 ? 'needs_attention' as const : 'idle' as const,
+          currentCount: compItems.length,
+          currentLabel: compItems.length > 0 ? 'compliance review items triggered' : 'compliance reviews triggered',
+          blockerCount: compItems.filter(w => w.priority === 'high').length,
+          blockerSummary: compItems.length > 0 ? `${compItems.length} active compliance signal${compItems.length > 1 ? 's' : ''}` : undefined,
+          lastActionLabel: compItems.length > 0 ? `${compItems.length} compliance trigger${compItems.length > 1 ? 's' : ''} active` : 'Event-based — activates on defined compliance triggers',
+          detail: 'Privacy, claims, legal/WHS/labour risk review — event-based governance role',
+        };
+      })(),
+      (() => {
+        const secItems = workItems.filter(w => matchesWorkItem(w, ROLE_WORK_MATCHER.security));
+        return {
+          id: 'security', name: 'Security & Data Protection', icon: Lock, tier: 'governance' as const,
+          status: secItems.length > 0 ? 'needs_attention' as const : 'active' as const,
+          currentCount: secItems.length > 0 ? secItems.length : activeClients.length,
+          currentLabel: secItems.length > 0 ? 'security review items open' : 'tenants under isolation governance',
+          blockerCount: secItems.filter(w => w.priority === 'high').length,
+          blockerSummary: secItems.length > 0 ? `${secItems.length} security signal${secItems.length > 1 ? 's' : ''} flagged` : undefined,
+          lastActionLabel: secItems.length > 0 ? `${secItems.length} active security signal${secItems.length > 1 ? 's' : ''}` : 'Tenant isolation, auth integrity, secrets handling — always active',
+          detail: 'Tenant isolation, auth integrity, secrets handling, API/data security',
+        };
+      })(),
     ];
   }, [
     openNBA, activities, activeLeads, overdueLeads, activeClients,
     clientsWithSEO, clientsWithWebsite, clientsWithGBP, clientsWithGBPAuth,
     clientsWithAds, clientsWithPrescription, aiActiveClients, autonomousClients,
-    redAmberClients
+    redAmberClients, workItems, leadsWithMissingFields, clientsWithNoEnrichment
   ]);
 
   const activeRoles = roles.filter(r => r.status !== 'idle');
