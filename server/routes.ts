@@ -7623,6 +7623,82 @@ Return JSON:
 
   // ── Evidence gathering: structured real-world data before any AI analysis ─
   // Orchestrates: GBP discovery + website crawl + social detection.
+  // ── Evidence delta computation ────────────────────────────────────────────
+  // Pure function — no side effects. Compares two evidence bundles and returns
+  // a list of meaningful human-readable changes. Called at gather time so the
+  // result can be persisted alongside the new bundle.
+  function computeEvidenceDelta(prev: any, next: any): any[] {
+    if (!prev || !next) return [];
+    const changes: any[] = [];
+
+    const pw = prev.website;
+    const nw = next.website;
+
+    // ── Website presence ──
+    if (!pw?.url && nw?.url)  changes.push({ section: 'website', field: 'url', type: 'added',   label: 'Website found' });
+    if ( pw?.url && !nw?.url) changes.push({ section: 'website', field: 'url', type: 'removed', label: 'Website lost' });
+
+    if (pw?.url && nw?.url) {
+      // Boolean flags
+      if (!pw.hasSitemap && nw.hasSitemap)   changes.push({ section: 'website', field: 'hasSitemap',  type: 'improved', label: 'Sitemap found' });
+      if ( pw.hasSitemap && !nw.hasSitemap)  changes.push({ section: 'website', field: 'hasSitemap',  type: 'worsened', label: 'Sitemap lost' });
+      if (!pw.hasSchema  && nw.hasSchema)    changes.push({ section: 'website', field: 'hasSchema',   type: 'improved', label: 'Schema markup added' });
+      if ( pw.hasSchema  && !nw.hasSchema)   changes.push({ section: 'website', field: 'hasSchema',   type: 'worsened', label: 'Schema markup lost' });
+      if (!pw.hasHttps   && nw.hasHttps)     changes.push({ section: 'website', field: 'hasHttps',    type: 'improved', label: 'HTTPS enabled' });
+      if ( pw.hasHttps   && !nw.hasHttps)    changes.push({ section: 'website', field: 'hasHttps',    type: 'worsened', label: 'HTTPS lost' });
+
+      // Array length diffs — only flag meaningful swings
+      const ctaDelta  = (nw.ctaSignals?.length    ?? 0) - (pw.ctaSignals?.length    ?? 0);
+      const trustDelta= (nw.trustSignals?.length   ?? 0) - (pw.trustSignals?.length   ?? 0);
+      const gapDelta  = (nw.conversionGaps?.length ?? 0) - (pw.conversionGaps?.length ?? 0);
+
+      if (ctaDelta   >=  2) changes.push({ section: 'website', field: 'ctaSignals',    type: 'improved', label: `CTAs +${ctaDelta}`,                   before: pw.ctaSignals?.length,    after: nw.ctaSignals?.length });
+      if (ctaDelta   <= -2) changes.push({ section: 'website', field: 'ctaSignals',    type: 'worsened', label: `CTAs ${ctaDelta}`,                     before: pw.ctaSignals?.length,    after: nw.ctaSignals?.length });
+      if (trustDelta >=  2) changes.push({ section: 'website', field: 'trustSignals',  type: 'improved', label: `Trust signals +${trustDelta}`,         before: pw.trustSignals?.length,  after: nw.trustSignals?.length });
+      if (trustDelta <= -2) changes.push({ section: 'website', field: 'trustSignals',  type: 'worsened', label: `Trust signals ${trustDelta}`,          before: pw.trustSignals?.length,  after: nw.trustSignals?.length });
+      if (gapDelta   <= -1) changes.push({ section: 'website', field: 'conversionGaps',type: 'improved', label: `${Math.abs(gapDelta)} gap${Math.abs(gapDelta) > 1 ? 's' : ''} fixed`,  before: pw.conversionGaps?.length, after: nw.conversionGaps?.length });
+      if (gapDelta   >=  1) changes.push({ section: 'website', field: 'conversionGaps',type: 'worsened', label: `${gapDelta} new gap${gapDelta > 1 ? 's' : ''}`,                        before: pw.conversionGaps?.length, after: nw.conversionGaps?.length });
+
+      // Phone presence (any→none or none→any)
+      const prevPhone = pw.phoneNumbers?.length ?? 0;
+      const nextPhone = nw.phoneNumbers?.length ?? 0;
+      if (prevPhone === 0 && nextPhone > 0) changes.push({ section: 'website', field: 'phoneNumbers', type: 'added',   label: 'Phone number found' });
+      if (prevPhone > 0 && nextPhone === 0) changes.push({ section: 'website', field: 'phoneNumbers', type: 'removed', label: 'Phone number lost' });
+    }
+
+    // ── GBP ──
+    const pg = prev.gbp;
+    const ng = next.gbp;
+
+    if (!pg && ng)  changes.push({ section: 'gbp', field: 'listing', type: 'added',   label: 'GBP listing found' });
+    if ( pg && !ng) changes.push({ section: 'gbp', field: 'listing', type: 'removed', label: 'GBP listing lost' });
+
+    if (pg && ng) {
+      if (pg.rating != null && ng.rating != null) {
+        const rDelta = parseFloat((ng.rating - pg.rating).toFixed(2));
+        if (rDelta >=  0.1) changes.push({ section: 'gbp', field: 'rating', type: 'improved', label: `Rating ↑ ${pg.rating} → ${ng.rating}`, before: pg.rating, after: ng.rating });
+        if (rDelta <= -0.1) changes.push({ section: 'gbp', field: 'rating', type: 'worsened', label: `Rating ↓ ${pg.rating} → ${ng.rating}`, before: pg.rating, after: ng.rating });
+      }
+      if (pg.reviewCount != null && ng.reviewCount != null) {
+        const revDelta = ng.reviewCount - pg.reviewCount;
+        if (Math.abs(revDelta) >= 5) changes.push({ section: 'gbp', field: 'reviewCount', type: revDelta > 0 ? 'improved' : 'worsened', label: `Reviews ${revDelta > 0 ? '+' : ''}${revDelta} (${ng.reviewCount} total)`, before: pg.reviewCount, after: ng.reviewCount });
+      }
+      if (!pg.editorialSummary && ng.editorialSummary) changes.push({ section: 'gbp', field: 'editorialSummary', type: 'added',   label: 'Google editorial summary added' });
+      if ( pg.editorialSummary && !ng.editorialSummary) changes.push({ section: 'gbp', field: 'editorialSummary', type: 'removed', label: 'Google editorial summary removed' });
+    }
+
+    // ── Social ──
+    for (const platform of ['facebook', 'instagram', 'linkedin', 'twitter'] as const) {
+      const wasDetected = prev.social?.[platform]?.detected ?? false;
+      const isDetected  = next.social?.[platform]?.detected ?? false;
+      const name = platform.charAt(0).toUpperCase() + platform.slice(1);
+      if (!wasDetected && isDetected) changes.push({ section: 'social', field: platform, type: 'added',   label: `${name} detected` });
+      if ( wasDetected && !isDetected) changes.push({ section: 'social', field: platform, type: 'removed', label: `${name} lost` });
+    }
+
+    return changes;
+  }
+
   // Saves structured evidenceBundle to Firestore. Called before prep pack.
   // ─────────────────────────────────────────────────────────────────────────
   async function gatherEvidenceBundle(lead: any, orgId: string): Promise<any> {
@@ -7718,13 +7794,30 @@ Return JSON:
       discoverySource: discovered.discoverySource,
     };
 
-    // Save to Firestore async (non-blocking)
-    leadRef.set({ evidenceBundle: bundle }, { merge: true }).catch((e: any) =>
+    // Compute delta against the previous bundle (already in memory via lead param — no extra read)
+    const prevBundle = lead.evidenceBundle || null;
+    const deltaChanges = computeEvidenceDelta(prevBundle, bundle);
+    const evidenceDelta = deltaChanges.length > 0 ? {
+      computedAt: new Date().toISOString(),
+      prevGatheredAt: prevBundle?.gatheredAt || null,
+      changes: deltaChanges,
+    } : null;
+
+    if (deltaChanges.length > 0) {
+      console.log(`[gather-evidence] delta: ${deltaChanges.length} change(s) detected for ${businessName}`);
+    }
+
+    // Save bundle + delta + previous snapshot to Firestore async (non-blocking)
+    leadRef.set({
+      evidenceBundle: bundle,
+      evidenceDelta,
+      evidenceBundlePrev: prevBundle,
+    }, { merge: true }).catch((e: any) =>
       console.warn('[gather-evidence] Firestore save error:', e.message)
     );
 
     console.log(`[gather-evidence] ${businessName} | website=${websiteEvidence ? (websiteEvidence.success ? 'crawled' : 'failed') : 'no URL'} | gbp=${gbpEvidence ? 'found' : 'not found'} | social=${Object.values(socialEvidence).filter((s: any) => s.detected).length} detected`);
-    return { bundle, discovered };
+    return { bundle, discovered, delta: evidenceDelta };
   }
 
   // ── Auto-generate Prep Call Pack for a lead ──────────────────────────────

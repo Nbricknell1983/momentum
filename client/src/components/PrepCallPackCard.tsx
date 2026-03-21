@@ -41,9 +41,71 @@ export function AiBadgeMini() {
   );
 }
 
+// ── Evidence delta chip colours + icons ────────────────────────────────────
+const DELTA_COLOR: Record<string, string> = {
+  added:    'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/40',
+  removed:  'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800/40',
+  improved: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/40',
+  worsened: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/40',
+  changed:  'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
+};
+const DELTA_ICON: Record<string, string> = {
+  added: '＋', removed: '−', improved: '↑', worsened: '↓', changed: '⇄',
+};
+
+function EvidenceDeltaPanel({ changes, prevGatheredAt }: { changes: any[]; prevGatheredAt?: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!changes || changes.length === 0) return null;
+  const MAX_VISIBLE = 4;
+  const visible = expanded ? changes : changes.slice(0, MAX_VISIBLE);
+  const overflow = changes.length - MAX_VISIBLE;
+  const prevAge = timeAgo(prevGatheredAt);
+
+  return (
+    <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 mt-1">
+      <div className="flex items-center gap-1 mb-1.5">
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+          What changed
+        </span>
+        {prevAge && (
+          <span className="text-[9px] text-slate-400">· since {prevAge}</span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {visible.map((c: any, i: number) => (
+          <span
+            key={i}
+            className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${DELTA_COLOR[c.type] ?? DELTA_COLOR.changed}`}
+          >
+            <span>{DELTA_ICON[c.type] ?? '·'}</span>
+            {c.label}
+          </span>
+        ))}
+        {!expanded && overflow > 0 && (
+          <button
+            onClick={() => setExpanded(true)}
+            className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            +{overflow} more
+          </button>
+        )}
+        {expanded && overflow > 0 && (
+          <button
+            onClick={() => setExpanded(false)}
+            className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-full border bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            show less
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function EvidencePresenceSection({
   eb, psAi, serp,
   ebGatheredAt, serpGeneratedAt, aiGeneratedAt,
+  delta, deltaPrevGatheredAt,
 }: {
   eb?: any;
   psAi?: PresenceSnapshot;
@@ -51,6 +113,8 @@ export function EvidencePresenceSection({
   ebGatheredAt?: string | Date | null;
   serpGeneratedAt?: string | Date | null;
   aiGeneratedAt?: string | Date | null;
+  delta?: any[] | null;
+  deltaPrevGatheredAt?: string | null;
 }) {
   const w = eb?.website;
   const gbp = eb?.gbp;
@@ -285,6 +349,11 @@ export function EvidencePresenceSection({
         )}
       </div>
 
+      {/* ── Evidence delta panel — only shown when changes exist ── */}
+      {delta && delta.length > 0 && (
+        <EvidenceDeltaPanel changes={delta} prevGatheredAt={deltaPrevGatheredAt} />
+      )}
+
     </div>
   );
 }
@@ -331,6 +400,7 @@ interface PrepCallPackCardProps {
   pack: PrepCallPack;
   businessName?: string;
   evidenceBundle?: any;
+  evidenceDelta?: any;
   onRegenerate?: () => void;
   isRegenerating?: boolean;
 }
@@ -362,7 +432,7 @@ function IntelRow({ label, value, icon: Icon }: { label: string; value: string; 
   );
 }
 
-export function PrepCallPackCard({ pack, businessName, evidenceBundle, onRegenerate, isRegenerating }: PrepCallPackCardProps) {
+export function PrepCallPackCard({ pack, businessName, evidenceBundle, evidenceDelta, onRegenerate, isRegenerating }: PrepCallPackCardProps) {
   const [showMissing, setShowMissing] = useState(false);
   const conf = CONFIDENCE_STYLES[pack.confidence] || CONFIDENCE_STYLES.medium;
   const genDate = pack.generatedAt ? format(new Date(pack.generatedAt), 'dd/MM/yyyy HH:mm') : '';
@@ -499,6 +569,8 @@ export function PrepCallPackCard({ pack, businessName, evidenceBundle, onRegener
             psAi={pack.presenceSnapshot}
             ebGatheredAt={(evidenceBundle as any)?.gatheredAt}
             aiGeneratedAt={pack.generatedAt}
+            delta={(evidenceDelta as any)?.changes ?? null}
+            deltaPrevGatheredAt={(evidenceDelta as any)?.prevGatheredAt ?? null}
           />
         </div>
 

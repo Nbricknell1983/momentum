@@ -461,6 +461,8 @@ function AgentIntelligenceCard({ lead, onRegenerate, isRegenerating }: { lead: L
                 ?? (lead as any).aiGrowthPlan?.generatedAt
               }
               aiGeneratedAt={pack.generatedAt}
+              delta={(lead as any).evidenceDelta?.changes ?? null}
+              deltaPrevGatheredAt={(lead as any).evidenceDelta?.prevGatheredAt ?? null}
             />
           </div>
 

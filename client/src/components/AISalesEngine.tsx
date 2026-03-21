@@ -762,7 +762,7 @@ export default function AISalesEngine({ isOpen, onClose, activeSection: external
                         Regenerate
                       </Button>
                     </div>
-                    <PrepCallPackCard pack={prepPack} businessName={selectedLead?.companyName} evidenceBundle={(selectedLead as any)?.evidenceBundle} />
+                    <PrepCallPackCard pack={prepPack} businessName={selectedLead?.companyName} evidenceBundle={(selectedLead as any)?.evidenceBundle} evidenceDelta={(selectedLead as any)?.evidenceDelta} />
                   </>
                 ) : (
                   <div className="space-y-3">
