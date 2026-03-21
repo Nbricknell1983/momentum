@@ -348,7 +348,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const websiteStatus: StageStatus = hasXray ? 'complete' : xrayRunning ? 'running' : !websiteUrl ? 'blocked' : 'pending';
   const xray = (lead as any).aiGrowthPlan?.xray;
   const xrayFinding = hasXray
-    ? xray?.humanView?.headline || `${xray?.pageCount ?? ''} pages audited — conversion signals extracted`
+    ? xray?.humanView?.headline || `${xray?.pageCount ?? ''} pages reviewed — key gaps and opportunities found`
     : undefined;
   const xrayAt = (lead as any).aiGrowthPlan?.generatedAt || null;
 
@@ -436,7 +436,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="website"
             status={websiteStatus}
-            task="Reviewing their site — checking page structure, SEO signals, and where visitors drop off"
+            task="Reviewing their site — page structure, SEO signals, and conversion gaps"
             finding={xrayFinding}
             timestamp={xrayAt}
             blockedReason="No website URL on this lead — add one and we'll dig straight in"
@@ -464,7 +464,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="seo"
             status={seoStatus}
-            task="Checking where this business sits in search and mapping out the competitive picture"
+            task="Checking where they sit in search and how they stack up against competitors"
             finding={serpFinding}
           />
 
@@ -499,7 +499,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             <HandoffConnector
               from="growth"
               to="commercial"
-              message="Readiness assessment done — Commercial Intelligence is sequencing your next moves"
+              message="Readiness assessment done — putting together your deal-specific next moves"
             />
           )}
 
