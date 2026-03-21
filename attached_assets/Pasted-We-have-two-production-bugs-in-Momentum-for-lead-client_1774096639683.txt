@@ -1,0 +1,68 @@
+We have two production bugs in Momentum for lead/client website + GBP detection.
+
+BUG 1 — Multi-location GBP selection is wrong
+Example: “First Parking” has multiple Google Business Profiles, but the GBP / Maps card is showing the wrong listing instead of the branch that matches the lead context (e.g. Brisbane South).
+
+What to fix:
+1. Find the GBP/Places resolution logic used by:
+   - Presence Snapshot GBP / Maps card
+   - SEO specialist / search signals stage
+   - any Google Places / GBP auto-detect helper
+2. Replace any “take first result” or “highest prominence result” logic with a branch-aware matching score.
+3. Ranking should prefer:
+   - strong business name match
+   - suburb/locality match with the lead’s suburb/city
+   - state/city match
+   - website domain match
+   - phone match if available
+4. If multiple strong matches remain:
+   - store all candidates in a `gbpCandidates` array
+   - select the best one as `primaryGbp`
+   - surface branch name clearly in UI
+5. Do not let a generic category result (e.g. “Parking Garage”) override a more specific branded branch listing.
+
+Implementation goal:
+- For First Parking, the selected GBP should be the branch that best matches the lead record context, not an arbitrary top result.
+
+BUG 2 — Presence Snapshot says “No sitemap.xml found” even though sitemap pages were captured
+We have screenshots showing:
+- the Presence Snapshot website card says “No sitemap.xml found”
+- but the sitemap section clearly shows “17 pages captured” and pages analysed
+
+What to fix:
+1. Find the component + selector building the website Presence Snapshot card.
+2. Audit the fields used for:
+   - sitemap badge visibility
+   - “No sitemap.xml found” warning
+   - page count display
+3. Make sitemap status derive from the actual stored crawl/sitemap data, not just a raw `/sitemap.xml` fetch result.
+4. Correct logic should be:
+   - if we have captured sitemap pages or crawled pages in Firestore, show sitemap as present
+   - only show “No sitemap.xml found” if:
+     - no sitemap pages are stored
+     - no crawl pages are stored
+     - and sitemap discovery truly failed
+5. If raw `/sitemap.xml` was missing but pages were still discovered another way, show a neutral state like:
+   - “Pages discovered”
+   - not a red “No sitemap.xml found” warning
+6. Ensure the Presence Snapshot and the detailed Sitemap panel both read from the same canonical derived status.
+
+Implementation details:
+- Create a shared helper like `getWebsitePresenceStatus(leadOrClient)` or similar.
+- That helper should derive:
+  - hasWebsite
+  - hasSitemapData
+  - sitemapPageCount
+  - crawlPageCount
+  - schemaPresent
+  - contactSignalsPresent
+  - warnings[]
+- Use this helper in both the compact Presence Snapshot card and detailed website/sitemap UI so they cannot drift.
+
+QA to verify:
+1. A record with stored sitemap pages shows:
+   - sitemap badge/check in Presence Snapshot
+   - no false “No sitemap.xml found” warning
+2. A multi-location business selects the correct branch GBP based on suburb/name match
+3. Existing records with already captured sitemap data render correctly without needing a fresh crawl
+4. The SEO specialist and Presence Snapshot use the same selected GBP entity
