@@ -15,6 +15,7 @@ import {
   STAGE_LABELS,
 } from '@/lib/types';
 import GrowthPrescriptionPanel from './GrowthPrescriptionPanel';
+import { EvidencePresenceSection } from './PrepCallPackCard';
 import {
   Heart,
   Globe,
@@ -445,29 +446,17 @@ function AgentIntelligenceCard({ lead, onRegenerate, isRegenerating }: { lead: L
           {/* Business snapshot */}
           <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{pack.businessSnapshot}</p>
 
-          {/* Presence snapshot — 2×2 grid */}
-          {hasPS && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
-                <Globe className="h-3 w-3" /> Presence Snapshot
-              </p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { label: 'Website', val: ps.website, icon: Globe },
-                  { label: 'GBP / Maps', val: ps.gbp, icon: MapPin },
-                  { label: 'Social', val: ps.social, icon: Users },
-                  { label: 'Search Visibility', val: ps.searchVisibility, icon: Search },
-                ].map(({ label, val, icon: Icon }) => val ? (
-                  <div key={label} className="rounded border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2 py-1.5 space-y-0.5">
-                    <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                      <Icon className="h-2.5 w-2.5" />{label}
-                    </div>
-                    <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug">{val}</p>
-                  </div>
-                ) : null)}
-              </div>
-            </div>
-          )}
+          {/* Presence snapshot — evidence-backed */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
+              <Globe className="h-3 w-3" /> Presence Snapshot
+            </p>
+            <EvidencePresenceSection
+              eb={(lead as any).evidenceBundle}
+              psAi={ps}
+              serp={(lead as any).aiGrowthPlan?.serp}
+            />
+          </div>
 
           {/* Customer profile */}
           {hasCP && (

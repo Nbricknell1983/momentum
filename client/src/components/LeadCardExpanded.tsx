@@ -1260,6 +1260,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
               <PrepCallPackCard
                 pack={prepPackData}
                 businessName={lead.companyName}
+                evidenceBundle={(lead as any).evidenceBundle}
                 onRegenerate={() => handleGeneratePrepPack(true)}
                 isRegenerating={isGeneratingPrepPack}
               />
