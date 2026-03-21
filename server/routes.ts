@@ -7515,6 +7515,7 @@ Return JSON:
     gbpAddress: string | null; gbpPhone: string | null; gbpMapsUrl: string | null;
     gbpPlaceId: string | null; gbpCategory: string | null; discoverySource: string[];
     gbpEditorialSummary: string | null; gbpIsOpen: boolean | null; gbpName: string | null;
+    gbpCandidates: any[];
   }> {
     const result = {
       websiteUrl: null as string | null, facebookUrl: null as string | null,
@@ -7524,7 +7525,7 @@ Return JSON:
       gbpMapsUrl: null as string | null, gbpPlaceId: null as string | null,
       gbpCategory: null as string | null, discoverySource: [] as string[],
       gbpEditorialSummary: null as string | null, gbpIsOpen: null as boolean | null,
-      gbpName: null as string | null,
+      gbpName: null as string | null, gbpCandidates: [] as any[],
     };
     const businessName = lead.businessName || lead.companyName || lead.contactName || '';
     if (!businessName) return result;
@@ -7542,17 +7543,72 @@ Return JSON:
             'X-Goog-Api-Key': apiKey,
             'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.formattedAddress,places.primaryType,places.primaryTypeDisplayName,places.googleMapsUri,places.editorialSummary,places.regularOpeningHours,places.businessStatus',
           },
-          body: JSON.stringify({ textQuery, languageCode: 'en', regionCode: 'AU', maxResultCount: 3 }),
+          body: JSON.stringify({ textQuery, languageCode: 'en', regionCode: 'AU', maxResultCount: 5 }),
         });
         if (placeResp.ok) {
           const { places } = await placeResp.json();
           if (places?.length) {
+            // ── Branch-aware GBP scoring ────────────────────────────────────
+            // Score each candidate by contextual match to the lead record.
+            // Prevents generic/high-prominence listings from overriding the
+            // correct branch for multi-location businesses.
             const nameLower = businessName.toLowerCase();
-            const best = places.find((p: any) => {
-              const n = (p.displayName?.text || '').toLowerCase();
-              return n.includes(nameLower) || nameLower.includes(n) ||
-                n.split(' ').some((w: string) => w.length > 3 && nameLower.includes(w));
-            }) || places[0];
+            const leadSuburb = (lead.suburb || '').toLowerCase().trim();
+            const leadCity   = (lead.city   || '').toLowerCase().trim();
+            const leadState  = (lead.state  || '').toLowerCase().trim();
+            const leadPhone  = (lead.phone  || '').replace(/\D/g, '');
+            const leadDomain = (() => {
+              try { return lead.website ? new URL(lead.website).hostname.replace(/^www\./, '') : ''; }
+              catch { return ''; }
+            })();
+
+            const scored = places.map((p: any) => {
+              let score = 0;
+              const pName  = (p.displayName?.text || '').toLowerCase();
+              const pAddr  = (p.formattedAddress  || '').toLowerCase();
+              const pPhone = (p.nationalPhoneNumber || '').replace(/\D/g, '');
+              const pDomain = (() => {
+                try { return p.websiteUri ? new URL(p.websiteUri).hostname.replace(/^www\./, '') : ''; }
+                catch { return ''; }
+              })();
+
+              // Name match (0–40 pts)
+              if (pName === nameLower)                                        score += 40;
+              else if (pName.includes(nameLower) || nameLower.includes(pName)) score += 30;
+              else {
+                const words   = nameLower.split(/\s+/).filter((w: string) => w.length > 2);
+                const matched = words.filter((w: string) => pName.includes(w));
+                score += Math.round((matched.length / Math.max(words.length, 1)) * 20);
+              }
+
+              // Suburb / locality match (0–25 pts) — key for multi-branch
+              if (leadSuburb && pAddr.includes(leadSuburb))      score += 25;
+              else if (leadCity && pAddr.includes(leadCity))      score += 20;
+
+              // State match (0–10 pts)
+              if (leadState && pAddr.includes(leadState))         score += 10;
+
+              // Phone match (0–20 pts — strongest branch signal)
+              if (leadPhone.length >= 8 && pPhone.length >= 8 &&
+                  (pPhone.endsWith(leadPhone.slice(-8)) || leadPhone.endsWith(pPhone.slice(-8)))) {
+                score += 20;
+              }
+
+              // Website domain match (0–15 pts)
+              if (leadDomain && pDomain && leadDomain === pDomain) score += 15;
+
+              return { place: p, score };
+            }).sort((a: any, b: any) => b.score - a.score);
+
+            // Store all candidates for auditability / UI disambiguation
+            result.gbpCandidates = scored.map((sc: any) => ({
+              placeId: sc.place.id,
+              name:    sc.place.displayName?.text   || null,
+              address: sc.place.formattedAddress    || null,
+              score:   sc.score,
+            }));
+
+            const best = scored[0]?.place;
             if (best) {
               if (best.websiteUri) {
                 result.websiteUrl = best.websiteUri;
@@ -7568,8 +7624,11 @@ Return JSON:
               const pt = best.primaryTypeDisplayName?.text || best.primaryType || null;
               result.gbpCategory = pt ? pt.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null;
               result.gbpEditorialSummary = best.editorialSummary?.text || best.editorialSummary?.overview || null;
-              result.gbpIsOpen = best.regularOpeningHours?.openNow ?? (best.businessStatus === 'OPERATIONAL' ? null : null);
+              result.gbpIsOpen = best.regularOpeningHours?.openNow ?? null;
               result.discoverySource.push('google_places_gbp');
+              if (scored.length > 1) {
+                console.log(`[active-discovery] GBP selected: "${result.gbpName}" (score ${scored[0].score}) from ${scored.length} candidates for "${businessName}"`);
+              }
             }
           }
         }
@@ -7775,6 +7834,8 @@ Return JSON:
         editorialSummary: discovered.gbpEditorialSummary,
         isOpen: discovered.gbpIsOpen,
         healthNotes,
+        // All scored candidates — enables UI disambiguation for multi-branch businesses
+        candidates: discovered.gbpCandidates.length > 1 ? discovered.gbpCandidates : undefined,
       };
     }
 

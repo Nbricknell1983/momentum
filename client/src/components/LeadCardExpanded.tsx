@@ -1262,6 +1262,7 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
                 businessName={lead.companyName}
                 evidenceBundle={(lead as any).evidenceBundle}
                 evidenceDelta={(lead as any).evidenceDelta}
+                sitemapPageCount={(lead as any).sitemapPages?.length ?? 0}
                 onRegenerate={() => handleGeneratePrepPack(true)}
                 isRegenerating={isGeneratingPrepPack}
               />

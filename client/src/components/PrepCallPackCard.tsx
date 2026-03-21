@@ -106,6 +106,7 @@ export function EvidencePresenceSection({
   eb, psAi, serp,
   ebGatheredAt, serpGeneratedAt, aiGeneratedAt,
   delta, deltaPrevGatheredAt,
+  sitemapPageCount,
 }: {
   eb?: any;
   psAi?: PresenceSnapshot;
@@ -115,6 +116,7 @@ export function EvidencePresenceSection({
   aiGeneratedAt?: string | Date | null;
   delta?: any[] | null;
   deltaPrevGatheredAt?: string | null;
+  sitemapPageCount?: number;
 }) {
   const w = eb?.website;
   const gbp = eb?.gbp;
@@ -124,6 +126,17 @@ export function EvidencePresenceSection({
   const hasGbpObs = !!gbp?.placeId || !!gbp?.name;
   const hasSocObs = !!(soc?.facebook?.detected || soc?.instagram?.detected || soc?.linkedin?.detected || soc?.twitter?.detected);
   const hasSocData = !!(soc?.facebook || soc?.instagram || soc?.linkedin || soc?.twitter);
+
+  // Sitemap: true if the raw /sitemap.xml check passed OR if a user-initiated scan
+  // found pages (lead.sitemapPages). Both data sources must agree on the green state.
+  const scannedPageCount = sitemapPageCount ?? 0;
+  const hasSitemapData  = !!(w?.hasSitemap || scannedPageCount > 0);
+
+  // Conversion gaps — filter out the sitemap gap when we already know pages exist
+  // (covers both 'No sitemap.xml found' from old crawls and 'No sitemap detected' from new ones)
+  const filteredGaps: string[] = (w?.conversionGaps ?? []).filter((g: string) =>
+    hasSitemapData ? !g.toLowerCase().includes('sitemap') : true
+  );
 
   const kwServices: string[] = w?.serviceKeywords?.slice(0, 4) ?? [];
   const kwLocations: string[] = w?.locationKeywords?.slice(0, 4) ?? [];
@@ -162,10 +175,20 @@ export function EvidencePresenceSection({
             <div className="flex flex-wrap gap-1">
               {[
                 w.hasHttps ? { label: 'HTTPS ✓', ok: true } : { label: 'No HTTPS', ok: false },
-                w.hasSitemap ? { label: 'Sitemap ✓', ok: true } : { label: 'No sitemap', ok: false },
+                // Sitemap: green if raw check passed; amber "Pages found" if scanned pages exist but
+                // /sitemap.xml wasn't detected; red only when truly no data at all
+                hasSitemapData
+                  ? { label: w.hasSitemap ? 'Sitemap ✓' : `${scannedPageCount} pages found`, ok: true, neutral: !w.hasSitemap }
+                  : { label: 'No sitemap', ok: false },
                 w.hasSchema ? { label: 'Schema ✓', ok: true } : null,
               ].filter(Boolean).map((chip: any, i) => (
-                <span key={i} className={`text-[9px] px-1 py-0.5 rounded font-medium ${chip.ok ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+                <span key={i} className={`text-[9px] px-1 py-0.5 rounded font-medium ${
+                  chip.ok
+                    ? chip.neutral
+                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                      : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                    : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                }`}>
                   {chip.label}
                 </span>
               ))}
@@ -183,9 +206,9 @@ export function EvidencePresenceSection({
                 ))}
               </div>
             )}
-            {w.conversionGaps?.length > 0 && (
+            {filteredGaps.length > 0 && (
               <div className="space-y-0.5">
-                {w.conversionGaps.slice(0, 2).map((g: string, i: number) => (
+                {filteredGaps.slice(0, 2).map((g: string, i: number) => (
                   <div key={i} className="flex items-start gap-1 text-[9px] text-red-600 dark:text-red-400">
                     <AlertTriangle className="h-2.5 w-2.5 mt-0.5 shrink-0" />{g}
                   </div>
@@ -220,7 +243,11 @@ export function EvidencePresenceSection({
                 {gbp.reviewCount != null && <span className="font-normal text-slate-500">· {gbp.reviewCount} reviews</span>}
               </div>
             )}
+            {gbp.name && <p className="text-[9px] font-medium text-slate-600 dark:text-slate-300 truncate">{gbp.name}</p>}
             {gbp.category && <p className="text-[9px] text-slate-500">{gbp.category}</p>}
+            {gbp.candidates?.length > 1 && (
+              <p className="text-[9px] text-slate-400 italic">Best match · {gbp.candidates.length} listings found</p>
+            )}
             <div className="flex items-center gap-1 text-[9px]">
               <span className={`px-1 py-0.5 rounded font-medium ${gbp.isOpen ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>
                 {gbp.isOpen ? 'Open now' : gbp.isOpen === false ? 'Closed' : 'Hours unknown'}
@@ -401,6 +428,7 @@ interface PrepCallPackCardProps {
   businessName?: string;
   evidenceBundle?: any;
   evidenceDelta?: any;
+  sitemapPageCount?: number;
   onRegenerate?: () => void;
   isRegenerating?: boolean;
 }
@@ -432,7 +460,7 @@ function IntelRow({ label, value, icon: Icon }: { label: string; value: string; 
   );
 }
 
-export function PrepCallPackCard({ pack, businessName, evidenceBundle, evidenceDelta, onRegenerate, isRegenerating }: PrepCallPackCardProps) {
+export function PrepCallPackCard({ pack, businessName, evidenceBundle, evidenceDelta, sitemapPageCount, onRegenerate, isRegenerating }: PrepCallPackCardProps) {
   const [showMissing, setShowMissing] = useState(false);
   const conf = CONFIDENCE_STYLES[pack.confidence] || CONFIDENCE_STYLES.medium;
   const genDate = pack.generatedAt ? format(new Date(pack.generatedAt), 'dd/MM/yyyy HH:mm') : '';
@@ -571,6 +599,7 @@ export function PrepCallPackCard({ pack, businessName, evidenceBundle, evidenceD
             aiGeneratedAt={pack.generatedAt}
             delta={(evidenceDelta as any)?.changes ?? null}
             deltaPrevGatheredAt={(evidenceDelta as any)?.prevGatheredAt ?? null}
+            sitemapPageCount={sitemapPageCount}
           />
         </div>
 

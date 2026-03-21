@@ -197,7 +197,7 @@ function detectConversionGaps($: cheerio.CheerioAPI, crawl: CrawlResult): string
   if (!crawl.h1s.length) gaps.push('No H1 heading on homepage');
   if (crawl.locationKeywords.length === 0) gaps.push('No location keywords detected in page content');
   if (!crawl.hasSchema) gaps.push('No structured data / schema markup');
-  if (!crawl.hasSitemap) gaps.push('No sitemap.xml found');
+  if (!crawl.hasSitemap) gaps.push('No sitemap detected');
   if (crawl.images.withoutAlt > crawl.images.withAlt && crawl.images.total > 3) gaps.push(`${crawl.images.withoutAlt} images missing alt text`);
   if (!crawl.hasHttps) gaps.push('Site not on HTTPS');
   if (crawl.wordCount < 300) gaps.push('Homepage content is very thin (under 300 words)');
