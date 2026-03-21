@@ -89,11 +89,12 @@ function EvidenceChip({ label, variant = 'neutral' }: { label: string; variant?:
   );
 }
 
-function EvidenceSectionHeader({ label, badge }: { label: string; badge?: React.ReactNode }) {
+function EvidenceSectionHeader({ label, badge, freshness }: { label: string; badge?: React.ReactNode; freshness?: string | null }) {
   return (
     <div className="flex items-center gap-1.5 mt-1.5 mb-0.5">
       <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
       {badge}
+      {freshness && <span className="text-[8px] text-muted-foreground/50 ml-auto shrink-0">· {freshness}</span>}
     </div>
   );
 }
@@ -270,6 +271,13 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const ebWebsite = eb.website || null;   // real crawl data
   const ebGbp     = eb.gbp     || null;   // real GBP data
   const ebSocial  = eb.social  || null;   // detected social profiles
+
+  // Freshness labels derived from available timestamps — null when no timestamp exists
+  const ebFreshness      = timeAgo(eb.gatheredAt);                                          // all observed evidence
+  const prepAiFreshness  = timeAgo((lead as any).prepCallPack?.generatedAt);                // prep AI sections
+  const aiPlanFreshness  = timeAgo((lead as any).aiGrowthPlan?.generatedAt);                // xray callouts, diag, serp
+  const serpFreshness    = timeAgo((lead as any).aiGrowthPlan?.serp?.generatedAt) ?? aiPlanFreshness; // SERP-specific
+  const nbsFreshness     = timeAgo((lead as any).nextBestSteps?.generatedAt);               // NBS next moves
 
   const saveGrowthPlan = useCallback((partialUpdate: Record<string, any>) => {
     if (!orgId || !authReady) return;
@@ -519,7 +527,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       {/* GBP observed evidence */}
       {ebGbp && (
         <>
-          <EvidenceSectionHeader label="Google Business Profile" badge={<ObservedBadge />} />
+          <EvidenceSectionHeader label="Google Business Profile" badge={<ObservedBadge />} freshness={ebFreshness} />
           <EvidenceChipRow chips={[
             ebGbp.category ? { label: ebGbp.category, variant: 'neutral' } : null,
             ebGbp.rating !== null ? { label: `★ ${ebGbp.rating}/5`, variant: 'positive' } : null,
@@ -542,7 +550,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       {/* Social observed evidence */}
       {ebSocial && (
         <>
-          <EvidenceSectionHeader label="Social Profiles" badge={<ObservedBadge />} />
+          <EvidenceSectionHeader label="Social Profiles" badge={<ObservedBadge />} freshness={ebFreshness} />
           <EvidenceChipRow chips={[
             ebSocial.facebook?.detected ? { label: 'Facebook', variant: 'positive' } : { label: 'Facebook: not found', variant: 'gap' },
             ebSocial.instagram?.detected ? { label: 'Instagram', variant: 'positive' } : { label: 'Instagram: not found', variant: 'gap' },
@@ -554,7 +562,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       {/* AI analysis */}
       {prepPack.commercialAngle && (
         <>
-          <EvidenceSectionHeader label="Commercial Angle" badge={<AiBadge />} />
+          <EvidenceSectionHeader label="Commercial Angle" badge={<AiBadge />} freshness={prepAiFreshness} />
           <div className="flex items-start justify-between gap-1">
             <p className="text-foreground/80 flex-1">{prepPack.commercialAngle}</p>
             <CopyBtn text={prepPack.commercialAngle} />
@@ -563,7 +571,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       )}
       {(prepPack.keyDiscoveryQuestions?.length > 0 || prepPack.discoveryQuestions?.length > 0) && (
         <>
-          <EvidenceSectionHeader label="Discovery Questions" badge={<AiBadge />} />
+          <EvidenceSectionHeader label="Discovery Questions" badge={<AiBadge />} freshness={prepAiFreshness} />
           <ul className="space-y-0.5">
             {(prepPack.keyDiscoveryQuestions || prepPack.discoveryQuestions || []).slice(0, 3).map((q: string, i: number) => (
               <li key={i} className="text-foreground/70">· {q}</li>
@@ -588,7 +596,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
         {/* Crawl observed evidence */}
         {crawl && (
           <>
-            <EvidenceSectionHeader label="Crawl Evidence" badge={<ObservedBadge />} />
+            <EvidenceSectionHeader label="Crawl Evidence" badge={<ObservedBadge />} freshness={ebFreshness} />
             {crawl.h1s?.length > 0 && (
               <div className="flex flex-wrap gap-1 items-center">
                 <span className="text-[9px] text-muted-foreground shrink-0">H1:</span>
@@ -636,7 +644,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
         {/* AI analysis callouts */}
         {topCallouts.length > 0 && (
           <>
-            <EvidenceSectionHeader label="Top Issues" badge={<AiBadge />} />
+            <EvidenceSectionHeader label="Top Issues" badge={<AiBadge />} freshness={aiPlanFreshness} />
             {topCallouts.slice(0, 3).map((c: any, i: number) => (
               <div key={i} className="flex items-start gap-1">
                 <span className={`shrink-0 text-[8px] font-bold mt-0.5 ${c.severity === 'high' ? 'text-red-500' : c.severity === 'medium' ? 'text-amber-500' : 'text-muted-foreground'}`}>
@@ -658,6 +666,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       <EvidenceSectionHeader
         label="Search Landscape"
         badge={serpIsEstimated ? <EstimatedBadge /> : <ObservedBadge />}
+        freshness={serpFreshness}
       />
       {serpIsEstimated && (
         <p className="text-[9px] text-amber-600 dark:text-amber-400 mb-1">
@@ -673,7 +682,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       {/* Top competitor */}
       {serp.competitors?.length > 0 && (
         <>
-          <EvidenceSectionHeader label="Top Competitors" badge={serpIsEstimated ? <EstimatedBadge /> : undefined} />
+          <EvidenceSectionHeader label="Top Competitors" badge={serpIsEstimated ? <EstimatedBadge /> : undefined} freshness={serpFreshness} />
           {serp.competitors.slice(0, 3).map((c: any, i: number) => (
             <div key={i} className="flex items-start gap-1">
               <span className="text-[9px] font-bold text-muted-foreground shrink-0 mt-0.5">{i + 1}.</span>
@@ -685,7 +694,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       {/* Observed crawl keyword signals (real) */}
       {(ebWebsite?.serviceKeywords?.length > 0 || ebWebsite?.locationKeywords?.length > 0) && (
         <>
-          <EvidenceSectionHeader label="Keyword Signals in Content" badge={<ObservedBadge />} />
+          <EvidenceSectionHeader label="Keyword Signals in Content" badge={<ObservedBadge />} freshness={ebFreshness} />
           <EvidenceChipRow chips={[
             ...(ebWebsite.serviceKeywords || []).slice(0, 4).map((k: string) => ({ label: k, variant: 'neutral' as const })),
             ...(ebWebsite.locationKeywords || []).slice(0, 3).map((k: string) => ({ label: k, variant: 'info' as const })),
@@ -695,7 +704,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       {/* Keyword opportunities */}
       {serp.opportunities?.length > 0 && (
         <>
-          <EvidenceSectionHeader label="Keyword Opportunities" badge={serpIsEstimated ? <EstimatedBadge /> : undefined} />
+          <EvidenceSectionHeader label="Keyword Opportunities" badge={serpIsEstimated ? <EstimatedBadge /> : undefined} freshness={serpFreshness} />
           {serp.opportunities.slice(0, 3).map((o: any, i: number) => (
             <div key={i} className="flex items-start gap-1">
               <EvidenceChip label={o.difficulty || 'medium'} variant={o.difficulty === 'low' ? 'positive' : o.difficulty === 'high' ? 'gap' : 'neutral'} />
@@ -712,7 +721,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     <div className="space-y-0.5">
       {diag?.priorities?.length > 0 && (
         <>
-          <EvidenceSectionHeader label="Growth Priorities" badge={<AiBadge />} />
+          <EvidenceSectionHeader label="Growth Priorities" badge={<AiBadge />} freshness={aiPlanFreshness} />
           {diag.priorities.slice(0, 3).map((p: any, i: number) => (
             <p key={i} className="text-foreground/70">· {p.priority || p}</p>
           ))}
@@ -720,7 +729,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       )}
       {ebGbp?.healthNotes?.length > 0 && (
         <>
-          <EvidenceSectionHeader label="GBP Health" badge={<ObservedBadge />} />
+          <EvidenceSectionHeader label="GBP Health" badge={<ObservedBadge />} freshness={ebFreshness} />
           <div className="flex flex-wrap gap-1">
             {ebGbp.healthNotes.map((n: string, i: number) => (
               <EvidenceChip key={i} label={n} variant={n.toLowerCase().includes('strong') || n.toLowerCase().includes('good') || n.toLowerCase().includes('excellent') ? 'positive' : n.toLowerCase().includes('low') || n.toLowerCase().includes('below') || n.toLowerCase().includes('risk') ? 'gap' : 'neutral'} />
@@ -737,7 +746,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   // Stage 5: Commercial — AI next steps + conversion gap context
   const commExpandContent = hasNbs ? (
     <div className="space-y-0.5">
-      <EvidenceSectionHeader label="Next Moves" badge={<AiBadge />} />
+      <EvidenceSectionHeader label="Next Moves" badge={<AiBadge />} freshness={nbsFreshness} />
       {nbs.steps.slice(0, 4).map((s: any, i: number) => (
         <div key={i} className="flex items-start gap-1">
           <span className="text-[9px] font-bold text-muted-foreground shrink-0 mt-0.5">{i + 1}.</span>
@@ -747,7 +756,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       {/* Conversion gaps as context for why these actions matter */}
       {ebWebsite?.conversionGaps?.length > 0 && (
         <>
-          <EvidenceSectionHeader label="Why — Gaps on Their Site" badge={<ObservedBadge />} />
+          <EvidenceSectionHeader label="Why — Gaps on Their Site" badge={<ObservedBadge />} freshness={ebFreshness} />
           <EvidenceChipRow chips={ebWebsite.conversionGaps.slice(0, 4).map((g: string) => ({ label: g, variant: 'gap' as const }))} />
         </>
       )}
