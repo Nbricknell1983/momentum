@@ -269,6 +269,17 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const ebGbp     = eb.gbp     || null;   // real GBP data
   const ebSocial  = eb.social  || null;   // detected social profiles
 
+  // Unified sitemap status — /sitemap.xml raw HTTP check OR pages captured by
+  // the intentional "Scan now" flow. Either source confirms the site is indexable.
+  const hasSitemapData = !!(ebWebsite?.hasSitemap || (lead as any).sitemapPages?.length > 0);
+  const sitemapScannedCount = (lead as any).sitemapPages?.length ?? 0;
+
+  // Helper: strip "No sitemap" gap entries when we already know pages exist —
+  // prevents a false red warning when /sitemap.xml isn't at the root path but
+  // pages were captured via the sitemap scan tool.
+  const filterSitemapGaps = (gaps: string[]): string[] =>
+    hasSitemapData ? gaps.filter(g => !g.toLowerCase().includes('sitemap')) : gaps;
+
   // Freshness labels derived from available timestamps — null when no timestamp exists
   const ebFreshness      = timeAgo(eb.gatheredAt);                                          // all observed evidence
   const prepAiFreshness  = timeAgo((lead as any).prepCallPack?.generatedAt);                // prep AI sections
@@ -664,10 +675,10 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
                 ))}
               </div>
             )}
-            {crawl.conversionGaps?.length > 0 && (
+            {filterSitemapGaps(crawl.conversionGaps ?? []).length > 0 && (
               <div className="flex flex-wrap gap-1 items-center">
                 <span className="text-[9px] text-muted-foreground shrink-0">Gaps:</span>
-                {crawl.conversionGaps.slice(0, 3).map((g: string, i: number) => (
+                {filterSitemapGaps(crawl.conversionGaps).slice(0, 3).map((g: string, i: number) => (
                   <EvidenceChip key={i} label={g} variant="gap" />
                 ))}
               </div>
@@ -677,7 +688,9 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
               crawl.locationPageUrls?.length ? { label: `${crawl.locationPageUrls.length} location page${crawl.locationPageUrls.length !== 1 ? 's' : ''} found`, variant: 'positive' } : { label: 'No location pages', variant: 'gap' },
               crawl.phoneNumbers?.length ? { label: `Phone: ${crawl.phoneNumbers[0]}`, variant: 'positive' } : { label: 'Phone: not visible', variant: 'gap' },
               crawl.hasSchema ? { label: 'Schema ✓', variant: 'positive' } : { label: 'No schema', variant: 'gap' },
-              crawl.hasSitemap ? { label: 'Sitemap ✓', variant: 'positive' } : { label: 'No sitemap', variant: 'neutral' },
+              hasSitemapData
+                ? { label: crawl.hasSitemap ? 'Sitemap ✓' : `${sitemapScannedCount} pages found`, variant: 'positive' as const }
+                : { label: 'No sitemap', variant: 'neutral' as const },
               crawl.hasHttps ? { label: 'HTTPS ✓', variant: 'positive' } : { label: 'Not HTTPS', variant: 'gap' },
             ].filter(Boolean) as any[]} />
           </>
@@ -796,10 +809,10 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
         </div>
       ))}
       {/* Conversion gaps as context for why these actions matter */}
-      {ebWebsite?.conversionGaps?.length > 0 && (
+      {filterSitemapGaps(ebWebsite?.conversionGaps ?? []).length > 0 && (
         <>
           <EvidenceSectionHeader label="Why — Gaps on Their Site" badge={<ObservedBadge />} freshness={ebFreshness} stale={ebIsStale} />
-          <EvidenceChipRow chips={ebWebsite.conversionGaps.slice(0, 4).map((g: string) => ({ label: g, variant: 'gap' as const }))} />
+          <EvidenceChipRow chips={filterSitemapGaps(ebWebsite.conversionGaps).slice(0, 4).map((g: string) => ({ label: g, variant: 'gap' as const }))} />
         </>
       )}
     </div>

@@ -270,6 +270,27 @@ export function EvidencePresenceSection({
                 ))}
               </div>
             )}
+            {/* Dev-only: ranked GBP candidates for debugging branch-selection issues */}
+            {import.meta.env.DEV && gbp.candidates?.length > 1 && (
+              <details className="mt-1">
+                <summary className="text-[8px] text-slate-400 cursor-pointer select-none hover:text-slate-500">
+                  [dev] {gbp.candidates.length} candidates ranked
+                </summary>
+                <div className="mt-0.5 space-y-0.5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-0.5">
+                  {gbp.candidates.map((c: any, i: number) => (
+                    <div key={c.placeId || i} className="text-[8px] text-slate-400 leading-tight">
+                      <span className={i === 0 ? 'font-bold text-green-600 dark:text-green-400' : ''}>
+                        #{i + 1} {c.name} ({c.score}pt)
+                      </span>
+                      {c.address && <span className="ml-1 opacity-60">{c.address.slice(0, 40)}</span>}
+                      {c.reasons?.length > 0 && (
+                        <span className="ml-1 opacity-50">[{c.reasons.join(' ')}]</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
         ) : psAi?.gbp ? (
           <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.gbp}</p>

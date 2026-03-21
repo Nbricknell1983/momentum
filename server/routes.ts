@@ -20,6 +20,7 @@ import { writeSettingsAudit } from "./lib/settingsAudit";
 import { resolveAgentId, getSupportedTaskTypes } from "./agent-jobs/router";
 import { createAgentJob, getAgentJob, listAgentJobs } from "./agent-jobs/firestore-helpers";
 import { processAgentJob } from "./agent-jobs/processor";
+import { scoreGbpCandidate, buildLeadContext, type GbpLeadContext } from "./lib/gbp-scorer";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -7548,64 +7549,20 @@ Return JSON:
         if (placeResp.ok) {
           const { places } = await placeResp.json();
           if (places?.length) {
-            // ── Branch-aware GBP scoring ────────────────────────────────────
-            // Score each candidate by contextual match to the lead record.
-            // Prevents generic/high-prominence listings from overriding the
-            // correct branch for multi-location businesses.
-            const nameLower = businessName.toLowerCase();
-            const leadSuburb = (lead.suburb || '').toLowerCase().trim();
-            const leadCity   = (lead.city   || '').toLowerCase().trim();
-            const leadState  = (lead.state  || '').toLowerCase().trim();
-            const leadPhone  = (lead.phone  || '').replace(/\D/g, '');
-            const leadDomain = (() => {
-              try { return lead.website ? new URL(lead.website).hostname.replace(/^www\./, '') : ''; }
-              catch { return ''; }
-            })();
+            // Build lead context once, pass to scorer for each candidate
+            const leadCtx: GbpLeadContext = buildLeadContext(lead);
 
-            const scored = places.map((p: any) => {
-              let score = 0;
-              const pName  = (p.displayName?.text || '').toLowerCase();
-              const pAddr  = (p.formattedAddress  || '').toLowerCase();
-              const pPhone = (p.nationalPhoneNumber || '').replace(/\D/g, '');
-              const pDomain = (() => {
-                try { return p.websiteUri ? new URL(p.websiteUri).hostname.replace(/^www\./, '') : ''; }
-                catch { return ''; }
-              })();
+            const scored = places
+              .map((p: any) => { const r = scoreGbpCandidate(p, leadCtx); return { place: p, ...r }; })
+              .sort((a: any, b: any) => b.score - a.score);
 
-              // Name match (0–40 pts)
-              if (pName === nameLower)                                        score += 40;
-              else if (pName.includes(nameLower) || nameLower.includes(pName)) score += 30;
-              else {
-                const words   = nameLower.split(/\s+/).filter((w: string) => w.length > 2);
-                const matched = words.filter((w: string) => pName.includes(w));
-                score += Math.round((matched.length / Math.max(words.length, 1)) * 20);
-              }
-
-              // Suburb / locality match (0–25 pts) — key for multi-branch
-              if (leadSuburb && pAddr.includes(leadSuburb))      score += 25;
-              else if (leadCity && pAddr.includes(leadCity))      score += 20;
-
-              // State match (0–10 pts)
-              if (leadState && pAddr.includes(leadState))         score += 10;
-
-              // Phone match (0–20 pts — strongest branch signal)
-              if (leadPhone.length >= 8 && pPhone.length >= 8 &&
-                  (pPhone.endsWith(leadPhone.slice(-8)) || leadPhone.endsWith(pPhone.slice(-8)))) {
-                score += 20;
-              }
-
-              // Website domain match (0–15 pts)
-              if (leadDomain && pDomain && leadDomain === pDomain) score += 15;
-
-              return { place: p, score };
-            }).sort((a: any, b: any) => b.score - a.score);
-
-            // Store all candidates for auditability / UI disambiguation
+            // Store all candidates (with scores) for auditability and dev-mode UI
             result.gbpCandidates = scored.map((sc: any) => ({
               placeId: sc.place.id,
-              name:    sc.place.displayName?.text   || null,
-              address: sc.place.formattedAddress    || null,
+              name:    sc.place.displayName?.text || null,
+              address: sc.place.formattedAddress  || null,
               score:   sc.score,
+              reasons: sc.reasons,
             }));
 
             const best = scored[0]?.place;
@@ -7626,9 +7583,18 @@ Return JSON:
               result.gbpEditorialSummary = best.editorialSummary?.text || best.editorialSummary?.overview || null;
               result.gbpIsOpen = best.regularOpeningHours?.openNow ?? null;
               result.discoverySource.push('google_places_gbp');
-              if (scored.length > 1) {
-                console.log(`[active-discovery] GBP selected: "${result.gbpName}" (score ${scored[0].score}) from ${scored.length} candidates for "${businessName}"`);
-              }
+
+              // Always log when a selection is made — even single results are
+              // useful as a baseline; multi-branch cases show the full reasoning.
+              console.log(
+                `[active-discovery] GBP selected: "${result.gbpName}" ` +
+                `| score=${scored[0].score} | candidates=${scored.length} ` +
+                `| reasons=[${(scored[0].reasons as string[]).join(', ') || 'none'}] ` +
+                `| for="${businessName}"` +
+                (scored.length > 1
+                  ? ` | runner-up="${scored[1].place.displayName?.text}" score=${scored[1].score}`
+                  : '')
+              );
             }
           }
         }
