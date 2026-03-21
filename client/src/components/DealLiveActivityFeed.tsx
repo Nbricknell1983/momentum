@@ -27,6 +27,66 @@ const SPEC = {
   commercial: { name: 'Commercial Intelligence',initial: 'C', color: 'bg-rose-500',    ring: 'ring-rose-200 dark:ring-rose-800',      text: 'text-rose-600 dark:text-rose-400',      Icon: Zap    },
 };
 
+// ── Small evidence display components ────────────────────────────────────────
+
+function ObservedBadge() {
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+      <CheckCircle2 className="h-2 w-2" /> Observed
+    </span>
+  );
+}
+
+function EstimatedBadge() {
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">
+      <AlertCircle className="h-2 w-2" /> Estimated
+    </span>
+  );
+}
+
+function AiBadge() {
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40">
+      <Sparkles className="h-2 w-2" /> AI Analysis
+    </span>
+  );
+}
+
+function EvidenceChip({ label, variant = 'neutral' }: { label: string; variant?: 'positive' | 'gap' | 'neutral' | 'info' }) {
+  const cls = {
+    positive: 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40',
+    gap:      'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/40',
+    neutral:  'bg-muted text-muted-foreground border-border',
+    info:     'bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/40',
+  }[variant];
+  return (
+    <span className={`inline-flex items-center text-[9px] font-medium px-1.5 py-0.5 rounded border ${cls} leading-none`}>
+      {label}
+    </span>
+  );
+}
+
+function EvidenceSectionHeader({ label, badge }: { label: string; badge?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5 mb-0.5">
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      {badge}
+    </div>
+  );
+}
+
+function EvidenceChipRow({ chips }: { chips: { label: string; variant?: 'positive' | 'gap' | 'neutral' | 'info' }[] }) {
+  if (!chips.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((c, i) => <EvidenceChip key={i} label={c.label} variant={c.variant} />)}
+    </div>
+  );
+}
+
+// ── Existing shared components ────────────────────────────────────────────────
+
 function SpecAvatar({ id, pulse }: { id: SpecId; pulse?: boolean }) {
   const s = SPEC[id];
   return (
@@ -183,6 +243,12 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const hasNbs = !!((lead as any).nextBestSteps?.steps?.length > 0);
   const hasDealContext = !!((lead as any).dealContext);
 
+  // Evidence bundle — populated by gatherEvidenceBundle on the server
+  const eb = (lead as any).evidenceBundle || {};
+  const ebWebsite = eb.website || null;   // real crawl data
+  const ebGbp     = eb.gbp     || null;   // real GBP data
+  const ebSocial  = eb.social  || null;   // detected social profiles
+
   const saveGrowthPlan = useCallback((partialUpdate: Record<string, any>) => {
     if (!orgId || !authReady) return;
     const current = (lead as any).aiGrowthPlan || { generatedAt: new Date() };
@@ -200,7 +266,6 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     const isMissing = !pack?.businessSnapshot;
     if (!isMissing && !isStale) return;
     autoPrepFired.current = true;
-    // Delay long enough for enrichment to run first (enrichment fires at mount and takes ~5s)
     const timer = setTimeout(async () => {
       setPrepRunning(true);
       try {
@@ -230,8 +295,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   useEffect(() => {
     if (!orgId || !authReady || autoXrayFired.current) return;
     if (hasXray) return;
-    if (!websiteUrl) return;     // guard: only fires once URL is known
-    autoXrayFired.current = true; // set before the async work — prevents double-fire
+    if (!websiteUrl) return;
+    autoXrayFired.current = true;
     const timer = setTimeout(async () => {
       setXrayRunning(true);
       try {
@@ -239,7 +304,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
         const res = await fetch('/api/ai/growth-plan/website-xray', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ websiteUrl, businessName, location, industry }),
+          // Pass orgId + leadId so the server writes crawl evidence to evidenceBundle.website
+          body: JSON.stringify({ websiteUrl, businessName, location, industry, orgId, leadId: lead.id }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -264,10 +330,18 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       setSerpRunning(true);
       try {
         const token = await auth.currentUser?.getIdToken();
+        // Pass xrayEvidence from evidenceBundle so SERP analysis is grounded in real crawl signals
+        const xrayEvidenceForSerp = ebWebsite?.success ? {
+          ctaSignals: ebWebsite.ctaSignals,
+          serviceKeywords: ebWebsite.serviceKeywords,
+          locationKeywords: ebWebsite.locationKeywords,
+          hasSchema: ebWebsite.hasSchema,
+          wordCount: ebWebsite.wordCount,
+        } : null;
         const res = await fetch('/api/ai/growth-plan/serp-analysis', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ businessName, websiteUrl, location, industry }),
+          body: JSON.stringify({ businessName, websiteUrl, location, industry, xrayEvidence: xrayEvidenceForSerp }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -337,7 +411,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
 
   const anyRunning = prepRunning || xrayRunning || serpRunning || diagRunning;
 
-  // Derive statuses
+  // ── Derive statuses and findings ─────────────────────────────────────────
+
   const prepStatus: StageStatus = hasPrepPack ? 'complete' : prepRunning ? 'running' : 'pending';
   const prepPack = (lead as any).prepCallPack;
   const prepFinding = hasPrepPack
@@ -347,7 +422,6 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
 
   const websiteStatus: StageStatus = hasXray ? 'complete' : xrayRunning ? 'running' : !websiteUrl ? 'blocked' : 'pending';
   const xray = (lead as any).aiGrowthPlan?.xray;
-  // Compose from real analysis: prefer the AI-written site summary, fall back to top callout
   const xrayFinding: string | undefined = (() => {
     if (!hasXray || !xray) return undefined;
     if (xray.summary) {
@@ -367,7 +441,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
 
   const seoStatus: StageStatus = hasSerp ? 'complete' : serpRunning ? 'running' : 'pending';
   const serp = (lead as any).aiGrowthPlan?.serp;
-  // Compose from real SERP data: keyword + presence signals + top competitor name
+  const serpIsEstimated = serp?.estimated !== false; // treat as estimated unless explicitly false
   const serpFinding: string | undefined = (() => {
     if (!hasSerp || !serp) return undefined;
     const kw: string = serp.keyword || '';
@@ -387,7 +461,6 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
 
   const growthStatus: StageStatus = hasDiagnosis ? 'complete' : diagRunning ? 'running' : 'pending';
   const diag = (lead as any).aiGrowthPlan?.strategyDiagnosis;
-  // insightSentence is an AI-written one-liner grounded in the actual data
   const growthFinding: string | undefined = (() => {
     if (!hasDiagnosis || !diag) return undefined;
     const score: number | undefined = diag.readinessScore;
@@ -401,7 +474,6 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
 
   const commStatus: StageStatus = hasNbs ? 'complete' : 'pending';
   const nbs = (lead as any).nextBestSteps;
-  // Lead with the first recommended action label so the rep knows exactly what to do
   const commFinding: string | undefined = (() => {
     if (!hasNbs || !nbs?.steps?.length) return undefined;
     const steps: any[] = nbs.steps;
@@ -416,6 +488,251 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     return `${count} next move${count !== 1 ? 's' : ''} lined up for this deal`;
   })();
   const nbsAt = nbs?.generatedAt || null;
+
+  // ── Build expand content for each stage ───────────────────────────────────
+
+  // Stage 1: Prep — GBP evidence + social + AI commercial angle
+  const prepExpandContent = hasPrepPack ? (
+    <div className="space-y-0.5">
+      {/* GBP observed evidence */}
+      {ebGbp && (
+        <>
+          <EvidenceSectionHeader label="Google Business Profile" badge={<ObservedBadge />} />
+          <EvidenceChipRow chips={[
+            ebGbp.category ? { label: ebGbp.category, variant: 'neutral' } : null,
+            ebGbp.rating !== null ? { label: `★ ${ebGbp.rating}/5`, variant: 'positive' } : null,
+            ebGbp.reviewCount !== null ? { label: `${ebGbp.reviewCount} reviews`, variant: ebGbp.reviewCount >= 20 ? 'positive' : ebGbp.reviewCount > 0 ? 'gap' : 'gap' } : null,
+            ebGbp.isOpen === true ? { label: 'Open now', variant: 'positive' } : ebGbp.isOpen === false ? { label: 'Currently closed', variant: 'neutral' } : null,
+            ebGbp.phone ? { label: ebGbp.phone, variant: 'neutral' } : null,
+          ].filter(Boolean) as any[]} />
+          {ebGbp.editorialSummary && (
+            <p className="text-foreground/60 italic mt-0.5">"{ebGbp.editorialSummary.slice(0, 100)}{ebGbp.editorialSummary.length > 100 ? '…' : ''}"</p>
+          )}
+          {ebGbp.healthNotes?.length > 0 && (
+            <div className="flex flex-col gap-0.5 mt-0.5">
+              {ebGbp.healthNotes.slice(0, 2).map((n: string, i: number) => (
+                <p key={i} className="text-muted-foreground">· {n}</p>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {/* Social observed evidence */}
+      {ebSocial && (
+        <>
+          <EvidenceSectionHeader label="Social Profiles" badge={<ObservedBadge />} />
+          <EvidenceChipRow chips={[
+            ebSocial.facebook?.detected ? { label: 'Facebook', variant: 'positive' } : { label: 'Facebook: not found', variant: 'gap' },
+            ebSocial.instagram?.detected ? { label: 'Instagram', variant: 'positive' } : { label: 'Instagram: not found', variant: 'gap' },
+            ebSocial.linkedin?.detected ? { label: 'LinkedIn', variant: 'positive' } : null,
+            ebSocial.twitter?.detected ? { label: 'Twitter/X', variant: 'positive' } : null,
+          ].filter(Boolean) as any[]} />
+        </>
+      )}
+      {/* AI analysis */}
+      {prepPack.commercialAngle && (
+        <>
+          <EvidenceSectionHeader label="Commercial Angle" badge={<AiBadge />} />
+          <div className="flex items-start justify-between gap-1">
+            <p className="text-foreground/80 flex-1">{prepPack.commercialAngle}</p>
+            <CopyBtn text={prepPack.commercialAngle} />
+          </div>
+        </>
+      )}
+      {(prepPack.keyDiscoveryQuestions?.length > 0 || prepPack.discoveryQuestions?.length > 0) && (
+        <>
+          <EvidenceSectionHeader label="Discovery Questions" badge={<AiBadge />} />
+          <ul className="space-y-0.5">
+            {(prepPack.keyDiscoveryQuestions || prepPack.discoveryQuestions || []).slice(0, 3).map((q: string, i: number) => (
+              <li key={i} className="text-foreground/70">· {q}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  ) : undefined;
+
+  // Stage 2: Website — real crawl evidence + AI callouts
+  const websiteExpandContent = hasXray ? (() => {
+    // Prefer evidenceBundle.website (saved from gatherEvidenceBundle or X-Ray write-back)
+    // Fall back to crawlData from xray result
+    const crawl = ebWebsite?.success ? ebWebsite : xray?.crawlData;
+    const callouts: any[] = xray?.callouts || [];
+    const highCallouts = callouts.filter((c: any) => c.severity === 'high');
+    const topCallouts = highCallouts.length ? highCallouts : callouts.slice(0, 3);
+
+    return (
+      <div className="space-y-0.5">
+        {/* Crawl observed evidence */}
+        {crawl && (
+          <>
+            <EvidenceSectionHeader label="Crawl Evidence" badge={<ObservedBadge />} />
+            {crawl.h1s?.length > 0 && (
+              <div className="flex flex-wrap gap-1 items-center">
+                <span className="text-[9px] text-muted-foreground shrink-0">H1:</span>
+                {crawl.h1s.slice(0, 2).map((h: string, i: number) => (
+                  <EvidenceChip key={i} label={`"${h.slice(0, 40)}${h.length > 40 ? '…' : ''}"`} variant="neutral" />
+                ))}
+              </div>
+            )}
+            {crawl.ctaSignals?.length > 0 ? (
+              <div className="flex flex-wrap gap-1 items-center">
+                <span className="text-[9px] text-muted-foreground shrink-0">CTAs:</span>
+                {crawl.ctaSignals.slice(0, 4).map((c: string, i: number) => (
+                  <EvidenceChip key={i} label={c} variant="positive" />
+                ))}
+              </div>
+            ) : (
+              <EvidenceChip label="No CTAs detected on homepage" variant="gap" />
+            )}
+            {crawl.trustSignals?.length > 0 && (
+              <div className="flex flex-wrap gap-1 items-center">
+                <span className="text-[9px] text-muted-foreground shrink-0">Trust:</span>
+                {crawl.trustSignals.slice(0, 3).map((t: string, i: number) => (
+                  <EvidenceChip key={i} label={t} variant="positive" />
+                ))}
+              </div>
+            )}
+            {crawl.conversionGaps?.length > 0 && (
+              <div className="flex flex-wrap gap-1 items-center">
+                <span className="text-[9px] text-muted-foreground shrink-0">Gaps:</span>
+                {crawl.conversionGaps.slice(0, 3).map((g: string, i: number) => (
+                  <EvidenceChip key={i} label={g} variant="gap" />
+                ))}
+              </div>
+            )}
+            <EvidenceChipRow chips={[
+              crawl.servicePageUrls?.length ? { label: `${crawl.servicePageUrls.length} service page${crawl.servicePageUrls.length !== 1 ? 's' : ''} found`, variant: 'positive' } : { label: 'No service pages', variant: 'gap' },
+              crawl.locationPageUrls?.length ? { label: `${crawl.locationPageUrls.length} location page${crawl.locationPageUrls.length !== 1 ? 's' : ''} found`, variant: 'positive' } : { label: 'No location pages', variant: 'gap' },
+              crawl.phoneNumbers?.length ? { label: `Phone: ${crawl.phoneNumbers[0]}`, variant: 'positive' } : { label: 'Phone: not visible', variant: 'gap' },
+              crawl.hasSchema ? { label: 'Schema ✓', variant: 'positive' } : { label: 'No schema', variant: 'gap' },
+              crawl.hasSitemap ? { label: 'Sitemap ✓', variant: 'positive' } : { label: 'No sitemap', variant: 'neutral' },
+              crawl.hasHttps ? { label: 'HTTPS ✓', variant: 'positive' } : { label: 'Not HTTPS', variant: 'gap' },
+            ].filter(Boolean) as any[]} />
+          </>
+        )}
+        {/* AI analysis callouts */}
+        {topCallouts.length > 0 && (
+          <>
+            <EvidenceSectionHeader label="Top Issues" badge={<AiBadge />} />
+            {topCallouts.slice(0, 3).map((c: any, i: number) => (
+              <div key={i} className="flex items-start gap-1">
+                <span className={`shrink-0 text-[8px] font-bold mt-0.5 ${c.severity === 'high' ? 'text-red-500' : c.severity === 'medium' ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                  {c.severity?.toUpperCase() || '·'}
+                </span>
+                <p className="text-foreground/70">{c.issue}{c.detail ? ` — ${c.detail.slice(0, 60)}${c.detail.length > 60 ? '…' : ''}` : ''}</p>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    );
+  })() : undefined;
+
+  // Stage 3: SEO — estimated label prominently + crawl signals
+  const seoExpandContent = hasSerp ? (
+    <div className="space-y-0.5">
+      {/* Estimated SERP analysis */}
+      <EvidenceSectionHeader
+        label="Search Landscape"
+        badge={serpIsEstimated ? <EstimatedBadge /> : <ObservedBadge />}
+      />
+      {serpIsEstimated && (
+        <p className="text-[9px] text-amber-600 dark:text-amber-400 mb-1">
+          Search position data is AI-estimated, not pulled from live search results.
+        </p>
+      )}
+      <EvidenceChipRow chips={[
+        serp.keyword ? { label: `Keyword: "${serp.keyword}"`, variant: 'info' } : null,
+        serp.prospectPosition?.mapsPresence === 'detected' ? { label: 'In Maps Pack', variant: 'positive' } : serp.prospectPosition?.mapsPresence === 'not detected' ? { label: 'Not in Maps', variant: 'gap' } : null,
+        serp.prospectPosition?.organicPresence === 'detected' ? { label: 'Organic presence', variant: 'positive' } : serp.prospectPosition?.organicPresence === 'not detected' ? { label: 'No organic visibility', variant: 'gap' } : null,
+        serp.prospectPosition?.relevanceScore !== undefined ? { label: `Relevance: ${serp.prospectPosition.relevanceScore}/100`, variant: 'neutral' } : null,
+      ].filter(Boolean) as any[]} />
+      {/* Top competitor */}
+      {serp.competitors?.length > 0 && (
+        <>
+          <EvidenceSectionHeader label="Top Competitors" badge={serpIsEstimated ? <EstimatedBadge /> : undefined} />
+          {serp.competitors.slice(0, 3).map((c: any, i: number) => (
+            <div key={i} className="flex items-start gap-1">
+              <span className="text-[9px] font-bold text-muted-foreground shrink-0 mt-0.5">{i + 1}.</span>
+              <p className="text-foreground/70 flex-1">{c.name}{c.strength ? ` — ${c.strength.slice(0, 60)}${c.strength.length > 60 ? '…' : ''}` : ''}</p>
+            </div>
+          ))}
+        </>
+      )}
+      {/* Observed crawl keyword signals (real) */}
+      {(ebWebsite?.serviceKeywords?.length > 0 || ebWebsite?.locationKeywords?.length > 0) && (
+        <>
+          <EvidenceSectionHeader label="Keyword Signals in Content" badge={<ObservedBadge />} />
+          <EvidenceChipRow chips={[
+            ...(ebWebsite.serviceKeywords || []).slice(0, 4).map((k: string) => ({ label: k, variant: 'neutral' as const })),
+            ...(ebWebsite.locationKeywords || []).slice(0, 3).map((k: string) => ({ label: k, variant: 'info' as const })),
+          ]} />
+        </>
+      )}
+      {/* Keyword opportunities */}
+      {serp.opportunities?.length > 0 && (
+        <>
+          <EvidenceSectionHeader label="Keyword Opportunities" badge={serpIsEstimated ? <EstimatedBadge /> : undefined} />
+          {serp.opportunities.slice(0, 3).map((o: any, i: number) => (
+            <div key={i} className="flex items-start gap-1">
+              <EvidenceChip label={o.difficulty || 'medium'} variant={o.difficulty === 'low' ? 'positive' : o.difficulty === 'high' ? 'gap' : 'neutral'} />
+              <p className="text-foreground/70 flex-1">{o.keyword}{o.recommendation ? ` — ${o.recommendation.slice(0, 50)}${o.recommendation.length > 50 ? '…' : ''}` : ''}</p>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  ) : undefined;
+
+  // Stage 4: Growth — AI readiness + GBP health notes as context
+  const growthExpandContent = hasDiagnosis ? (
+    <div className="space-y-0.5">
+      {diag?.priorities?.length > 0 && (
+        <>
+          <EvidenceSectionHeader label="Growth Priorities" badge={<AiBadge />} />
+          {diag.priorities.slice(0, 3).map((p: any, i: number) => (
+            <p key={i} className="text-foreground/70">· {p.priority || p}</p>
+          ))}
+        </>
+      )}
+      {ebGbp?.healthNotes?.length > 0 && (
+        <>
+          <EvidenceSectionHeader label="GBP Health" badge={<ObservedBadge />} />
+          <div className="flex flex-wrap gap-1">
+            {ebGbp.healthNotes.map((n: string, i: number) => (
+              <EvidenceChip key={i} label={n} variant={n.toLowerCase().includes('strong') || n.toLowerCase().includes('good') || n.toLowerCase().includes('excellent') ? 'positive' : n.toLowerCase().includes('low') || n.toLowerCase().includes('below') || n.toLowerCase().includes('risk') ? 'gap' : 'neutral'} />
+            ))}
+          </div>
+        </>
+      )}
+      {diag?.readinessScore !== undefined && (
+        <p className="text-muted-foreground mt-1">Readiness score: {diag.readinessScore}/100</p>
+      )}
+    </div>
+  ) : undefined;
+
+  // Stage 5: Commercial — AI next steps + conversion gap context
+  const commExpandContent = hasNbs ? (
+    <div className="space-y-0.5">
+      <EvidenceSectionHeader label="Next Moves" badge={<AiBadge />} />
+      {nbs.steps.slice(0, 4).map((s: any, i: number) => (
+        <div key={i} className="flex items-start gap-1">
+          <span className="text-[9px] font-bold text-muted-foreground shrink-0 mt-0.5">{i + 1}.</span>
+          <p className="text-foreground/70 flex-1">{s.label || s.action || s.title || s}</p>
+        </div>
+      ))}
+      {/* Conversion gaps as context for why these actions matter */}
+      {ebWebsite?.conversionGaps?.length > 0 && (
+        <>
+          <EvidenceSectionHeader label="Why — Gaps on Their Site" badge={<ObservedBadge />} />
+          <EvidenceChipRow chips={ebWebsite.conversionGaps.slice(0, 4).map((g: string) => ({ label: g, variant: 'gap' as const }))} />
+        </>
+      )}
+    </div>
+  ) : undefined;
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="deal-live-activity-feed">
@@ -449,29 +766,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             finding={prepFinding}
             timestamp={prepAt}
             expandable={hasPrepPack}
-            expandContent={hasPrepPack ? (
-              <div className="space-y-1.5">
-                {prepPack.commercialAngle && (
-                  <div>
-                    <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Commercial Angle</p>
-                    <div className="flex items-start justify-between gap-1">
-                      <p className="text-foreground/80 flex-1">{prepPack.commercialAngle}</p>
-                      <CopyBtn text={prepPack.commercialAngle} />
-                    </div>
-                  </div>
-                )}
-                {prepPack.keyDiscoveryQuestions?.length > 0 && (
-                  <div>
-                    <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Discovery Questions</p>
-                    <ul className="space-y-0.5">
-                      {prepPack.keyDiscoveryQuestions.slice(0, 3).map((q: string, i: number) => (
-                        <li key={i} className="text-foreground/70">· {q}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : undefined}
+            expandContent={prepExpandContent}
           />
 
           {/* Handoff 1→2 */}
@@ -492,14 +787,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             timestamp={xrayAt}
             blockedReason="No website URL on this lead — add one and we'll dig straight in"
             expandable={hasXray}
-            expandContent={hasXray && xray?.gaps ? (
-              <div className="space-y-1">
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Top Gaps</p>
-                {xray.gaps.slice(0, 3).map((g: any, i: number) => (
-                  <p key={i} className="text-foreground/70">· {g.gap || g}</p>
-                ))}
-              </div>
-            ) : undefined}
+            expandContent={websiteExpandContent}
           />
 
           {/* Handoff 2→3 */}
@@ -517,6 +805,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             status={seoStatus}
             task="Checking where they sit in search and how they stack up against competitors"
             finding={serpFinding}
+            expandable={hasSerp}
+            expandContent={seoExpandContent}
           />
 
           {/* Handoff 3→4 */}
@@ -535,14 +825,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             task="Pulling the team's findings together into a growth readiness picture"
             finding={growthFinding}
             expandable={hasDiagnosis}
-            expandContent={hasDiagnosis && diag?.priorities?.length > 0 ? (
-              <div className="space-y-1">
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Growth Priorities</p>
-                {diag.priorities.slice(0, 3).map((p: any, i: number) => (
-                  <p key={i} className="text-foreground/70">· {p.priority || p}</p>
-                ))}
-              </div>
-            ) : undefined}
+            expandContent={growthExpandContent}
           />
 
           {/* Handoff 4→5 */}
@@ -562,16 +845,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             finding={commFinding}
             timestamp={nbsAt}
             expandable={hasNbs}
-            expandContent={hasNbs && nbs?.steps?.length > 0 ? (
-              <div className="space-y-1">
-                {nbs.steps.slice(0, 3).map((s: any, i: number) => (
-                  <div key={i} className="flex items-start gap-1">
-                    <span className="text-[9px] font-bold text-muted-foreground shrink-0 mt-0.5">{i + 1}.</span>
-                    <p className="text-foreground/70">{s.action || s.title || s}</p>
-                  </div>
-                ))}
-              </div>
-            ) : undefined}
+            expandContent={commExpandContent}
           />
 
           {/* Context event — shown if deal context has been added */}
