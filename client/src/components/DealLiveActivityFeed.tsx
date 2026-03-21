@@ -224,12 +224,14 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id, orgId, authReady]);
 
-  // Auto-fire X-Ray if website URL exists and no cached result
+  // Auto-fire X-Ray if website URL exists and no cached result.
+  // websiteUrl is in deps so this re-fires when activePresenceDiscovery
+  // discovers and writes lead.website back to Firestore after mount.
   useEffect(() => {
     if (!orgId || !authReady || autoXrayFired.current) return;
     if (hasXray) return;
-    if (!websiteUrl) return;
-    autoXrayFired.current = true;
+    if (!websiteUrl) return;     // guard: only fires once URL is known
+    autoXrayFired.current = true; // set before the async work — prevents double-fire
     const timer = setTimeout(async () => {
       setXrayRunning(true);
       try {
@@ -248,8 +250,9 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       }
     }, 800);
     return () => clearTimeout(timer);
+  // websiteUrl deliberately included — re-fires when URL is discovered post-mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead.id, orgId, authReady]);
+  }, [lead.id, orgId, authReady, websiteUrl]);
 
   // Auto-fire SERP if business name exists and no cached result
   useEffect(() => {
