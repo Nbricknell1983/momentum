@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
+import { timeAgo } from '@/lib/utils';
 
 interface PresenceSnapshot {
   website: string;
@@ -40,7 +41,17 @@ export function AiBadgeMini() {
   );
 }
 
-export function EvidencePresenceSection({ eb, psAi, serp }: { eb?: any; psAi?: PresenceSnapshot; serp?: any }) {
+export function EvidencePresenceSection({
+  eb, psAi, serp,
+  ebGatheredAt, serpGeneratedAt, aiGeneratedAt,
+}: {
+  eb?: any;
+  psAi?: PresenceSnapshot;
+  serp?: any;
+  ebGatheredAt?: string | Date | null;
+  serpGeneratedAt?: string | Date | null;
+  aiGeneratedAt?: string | Date | null;
+}) {
   const w = eb?.website;
   const gbp = eb?.gbp;
   const soc = eb?.social;
@@ -54,16 +65,28 @@ export function EvidencePresenceSection({ eb, psAi, serp }: { eb?: any; psAi?: P
   const kwLocations: string[] = w?.locationKeywords?.slice(0, 4) ?? [];
   const hasKwObs = kwServices.length > 0 || kwLocations.length > 0;
 
+  // Freshness strings — null when timestamp is absent (rendered as nothing)
+  const ebAge   = timeAgo(ebGatheredAt);
+  const serpAge = timeAgo(serpGeneratedAt);
+  const aiAge   = timeAgo(aiGeneratedAt);
+
+  // Small inline freshness label — only rendered when a non-null string is available
+  const FreshnessTag = ({ age }: { age: string | null }) =>
+    age ? <span className="text-[9px] text-slate-400 tabular-nums">· {age}</span> : null;
+
   return (
     <div className="grid grid-cols-2 gap-2">
 
       {/* ── Website card ── */}
       <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
             <Globe className="h-2.5 w-2.5" /> Website
           </div>
-          {hasWebObs ? <ObsBadge /> : psAi?.website ? <AiBadgeMini /> : null}
+          <div className="flex items-center gap-1 min-w-0">
+            {hasWebObs ? <ObsBadge /> : psAi?.website ? <AiBadgeMini /> : null}
+            <FreshnessTag age={hasWebObs ? ebAge : aiAge} />
+          </div>
         </div>
         {hasWebObs ? (
           <div className="space-y-1">
@@ -115,11 +138,14 @@ export function EvidencePresenceSection({ eb, psAi, serp }: { eb?: any; psAi?: P
 
       {/* ── GBP / Maps card ── */}
       <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
             <MapPin className="h-2.5 w-2.5" /> GBP / Maps
           </div>
-          {hasGbpObs ? <ObsBadge /> : psAi?.gbp ? <AiBadgeMini /> : null}
+          <div className="flex items-center gap-1 min-w-0">
+            {hasGbpObs ? <ObsBadge /> : psAi?.gbp ? <AiBadgeMini /> : null}
+            <FreshnessTag age={hasGbpObs ? ebAge : aiAge} />
+          </div>
         </div>
         {hasGbpObs ? (
           <div className="space-y-1">
@@ -163,11 +189,14 @@ export function EvidencePresenceSection({ eb, psAi, serp }: { eb?: any; psAi?: P
 
       {/* ── Social card ── */}
       <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
             <Users className="h-2.5 w-2.5" /> Social
           </div>
-          {hasSocData ? <ObsBadge /> : psAi?.social ? <AiBadgeMini /> : null}
+          <div className="flex items-center gap-1 min-w-0">
+            {hasSocData ? <ObsBadge /> : psAi?.social ? <AiBadgeMini /> : null}
+            <FreshnessTag age={hasSocData ? ebAge : aiAge} />
+          </div>
         </div>
         {hasSocData ? (
           <div className="space-y-1">
@@ -203,11 +232,14 @@ export function EvidencePresenceSection({ eb, psAi, serp }: { eb?: any; psAi?: P
 
       {/* ── Search Visibility card ── */}
       <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-            <Search className="h-2.5 w-2.5" /> Search Visibility
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+            <Search className="h-2.5 w-2.5" /> Search
           </div>
-          {hasKwObs ? <ObsBadge /> : psAi?.searchVisibility ? <AiBadgeMini /> : null}
+          <div className="flex items-center gap-1 min-w-0">
+            {hasKwObs ? <ObsBadge /> : psAi?.searchVisibility ? <AiBadgeMini /> : null}
+            <FreshnessTag age={hasKwObs ? ebAge : aiAge} />
+          </div>
         </div>
         {hasKwObs ? (
           <div className="space-y-1.5">
@@ -236,6 +268,7 @@ export function EvidencePresenceSection({ eb, psAi, serp }: { eb?: any; psAi?: P
                 <div className="flex items-center gap-1 mb-0.5">
                   <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Top competitors</p>
                   <EstBadge />
+                  <FreshnessTag age={serpAge} />
                 </div>
                 <div className="space-y-0.5">
                   {serp.competitors.slice(0, 2).map((c: any, i: number) => (
@@ -464,6 +497,8 @@ export function PrepCallPackCard({ pack, businessName, evidenceBundle, onRegener
           <EvidencePresenceSection
             eb={evidenceBundle}
             psAi={pack.presenceSnapshot}
+            ebGatheredAt={(evidenceBundle as any)?.gatheredAt}
+            aiGeneratedAt={pack.generatedAt}
           />
         </div>
 

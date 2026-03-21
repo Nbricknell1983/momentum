@@ -15,6 +15,7 @@ import {
   CheckCircle2, Clock, AlertCircle, ArrowDown, MessageSquare,
   Sparkles, Copy, Check, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
+import { timeAgo } from '@/lib/utils';
 
 type SpecId = 'prep' | 'website' | 'seo' | 'growth' | 'commercial';
 type StageStatus = 'pending' | 'running' | 'complete' | 'blocked';
@@ -26,28 +27,6 @@ const SPEC = {
   growth:     { name: 'Growth Analyst',         initial: 'G', color: 'bg-amber-500',   ring: 'ring-amber-200 dark:ring-amber-800',    text: 'text-amber-600 dark:text-amber-400',    Icon: TrendingUp },
   commercial: { name: 'Commercial Intelligence',initial: 'C', color: 'bg-rose-500',    ring: 'ring-rose-200 dark:ring-rose-800',      text: 'text-rose-600 dark:text-rose-400',      Icon: Zap    },
 };
-
-// ── Freshness utility ────────────────────────────────────────────────────────
-
-function timeAgo(ts: string | Date | null | undefined): string | null {
-  if (!ts) return null;
-  const d = new Date(ts as any);
-  if (isNaN(d.getTime())) return null;
-  const diff = Date.now() - d.getTime();
-  if (diff < 0) return null;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const dDay = new Date(d); dDay.setHours(0, 0, 0, 0);
-  const daysDiff = Math.round((today.getTime() - dDay.getTime()) / 86400000);
-  if (daysDiff === 0) return 'today';
-  if (daysDiff === 1) return 'yesterday';
-  if (daysDiff < 7) return `${daysDiff}d ago`;
-  const weeks = Math.floor(daysDiff / 7);
-  if (weeks < 5) return `${weeks}w ago`;
-  return `${Math.floor(daysDiff / 30)}mo ago`;
-}
 
 // Returns true when a timestamp is older than thresholdMs. Returns false (not stale) when
 // the timestamp is missing — we only flag data we know is old, not data we've never seen.

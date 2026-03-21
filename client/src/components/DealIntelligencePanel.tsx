@@ -455,6 +455,12 @@ function AgentIntelligenceCard({ lead, onRegenerate, isRegenerating }: { lead: L
               eb={(lead as any).evidenceBundle}
               psAi={ps}
               serp={(lead as any).aiGrowthPlan?.serp}
+              ebGatheredAt={(lead as any).evidenceBundle?.gatheredAt}
+              serpGeneratedAt={
+                (lead as any).aiGrowthPlan?.serp?.generatedAt
+                ?? (lead as any).aiGrowthPlan?.generatedAt
+              }
+              aiGeneratedAt={pack.generatedAt}
             />
           </div>
 
