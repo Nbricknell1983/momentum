@@ -347,23 +347,74 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
 
   const websiteStatus: StageStatus = hasXray ? 'complete' : xrayRunning ? 'running' : !websiteUrl ? 'blocked' : 'pending';
   const xray = (lead as any).aiGrowthPlan?.xray;
-  const xrayFinding = hasXray
-    ? xray?.humanView?.headline || `${xray?.pageCount ?? ''} pages reviewed — key gaps and opportunities found`
-    : undefined;
+  // Compose from real analysis: prefer the AI-written site summary, fall back to top callout
+  const xrayFinding: string | undefined = (() => {
+    if (!hasXray || !xray) return undefined;
+    if (xray.summary) {
+      const s = xray.summary as string;
+      return s.length > 130 ? s.slice(0, 127) + '…' : s;
+    }
+    const callouts: any[] = xray.callouts || [];
+    const high = callouts.filter((c: any) => c.severity === 'high');
+    const top = high[0] || callouts[0];
+    if (top) {
+      const n = high.length || callouts.length;
+      return `${n} issue${n !== 1 ? 's' : ''} flagged — top: ${top.issue}`;
+    }
+    return `${xray.pageCount || 'Pages'} reviewed — key gaps and opportunities found`;
+  })();
   const xrayAt = (lead as any).aiGrowthPlan?.generatedAt || null;
 
   const seoStatus: StageStatus = hasSerp ? 'complete' : serpRunning ? 'running' : 'pending';
-  const serpFinding = hasSerp ? 'Search landscape mapped — visibility gaps and key competitors identified' : undefined;
+  const serp = (lead as any).aiGrowthPlan?.serp;
+  // Compose from real SERP data: keyword + presence signals + top competitor name
+  const serpFinding: string | undefined = (() => {
+    if (!hasSerp || !serp) return undefined;
+    const kw: string = serp.keyword || '';
+    const maps: string = serp.prospectPosition?.mapsPresence || '';
+    const organic: string = serp.prospectPosition?.organicPresence || '';
+    const topComp: string = serp.competitors?.[0]?.name || '';
+    const presence: string[] = [];
+    if (maps === 'detected') presence.push('showing in Maps');
+    else if (maps === 'not detected') presence.push('not in Maps');
+    if (organic === 'detected') presence.push('organic presence found');
+    else if (organic === 'not detected') presence.push('no organic visibility');
+    const presStr = presence.join(', ');
+    const compStr = topComp ? ` — ${topComp} is the one to beat` : '';
+    if (kw && presStr) return `"${kw}": ${presStr}${compStr}`;
+    return 'Search landscape mapped — visibility gaps and key competitors identified';
+  })();
 
   const growthStatus: StageStatus = hasDiagnosis ? 'complete' : diagRunning ? 'running' : 'pending';
   const diag = (lead as any).aiGrowthPlan?.strategyDiagnosis;
-  const growthFinding = hasDiagnosis && diag
-    ? `Readiness ${diag.readinessScore}/100 — ${diag.insightSentence?.slice(0, 80)}${(diag.insightSentence?.length ?? 0) > 80 ? '…' : ''}`
-    : undefined;
+  // insightSentence is an AI-written one-liner grounded in the actual data
+  const growthFinding: string | undefined = (() => {
+    if (!hasDiagnosis || !diag) return undefined;
+    const score: number | undefined = diag.readinessScore;
+    const insight: string = diag.insightSentence || '';
+    const truncated = insight.length > 90 ? insight.slice(0, 87) + '…' : insight;
+    if (score !== undefined && insight) return `Readiness ${score}/100 — ${truncated}`;
+    if (insight) return truncated;
+    const pCount = diag.priorities?.length;
+    return `Growth readiness scored${pCount ? ` — ${pCount} priorities identified` : ''}`;
+  })();
 
   const commStatus: StageStatus = hasNbs ? 'complete' : 'pending';
   const nbs = (lead as any).nextBestSteps;
-  const commFinding = hasNbs ? `${nbs.steps.length} next move${nbs.steps.length !== 1 ? 's' : ''} lined up for this deal` : undefined;
+  // Lead with the first recommended action label so the rep knows exactly what to do
+  const commFinding: string | undefined = (() => {
+    if (!hasNbs || !nbs?.steps?.length) return undefined;
+    const steps: any[] = nbs.steps;
+    const first = steps[0];
+    const label: string = first?.label || first?.action || '';
+    const count = steps.length;
+    if (label) {
+      return count > 1
+        ? `Lead with: ${label} — ${count - 1} more action${count - 1 !== 1 ? 's' : ''} ready`
+        : label;
+    }
+    return `${count} next move${count !== 1 ? 's' : ''} lined up for this deal`;
+  })();
   const nbsAt = nbs?.generatedAt || null;
 
   return (
