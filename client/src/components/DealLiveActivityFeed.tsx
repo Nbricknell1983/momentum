@@ -236,7 +236,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       setXrayRunning(true);
       try {
         const token = await auth.currentUser?.getIdToken();
-        const res = await fetch('/api/ai/growth-plan/xray', {
+        const res = await fetch('/api/ai/growth-plan/website-xray', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ websiteUrl, businessName, location, industry }),
