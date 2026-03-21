@@ -44,12 +44,12 @@ function SpecAvatar({ id, pulse }: { id: SpecId; pulse?: boolean }) {
 
 function StatusBadge({ status }: { status: StageStatus }) {
   if (status === 'complete')
-    return <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 className="h-3 w-3" /> Complete</span>;
+    return <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 className="h-3 w-3" /> Done</span>;
   if (status === 'running')
-    return <span className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium"><Loader2 className="h-3 w-3 animate-spin" /> Working…</span>;
+    return <span className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium"><Loader2 className="h-3 w-3 animate-spin" /> On it…</span>;
   if (status === 'blocked')
-    return <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><AlertCircle className="h-3 w-3" /> Blocked</span>;
-  return <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium"><Clock className="h-3 w-3" /> Queued</span>;
+    return <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><AlertCircle className="h-3 w-3" /> Needs info</span>;
+  return <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium"><Clock className="h-3 w-3" /> Up next</span>;
 }
 
 function HandoffConnector({ from, to, message }: { from: SpecId; to: SpecId; message: string }) {
@@ -353,7 +353,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const xrayAt = (lead as any).aiGrowthPlan?.generatedAt || null;
 
   const seoStatus: StageStatus = hasSerp ? 'complete' : serpRunning ? 'running' : 'pending';
-  const serpFinding = hasSerp ? 'Keyword landscape and competitor signals captured' : undefined;
+  const serpFinding = hasSerp ? 'Search landscape mapped — visibility gaps and key competitors identified' : undefined;
 
   const growthStatus: StageStatus = hasDiagnosis ? 'complete' : diagRunning ? 'running' : 'pending';
   const diag = (lead as any).aiGrowthPlan?.strategyDiagnosis;
@@ -363,7 +363,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
 
   const commStatus: StageStatus = hasNbs ? 'complete' : 'pending';
   const nbs = (lead as any).nextBestSteps;
-  const commFinding = hasNbs ? `${nbs.steps.length} action${nbs.steps.length !== 1 ? 's' : ''} sequenced for this deal` : undefined;
+  const commFinding = hasNbs ? `${nbs.steps.length} next move${nbs.steps.length !== 1 ? 's' : ''} lined up for this deal` : undefined;
   const nbsAt = nbs?.generatedAt || null;
 
   return (
@@ -380,11 +380,11 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
           )}
           <p className="text-xs font-bold text-foreground">
-            {anyRunning ? 'Specialists Working' : 'Specialist Team'}
+            {anyRunning ? 'Team is on it' : 'Your deal team'}
           </p>
           <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[120px]">{lead.companyName}</span>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-0.5">Deal-scoped intelligence only</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Working this deal together</p>
       </div>
 
       <ScrollArea className="flex-1">
@@ -394,7 +394,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="prep"
             status={prepStatus}
-            task="Building call prep pack from business intelligence"
+            task="Pulling together everything we know about this business before the call"
             finding={prepFinding}
             timestamp={prepAt}
             expandable={hasPrepPack}
@@ -428,7 +428,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             <HandoffConnector
               from="prep"
               to="website"
-              message="Site URL passed for structural analysis and SEO signal extraction"
+              message="Handing off the site URL — Website Specialist is taking it from here"
             />
           )}
 
@@ -436,10 +436,10 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="website"
             status={websiteStatus}
-            task="Running X-Ray — auditing pages, SEO signals, conversion friction"
+            task="Reviewing their site — checking page structure, SEO signals, and where visitors drop off"
             finding={xrayFinding}
             timestamp={xrayAt}
-            blockedReason="No website URL on this lead — add one to unlock X-Ray"
+            blockedReason="No website URL on this lead — add one and we'll dig straight in"
             expandable={hasXray}
             expandContent={hasXray && xray?.gaps ? (
               <div className="space-y-1">
@@ -456,7 +456,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             <HandoffConnector
               from="website"
               to="seo"
-              message="Site structure and page data passed for keyword and SERP analysis"
+              message="Site review done — passing the search signals across to SEO Specialist"
             />
           )}
 
@@ -464,7 +464,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="seo"
             status={seoStatus}
-            task="Mapping keyword landscape, SERP position, and competitor visibility"
+            task="Checking where this business sits in search and mapping out the competitive picture"
             finding={serpFinding}
           />
 
@@ -473,7 +473,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             <HandoffConnector
               from="seo"
               to="growth"
-              message="Search data passed to Growth Analyst for readiness assessment"
+              message="Search picture is in — Growth Analyst is building the readiness assessment"
             />
           )}
 
@@ -481,7 +481,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="growth"
             status={growthStatus}
-            task="Running readiness assessment — scoring digital visibility and growth gaps"
+            task="Pulling the team's findings together into a growth readiness picture"
             finding={growthFinding}
             expandable={hasDiagnosis}
             expandContent={hasDiagnosis && diag?.priorities?.length > 0 ? (
@@ -499,7 +499,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             <HandoffConnector
               from="growth"
               to="commercial"
-              message="Readiness findings passed — sequencing deal-specific next actions"
+              message="Readiness assessment done — Commercial Intelligence is sequencing your next moves"
             />
           )}
 
@@ -507,7 +507,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="commercial"
             status={commStatus}
-            task="Translating specialist findings into deal-specific next actions"
+            task="Turning the team's findings into your specific next moves for this deal"
             finding={commFinding}
             timestamp={nbsAt}
             expandable={hasNbs}
@@ -533,13 +533,13 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
                 </div>
                 <div className="flex-1 min-w-0 pb-2">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Deal Context Added</p>
+                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">You shared context with the team</p>
                     <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
                       <CheckCircle2 className="h-3 w-3" /> Saved
                     </span>
                   </div>
                   <p className="text-[11px] text-foreground/70 line-clamp-2">{(lead as any).dealContext}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Intelligence refreshed across all specialists</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">The team's been updated with your notes</p>
                 </div>
               </div>
             </>
@@ -554,7 +554,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
         <div className="rounded-lg border border-blue-200 dark:border-blue-800/40 bg-blue-50/40 dark:bg-blue-950/10 p-2.5 space-y-2">
           <div className="flex items-center gap-1.5">
             <MessageSquare className="h-3 w-3 text-blue-500 shrink-0" />
-            <p className="text-[10px] font-bold text-blue-900 dark:text-blue-200 flex-1">Add context for this deal</p>
+            <p className="text-[10px] font-bold text-blue-900 dark:text-blue-200 flex-1">Share context with the team</p>
           </div>
           <Textarea
             value={dealContext}
@@ -564,7 +564,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             data-testid="textarea-feed-deal-context"
           />
           <div className="flex items-center justify-between">
-            <p className="text-[9px] text-blue-500/70 dark:text-blue-400/60">Refines next best steps and strategy</p>
+            <p className="text-[9px] text-blue-500/70 dark:text-blue-400/60">Helps the team sharpen their recommendations</p>
             <Button
               size="sm"
               onClick={handleSaveContext}
