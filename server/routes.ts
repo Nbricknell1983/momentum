@@ -5552,7 +5552,7 @@ Generate realistic prospect suggestions based on common business patterns in the
 
   app.post("/api/ai/growth-plan/website-xray", async (req, res) => {
     try {
-      const { websiteUrl, businessName, industry, location } = req.body;
+      const { websiteUrl, businessName, industry, location, orgId, leadId } = req.body;
       if (!websiteUrl) {
         return res.status(400).json({ error: "Website URL is required" });
       }
@@ -5563,42 +5563,61 @@ Generate realistic prospect suggestions based on common business patterns in the
         return res.status(400).json({ error: `Could not access website: ${crawlData.error}` });
       }
 
-      const prompt = `You are a digital marketing auditor. Analyse these website crawl signals and identify issues.
+      const prompt = `You are a digital marketing auditor reviewing real crawl evidence. Analyse the data below and identify specific, evidence-based issues.
 
 WEBSITE: ${websiteUrl}
 BUSINESS: ${businessName || 'Unknown'}
 INDUSTRY: ${industry || 'Unknown'}
 LOCATION: ${location || 'Unknown'}
 
-CRAWL DATA:
-- Title: ${crawlData.title || 'MISSING'}
-- Meta Description: ${crawlData.metaDescription || 'MISSING'}
-- H1 Tags: ${crawlData.h1s.length > 0 ? crawlData.h1s.join(', ') : 'NONE'}
-- Heading Hierarchy: ${crawlData.headingHierarchy.slice(0, 10).map(h => `${h.tag}: ${h.text}`).join(' | ')}
-- Word Count: ${crawlData.wordCount}
-- Internal Links: ${crawlData.internalLinks}
-- External Links: ${crawlData.externalLinks}
-- HTTPS: ${crawlData.hasHttps}
-- Sitemap: ${crawlData.hasSitemap}
-- Schema Markup: ${crawlData.hasSchema}
-- Images: ${crawlData.images.total} total, ${crawlData.images.withAlt} with alt text
-- Nav Labels: ${crawlData.navLabels.join(', ') || 'None detected'}
-- Service Keywords Found: ${crawlData.serviceKeywords.join(', ') || 'None'}
-- Location Keywords Found: ${crawlData.locationKeywords.join(', ') || 'None'}
+── CRAWL EVIDENCE ───────────────────────────────────────────
+Title tag: ${crawlData.title || 'MISSING'}
+Meta description: ${crawlData.metaDescription || 'MISSING'}
+H1 tags: ${crawlData.h1s.length > 0 ? crawlData.h1s.join(' | ') : 'NONE'}
+H2 tags: ${crawlData.h2s?.length > 0 ? crawlData.h2s.slice(0, 8).join(' | ') : 'None detected'}
+Heading structure: ${crawlData.headingHierarchy.slice(0, 10).map(h => `${h.tag}: "${h.text}"`).join(' → ')}
+Nav labels: ${crawlData.navLabels.join(', ') || 'None detected'}
+Word count: ${crawlData.wordCount}
+Internal links: ${crawlData.internalLinks}
+HTTPS: ${crawlData.hasHttps ? 'Yes' : 'NO — not secure'}
+Sitemap: ${crawlData.hasSitemap ? 'Found' : 'NOT FOUND'}
+Schema markup: ${crawlData.hasSchema ? 'Present' : 'NONE'}
+Images: ${crawlData.images.total} total, ${crawlData.images.withAlt} with alt, ${crawlData.images.withoutAlt} without alt
+
+── DETECTED CTAs ────────────────────────────────────────────
+${crawlData.ctaSignals?.length ? crawlData.ctaSignals.join('\n') : 'NO CTAs DETECTED'}
+
+── DETECTED TRUST SIGNALS ───────────────────────────────────
+${crawlData.trustSignals?.length ? crawlData.trustSignals.join('\n') : 'NO TRUST SIGNALS DETECTED'}
+
+── CONVERSION GAPS (pre-detected) ───────────────────────────
+${crawlData.conversionGaps?.length ? crawlData.conversionGaps.join('\n') : 'None pre-detected'}
+
+── SERVICE PAGES FOUND ──────────────────────────────────────
+${crawlData.servicePageUrls?.length ? crawlData.servicePageUrls.join('\n') : 'None detected'}
+
+── LOCATION PAGES FOUND ─────────────────────────────────────
+${crawlData.locationPageUrls?.length ? crawlData.locationPageUrls.join('\n') : 'None detected'}
+
+── KEYWORD SIGNALS ──────────────────────────────────────────
+Service keywords in content: ${crawlData.serviceKeywords.join(', ') || 'None'}
+Location keywords in content: ${crawlData.locationKeywords.join(', ') || 'None'}
+Phone numbers found: ${crawlData.phoneNumbers?.join(', ') || 'None visible'}
 
 Respond with JSON:
 {
   "callouts": [
-    { "id": 1, "issue": "Issue title", "detail": "What the data shows", "fix": "Recommended fix", "severity": "high|medium|low" }
+    { "id": 1, "issue": "Issue title", "detail": "What the evidence shows — quote specific data", "fix": "Recommended fix", "severity": "high|medium|low" }
   ],
-  "summary": "2-3 sentence overall assessment of the website's SEO health and biggest opportunity"
+  "summary": "2-3 sentence overall assessment grounded in the actual evidence above — name specific issues found"
 }
 
 Rules:
-- Only flag issues supported by the crawl data
-- Prioritise issues that impact local search rankings
-- Include 4-8 callouts ordered by severity
-- Focus on: service clarity, location signals, call-to-action strength, content depth, technical SEO`;
+- Every callout MUST cite specific evidence from the crawl data (e.g. "H1 reads 'Welcome' with no service or location")
+- Do NOT invent issues not supported by the data
+- Do NOT repeat conversion gaps already listed — interpret them and add commercial context
+- Include 5-8 callouts ordered high → medium → low
+- The summary must name 2-3 specific findings, not generic statements`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -5619,6 +5638,36 @@ Rules:
         };
       }
 
+      // Write crawl evidence to evidenceBundle.website (non-blocking) if lead context provided
+      if (firestore && orgId && leadId) {
+        const websiteEvidence = {
+          url: websiteUrl,
+          crawledAt: new Date().toISOString(),
+          success: true,
+          title: crawlData.title || null,
+          metaDescription: crawlData.metaDescription || null,
+          h1s: crawlData.h1s,
+          h2s: crawlData.h2s || [],
+          navLabels: crawlData.navLabels,
+          servicePageUrls: crawlData.servicePageUrls || [],
+          locationPageUrls: crawlData.locationPageUrls || [],
+          ctaSignals: crawlData.ctaSignals || [],
+          trustSignals: crawlData.trustSignals || [],
+          conversionGaps: crawlData.conversionGaps || [],
+          hasSchema: crawlData.hasSchema,
+          hasSitemap: crawlData.hasSitemap,
+          wordCount: crawlData.wordCount,
+          serviceKeywords: crawlData.serviceKeywords,
+          locationKeywords: crawlData.locationKeywords,
+          phoneNumbers: crawlData.phoneNumbers || [],
+          internalLinks: crawlData.internalLinks,
+          hasHttps: crawlData.hasHttps,
+        };
+        firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId)
+          .set({ evidenceBundle: { website: websiteEvidence, gatheredAt: new Date().toISOString() } }, { merge: true })
+          .catch((e: any) => console.warn('[xray] evidenceBundle write-back error:', e.message));
+      }
+
       res.json({ crawlData, ...aiResult });
     } catch (error) {
       console.error("Error in website x-ray:", error);
@@ -5635,46 +5684,50 @@ Rules:
 
       const searchKeyword = keyword || `${industry || businessName} ${location || ''}`.trim();
 
-      const prompt = `You are an SEO analyst. Generate a realistic local search analysis for this business.
+      const prompt = `You are an SEO analyst building an estimated search landscape picture for a business. This is NOT based on real search data — it is a market-informed estimate based on the business details provided. Label your analysis accordingly.
 
 BUSINESS: ${businessName}
 WEBSITE: ${websiteUrl || 'None'}
 LOCATION: ${location || 'Not specified'}
 INDUSTRY: ${industry || 'Not specified'}
-SEARCH KEYWORD: "${searchKeyword}"
+TARGET KEYWORD: "${searchKeyword}"
 
-Based on the business type, location, and industry, generate a realistic analysis of what the Google search results would look like for "${searchKeyword}".
+Your job: estimate what the local search landscape LIKELY looks like for this keyword, based on the business type, location, and competitive dynamics of the Australian market. Be realistic — not optimistic. If a business has no website, it almost certainly won't appear organically.
 
 Respond with JSON:
 {
   "keyword": "${searchKeyword}",
+  "estimated": true,
   "prospectPosition": {
-    "mapsPresence": "detected or not detected",
-    "organicPresence": "detected or not detected",
-    "bestMatchingPage": "URL or empty string",
+    "mapsPresence": "detected or not detected — whether a business like this would likely appear in the Maps Pack",
+    "organicPresence": "detected or not detected — whether they would likely appear in organic results",
+    "bestMatchingPage": "most likely matching page URL if they have a website, or empty string",
     "relevanceScore": 0-100
   },
   "serpSnapshot": [
-    { "position": 1, "title": "Result title", "domain": "example.com", "snippet": "Result description", "type": "organic|maps|ad" }
+    { "position": 1, "title": "Likely result title", "domain": "realistic-domain.com.au", "snippet": "What a searcher would see", "type": "organic|maps|ad" }
   ],
   "competitors": [
-    { "name": "Business name", "domain": "domain.com", "position": 1, "strength": "Why they rank well" }
+    { "name": "Realistic local competitor name", "domain": "their-domain.com.au", "position": 1, "strength": "Why they likely rank — specific signals (reviews, content, longevity)" }
   ],
   "opportunities": [
-    { "keyword": "Related keyword", "difficulty": "low|medium|high", "volume": "estimated monthly searches", "recommendation": "How to target this" }
+    { "keyword": "Related keyword", "difficulty": "low|medium|high", "volume": "estimated monthly searches", "recommendation": "Specific action to capture this" }
   ]
 }
 
 Rules:
-- Generate 8-10 SERP snapshot results (mix of maps pack and organic)
-- Generate 5 competitors
-- Generate 5-8 keyword opportunities
-- If the business has a website, assess whether it would realistically appear
-- Be realistic about competitor strength based on the Australian market`;
+- 8-10 SERP snapshot results (realistic mix of maps pack and organic for this Australian market)
+- 4-5 realistic local competitors (use plausible Australian business names, not generic)
+- 5-8 keyword opportunities specific to this business type and location
+- Be conservative about the prospect's position — most SMBs do not rank well without active SEO
+- Competitor strengths should be specific: "47 Google reviews", "service page for each suburb", "5-year-old domain"`;
+
+      const { xrayEvidence } = req.body as { xrayEvidence?: any };
+      const xrayContext = xrayEvidence ? `\nWEBSITE EVIDENCE (real crawl):\n- CTAs: ${xrayEvidence.ctaSignals?.join(', ') || 'none'}\n- Service keywords: ${xrayEvidence.serviceKeywords?.join(', ') || 'none'}\n- Location keywords: ${xrayEvidence.locationKeywords?.join(', ') || 'none'}\n- Schema: ${xrayEvidence.hasSchema ? 'yes' : 'no'}\n- Word count: ${xrayEvidence.wordCount || 'unknown'}` : '';
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: prompt + xrayContext }],
         max_completion_tokens: 1500,
         response_format: { type: "json_object" },
       });
@@ -5687,6 +5740,7 @@ Rules:
       } catch {
         result = {
           keyword: searchKeyword,
+          estimated: true,
           prospectPosition: { mapsPresence: "not detected", organicPresence: "not detected", bestMatchingPage: "", relevanceScore: 20 },
           serpSnapshot: [],
           competitors: [],
@@ -7460,6 +7514,7 @@ Return JSON:
     linkedinUrl: string | null; gbpRating: number | null; gbpReviewCount: number | null;
     gbpAddress: string | null; gbpPhone: string | null; gbpMapsUrl: string | null;
     gbpPlaceId: string | null; gbpCategory: string | null; discoverySource: string[];
+    gbpEditorialSummary: string | null; gbpIsOpen: boolean | null; gbpName: string | null;
   }> {
     const result = {
       websiteUrl: null as string | null, facebookUrl: null as string | null,
@@ -7468,6 +7523,8 @@ Return JSON:
       gbpAddress: null as string | null, gbpPhone: null as string | null,
       gbpMapsUrl: null as string | null, gbpPlaceId: null as string | null,
       gbpCategory: null as string | null, discoverySource: [] as string[],
+      gbpEditorialSummary: null as string | null, gbpIsOpen: null as boolean | null,
+      gbpName: null as string | null,
     };
     const businessName = lead.businessName || lead.companyName || lead.contactName || '';
     if (!businessName) return result;
@@ -7483,7 +7540,7 @@ Return JSON:
           headers: {
             'Content-Type': 'application/json',
             'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.formattedAddress,places.primaryType,places.googleMapsUri',
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.formattedAddress,places.primaryType,places.primaryTypeDisplayName,places.googleMapsUri,places.editorialSummary,places.regularOpeningHours,places.businessStatus',
           },
           body: JSON.stringify({ textQuery, languageCode: 'en', regionCode: 'AU', maxResultCount: 3 }),
         });
@@ -7501,14 +7558,17 @@ Return JSON:
                 result.websiteUrl = best.websiteUri;
                 result.discoverySource.push('google_places_website');
               }
+              result.gbpName = best.displayName?.text || null;
               result.gbpRating = best.rating ?? null;
               result.gbpReviewCount = best.userRatingCount ?? null;
               result.gbpAddress = best.formattedAddress || null;
               result.gbpPhone = best.nationalPhoneNumber || null;
               result.gbpMapsUrl = best.googleMapsUri || null;
               result.gbpPlaceId = best.id || null;
-              const pt = best.primaryType || null;
+              const pt = best.primaryTypeDisplayName?.text || best.primaryType || null;
               result.gbpCategory = pt ? pt.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null;
+              result.gbpEditorialSummary = best.editorialSummary?.text || best.editorialSummary?.overview || null;
+              result.gbpIsOpen = best.regularOpeningHours?.openNow ?? (best.businessStatus === 'OPERATIONAL' ? null : null);
               result.discoverySource.push('google_places_gbp');
             }
           }
@@ -7561,6 +7621,112 @@ Return JSON:
     return result;
   }
 
+  // ── Evidence gathering: structured real-world data before any AI analysis ─
+  // Orchestrates: GBP discovery + website crawl + social detection.
+  // Saves structured evidenceBundle to Firestore. Called before prep pack.
+  // ─────────────────────────────────────────────────────────────────────────
+  async function gatherEvidenceBundle(lead: any, orgId: string): Promise<any> {
+    if (!firestore) return null;
+    const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(lead.id);
+    const businessName = lead.businessName || lead.companyName || lead.contactName || '';
+
+    // Step 1: Active presence discovery (GBP + social)
+    const discovered = await activePresenceDiscovery(lead, orgId);
+
+    // Step 2: Website crawl with enhanced evidence extraction
+    const websiteUrl = lead.website || lead.sourceData?.googleWebsite || discovered.websiteUrl || null;
+    let websiteEvidence: any = null;
+    if (websiteUrl) {
+      try {
+        const crawl = await crawlWebsite(websiteUrl);
+        if (crawl.success) {
+          websiteEvidence = {
+            url: websiteUrl,
+            crawledAt: new Date().toISOString(),
+            success: true,
+            title: crawl.title || null,
+            metaDescription: crawl.metaDescription || null,
+            h1s: crawl.h1s,
+            h2s: crawl.h2s || [],
+            navLabels: crawl.navLabels,
+            servicePageUrls: crawl.servicePageUrls || [],
+            locationPageUrls: crawl.locationPageUrls || [],
+            ctaSignals: crawl.ctaSignals || [],
+            trustSignals: crawl.trustSignals || [],
+            conversionGaps: crawl.conversionGaps || [],
+            hasSchema: crawl.hasSchema,
+            hasSitemap: crawl.hasSitemap,
+            wordCount: crawl.wordCount,
+            serviceKeywords: crawl.serviceKeywords,
+            locationKeywords: crawl.locationKeywords,
+            phoneNumbers: crawl.phoneNumbers || [],
+            internalLinks: crawl.internalLinks,
+            hasHttps: crawl.hasHttps,
+          };
+        } else {
+          websiteEvidence = { url: websiteUrl, success: false, error: crawl.error || 'Crawl failed', crawledAt: new Date().toISOString() };
+        }
+      } catch (e: any) {
+        console.warn(`[gather-evidence] Website crawl failed for ${businessName}:`, e.message);
+      }
+    }
+
+    // Step 3: GBP evidence with health notes derived from actual data
+    let gbpEvidence: any = null;
+    if (discovered.gbpPlaceId || discovered.gbpRating !== null || discovered.gbpMapsUrl) {
+      const rating = discovered.gbpRating;
+      const reviews = discovered.gbpReviewCount;
+      const healthNotes: string[] = [];
+      if (reviews !== null && reviews >= 50) healthNotes.push(`Strong review volume: ${reviews} reviews`);
+      else if (reviews !== null && reviews >= 20) healthNotes.push(`Moderate review volume: ${reviews} reviews`);
+      else if (reviews !== null && reviews > 0) healthNotes.push(`Low review count: only ${reviews} reviews — growth opportunity`);
+      else healthNotes.push('No review count retrieved');
+      if (rating !== null && rating >= 4.5) healthNotes.push(`Excellent rating: ${rating}/5`);
+      else if (rating !== null && rating >= 4.0) healthNotes.push(`Good rating: ${rating}/5`);
+      else if (rating !== null) healthNotes.push(`Below average rating: ${rating}/5 — reputation risk`);
+      if (discovered.gbpEditorialSummary) healthNotes.push(`Google editorial summary present`);
+      if (!discovered.gbpCategory) healthNotes.push('Primary category not retrieved — check GBP setup');
+
+      gbpEvidence = {
+        placeId: discovered.gbpPlaceId,
+        name: discovered.gbpName,
+        rating,
+        reviewCount: reviews,
+        category: discovered.gbpCategory,
+        address: discovered.gbpAddress,
+        phone: discovered.gbpPhone,
+        mapsUrl: discovered.gbpMapsUrl,
+        editorialSummary: discovered.gbpEditorialSummary,
+        isOpen: discovered.gbpIsOpen,
+        healthNotes,
+      };
+    }
+
+    // Step 4: Social evidence
+    const socialEvidence = {
+      facebook: { url: discovered.facebookUrl || lead.facebookUrl || null, detected: !!(discovered.facebookUrl || lead.facebookUrl) },
+      instagram: { url: discovered.instagramUrl || lead.instagramUrl || null, detected: !!(discovered.instagramUrl || lead.instagramUrl) },
+      linkedin: { url: discovered.linkedinUrl || lead.linkedinUrl || null, detected: !!(discovered.linkedinUrl || lead.linkedinUrl) },
+      twitter: { url: lead.twitterUrl || null, detected: !!lead.twitterUrl },
+    };
+
+    const bundle: any = {
+      gatheredAt: new Date().toISOString(),
+      website: websiteEvidence,
+      gbp: gbpEvidence,
+      social: socialEvidence,
+      discoverySource: discovered.discoverySource,
+    };
+
+    // Save to Firestore async (non-blocking)
+    leadRef.set({ evidenceBundle: bundle }, { merge: true }).catch((e: any) =>
+      console.warn('[gather-evidence] Firestore save error:', e.message)
+    );
+
+    console.log(`[gather-evidence] ${businessName} | website=${websiteEvidence ? (websiteEvidence.success ? 'crawled' : 'failed') : 'no URL'} | gbp=${gbpEvidence ? 'found' : 'not found'} | social=${Object.values(socialEvidence).filter((s: any) => s.detected).length} detected`);
+    return { bundle, discovered };
+  }
+
   // ── Auto-generate Prep Call Pack for a lead ──────────────────────────────
   // ─────────────────────────────────────────────────────────────────────────
   // Shared helper: generate (or skip) a prep call pack for a single lead.
@@ -7589,83 +7755,96 @@ Return JSON:
     const si = lead.strategyIntelligence || {};
     const gp = lead.growthPrescription || null;
 
-    // ── Active presence discovery: live lookup before prompt assembly ──────────
-    // Calls Google Places API (website + GBP signals) then scrapes homepage for
-    // social links. Results are merged with stored signals below.
-    const discovered = await activePresenceDiscovery(lead, orgId);
+    // ── Evidence gathering: structured real-world data first ──────────────────
+    // Runs GBP discovery + website crawl + social detection and saves to Firestore.
+    const evidenceResult = await gatherEvidenceBundle(lead, orgId);
+    const discovered = evidenceResult?.discovered || {};
+    const bundle = evidenceResult?.bundle || {};
+    const wb = bundle.website;   // website evidence (null if no URL)
+    const gb = bundle.gbp;       // GBP evidence (null if not found)
+    const sb = bundle.social;    // social evidence
 
-    // ── Website signals: cascade stored → discovered → enrichment inference ──
-    const websiteUrlConfirmed = lead.website || src.googleWebsite || discovered.websiteUrl || null;
-    const hasSitemap = (lead.sitemapPages?.length ?? 0) > 0;
-    const hasCrawl = (lead.crawledPages?.length ?? 0) > 0;
-    const sitemapPageCount = lead.sitemapPages?.length ?? 0;
-    const crawlPageCount = lead.crawledPages?.filter((p: any) => !p.error).length ?? 0;
-    const enrichWebsiteStatus: string = enr.websiteStatus || 'unknown';
-    let websiteStr: string;
-    if (websiteUrlConfirmed) {
-      websiteStr = websiteUrlConfirmed;
-      if (hasSitemap) websiteStr += ` | Sitemap found (${sitemapPageCount} pages indexed)`;
-      if (hasCrawl)   websiteStr += ` | Deep crawl complete (${crawlPageCount} pages analysed)`;
-    } else if (hasSitemap || hasCrawl) {
-      websiteStr = `[website confirmed via crawl — ${hasCrawl ? crawlPageCount + ' pages analysed' : sitemapPageCount + ' sitemap pages'}]`;
-    } else if (enrichWebsiteStatus === 'has_website') {
-      websiteStr = '[website confirmed by enrichment intelligence — URL not yet stored on record]';
-    } else if (enrichWebsiteStatus === 'no_website') {
-      websiteStr = '[enrichment indicates no website detected — should be confirmed manually]';
+    // ── Build structured evidence strings for the prompt ──────────────────────
+    // Website evidence
+    const websiteUrlConfirmed = wb?.url || lead.website || src.googleWebsite || discovered.websiteUrl || null;
+    let websiteSection = '';
+    if (wb?.success) {
+      websiteSection = [
+        `URL: ${wb.url}`,
+        wb.title ? `Title tag: "${wb.title}"` : 'Title tag: MISSING',
+        wb.metaDescription ? `Meta description: "${wb.metaDescription}"` : 'Meta description: MISSING',
+        wb.h1s?.length ? `H1: ${wb.h1s.join(' | ')}` : 'H1: NONE',
+        wb.h2s?.length ? `H2s: ${wb.h2s.slice(0, 5).join(' | ')}` : '',
+        wb.navLabels?.length ? `Nav: ${wb.navLabels.join(', ')}` : '',
+        wb.servicePageUrls?.length ? `Service pages (${wb.servicePageUrls.length}): ${wb.servicePageUrls.slice(0, 3).join(', ')}` : 'Service pages: none detected',
+        wb.locationPageUrls?.length ? `Location pages (${wb.locationPageUrls.length}): ${wb.locationPageUrls.slice(0, 3).join(', ')}` : 'Location pages: none detected',
+        wb.ctaSignals?.length ? `CTAs: ${wb.ctaSignals.join(' | ')}` : 'CTAs: NONE DETECTED',
+        wb.trustSignals?.length ? `Trust signals: ${wb.trustSignals.join(' | ')}` : 'Trust signals: none',
+        wb.conversionGaps?.length ? `Conversion gaps: ${wb.conversionGaps.join('; ')}` : '',
+        `Schema markup: ${wb.hasSchema ? 'Yes' : 'NO'}`,
+        `Sitemap: ${wb.hasSitemap ? 'Found' : 'NOT FOUND'}`,
+        `HTTPS: ${wb.hasHttps ? 'Yes' : 'NO'}`,
+        `Word count: ${wb.wordCount}`,
+        wb.phoneNumbers?.length ? `Phone visible: ${wb.phoneNumbers.join(', ')}` : 'Phone: not visible on homepage',
+        wb.serviceKeywords?.length ? `Service keywords in content: ${wb.serviceKeywords.join(', ')}` : '',
+        wb.locationKeywords?.length ? `Location keywords in content: ${wb.locationKeywords.join(', ')}` : '',
+      ].filter(Boolean).join('\n');
+    } else if (!websiteUrlConfirmed) {
+      const enrichWebsiteStatus: string = enr.websiteStatus || 'unknown';
+      websiteSection = enrichWebsiteStatus === 'has_website'
+        ? 'Website confirmed by enrichment intelligence — URL not yet stored on record'
+        : enrichWebsiteStatus === 'no_website'
+          ? 'No website detected'
+          : 'Not yet verified';
     } else {
-      websiteStr = 'not yet verified';
+      websiteSection = `URL: ${websiteUrlConfirmed} (crawl failed or skipped)`;
     }
 
-    // ── GBP / Maps signals: cascade stored → discovered ───────────────────────
-    const reviewCount = src.googleReviewCount ?? enr.reviewCount ?? discovered.gbpReviewCount ?? null;
-    const rating = src.googleRating ?? enr.rating ?? discovered.gbpRating ?? null;
-    const gbpUrlRaw = src.googleMapsUrl || src.gbpUrl || discovered.gbpMapsUrl || null;
-    const gbpPlaceId = src.googlePlaceId || discovered.gbpPlaceId || null;
-    const gbpAddress = src.googleAddress || discovered.gbpAddress || null;
-    const gbpCategory = src.googleCategory || discovered.gbpCategory || null;
-    const gbpPhone = lead.phone || src.phone || discovered.gbpPhone || null;
-    let gbpStr: string;
-    if (gbpUrlRaw) {
-      gbpStr = gbpUrlRaw;
-      if (reviewCount !== null) gbpStr += ` | ${reviewCount} reviews`;
-      if (rating !== null) gbpStr += `, ${rating}/5`;
-      if (gbpCategory) gbpStr += ` | Category: ${gbpCategory}`;
-    } else if (reviewCount !== null && reviewCount > 0) {
-      gbpStr = `[GBP confirmed — ${reviewCount} Google reviews${rating !== null ? `, ${rating}/5 stars` : ''}]`;
-      if (gbpAddress) gbpStr += ` | Address: ${gbpAddress}`;
-      if (gbpCategory) gbpStr += ` | Category: ${gbpCategory}`;
-    } else if (gbpPlaceId) {
-      gbpStr = `[GBP confirmed via Place ID — review count not yet retrieved]`;
-      if (gbpAddress) gbpStr += ` | Address: ${gbpAddress}`;
+    // GBP evidence
+    const reviewCount = gb?.reviewCount ?? src.googleReviewCount ?? enr.reviewCount ?? null;
+    const rating = gb?.rating ?? src.googleRating ?? enr.rating ?? null;
+    let gbpSection = '';
+    if (gb) {
+      gbpSection = [
+        gb.mapsUrl ? `Maps URL: ${gb.mapsUrl}` : '',
+        gb.name ? `Listed name: "${gb.name}"` : '',
+        gb.category ? `Primary category: ${gb.category}` : '',
+        gb.address ? `Address: ${gb.address}` : '',
+        gb.phone ? `Phone on GBP: ${gb.phone}` : '',
+        reviewCount !== null ? `Reviews: ${reviewCount}${rating !== null ? ` at ${rating}/5★` : ''}` : 'Reviews: not retrieved',
+        gb.editorialSummary ? `Google description: "${gb.editorialSummary}"` : 'Google description: not set',
+        gb.healthNotes?.length ? `Health notes: ${gb.healthNotes.join('; ')}` : '',
+      ].filter(Boolean).join('\n');
     } else if (src.googleBusinessName || src.googleName) {
-      gbpStr = `[Google business name found: ${src.googleBusinessName || src.googleName} — Maps presence likely]`;
+      gbpSection = `Google business name found: ${src.googleBusinessName || src.googleName} — Maps presence likely`;
     } else {
-      gbpStr = 'not yet verified';
+      gbpSection = 'Not yet verified';
     }
 
-    // ── Social presence: stored → discovered (homepage scrape) → enrichment ───
-    const enrichSocial = enr.socialPresence || {};
-    const facebookUrl  = lead.facebookUrl  || src.facebookUrl  || discovered.facebookUrl  || null;
-    const instagramUrl = lead.instagramUrl || src.instagramUrl || discovered.instagramUrl || null;
-    const linkedinUrl  = lead.linkedinUrl  || src.linkedinUrl  || discovered.linkedinUrl  || null;
-    const twitterUrl   = lead.twitterUrl   || src.twitterUrl   || null;
-    const signals: string[] = src.businessSignals || [];
-    const sigLower = signals.join(' ').toLowerCase();
-    const impliedFacebook  = !facebookUrl  && (sigLower.includes('facebook')  || sigLower.includes('fb') || enrichSocial.facebook === true);
-    const impliedInstagram = !instagramUrl && (sigLower.includes('instagram') || enrichSocial.instagram === true);
-    const impliedLinkedIn  = !linkedinUrl  && (sigLower.includes('linkedin')  || enrichSocial.linkedin  === true);
-    const socialParts: string[] = [];
-    if (facebookUrl)          socialParts.push(`Facebook: ${facebookUrl}`);
-    else if (impliedFacebook) socialParts.push('Facebook (presence detected — URL not yet stored)');
-    if (instagramUrl)          socialParts.push(`Instagram: ${instagramUrl}`);
-    else if (impliedInstagram) socialParts.push('Instagram (presence detected — URL not yet stored)');
-    if (linkedinUrl)          socialParts.push(`LinkedIn: ${linkedinUrl}`);
-    else if (impliedLinkedIn) socialParts.push('LinkedIn (presence detected — URL not yet stored)');
-    if (twitterUrl)           socialParts.push(`Twitter/X: ${twitterUrl}`);
-    const socials = socialParts.length > 0 ? socialParts.join('; ') : 'none detected';
+    // Social evidence
+    let socialSection = '';
+    if (sb) {
+      const platforms: string[] = [];
+      if (sb.facebook?.url) platforms.push(`Facebook: ${sb.facebook.url}`);
+      else if (sb.facebook?.detected) platforms.push('Facebook: detected (URL not stored)');
+      if (sb.instagram?.url) platforms.push(`Instagram: ${sb.instagram.url}`);
+      else if (sb.instagram?.detected) platforms.push('Instagram: detected (URL not stored)');
+      if (sb.linkedin?.url) platforms.push(`LinkedIn: ${sb.linkedin.url}`);
+      else if (sb.linkedin?.detected) platforms.push('LinkedIn: detected (URL not stored)');
+      if (sb.twitter?.url) platforms.push(`Twitter/X: ${sb.twitter.url}`);
+      const impliedFacebook  = !sb.facebook?.detected  && ((src.businessSignals || []).join(' ').toLowerCase().includes('facebook')  || enr.socialPresence?.facebook === true);
+      const impliedInstagram = !sb.instagram?.detected && ((src.businessSignals || []).join(' ').toLowerCase().includes('instagram') || enr.socialPresence?.instagram === true);
+      const impliedLinkedIn  = !sb.linkedin?.detected  && ((src.businessSignals || []).join(' ').toLowerCase().includes('linkedin')  || enr.socialPresence?.linkedin === true);
+      if (impliedFacebook)  platforms.push('Facebook: presence implied by signals');
+      if (impliedInstagram) platforms.push('Instagram: presence implied by signals');
+      if (impliedLinkedIn)  platforms.push('LinkedIn: presence implied by signals');
+      socialSection = platforms.length > 0 ? platforms.join('\n') : 'None detected';
+    } else {
+      socialSection = 'Not yet verified';
+    }
 
-    // Debug: log assembled presence signals so we can verify correctness
-    console.log(`[prep-pack] ${lead.companyName} | website="${websiteStr}" | gbp="${gbpStr}" | socials="${socials}" | reviews=${reviewCount} | rating=${rating}`);
+    // Debug: log assembled evidence so we can verify correctness
+    console.log(`[prep-pack] ${lead.companyName} | website=${wb?.success ? 'crawled' : websiteUrlConfirmed ? 'url-only' : 'none'} | gbp=${gb ? 'found' : 'not found'} | reviews=${reviewCount} | rating=${rating}`);
 
     const daysSinceCreated = lead.createdAt ? Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 86400000) : null;
     const lastContact = lead.lastContactDate ? new Date(lead.lastContactDate).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never';
@@ -7691,44 +7870,46 @@ Return JSON:
 
     const gpSummary = gp ? `Growth Prescription: ${gp.businessDiagnosis}. Urgency: ${gp.urgencyLevel}. Recommended: ${(gp.recommendedStack || []).slice(0, 3).map((p: any) => p.product).join(', ')}.` : '';
 
-    const prompt = `You are a senior marketing strategist preparing a call brief for an agency sales rep. Act like the agency's strategy team has already researched this business and is briefing the rep before the call. Be specific, commercially sharp, and useful even when data is incomplete.
+    const prompt = `You are a senior marketing strategist preparing a call brief for an agency sales rep. The system has gathered real evidence about this business — interpret it commercially. Every claim you make must be grounded in the actual evidence below.
 
 PROSPECT DATA:
 Business: ${lead.companyName}
 Industry: ${lead.industry || enr.industry || src.category || 'Unknown — infer from business name and context'}
-Location: ${lead.address || src.googleAddress || lead.territory || 'Not provided'}
+Location: ${lead.address || src.googleAddress || gb?.address || lead.territory || 'Not provided'}
 Contact: ${lead.contactName || 'Unknown'}
 Stage: ${lead.stage || 'unknown'}
 Days in pipeline: ${daysSinceCreated !== null ? daysSinceCreated : 'Unknown'}
 Last contact: ${lastContact}
-Website: ${websiteStr}
-GBP/Google Maps: ${gbpStr}
-Reviews: ${reviewCount !== null ? `${reviewCount} reviews` : 'not yet retrieved'} ${rating !== null ? `| ${rating}/5 stars` : ''}
-Social presence: ${socials}
 Notes from rep: ${lead.notes || 'None'}
 
-${enrichmentSummary ? `INTELLIGENCE ENGINE DATA:\n${enrichmentSummary}` : ''}
-${siSummary ? `STRATEGY INTELLIGENCE:\n${siSummary}` : ''}
-${gpSummary ? `GROWTH PRESCRIPTION:\n${gpSummary}` : ''}
-${src.businessSignals?.length ? `BUSINESS SIGNALS: ${src.businessSignals.join(', ')}` : ''}
+── WEBSITE EVIDENCE (real crawl data) ───────────────────────
+${websiteSection || 'Not yet verified — no website URL available'}
+
+── GBP / GOOGLE MAPS EVIDENCE ───────────────────────────────
+${gbpSection || 'Not yet verified'}
+
+── SOCIAL PRESENCE ──────────────────────────────────────────
+${socialSection || 'Not yet verified'}
+
+${enrichmentSummary ? `── INTELLIGENCE ENGINE DATA ──────────────────────────────────\n${enrichmentSummary}` : ''}
+${siSummary ? `── STRATEGY INTELLIGENCE ────────────────────────────────────\n${siSummary}` : ''}
+${gpSummary ? `── GROWTH PRESCRIPTION ──────────────────────────────────────\n${gpSummary}` : ''}
+${src.businessSignals?.length ? `── BUSINESS SIGNALS ─────────────────────────────────────────\n${src.businessSignals.join(', ')}` : ''}
 
 CRITICAL INSTRUCTIONS:
-1. If data is missing, use what is known + what is strongly inferable. Do NOT produce a weak pack because some inputs are missing.
-2. Be commercially specific — not generic. Everything must feel like it was written for THIS specific business.
-3. Think like a strategy team that has already walked into this lead before the rep does.
-4. Separate factual presence data from commercial intelligence. The commercial intelligence is what matters most.
-5. For customer/search intent: think about what drives a customer to search this category — the urgency, emotion, job-to-be-done.
-6. For website analysis: interpret what the site is TRYING to do commercially, who it's built for, and where it fails that customer.
+1. The website evidence above is real — it was crawled. Use the specific H1s, CTAs, trust signals, and conversion gaps to make every observation concrete.
+2. The GBP data is real — it came from Google Places API. Quote actual numbers (reviews, rating) and note what's missing vs what's confirmed.
+3. If any section says "Not yet verified", treat it as genuinely unknown — do not invent absence or presence.
+4. Be commercially specific — every observation must feel like it was written for THIS specific business.
+5. Think like a strategy team that has already walked through this lead's digital presence before the rep calls.
+6. Identify WHERE conversion is breaking down based on the actual evidence — missing CTAs, no phone visible, no trust signals.
 
 PRESENCE SNAPSHOT — STRICT RULES (non-negotiable):
-- "not yet verified" means the system has not confirmed that asset YET — it does NOT mean the asset is absent. Do not write "no website", "no GBP", "no social" when the field says "not yet verified" or "enrichment may be incomplete".
-- If a URL exists (website, GBP, social), that asset IS PRESENT. Assess it as present and describe its commercial quality. Never flip a confirmed URL into an absence claim.
-- If reviews > 0 or a Place ID or Maps URL exists, GBP IS PRESENT. Assess it accordingly.
-- If sitemap or crawled pages exist, the website IS PRESENT and indexable. Assess it accordingly.
-- If any social URL or social signal is listed, that platform IS ACTIVE. Assess it accordingly.
-- Only write "None" or "absent" if you have a POSITIVE confirmation of absence — which is extremely rare. Absence of data ≠ absence of asset.
-- For any presence dimension where data is genuinely missing or unverified, write: "Not yet verified — [1 sentence on what this means commercially and what to confirm on the call]"
-- The Presence Snapshot must be truthful. False absence claims corrupt the commercial intelligence and mislead the rep.
+- If a URL or crawl data is confirmed: assess commercial quality — strong/moderate/weak — with specific evidence.
+- If reviews > 0 or a Maps URL exists: GBP IS PRESENT. Assess it based on actual numbers.
+- If CTA signals are listed: quote them. If NO CTAs DETECTED: say that explicitly and explain the commercial impact.
+- Only write "None" or "absent" if evidence positively confirms absence.
+- "Not yet verified" means data was not gathered — do not turn it into an absence claim.
 
 Return ONLY a JSON object with ALL these fields:
 {
@@ -7814,6 +7995,31 @@ Return ONLY a JSON object with ALL these fields:
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // ── Gather evidence bundle for a lead (explicit trigger) ──────────────────
+  // Runs GBP discovery + website crawl + social detection and saves to Firestore.
+  // Call this before running specialist analyses to ensure evidence is current.
+  // ─────────────────────────────────────────────────────────────────────────
+  app.post("/api/leads/:leadId/gather-evidence", requireOrgAccess, async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      const orgId: string = req.orgId || req.body?.orgId || req.query?.orgId || (req.headers['x-org-id'] as string) || '';
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      if (!orgId) return res.status(400).json({ error: "orgId required" });
+      const { leadId } = req.params;
+
+      const leadDoc = await firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId).get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+      const lead = { id: leadDoc.id, ...leadDoc.data() as any };
+
+      const evidenceResult = await gatherEvidenceBundle(lead, orgId);
+      res.json({ success: true, evidenceBundle: evidenceResult?.bundle || null });
+    } catch (err: any) {
+      console.error("[gather-evidence]", err);
+      res.status(500).json({ error: err.message || "Failed to gather evidence" });
+    }
+  });
+
   // Prep Call Pack — generate for a single lead (HTTP endpoint)
   // ─────────────────────────────────────────────────────────────────────────
   app.post("/api/leads/:leadId/generate-prep-pack", async (req: any, res) => {
@@ -7873,44 +8079,32 @@ Growth objective: ${si.growthObjective || ''}
 Target locations: ${si.targetLocations || ''}
 Core services: ${si.coreServices || ''}` : '';
 
-      // Build presence signals — run active discovery to get live data
-      const nbsDiscovered = await activePresenceDiscovery(lead, orgId);
+      // Build presence signals — run evidence gathering for live data
+      const nbsEvidence = await gatherEvidenceBundle(lead, orgId);
+      const nbsBundle = nbsEvidence?.bundle || {};
+      const nbsWb = nbsBundle.website;
+      const nbsGb = nbsBundle.gbp;
+      const nbsSb = nbsBundle.social;
 
-      const nbsWebsite = lead.website || src.googleWebsite || nbsDiscovered.websiteUrl ||
-        ((lead.sitemapPages?.length ?? 0) > 0 ? `[confirmed via sitemap — ${lead.sitemapPages.length} pages]` : null) ||
-        ((lead.crawledPages?.length ?? 0) > 0 ? `[confirmed via crawl]` : null) ||
-        (enr.websiteStatus === 'has_website' ? '[website confirmed by enrichment — URL not stored]' : null) ||
-        'not yet verified';
-      const nbsReviewCount = src.googleReviewCount ?? nbsDiscovered.gbpReviewCount ?? null;
-      const nbsRating = src.googleRating ?? nbsDiscovered.gbpRating ?? null;
-      const nbsGbpUrl = src.googleMapsUrl || src.gbpUrl || nbsDiscovered.gbpMapsUrl || null;
-      const nbsGbpId = src.googlePlaceId || nbsDiscovered.gbpPlaceId || null;
-      const nbsGbpAddr = src.googleAddress || nbsDiscovered.gbpAddress || null;
-      let nbsGbp: string;
-      if (nbsGbpUrl) {
-        nbsGbp = nbsGbpUrl;
-        if (nbsReviewCount !== null) nbsGbp += ` | ${nbsReviewCount} reviews`;
-        if (nbsRating !== null) nbsGbp += `, ${nbsRating}/5`;
-      } else if (nbsReviewCount !== null && nbsReviewCount > 0) {
-        nbsGbp = `[GBP confirmed — ${nbsReviewCount} Google reviews${nbsRating !== null ? `, ${nbsRating}/5 stars` : ''}]`;
-        if (nbsGbpAddr) nbsGbp += ` | Address: ${nbsGbpAddr}`;
-      } else if (nbsGbpId) {
-        nbsGbp = `[GBP found via Place ID — reviews not yet retrieved]`;
-        if (nbsGbpAddr) nbsGbp += ` | Address: ${nbsGbpAddr}`;
-      } else {
-        nbsGbp = 'not yet verified';
-      }
-      const nbsReviews = nbsReviewCount !== null ? `${nbsReviewCount} reviews${nbsRating !== null ? `, ${nbsRating}★` : ''}` : 'not yet retrieved';
-      const nbsFb  = lead.facebookUrl  || src.facebookUrl  || nbsDiscovered.facebookUrl  || (enr.socialPresence?.facebook  ? '[detected]' : null);
-      const nbsIg  = lead.instagramUrl || src.instagramUrl || nbsDiscovered.instagramUrl || (enr.socialPresence?.instagram ? '[detected]' : null);
-      const nbsLi  = lead.linkedinUrl  || src.linkedinUrl  || nbsDiscovered.linkedinUrl  || (enr.socialPresence?.linkedin  ? '[detected]' : null);
-      const nbsSocials = [nbsFb && `Facebook: ${nbsFb}`, nbsIg && `Instagram: ${nbsIg}`, nbsLi && `LinkedIn: ${nbsLi}`].filter(Boolean).join('; ') || 'none detected';
+      const nbsWebsiteStr = nbsWb?.success
+        ? [nbsWb.url, nbsWb.ctaSignals?.length ? `CTAs: ${nbsWb.ctaSignals.join(', ')}` : 'No CTAs detected', nbsWb.conversionGaps?.length ? `Gaps: ${nbsWb.conversionGaps.slice(0, 3).join('; ')}` : ''].filter(Boolean).join(' | ')
+        : (lead.website || src.googleWebsite || 'not yet verified');
+      const nbsGbpStr = nbsGb
+        ? `${nbsGb.reviewCount ?? '?'} reviews${nbsGb.rating ? `, ${nbsGb.rating}/5★` : ''} | ${nbsGb.category || 'category unknown'} | ${nbsGb.address || 'address unknown'}`
+        : 'not yet verified';
+      const nbsSocialParts: string[] = [];
+      if (nbsSb?.facebook?.url) nbsSocialParts.push(`Facebook: ${nbsSb.facebook.url}`);
+      else if (nbsSb?.facebook?.detected || enr.socialPresence?.facebook) nbsSocialParts.push('Facebook: detected');
+      if (nbsSb?.instagram?.url) nbsSocialParts.push(`Instagram: ${nbsSb.instagram.url}`);
+      else if (nbsSb?.instagram?.detected || enr.socialPresence?.instagram) nbsSocialParts.push('Instagram: detected');
+      if (nbsSb?.linkedin?.url) nbsSocialParts.push(`LinkedIn: ${nbsSb.linkedin.url}`);
+      else if (nbsSb?.linkedin?.detected || enr.socialPresence?.linkedin) nbsSocialParts.push('LinkedIn: detected');
+      const nbsSocials = nbsSocialParts.join('; ') || 'none detected';
 
       const presenceCtx = `
-PRESENCE:
-Website: ${nbsWebsite}
-GBP/Google Maps: ${nbsGbp}
-Reviews: ${nbsReviews}
+PRESENCE (gathered from live data):
+Website: ${nbsWebsiteStr}
+GBP/Google Maps: ${nbsGbpStr}
 Social: ${nbsSocials}
 Deal stage: ${lead.stage || 'unknown'}
 Next contact: ${lead.nextContactDate ? new Date(lead.nextContactDate).toLocaleDateString('en-AU') : 'Not set'}

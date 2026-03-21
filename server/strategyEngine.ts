@@ -7,6 +7,7 @@ export interface CrawlResult {
   title?: string;
   metaDescription?: string;
   h1s: string[];
+  h2s: string[];
   headingHierarchy: { tag: string; text: string }[];
   internalLinks: number;
   externalLinks: number;
@@ -21,6 +22,13 @@ export interface CrawlResult {
   canonicalUrl?: string;
   ogTags: Record<string, string>;
   loadEstimate: string;
+  // Evidence-layer additions
+  ctaSignals: string[];          // detected CTAs: button texts, form presence, click-to-call
+  trustSignals: string[];        // testimonials, awards, review widgets, certifications
+  conversionGaps: string[];      // missing elements that hurt conversion
+  servicePageUrls: string[];     // internal URLs containing service keywords
+  locationPageUrls: string[];    // internal URLs containing location keywords
+  phoneNumbers: string[];        // phone numbers found in page text/links
 }
 
 export interface WebsiteXRayResult {
@@ -75,6 +83,54 @@ export interface TrafficForecastResult {
   keyDrivers: string[];
 }
 
+// ── Evidence bundle saved to Firestore on each lead ──────────────────────────
+export interface EvidenceBundle {
+  gatheredAt: string;
+  website: {
+    url: string;
+    crawledAt: string;
+    success: boolean;
+    title: string | null;
+    metaDescription: string | null;
+    h1s: string[];
+    h2s: string[];
+    navLabels: string[];
+    servicePageUrls: string[];
+    locationPageUrls: string[];
+    ctaSignals: string[];
+    trustSignals: string[];
+    conversionGaps: string[];
+    hasSchema: boolean;
+    hasSitemap: boolean;
+    wordCount: number;
+    serviceKeywords: string[];
+    locationKeywords: string[];
+    phoneNumbers: string[];
+    internalLinks: number;
+    hasHttps: boolean;
+  } | null;
+  gbp: {
+    placeId: string | null;
+    name: string | null;
+    rating: number | null;
+    reviewCount: number | null;
+    category: string | null;
+    address: string | null;
+    phone: string | null;
+    mapsUrl: string | null;
+    editorialSummary: string | null;
+    isOpen: boolean | null;
+    healthNotes: string[];
+  } | null;
+  social: {
+    facebook: { url: string | null; detected: boolean };
+    instagram: { url: string | null; detected: boolean };
+    linkedin: { url: string | null; detected: boolean };
+    twitter: { url: string | null; detected: boolean };
+  };
+  discoverySource: string[];
+}
+
 const crawlCache = new Map<string, { result: CrawlResult; timestamp: number }>();
 const CACHE_TTL = 30 * 60 * 1000;
 
@@ -88,6 +144,93 @@ function extractServiceKeywords(text: string, industry?: string): string[] {
   const commonServices = /\b(plumbing|electrical|concrete|landscaping|roofing|painting|flooring|carpentry|demolition|excavation|fencing|tiling|rendering|plastering|welding|air conditioning|hvac|cleaning|pest control|locksmith|glazing|waterproofing|bathroom renovation|kitchen renovation|home renovation|building|construction|pool|solar|guttering|drainage)\b/gi;
   const matches = text.match(commonServices) || [];
   return Array.from(new Set(matches.map(m => m.toLowerCase())));
+}
+
+function extractPhoneNumbers(text: string): string[] {
+  const phoneRe = /(?:\+61\s?)?(?:\(0\d\)\s?|\b0\d\s?)[\d\s]{7,10}\b|\b1[38]00[\s\d]{6,8}\b/g;
+  return Array.from(new Set((text.match(phoneRe) || []).map(p => p.trim()))).slice(0, 5);
+}
+
+function detectCtaSignals($: cheerio.CheerioAPI): string[] {
+  const signals: string[] = [];
+  const ctaPatterns = /\b(get a quote|free quote|request a quote|book now|book online|get started|contact us|call us|call now|enquire now|enquire|get in touch|schedule|request a call|free consultation|free estimate|get estimate|apply now|sign up|try free|start free)\b/i;
+
+  $('a, button').each((_, el) => {
+    const text = $(el).text().trim();
+    if (text && ctaPatterns.test(text) && text.length < 60) {
+      signals.push(text);
+    }
+  });
+
+  if ($('form').length > 0) signals.push('Contact/enquiry form present');
+  if ($('a[href^="tel:"]').length > 0) signals.push('Click-to-call phone link');
+  if ($('a[href^="mailto:"]').length > 0) signals.push('Email link');
+
+  return Array.from(new Set(signals)).slice(0, 8);
+}
+
+function detectTrustSignals($: cheerio.CheerioAPI, html: string): string[] {
+  const signals: string[] = [];
+  const bodyText = $('body').text().toLowerCase();
+
+  if (/testimon/i.test(bodyText)) signals.push('Testimonials section');
+  if (/review/i.test(bodyText) && /<iframe[^>]*google|widget[^>]*review|elfsight|birdeye|grade\.us/i.test(html)) signals.push('Google reviews widget');
+  if (/award|winner|best\s+\w+\s+20\d\d/i.test(bodyText)) signals.push('Awards or recognition mentioned');
+  if (/certif|licensed|accredited|insured|member of|association/i.test(bodyText)) signals.push('Licences or certifications mentioned');
+  if (/guarantee|warranty|satisfaction|100%/i.test(bodyText)) signals.push('Guarantee or warranty');
+  if (html.includes('application/ld+json')) {
+    if (html.includes('"Review"') || html.includes('"AggregateRating"')) signals.push('Structured review schema');
+    if (html.includes('"LocalBusiness"') || html.includes('"Organization"')) signals.push('Local business schema markup');
+  }
+  if (/years of experience|years experience|year[s]? in business|established\s+\d{4}/i.test(bodyText)) signals.push('Years in business stated');
+  if (/as seen on|featured in|media|press/i.test(bodyText)) signals.push('Media or press mentions');
+
+  return signals.slice(0, 8);
+}
+
+function detectConversionGaps($: cheerio.CheerioAPI, crawl: CrawlResult): string[] {
+  const gaps: string[] = [];
+
+  if (crawl.ctaSignals.length === 0) gaps.push('No clear CTA detected on homepage');
+  if (!crawl.phoneNumbers.length && $('a[href^="tel:"]').length === 0) gaps.push('No phone number visible on homepage');
+  if (!crawl.metaDescription) gaps.push('Missing meta description');
+  if (!crawl.h1s.length) gaps.push('No H1 heading on homepage');
+  if (crawl.locationKeywords.length === 0) gaps.push('No location keywords detected in page content');
+  if (!crawl.hasSchema) gaps.push('No structured data / schema markup');
+  if (!crawl.hasSitemap) gaps.push('No sitemap.xml found');
+  if (crawl.images.withoutAlt > crawl.images.withAlt && crawl.images.total > 3) gaps.push(`${crawl.images.withoutAlt} images missing alt text`);
+  if (!crawl.hasHttps) gaps.push('Site not on HTTPS');
+  if (crawl.wordCount < 300) gaps.push('Homepage content is very thin (under 300 words)');
+  if ($('form').length === 0 && crawl.ctaSignals.filter(s => s.toLowerCase().includes('quote') || s.toLowerCase().includes('book') || s.toLowerCase().includes('enquir')).length === 0) {
+    gaps.push('No enquiry form or booking mechanism detected');
+  }
+
+  return gaps.slice(0, 8);
+}
+
+function extractInternalPageUrls($: cheerio.CheerioAPI, baseUrl: string): { servicePageUrls: string[]; locationPageUrls: string[] } {
+  const serviceTerms = /\/(service|services|plumb|electr|paint|landscape|roof|floor|clean|pest|heat|air|hvac|reno|build|construct|pool|solar|concrete|fence|tile|render|plaster|drain|window|gutter|waterproof|bathroom|kitchen|garden|fence|install|repair|maintain)/i;
+  const locationTerms = /\/(sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|nsw|vic|qld|wa|sa|tas|suburb|location|area|region|local|parramatta|chatswood|bondi|manly|penrith|blacktown|hornsby|cronulla|newcastle|wollongong|gold-coast|sunshine-coast)/i;
+
+  const servicePageUrls: string[] = [];
+  const locationPageUrls: string[] = [];
+
+  let domain = '';
+  try { domain = new URL(baseUrl).hostname; } catch { /* ignore */ }
+
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    let full = '';
+    try { full = new URL(href, baseUrl).href.split('?')[0].split('#')[0]; } catch { return; }
+    if (!full.includes(domain)) return;
+    if (serviceTerms.test(full) && !servicePageUrls.includes(full)) servicePageUrls.push(full);
+    if (locationTerms.test(full) && !locationPageUrls.includes(full)) locationPageUrls.push(full);
+  });
+
+  return {
+    servicePageUrls: servicePageUrls.slice(0, 10),
+    locationPageUrls: locationPageUrls.slice(0, 10),
+  };
 }
 
 function isUrlSafe(urlString: string): { safe: boolean; error?: string } {
@@ -129,11 +272,13 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
   if (!urlCheck.safe) {
     return {
       url: normalizedUrl, success: false, error: urlCheck.error,
-      h1s: [], headingHierarchy: [], internalLinks: 0, externalLinks: 0,
+      h1s: [], h2s: [], headingHierarchy: [], internalLinks: 0, externalLinks: 0,
       wordCount: 0, navLabels: [], hasHttps: false, hasSitemap: false,
       serviceKeywords: [], locationKeywords: [],
       images: { total: 0, withAlt: 0, withoutAlt: 0 },
       hasSchema: false, ogTags: {}, loadEstimate: 'unknown',
+      ctaSignals: [], trustSignals: [], conversionGaps: [], servicePageUrls: [],
+      locationPageUrls: [], phoneNumbers: [],
     };
   }
 
@@ -141,6 +286,7 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     url: normalizedUrl,
     success: false,
     h1s: [],
+    h2s: [],
     headingHierarchy: [],
     internalLinks: 0,
     externalLinks: 0,
@@ -154,6 +300,12 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     hasSchema: false,
     ogTags: {},
     loadEstimate: 'unknown',
+    ctaSignals: [],
+    trustSignals: [],
+    conversionGaps: [],
+    servicePageUrls: [],
+    locationPageUrls: [],
+    phoneNumbers: [],
   };
 
   try {
@@ -187,6 +339,12 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
       const text = $(el).text().trim();
       if (text) result.h1s.push(text);
     });
+
+    $('h2').each((_, el) => {
+      const text = $(el).text().trim();
+      if (text && text.length < 150) result.h2s.push(text);
+    });
+    result.h2s = result.h2s.slice(0, 15);
 
     const headingTags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
     headingTags.forEach(tag => {
@@ -222,6 +380,7 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
 
     result.serviceKeywords = extractServiceKeywords(bodyText);
     result.locationKeywords = extractLocationKeywords(bodyText);
+    result.phoneNumbers = extractPhoneNumbers(bodyText);
 
     $('img').each((_, el) => {
       result.images.total++;
@@ -239,6 +398,14 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
       const content = $(el).attr('content') || '';
       if (prop && content) result.ogTags[prop] = content;
     });
+
+    // ── Evidence-layer: CTAs, trust signals, conversion gaps, page URLs ───────
+    result.ctaSignals = detectCtaSignals($);
+    result.trustSignals = detectTrustSignals($, html);
+    const { servicePageUrls, locationPageUrls } = extractInternalPageUrls($, normalizedUrl);
+    result.servicePageUrls = servicePageUrls;
+    result.locationPageUrls = locationPageUrls;
+    result.conversionGaps = detectConversionGaps($, result);
 
     try {
       const sitemapUrl = new URL('/sitemap.xml', normalizedUrl).href;

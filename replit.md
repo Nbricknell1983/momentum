@@ -42,6 +42,19 @@ Preferred communication style: Simple, everyday language.
 - **Firestore Rules**: Deployed separately via Firebase CLI, covering all org collections.
 - **Control-Plane Config**: `automationRules` and `openclawConfig` are validated with Zod and written only through server routes with an audit trail.
 
+### Evidence Bundle Pipeline
+- **Purpose**: Structured real-world evidence gathering before any AI analysis runs. Ensures specialist outputs are grounded in actual data, not inference.
+- **Firestore field**: `leads/{leadId}.evidenceBundle` — saved before prep pack generation and via explicit trigger.
+- **`gatherEvidenceBundle(lead, orgId)`** (server/routes.ts): Orchestrates (1) GBP/Places API discovery, (2) website crawl with enhanced detection, (3) social URL extraction. Saves structured bundle to Firestore async.
+- **`POST /api/leads/:leadId/gather-evidence`**: Explicit trigger endpoint to refresh evidence without running prep pack.
+- **Website evidence fields**: `url`, `title`, `metaDescription`, `h1s`, `h2s`, `navLabels`, `servicePageUrls`, `locationPageUrls`, `ctaSignals`, `trustSignals`, `conversionGaps`, `hasSchema`, `hasSitemap`, `phoneNumbers`, `serviceKeywords`, `locationKeywords`, `wordCount`, `hasHttps`.
+- **GBP evidence fields**: `placeId`, `name`, `rating`, `reviewCount`, `category`, `address`, `phone`, `mapsUrl`, `editorialSummary`, `isOpen`, `healthNotes[]` (derived quality signals).
+- **Social evidence fields**: `facebook`, `instagram`, `linkedin`, `twitter` — each with `url` and `detected` boolean.
+- **Enhanced `crawlWebsite`** (server/strategyEngine.ts): Now detects CTAs (button/link texts, forms, click-to-call), trust signals (testimonials, awards, schema, certifications), conversion gaps (missing phone, no form, no H1, no HTTPS), service page URLs, location page URLs, and phone numbers in page content.
+- **GBP field mask**: Now requests `editorialSummary`, `regularOpeningHours`, `businessStatus`, `primaryTypeDisplayName` in addition to basic fields.
+- **SERP analysis**: GPT-estimated (not real search data) — labeled `estimated: true` in response. Accepts `xrayEvidence` in request body to ground competitor analysis in real crawl signals.
+- **X-Ray write-back**: `POST /api/ai/growth-plan/website-xray` writes crawl evidence to `evidenceBundle.website` when `orgId` + `leadId` are provided in request body.
+
 ### Core Features
 - **Sales Operating System**: Includes Pipeline Management (Kanban, Lead Focus View), Conversation Intelligence, Lead & Client Management (AI Movement Tips), Territory System, Nurture System, Activity Tracking, and Momentum Scoring.
 - **AI Sales Engine**: A 5-section AI layer powered by GPT-4o-mini, offering stage-aware defaults, conversation intelligence, AI-extracted insights, and personalized email generation.

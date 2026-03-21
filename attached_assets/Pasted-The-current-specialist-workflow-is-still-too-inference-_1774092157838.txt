@@ -1,0 +1,72 @@
+The current specialist workflow is still too inference-heavy.
+
+I need the agents to pull real evidence before they analyse.
+
+Right now the Presence Snapshot is too shallow. It gives summary statements like:
+- website is present
+- GBP is present
+- search visibility is likely moderate
+- social not yet verified
+
+That is not enough.
+
+I need the specialist pipeline to gather and save richer structured evidence for:
+1. Website
+- website URL
+- sitemap URL if present
+- crawled pages
+- key page structure
+- H1 and H2 headings
+- page titles/meta where available
+- CTA quality
+- trust signals
+- service pages / location pages
+- conversion gaps
+
+2. GBP / Maps
+- rating
+- review count
+- categories
+- description
+- services
+- posts if available
+- photos / attributes / service areas if available
+- stronger GBP health notes
+
+3. Social
+- detected social profiles from website and discovery
+- which platforms exist
+- whether they are active or missing
+- whether branding/contact info is consistent
+
+4. Search visibility
+- evidence-based search visibility signals, not vague inferred text
+- branded presence
+- local visibility clues
+- service/suburb opportunities
+- page targeting gaps
+
+5. Competitor analysis
+- identify likely competitors
+- compare website, GBP, search, and positioning
+- explain where this business is behind and where they could realistically get to
+
+Please redesign this flow so specialists operate in two steps:
+- first gather evidence
+- then interpret it
+
+Requirements:
+- keep Firestore as source of truth
+- save structured evidence back to the lead/client record
+- keep the UI readable, but make the underlying data much richer
+- do not just generate nicer summary text
+- improve the actual data pipeline
+- show me which files and data fields need to change
+- show me how the Presence Snapshot and specialist outputs will become evidence-based instead of inference-heavy
+
+Please return:
+1. root cause of the current shallow output
+2. exact files involved
+3. proposed architecture changes
+4. data model changes
+5. safest implementation order
