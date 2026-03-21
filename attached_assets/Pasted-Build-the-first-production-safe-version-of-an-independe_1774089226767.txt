@@ -1,0 +1,69 @@
+Build the first production-safe version of an independent agent job system for Momentum using Firestore as the job queue.
+
+Context:
+- Momentum is an AI-powered Growth Operating System.
+- Firestore is the source of truth.
+- OpenClaw specialist agents already exist.
+- We want agents to act independently after the app creates work for them.
+- Nathan is not a developer, so keep the implementation clean and explain what you changed.
+
+Goal:
+Create a Firestore-backed orchestration layer where:
+1. the app creates an agent job
+2. the job includes orgId, taskType, chosen specialist agent, status, input, output, error, createdAt, startedAt, completedAt
+3. queued jobs can be picked up and processed automatically
+4. the processor routes the task to the correct OpenClaw specialist
+5. OpenClaw is invoked using the existing CLI pattern:
+openclaw agent --agent AGENT_ID --message "MESSAGE" --json
+6. the result is written back to Firestore
+7. job status moves through queued -> running -> completed or failed
+
+Requirements:
+- Use the existing Node.js + Express + TypeScript backend style already used in Momentum.
+- Do not break existing auth, org scoping, or Firestore structure.
+- Add code in a clean server/openclaw/ area or similar.
+- Use Firestore for persistence of agent jobs.
+- Create a small routing layer that maps task types to specialist agents.
+- Start with these mappings:
+- strategy -> strategy-specialist
+- seo -> seo-specialist
+- gbp -> gbp-specialist
+- ads -> google-ads-specialist
+- website -> website-specialist
+- If no mapping exists, default to strategy-specialist.
+- The OpenClaw runner should be wrapped in one reusable function.
+- Save raw result payloads and normalized status fields.
+- Keep the first version simple, reliable, and easy to extend.
+
+Please create:
+1. a job type/schema definition
+2. a routing function for taskType -> agentId
+3. an OpenClaw runner wrapper
+4. a job processor function
+5. a Firestore write helper for creating jobs
+6. a Firestore update helper for marking jobs running/completed/failed
+7. one API route that creates a new queued agent job
+8. one basic processing path that can be triggered safely for testing
+
+Important constraints:
+- Do not attempt full autonomous multi-agent fan-out yet.
+- Do not rebuild existing agents.
+- Do not add random new architecture unrelated to this feature.
+- Keep it compatible with the existing Momentum app structure.
+- Keep outputs structured and debuggable.
+- If OpenClaw is unavailable, fail gracefully and save the error on the job.
+
+Testing:
+Please also add a simple way to test the flow end-to-end:
+- create a strategy job
+- process it
+- store the result
+- show where the Firestore document is written
+
+Output format:
+When done, show me:
+1. which files you created or changed
+2. the Firestore collection path used for agent jobs
+3. how to trigger a test strategy job
+4. how to verify the result in Firestore
+5. any environment assumptions or secrets required

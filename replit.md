@@ -60,6 +60,26 @@ Preferred communication style: Simple, everyday language.
 - **Bullpen Daily Brief**: Scheduled daily agent review — trigger scan + 3 review passes (operations, client health, pipeline) + GPT synthesis into a morning brief. Auto-runs on configurable AEST cadence (default 8am). Stored in `orgs/{orgId}/bullpenSummaries/{date}`. Scheduler uses an in-memory key (`INTERNAL_SCHEDULER_KEY`) for safe server-to-server calls.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for all active leads and clients. Pass 1: identity & presence (GPT: industry, category, location). Pass 2: strategic intelligence (GPT: deal/client summary, next action, urgency). Pass 3: deterministic dependency check (GBP OAuth, Ahrefs API, website field, Local Falcon). Confidence ≥ 0.80 → auto-write to record field; below → stored in `enrichment.*` only. 7-day skip policy. Batch endpoint fires async and stores progress at `orgs/{orgId}/settings/enrichmentBatch`.
 
+### Agent Job System
+- **Purpose**: Firestore-backed job queue for dispatching work to OpenClaw specialist agents independently.
+- **Firestore path**: `orgs/{orgId}/agentJobs/{jobId}`
+- **Job status flow**: `queued → running → completed | failed`
+- **Job fields**: `orgId`, `taskType`, `agentId`, `status`, `input`, `output`, `raw`, `error`, `createdAt`, `startedAt`, `completedAt`
+- **Task → Agent routing**:
+  - `strategy` → `strategy-specialist`
+  - `seo` → `seo-specialist`
+  - `gbp` → `gbp-specialist`
+  - `ads` → `google-ads-specialist`
+  - `website` → `website-specialist`
+  - (default) → `strategy-specialist`
+- **Runner**: Primary path is OpenClaw CLI (`openclaw agent --agent ID --message "..." --json`). Fallback is HTTP POST to `{openclawConfig.baseUrl}/api/agent/run` with `x-openclaw-key` header.
+- **Module files**: `server/agent-jobs/types.ts`, `router.ts`, `runner.ts`, `processor.ts`, `firestore-helpers.ts`
+- **API routes**:
+  - `POST /api/agent-jobs` — create a queued job (requires org access)
+  - `GET /api/agent-jobs` — list jobs (manager only)
+  - `GET /api/agent-jobs/:jobId` — get job status (manager only)
+  - `POST /api/agent-jobs/:jobId/process` — trigger processing (manager only)
+
 ## External Dependencies
 
 ### Database

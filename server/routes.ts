@@ -17,6 +17,9 @@ import {
   type OpenclawConfigReadResult,
 } from "../shared/controlPlaneSchemas";
 import { writeSettingsAudit } from "./lib/settingsAudit";
+import { resolveAgentId, getSupportedTaskTypes } from "./agent-jobs/router";
+import { createAgentJob, getAgentJob, listAgentJobs } from "./agent-jobs/firestore-helpers";
+import { processAgentJob } from "./agent-jobs/processor";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -10631,6 +10634,98 @@ Rules:
     const exists = report.filter(r => r.status === 'exists').length;
     const notSupported = report.filter(r => r.status === 'not_supported').length;
     res.json({ report, created, failed, exists, notSupported });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Agent Job System — Firestore-backed job queue for OpenClaw specialist agents
+  // Firestore path: orgs/{orgId}/agentJobs/{jobId}
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // POST /api/agent-jobs — create a new queued agent job
+  app.post('/api/agent-jobs', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const orgId: string = req.orgId;
+      const { taskType, input } = req.body as { taskType?: string; input?: Record<string, any> };
+      if (!taskType || typeof taskType !== 'string') {
+        return res.status(400).json({ error: 'taskType is required', supported: getSupportedTaskTypes() });
+      }
+      const agentId = resolveAgentId(taskType);
+      const jobId = await createAgentJob(firestore, {
+        orgId,
+        taskType,
+        agentId,
+        input: input || {},
+        createdAt: new Date().toISOString(),
+      });
+      res.status(201).json({
+        jobId,
+        orgId,
+        taskType,
+        agentId,
+        status: 'queued',
+        firestorePath: `orgs/${orgId}/agentJobs/${jobId}`,
+        message: `Job queued. POST /api/agent-jobs/${jobId}/process to execute it.`,
+      });
+    } catch (err: any) {
+      console.error('[agent-jobs] Create error:', err);
+      res.status(500).json({ error: err.message || 'Failed to create agent job' });
+    }
+  });
+
+  // GET /api/agent-jobs — list all jobs for the org
+  app.get('/api/agent-jobs', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const orgId: string = req.orgId;
+      const limit = Math.min(parseInt(String(req.query.limit || '50'), 10), 100);
+      const jobs = await listAgentJobs(firestore, orgId, limit);
+      res.json({ jobs, count: jobs.length });
+    } catch (err: any) {
+      console.error('[agent-jobs] List error:', err);
+      res.status(500).json({ error: err.message || 'Failed to list agent jobs' });
+    }
+  });
+
+  // GET /api/agent-jobs/:jobId — get a single job's status and output
+  app.get('/api/agent-jobs/:jobId', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const orgId: string = req.orgId;
+      const { jobId } = req.params;
+      const job = await getAgentJob(firestore, orgId, jobId);
+      if (!job) return res.status(404).json({ error: 'Job not found' });
+      res.json(job);
+    } catch (err: any) {
+      console.error('[agent-jobs] Get error:', err);
+      res.status(500).json({ error: err.message || 'Failed to fetch agent job' });
+    }
+  });
+
+  // POST /api/agent-jobs/:jobId/process — trigger processing of a queued job
+  // Safe to call from tests and from automated triggers.
+  app.post('/api/agent-jobs/:jobId/process', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const orgId: string = req.orgId;
+      const { jobId } = req.params;
+      console.log(`[agent-jobs] Processing job ${jobId} for org ${orgId}`);
+      const result = await processAgentJob(firestore, orgId, jobId);
+      res.json({
+        jobId,
+        status: result.status,
+        agentId: result.agentId,
+        taskType: result.taskType,
+        output: result.output,
+        error: result.error,
+        startedAt: result.startedAt,
+        completedAt: result.completedAt,
+        firestorePath: `orgs/${orgId}/agentJobs/${jobId}`,
+      });
+    } catch (err: any) {
+      console.error('[agent-jobs] Process error:', err);
+      res.status(500).json({ error: err.message || 'Failed to process agent job' });
+    }
   });
 
   // ─── Bullpen Command Center — Media Upload ────────────────────────────────
