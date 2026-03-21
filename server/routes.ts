@@ -7642,36 +7642,36 @@ Return JSON:
       // Boolean flags
       if (!pw.hasSitemap && nw.hasSitemap)   changes.push({ section: 'website', field: 'hasSitemap',  type: 'improved', label: 'Sitemap found' });
       if ( pw.hasSitemap && !nw.hasSitemap)  changes.push({ section: 'website', field: 'hasSitemap',  type: 'worsened', label: 'Sitemap lost' });
-      if (!pw.hasSchema  && nw.hasSchema)    changes.push({ section: 'website', field: 'hasSchema',   type: 'improved', label: 'Schema markup added' });
+      if (!pw.hasSchema  && nw.hasSchema)    changes.push({ section: 'website', field: 'hasSchema',   type: 'improved', label: 'Schema markup detected' });
       if ( pw.hasSchema  && !nw.hasSchema)   changes.push({ section: 'website', field: 'hasSchema',   type: 'worsened', label: 'Schema markup lost' });
       if (!pw.hasHttps   && nw.hasHttps)     changes.push({ section: 'website', field: 'hasHttps',    type: 'improved', label: 'HTTPS enabled' });
       if ( pw.hasHttps   && !nw.hasHttps)    changes.push({ section: 'website', field: 'hasHttps',    type: 'worsened', label: 'HTTPS lost' });
 
       // Array length diffs — only flag meaningful swings
-      const ctaDelta  = (nw.ctaSignals?.length    ?? 0) - (pw.ctaSignals?.length    ?? 0);
-      const trustDelta= (nw.trustSignals?.length   ?? 0) - (pw.trustSignals?.length   ?? 0);
-      const gapDelta  = (nw.conversionGaps?.length ?? 0) - (pw.conversionGaps?.length ?? 0);
+      const ctaDelta   = (nw.ctaSignals?.length    ?? 0) - (pw.ctaSignals?.length    ?? 0);
+      const trustDelta = (nw.trustSignals?.length   ?? 0) - (pw.trustSignals?.length   ?? 0);
+      const gapDelta   = (nw.conversionGaps?.length ?? 0) - (pw.conversionGaps?.length ?? 0);
 
-      if (ctaDelta   >=  2) changes.push({ section: 'website', field: 'ctaSignals',    type: 'improved', label: `CTAs +${ctaDelta}`,                   before: pw.ctaSignals?.length,    after: nw.ctaSignals?.length });
-      if (ctaDelta   <= -2) changes.push({ section: 'website', field: 'ctaSignals',    type: 'worsened', label: `CTAs ${ctaDelta}`,                     before: pw.ctaSignals?.length,    after: nw.ctaSignals?.length });
-      if (trustDelta >=  2) changes.push({ section: 'website', field: 'trustSignals',  type: 'improved', label: `Trust signals +${trustDelta}`,         before: pw.trustSignals?.length,  after: nw.trustSignals?.length });
-      if (trustDelta <= -2) changes.push({ section: 'website', field: 'trustSignals',  type: 'worsened', label: `Trust signals ${trustDelta}`,          before: pw.trustSignals?.length,  after: nw.trustSignals?.length });
-      if (gapDelta   <= -1) changes.push({ section: 'website', field: 'conversionGaps',type: 'improved', label: `${Math.abs(gapDelta)} gap${Math.abs(gapDelta) > 1 ? 's' : ''} fixed`,  before: pw.conversionGaps?.length, after: nw.conversionGaps?.length });
-      if (gapDelta   >=  1) changes.push({ section: 'website', field: 'conversionGaps',type: 'worsened', label: `${gapDelta} new gap${gapDelta > 1 ? 's' : ''}`,                        before: pw.conversionGaps?.length, after: nw.conversionGaps?.length });
+      if (ctaDelta   >=  2) changes.push({ section: 'website', field: 'ctaSignals',    type: 'improved', label: `+${ctaDelta} CTAs detected`,                                                              before: pw.ctaSignals?.length,    after: nw.ctaSignals?.length });
+      if (ctaDelta   <= -2) changes.push({ section: 'website', field: 'ctaSignals',    type: 'worsened', label: `${Math.abs(ctaDelta)} CTAs removed`,                                                      before: pw.ctaSignals?.length,    after: nw.ctaSignals?.length });
+      if (trustDelta >=  2) changes.push({ section: 'website', field: 'trustSignals',  type: 'improved', label: `+${trustDelta} trust signals`,                                                            before: pw.trustSignals?.length,  after: nw.trustSignals?.length });
+      if (trustDelta <= -2) changes.push({ section: 'website', field: 'trustSignals',  type: 'worsened', label: `${Math.abs(trustDelta)} trust signals lost`,                                              before: pw.trustSignals?.length,  after: nw.trustSignals?.length });
+      if (gapDelta   <= -1) changes.push({ section: 'website', field: 'conversionGaps',type: 'improved', label: `${Math.abs(gapDelta)} conversion gap${Math.abs(gapDelta) > 1 ? 's' : ''} fixed`,        before: pw.conversionGaps?.length, after: nw.conversionGaps?.length });
+      if (gapDelta   >=  1) changes.push({ section: 'website', field: 'conversionGaps',type: 'worsened', label: `${gapDelta} new conversion gap${gapDelta > 1 ? 's' : ''}`,                              before: pw.conversionGaps?.length, after: nw.conversionGaps?.length });
 
       // Phone presence (any→none or none→any)
       const prevPhone = pw.phoneNumbers?.length ?? 0;
       const nextPhone = nw.phoneNumbers?.length ?? 0;
       if (prevPhone === 0 && nextPhone > 0) changes.push({ section: 'website', field: 'phoneNumbers', type: 'added',   label: 'Phone number found' });
-      if (prevPhone > 0 && nextPhone === 0) changes.push({ section: 'website', field: 'phoneNumbers', type: 'removed', label: 'Phone number lost' });
+      if (prevPhone > 0 && nextPhone === 0) changes.push({ section: 'website', field: 'phoneNumbers', type: 'removed', label: 'Phone number removed' });
     }
 
     // ── GBP ──
     const pg = prev.gbp;
     const ng = next.gbp;
 
-    if (!pg && ng)  changes.push({ section: 'gbp', field: 'listing', type: 'added',   label: 'GBP listing found' });
-    if ( pg && !ng) changes.push({ section: 'gbp', field: 'listing', type: 'removed', label: 'GBP listing lost' });
+    if (!pg && ng)  changes.push({ section: 'gbp', field: 'listing', type: 'added',   label: 'Google Business profile found' });
+    if ( pg && !ng) changes.push({ section: 'gbp', field: 'listing', type: 'removed', label: 'Google Business profile lost' });
 
     if (pg && ng) {
       if (pg.rating != null && ng.rating != null) {
@@ -7683,8 +7683,8 @@ Return JSON:
         const revDelta = ng.reviewCount - pg.reviewCount;
         if (Math.abs(revDelta) >= 5) changes.push({ section: 'gbp', field: 'reviewCount', type: revDelta > 0 ? 'improved' : 'worsened', label: `Reviews ${revDelta > 0 ? '+' : ''}${revDelta} (${ng.reviewCount} total)`, before: pg.reviewCount, after: ng.reviewCount });
       }
-      if (!pg.editorialSummary && ng.editorialSummary) changes.push({ section: 'gbp', field: 'editorialSummary', type: 'added',   label: 'Google editorial summary added' });
-      if ( pg.editorialSummary && !ng.editorialSummary) changes.push({ section: 'gbp', field: 'editorialSummary', type: 'removed', label: 'Google editorial summary removed' });
+      if (!pg.editorialSummary && ng.editorialSummary) changes.push({ section: 'gbp', field: 'editorialSummary', type: 'added',   label: 'Google summary added' });
+      if ( pg.editorialSummary && !ng.editorialSummary) changes.push({ section: 'gbp', field: 'editorialSummary', type: 'removed', label: 'Google summary removed' });
     }
 
     // ── Social ──
@@ -7692,8 +7692,8 @@ Return JSON:
       const wasDetected = prev.social?.[platform]?.detected ?? false;
       const isDetected  = next.social?.[platform]?.detected ?? false;
       const name = platform.charAt(0).toUpperCase() + platform.slice(1);
-      if (!wasDetected && isDetected) changes.push({ section: 'social', field: platform, type: 'added',   label: `${name} detected` });
-      if ( wasDetected && !isDetected) changes.push({ section: 'social', field: platform, type: 'removed', label: `${name} lost` });
+      if (!wasDetected && isDetected) changes.push({ section: 'social', field: platform, type: 'added',   label: `${name} page found` });
+      if ( wasDetected && !isDetected) changes.push({ section: 'social', field: platform, type: 'removed', label: `${name} page lost` });
     }
 
     return changes;
