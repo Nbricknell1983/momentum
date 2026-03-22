@@ -1,14 +1,19 @@
-import { useState } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import { format } from 'date-fns';
 import {
   Phone, Globe, MapPin, Users, TrendingUp, AlertTriangle, CheckCircle2,
-  MessageSquare, Lightbulb, HelpCircle, ChevronDown, ChevronUp,
+  MessageSquare, Lightbulb, HelpCircle, ChevronDown, ChevronUp, ChevronRight,
   RotateCcw, Loader2, Star, Brain, Search, Heart, ShieldCheck, Zap, Monitor, Eye,
   ExternalLink, X as XIcon,
 } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
-import { timeAgo } from '@/lib/utils';
+import { cn, timeAgo } from '@/lib/utils';
+import { PresenceInsightModal } from '@/components/PresenceInsightModal';
+import {
+  buildWebsiteInsights, buildGbpInsights, buildSocialInsights, buildSearchInsights,
+  type PresenceInsightDetail, type InsightStatus,
+} from '@/lib/presenceInsights';
 
 interface PresenceSnapshot {
   website: string;
@@ -102,6 +107,66 @@ function EvidenceDeltaPanel({ changes, prevGatheredAt }: { changes: any[]; prevG
   );
 }
 
+// ── Status helpers for insight rows ────────────────────────────────────────
+
+const INSIGHT_ROW_STYLES: Record<InsightStatus, { icon: string; text: string; dot: string }> = {
+  positive: { icon: '✓', text: 'text-emerald-700 dark:text-emerald-400', dot: 'text-emerald-500' },
+  warning:  { icon: '!', text: 'text-amber-700 dark:text-amber-400',   dot: 'text-amber-500'  },
+  neutral:  { icon: '·', text: 'text-slate-600 dark:text-slate-300',   dot: 'text-slate-400'  },
+  negative: { icon: '✗', text: 'text-red-700 dark:text-red-400',       dot: 'text-red-500'    },
+};
+
+function PresenceInsightRow({
+  insight,
+  onOpen,
+}: {
+  insight: PresenceInsightDetail;
+  onOpen: (d: PresenceInsightDetail) => void;
+}) {
+  const s = INSIGHT_ROW_STYLES[insight.status];
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(insight)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(insight); } }}
+      className="flex items-center gap-1.5 text-[10px] rounded px-1 py-0.5 -mx-1 cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-700/60 focus:outline-none focus:ring-1 focus:ring-violet-400/60 transition-colors group"
+      data-testid={`insight-row-${insight.id}`}
+    >
+      <span className={cn('shrink-0 font-bold leading-none', s.dot)}>{s.icon}</span>
+      <span className={cn('flex-1 leading-snug', s.text)}>{insight.label}</span>
+      <ChevronRight className="h-2.5 w-2.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 dark:group-hover:text-slate-400 shrink-0 transition-colors" />
+    </div>
+  );
+}
+
+// ── Card wrapper ────────────────────────────────────────────────────────────
+
+function PresenceCard({
+  icon: Icon, title, badge, age, children,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  badge: ReactNode;
+  age?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+          <Icon className="h-2.5 w-2.5" /> {title}
+        </div>
+        <div className="flex items-center gap-1 min-w-0">
+          {badge}
+          {age && <span className="text-[9px] text-slate-400 tabular-nums">· {age}</span>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function EvidencePresenceSection({
   eb, psAi, serp,
   ebGatheredAt, serpGeneratedAt, aiGeneratedAt,
@@ -118,291 +183,216 @@ export function EvidencePresenceSection({
   deltaPrevGatheredAt?: string | null;
   sitemapPageCount?: number;
 }) {
-  const w = eb?.website;
+  const [activeDetail, setActiveDetail] = useState<PresenceInsightDetail | null>(null);
+
+  const w   = eb?.website;
   const gbp = eb?.gbp;
   const soc = eb?.social;
 
   const hasWebObs = !!w?.url;
   const hasGbpObs = !!gbp?.placeId || !!gbp?.name;
-  const hasSocObs = !!(soc?.facebook?.detected || soc?.instagram?.detected || soc?.linkedin?.detected || soc?.twitter?.detected);
   const hasSocData = !!(soc?.facebook || soc?.instagram || soc?.linkedin || soc?.twitter);
+  const kwServices: string[] = w?.serviceKeywords?.slice(0, 8) ?? [];
+  const kwLocations: string[] = w?.locationKeywords?.slice(0, 8) ?? [];
+  const hasKwObs = kwServices.length > 0 || kwLocations.length > 0;
 
-  // Sitemap: true if the raw /sitemap.xml check passed OR if a user-initiated scan
-  // found pages (lead.sitemapPages). Both data sources must agree on the green state.
+  // Unified sitemap — raw /sitemap.xml check OR scanned pages
   const scannedPageCount = sitemapPageCount ?? 0;
-  const hasSitemapData  = !!(w?.hasSitemap || scannedPageCount > 0);
+  const hasSitemapData   = !!(w?.hasSitemap || scannedPageCount > 0);
 
-  // Conversion gaps — filter out the sitemap gap when we already know pages exist
-  // (covers both 'No sitemap.xml found' from old crawls and 'No sitemap detected' from new ones)
+  // Conversion gaps filtered to remove stale sitemap entries when pages exist
   const filteredGaps: string[] = (w?.conversionGaps ?? []).filter((g: string) =>
     hasSitemapData ? !g.toLowerCase().includes('sitemap') : true
   );
 
-  const kwServices: string[] = w?.serviceKeywords?.slice(0, 4) ?? [];
-  const kwLocations: string[] = w?.locationKeywords?.slice(0, 4) ?? [];
-  const hasKwObs = kwServices.length > 0 || kwLocations.length > 0;
+  // Freshness
+  const ebAge   = timeAgo(ebGatheredAt) ?? undefined;
+  const serpAge = timeAgo(serpGeneratedAt) ?? undefined;
+  const aiAge   = timeAgo(aiGeneratedAt) ?? undefined;
 
-  // Freshness strings — null when timestamp is absent (rendered as nothing)
-  const ebAge   = timeAgo(ebGatheredAt);
-  const serpAge = timeAgo(serpGeneratedAt);
-  const aiAge   = timeAgo(aiGeneratedAt);
-
-  // Small inline freshness label — only rendered when a non-null string is available
-  const FreshnessTag = ({ age }: { age: string | null }) =>
-    age ? <span className="text-[9px] text-slate-400 tabular-nums">· {age}</span> : null;
+  // Build structured insight lists from evidence
+  const websiteInsights = buildWebsiteInsights(w, hasSitemapData, scannedPageCount, filteredGaps);
+  const gbpInsights     = buildGbpInsights(gbp);
+  const socialInsights  = buildSocialInsights(soc);
+  const searchInsights  = buildSearchInsights(w, serp);
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <>
+      <div className="grid grid-cols-2 gap-2">
 
-      {/* ── Website card ── */}
-      <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-            <Globe className="h-2.5 w-2.5" /> Website
-          </div>
-          <div className="flex items-center gap-1 min-w-0">
-            {hasWebObs ? <ObsBadge /> : psAi?.website ? <AiBadgeMini /> : null}
-            <FreshnessTag age={hasWebObs ? ebAge : aiAge} />
-          </div>
-        </div>
-        {hasWebObs ? (
-          <div className="space-y-1">
-            <a href={w.url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline truncate">
-              <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-              <span className="truncate">{w.url.replace(/^https?:\/\//, '')}</span>
-            </a>
-            <div className="flex flex-wrap gap-1">
-              {[
-                w.hasHttps ? { label: 'HTTPS ✓', ok: true } : { label: 'No HTTPS', ok: false },
-                // Sitemap: green if raw check passed; amber "Pages found" if scanned pages exist but
-                // /sitemap.xml wasn't detected; red only when truly no data at all
-                hasSitemapData
-                  ? { label: w.hasSitemap ? 'Sitemap ✓' : `${scannedPageCount} pages found`, ok: true, neutral: !w.hasSitemap }
-                  : { label: 'No sitemap', ok: false },
-                w.hasSchema ? { label: 'Schema ✓', ok: true } : null,
-              ].filter(Boolean).map((chip: any, i) => (
-                <span key={i} className={`text-[9px] px-1 py-0.5 rounded font-medium ${
-                  chip.ok
-                    ? chip.neutral
-                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
-                      : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                    : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                }`}>
-                  {chip.label}
-                </span>
+        {/* ── Website card ── */}
+        <PresenceCard
+          icon={Globe}
+          title="Website"
+          badge={hasWebObs ? <ObsBadge /> : psAi?.website ? <AiBadgeMini /> : null}
+          age={hasWebObs ? ebAge : aiAge}
+        >
+          {hasWebObs ? (
+            <div className="space-y-0.5">
+              {/* URL link — static, not an insight row */}
+              <a href={w.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline truncate mb-1">
+                <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{w.url.replace(/^https?:\/\//, '')}</span>
+              </a>
+              {/* Insight rows — each clickable */}
+              {websiteInsights.map(insight => (
+                <PresenceInsightRow key={insight.id} insight={insight} onOpen={setActiveDetail} />
               ))}
             </div>
-            {(w.servicePageUrls?.length > 0 || w.locationPageUrls?.length > 0) && (
-              <div className="flex gap-2 text-[9px] text-slate-500">
-                {w.servicePageUrls?.length > 0 && <span>{w.servicePageUrls.length} service pages</span>}
-                {w.locationPageUrls?.length > 0 && <span>{w.locationPageUrls.length} location pages</span>}
-              </div>
-            )}
-            {w.ctaSignals?.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {w.ctaSignals.slice(0, 3).map((c: string, i: number) => (
-                  <span key={i} className="text-[9px] px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">{c}</span>
-                ))}
-              </div>
-            )}
-            {filteredGaps.length > 0 && (
-              <div className="space-y-0.5">
-                {filteredGaps.slice(0, 2).map((g: string, i: number) => (
-                  <div key={i} className="flex items-start gap-1 text-[9px] text-red-600 dark:text-red-400">
-                    <AlertTriangle className="h-2.5 w-2.5 mt-0.5 shrink-0" />{g}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : psAi?.website ? (
-          <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.website}</p>
-        ) : (
-          <p className="text-[10px] text-slate-400 italic">No website data gathered</p>
-        )}
-      </div>
+          ) : psAi?.website ? (
+            <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.website}</p>
+          ) : (
+            <p className="text-[10px] text-slate-400 italic">No website data gathered</p>
+          )}
+        </PresenceCard>
 
-      {/* ── GBP / Maps card ── */}
-      <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-            <MapPin className="h-2.5 w-2.5" /> GBP / Maps
-          </div>
-          <div className="flex items-center gap-1 min-w-0">
-            {hasGbpObs ? <ObsBadge /> : psAi?.gbp ? <AiBadgeMini /> : null}
-            <FreshnessTag age={hasGbpObs ? ebAge : aiAge} />
-          </div>
-        </div>
-        {hasGbpObs ? (
-          <div className="space-y-1">
-            {(gbp.rating != null || gbp.reviewCount != null) && (
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-200">
-                <Star className="h-2.5 w-2.5 text-amber-500" />
-                {gbp.rating != null ? gbp.rating.toFixed(1) : '—'}
-                {gbp.reviewCount != null && <span className="font-normal text-slate-500">· {gbp.reviewCount} reviews</span>}
-              </div>
-            )}
-            {gbp.name && <p className="text-[9px] font-medium text-slate-600 dark:text-slate-300 truncate">{gbp.name}</p>}
-            {gbp.category && <p className="text-[9px] text-slate-500">{gbp.category}</p>}
-            {gbp.candidates?.length > 1 && (
-              <p className="text-[9px] text-slate-400 italic">Best match · {gbp.candidates.length} listings found</p>
-            )}
-            <div className="flex items-center gap-1 text-[9px]">
-              <span className={`px-1 py-0.5 rounded font-medium ${gbp.isOpen ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>
-                {gbp.isOpen ? 'Open now' : gbp.isOpen === false ? 'Closed' : 'Hours unknown'}
-              </span>
-              {gbp.mapsUrl && (
-                <a href={gbp.mapsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline flex items-center gap-0.5">
-                  <ExternalLink className="h-2 w-2" /> Maps
-                </a>
+        {/* ── GBP / Maps card ── */}
+        <PresenceCard
+          icon={MapPin}
+          title="GBP / Maps"
+          badge={hasGbpObs ? <ObsBadge /> : psAi?.gbp ? <AiBadgeMini /> : null}
+          age={hasGbpObs ? ebAge : aiAge}
+        >
+          {hasGbpObs ? (
+            <div className="space-y-0.5">
+              {/* Static identity info */}
+              {gbp.name && (
+                <p className="text-[9px] font-medium text-slate-600 dark:text-slate-300 truncate leading-snug">
+                  {gbp.name}
+                </p>
               )}
-            </div>
-            {gbp.editorialSummary && (
-              <p className="text-[9px] text-slate-500 italic leading-snug line-clamp-2">"{gbp.editorialSummary}"</p>
-            )}
-            {gbp.healthNotes?.length > 0 && (
-              <div className="space-y-0.5">
-                {gbp.healthNotes.slice(0, 2).map((n: string, i: number) => (
-                  <div key={i} className="flex items-start gap-1 text-[9px] text-amber-600 dark:text-amber-400">
-                    <AlertTriangle className="h-2.5 w-2.5 mt-0.5 shrink-0" />{n}
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Dev-only: ranked GBP candidates for debugging branch-selection issues */}
-            {import.meta.env.DEV && gbp.candidates?.length > 1 && (
-              <details className="mt-1">
-                <summary className="text-[8px] text-slate-400 cursor-pointer select-none hover:text-slate-500">
-                  [dev] {gbp.candidates.length} candidates ranked
-                </summary>
-                <div className="mt-0.5 space-y-0.5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-0.5">
-                  {gbp.candidates.map((c: any, i: number) => (
-                    <div key={c.placeId || i} className="text-[8px] text-slate-400 leading-tight">
-                      <span className={i === 0 ? 'font-bold text-green-600 dark:text-green-400' : ''}>
-                        #{i + 1} {c.name} ({c.score}pt)
-                      </span>
-                      {c.address && <span className="ml-1 opacity-60">{c.address.slice(0, 40)}</span>}
-                      {c.reasons?.length > 0 && (
-                        <span className="ml-1 opacity-50">[{c.reasons.join(' ')}]</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
-          </div>
-        ) : psAi?.gbp ? (
-          <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.gbp}</p>
-        ) : (
-          <p className="text-[10px] text-slate-400 italic">No GBP data gathered</p>
-        )}
-      </div>
-
-      {/* ── Social card ── */}
-      <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-            <Users className="h-2.5 w-2.5" /> Social
-          </div>
-          <div className="flex items-center gap-1 min-w-0">
-            {hasSocData ? <ObsBadge /> : psAi?.social ? <AiBadgeMini /> : null}
-            <FreshnessTag age={hasSocData ? ebAge : aiAge} />
-          </div>
-        </div>
-        {hasSocData ? (
-          <div className="space-y-1">
-            {[
-              { key: 'facebook',  label: 'Facebook',  icon: SiFacebook,  data: soc?.facebook },
-              { key: 'instagram', label: 'Instagram', icon: SiInstagram, data: soc?.instagram },
-              { key: 'linkedin',  label: 'LinkedIn',  icon: SiLinkedin,  data: soc?.linkedin },
-              { key: 'twitter',   label: 'X / Twitter', icon: XIcon,    data: soc?.twitter },
-            ].map(({ key, label, icon: Icon, data }) => (
-              <div key={key} className="flex items-center gap-1.5 text-[10px]">
-                <Icon className="h-2.5 w-2.5 shrink-0 text-slate-400" />
-                {data?.detected ? (
-                  data.url ? (
-                    <a href={data.url} target="_blank" rel="noopener noreferrer"
-                      className="text-green-700 dark:text-green-300 hover:underline flex items-center gap-0.5 font-medium">
-                      {label} <ExternalLink className="h-2 w-2" />
-                    </a>
-                  ) : (
-                    <span className="text-green-700 dark:text-green-300 font-medium">{label} ✓</span>
-                  )
-                ) : (
-                  <span className="text-slate-400 dark:text-slate-500">{label} — not found</span>
+              {gbp.category && (
+                <p className="text-[9px] text-slate-400 leading-snug">{gbp.category}</p>
+              )}
+              {gbp.candidates?.length > 1 && (
+                <p className="text-[9px] text-slate-400 italic leading-snug">
+                  Best match · {gbp.candidates.length} listings found
+                </p>
+              )}
+              {/* Static status chips */}
+              <div className="flex items-center gap-1 text-[9px] mt-0.5 mb-0.5">
+                <span className={`px-1 py-0.5 rounded font-medium ${
+                  gbp.isOpen ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                             : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                }`}>
+                  {gbp.isOpen ? 'Open now' : gbp.isOpen === false ? 'Closed' : 'Hours unknown'}
+                </span>
+                {gbp.mapsUrl && (
+                  <a href={gbp.mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline flex items-center gap-0.5">
+                    <ExternalLink className="h-2 w-2" /> Maps
+                  </a>
                 )}
               </div>
-            ))}
+              {gbp.editorialSummary && (
+                <p className="text-[9px] text-slate-400 italic leading-snug line-clamp-2 mb-0.5">
+                  "{gbp.editorialSummary}"
+                </p>
+              )}
+              {/* Insight rows — rating + health notes */}
+              {gbpInsights.map(insight => (
+                <PresenceInsightRow key={insight.id} insight={insight} onOpen={setActiveDetail} />
+              ))}
+              {/* Dev-only: ranked candidates */}
+              {import.meta.env.DEV && gbp.candidates?.length > 1 && (
+                <details className="mt-1">
+                  <summary className="text-[8px] text-slate-400 cursor-pointer select-none hover:text-slate-500">
+                    [dev] {gbp.candidates.length} candidates ranked
+                  </summary>
+                  <div className="mt-0.5 space-y-0.5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-0.5">
+                    {gbp.candidates.map((c: any, i: number) => (
+                      <div key={c.placeId || i} className="text-[8px] text-slate-400 leading-tight">
+                        <span className={i === 0 ? 'font-bold text-green-600 dark:text-green-400' : ''}>
+                          #{i + 1} {c.name} ({c.score}pt)
+                        </span>
+                        {c.address && <span className="ml-1 opacity-60">{c.address.slice(0, 40)}</span>}
+                        {c.reasons?.length > 0 && (
+                          <span className="ml-1 opacity-50">[{c.reasons.join(' ')}]</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          ) : psAi?.gbp ? (
+            <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.gbp}</p>
+          ) : (
+            <p className="text-[10px] text-slate-400 italic">No GBP data gathered</p>
+          )}
+        </PresenceCard>
+
+        {/* ── Social card ── */}
+        <PresenceCard
+          icon={Users}
+          title="Social"
+          badge={hasSocData ? <ObsBadge /> : psAi?.social ? <AiBadgeMini /> : null}
+          age={hasSocData ? ebAge : aiAge}
+        >
+          {hasSocData ? (
+            <div className="space-y-0.5">
+              {socialInsights.map(insight => (
+                <PresenceInsightRow key={insight.id} insight={insight} onOpen={setActiveDetail} />
+              ))}
+            </div>
+          ) : psAi?.social ? (
+            <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.social}</p>
+          ) : (
+            <p className="text-[10px] text-slate-400 italic">No social data gathered</p>
+          )}
+        </PresenceCard>
+
+        {/* ── Search Visibility card ── */}
+        <PresenceCard
+          icon={Search}
+          title="Search"
+          badge={hasKwObs ? <ObsBadge /> : psAi?.searchVisibility ? <AiBadgeMini /> : null}
+          age={hasKwObs ? ebAge : aiAge}
+        >
+          {hasKwObs || serp?.competitors?.length > 0 ? (
+            <div className="space-y-0.5">
+              {searchInsights.map((insight, i) => {
+                const isCompetitor = insight.id === 'competitors';
+                return (
+                  <div key={insight.id}>
+                    {isCompetitor && searchInsights.length > 1 && (
+                      <div className="border-t border-slate-200 dark:border-slate-700 my-1" />
+                    )}
+                    {isCompetitor && (
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <EstBadge />
+                        {serpAge && <span className="text-[9px] text-slate-400 tabular-nums">· {serpAge}</span>}
+                      </div>
+                    )}
+                    <PresenceInsightRow insight={insight} onOpen={setActiveDetail} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : psAi?.searchVisibility ? (
+            <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.searchVisibility}</p>
+          ) : (
+            <p className="text-[10px] text-slate-400 italic">No search visibility data</p>
+          )}
+        </PresenceCard>
+
+        {/* ── Evidence delta panel — spans both columns ── */}
+        {delta && delta.length > 0 && (
+          <div className="col-span-2">
+            <EvidenceDeltaPanel changes={delta} prevGatheredAt={deltaPrevGatheredAt} />
           </div>
-        ) : psAi?.social ? (
-          <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.social}</p>
-        ) : (
-          <p className="text-[10px] text-slate-400 italic">No social data gathered</p>
         )}
+
       </div>
 
-      {/* ── Search Visibility card ── */}
-      <div className="rounded-lg border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 px-2.5 py-2 space-y-1.5">
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-            <Search className="h-2.5 w-2.5" /> Search
-          </div>
-          <div className="flex items-center gap-1 min-w-0">
-            {hasKwObs ? <ObsBadge /> : psAi?.searchVisibility ? <AiBadgeMini /> : null}
-            <FreshnessTag age={hasKwObs ? ebAge : aiAge} />
-          </div>
-        </div>
-        {hasKwObs ? (
-          <div className="space-y-1.5">
-            {kwServices.length > 0 && (
-              <div>
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Services detected</p>
-                <div className="flex flex-wrap gap-1">
-                  {kwServices.map((k: string, i: number) => (
-                    <span key={i} className="text-[9px] px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">{k}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {kwLocations.length > 0 && (
-              <div>
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Locations detected</p>
-                <div className="flex flex-wrap gap-1">
-                  {kwLocations.map((k: string, i: number) => (
-                    <span key={i} className="text-[9px] px-1 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">{k}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {serp?.competitors?.length > 0 && (
-              <div className="pt-1 border-t border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-1 mb-0.5">
-                  <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Top competitors</p>
-                  <EstBadge />
-                  <FreshnessTag age={serpAge} />
-                </div>
-                <div className="space-y-0.5">
-                  {serp.competitors.slice(0, 2).map((c: any, i: number) => (
-                    <p key={i} className="text-[9px] text-slate-500 truncate">· {c.name || c}</p>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : psAi?.searchVisibility ? (
-          <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.searchVisibility}</p>
-        ) : (
-          <p className="text-[10px] text-slate-400 italic">No search visibility data</p>
-        )}
-      </div>
-
-      {/* ── Evidence delta panel — only shown when changes exist ── */}
-      {delta && delta.length > 0 && (
-        <EvidenceDeltaPanel changes={delta} prevGatheredAt={deltaPrevGatheredAt} />
-      )}
-
-    </div>
+      {/* ── Insight drilldown modal ── */}
+      <PresenceInsightModal
+        detail={activeDetail}
+        open={!!activeDetail}
+        onClose={() => setActiveDetail(null)}
+      />
+    </>
   );
 }
 

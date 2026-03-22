@@ -1,0 +1,200 @@
+I want to upgrade the Presence Snapshot experience so the summary stays clean, but each meaningful item can be clicked to inspect deeper evidence in a modal.
+
+Goal:
+Turn the Presence Snapshot from a flat list of technical findings into an interactive “scan + inspect” experience. The main card should stay short and readable, while deeper explanation and evidence live in a modal.
+
+What to build:
+1. Make Presence Snapshot rows clickable when supporting drilldown data exists
+2. Open a modal (or right-side drawer if that fits the design system better) when the user clicks a row
+3. Use plain-English labels in the main card
+4. In the modal, show:
+- what we found
+- why it matters
+- recommended improvement
+- supporting evidence
+- optional technical details
+
+UX requirements:
+- Keep the collapsed snapshot compact and scannable
+- Do not overload the main card with long explanations
+- Only make rows clickable if real supporting detail exists
+- If there is no drilldown data, render the row as static text
+- Use product-native language, not raw SEO jargon where possible
+- Preserve the premium feel of the Focus View / AI panels
+
+Main card row examples:
+- Secure website ✓
+- Sitemap found ✓
+- Structured data found ✓
+- Phone number not prominent on homepage
+- 25 images missing descriptions
+- Limited service-page coverage
+
+Modal structure:
+For each clicked insight, show sections in this order:
+1. Summary
+2. Why it matters
+3. Evidence
+4. Recommended improvement
+5. Technical details (optional / collapsible)
+
+Suggested data shape:
+Create a reusable insight detail model so Presence Snapshot can support multiple insight types consistently.
+
+Example TypeScript shape:
+
+type PresenceInsightDetail = {
+id: string;
+label: string;
+status: "positive" | "warning" | "neutral";
+summary: string;
+whyItMatters?: string;
+recommendedImprovement?: string;
+evidence?: Array<{
+label?: string;
+value: string;
+type?: "text" | "link" | "count" | "code";
+}>;
+technicalDetails?: string[];
+clickable?: boolean;
+};
+
+type PresenceSnapshotItem = {
+id: string;
+label: string;
+status: "positive" | "warning" | "neutral";
+icon?: string;
+detail?: PresenceInsightDetail | null;
+};
+
+Interaction rules:
+- If item.detail exists and has meaningful evidence or explanation, row is clickable
+- Clicking row opens PresenceInsightModal
+- Modal title should use human-readable language
+- Add hover/cursor states only for clickable rows
+- Include a small chevron, external-inspect icon, or subtle “View details” affordance for clickable items
+- Keyboard accessible: Enter/Space should open if focused
+- Escape closes modal
+- Follow existing shadcn/ui + Radix patterns already used in the app
+
+Example modal content by insight type:
+
+1. Sitemap found
+Summary:
+We found a sitemap that helps search engines discover the website’s pages.
+
+Why it matters:
+A sitemap improves crawlability and helps Google locate important content more efficiently.
+
+Evidence:
+- Sitemap URL: https://example.com/sitemap.xml
+- Indexed URLs detected: 38
+
+Recommended improvement:
+Make sure all key service and location pages are included in the sitemap and kept up to date.
+
+Technical details:
+- sitemap.xml fetched successfully
+- urlset detected
+
+2. Structured data found
+Summary:
+Structured data is present on the site.
+
+Why it matters:
+This helps search engines better understand the business and page content.
+
+Evidence:
+- Schema types found: LocalBusiness, Organization
+- Detected on homepage
+
+Recommended improvement:
+Expand structured data coverage to service and location pages if those pages exist.
+
+3. Secure website
+Summary:
+The website is using HTTPS.
+
+Why it matters:
+This supports user trust and meets modern browser and search expectations.
+
+Evidence:
+- Homepage loaded securely
+- HTTPS redirect confirmed
+
+Recommended improvement:
+Maintain secure redirects across all key pages and assets.
+
+4. Images missing descriptions
+Summary:
+Some images are missing alt text (image descriptions).
+
+Why it matters:
+This reduces accessibility for screen-reader users and weakens contextual SEO signals.
+
+Evidence:
+- Missing alt text count: 25
+- Affected pages: homepage, gallery, services
+
+Recommended improvement:
+Add short, descriptive alt text to informative images, especially on core landing pages.
+
+5. Phone number not prominent
+Summary:
+A phone number was not clearly visible in key homepage areas.
+
+Why it matters:
+People ready to enquire may not see an immediate path to call, which increases friction.
+
+Evidence:
+- Homepage checked
+- No clear phone number found in header or hero
+
+Recommended improvement:
+Place the phone number prominently in the header, hero, or sticky contact area.
+
+6. Limited service-page coverage
+Summary:
+The site appears to have limited dedicated service pages.
+
+Why it matters:
+Customers may not quickly understand what the business offers, and Google has fewer relevant pages to rank for service-specific searches.
+
+Evidence:
+- Service pages detected: 1
+- No separate pages found for key offerings
+
+Recommended improvement:
+Create dedicated pages for each major service with clear descriptions, trust signals, and calls to action.
+
+Implementation notes:
+- Reuse existing modal/dialog primitives from the app where possible
+- Keep the styling consistent with Lead Focus View / Client Focus View side panels
+- Avoid markdown tables in UI output
+- Use bullets, stacked sections, and muted helper text
+- If technical source data is incomplete, still allow modal rendering with summary + why it matters, but avoid fake precision
+- For links like sitemap URLs, make them clickable in the evidence section
+- For large evidence lists, show top items first and collapse the rest behind “Show more”
+
+Data mapping:
+Please inspect the current Presence Snapshot source data and map existing fields into the new insight detail structure.
+If current backend payloads do not provide enough drilldown detail, do this in two phases:
+Phase 1:
+- Ship the clickable modal framework with whatever detail already exists
+- Improve labels and explanations immediately
+Phase 2:
+- Extend the backend enrichment/discovery output so items like sitemap, schema, alt text, phone visibility, and service-page coverage include richer evidence payloads
+
+Technical request:
+Please identify:
+1. the component currently rendering Presence Snapshot
+2. the data source feeding those items
+3. the smallest safe refactor path to add interactive drilldowns without breaking existing snapshot rendering
+
+Deliverables:
+- implemented clickable Presence Snapshot rows
+- reusable PresenceInsightModal component
+- mapped data model for insight detail
+- improved plain-English microcopy
+- graceful fallback for items with no detail
+- clean TypeScript-safe implementation
