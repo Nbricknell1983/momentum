@@ -76,7 +76,10 @@ export async function verifyFirebaseToken(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  if (isPublicPath(req.path)) return next();
+  // req.path has the /api/ prefix stripped when mounted via app.use('/api/', ...).
+  // Reconstruct the full path so PUBLIC_EXACT / PUBLIC_PREFIXES / regexes match correctly.
+  const fullPath = (req.baseUrl || '') + req.path;
+  if (isPublicPath(fullPath)) return next();
 
   // ── Internal scheduler bypass ────────────────────────────────────────────
   const schedulerKey = req.headers['x-scheduler-key'];

@@ -272,6 +272,8 @@ export default function StrategyReportPage() {
   const [acceptNotes, setAcceptNotes] = useState('');
   const [isAccepting, setIsAccepting] = useState(false);
   const [acceptanceResult, setAcceptanceResult] = useState<{ workItemIds: string[] } | null>(null);
+  const [errorKind, setErrorKind] = useState<'not-found' | 'expired' | 'server' | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const toggleService = (key: string) => setAcceptedServices(prev =>
     prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]
@@ -299,19 +301,38 @@ export default function StrategyReportPage() {
 
   useEffect(() => {
     if (!reportId) return;
+    setLoading(true);
+    setError(null);
+    setErrorKind(null);
     const load = async () => {
       try {
+        // Try by Firestore doc ID first, then by public slug
         const r1 = await fetch(`/api/strategy-reports/${reportId}`);
-        if (r1.ok) { const data = await r1.json(); if (!data.error) { setReport(data); setLoading(false); return; } }
+        if (r1.ok) {
+          const data = await r1.json();
+          if (!data.error) { setReport(data); setLoading(false); return; }
+        }
+        if (r1.status === 410) { setErrorKind('expired'); setError('This strategy report has expired.'); setLoading(false); return; }
+        // Fall through to slug lookup
         const r2 = await fetch(`/api/strategy-reports/by-slug/${encodeURIComponent(reportId)}`);
-        const data2 = await r2.json();
-        if (!r2.ok || data2.error) setError(data2.error || 'Report not found');
-        else setReport(data2);
-      } catch { setError('Failed to load report'); }
-      finally { setLoading(false); }
+        if (r2.ok) {
+          const data2 = await r2.json();
+          if (!data2.error) { setReport(data2); setLoading(false); return; }
+        }
+        if (r2.status === 410) { setErrorKind('expired'); setError('This strategy report has expired.'); setLoading(false); return; }
+        if (r2.status === 404 || r1.status === 404) { setErrorKind('not-found'); setError('This strategy link is invalid or has been removed.'); setLoading(false); return; }
+        // Any other failure
+        setErrorKind('server');
+        setError('Unable to load this strategy report. Please try again shortly.');
+      } catch {
+        setErrorKind('server');
+        setError('Unable to connect. Check your internet connection and try again.');
+      } finally {
+        setLoading(false);
+      }
     };
     load();
-  }, [reportId]);
+  }, [reportId, retryCount]);
 
   if (loading) return (
     <div className="min-h-screen bg-[#0d1123] flex items-center justify-center">
@@ -322,15 +343,31 @@ export default function StrategyReportPage() {
     </div>
   );
 
-  if (error || !report) return (
-    <div className="min-h-screen bg-[#0d1123] flex items-center justify-center">
-      <div className="text-center space-y-4 max-w-sm px-6">
-        <AlertCircle className="h-12 w-12 text-red-400 mx-auto" />
-        <h1 className="text-xl font-semibold text-white">Strategy not found</h1>
-        <p className="text-slate-400 text-sm">{error || 'This link is invalid or no longer available.'}</p>
+  if (error || !report) {
+    const headings: Record<string, string> = {
+      'not-found': 'Strategy not found',
+      'expired':   'This link has expired',
+      'server':    'Unable to load strategy',
+    };
+    const heading = errorKind ? headings[errorKind] : 'Strategy not found';
+    return (
+      <div className="min-h-screen bg-[#0d1123] flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-sm px-6">
+          <AlertCircle className="h-12 w-12 text-red-400 mx-auto" />
+          <h1 className="text-xl font-semibold text-white">{heading}</h1>
+          <p className="text-slate-400 text-sm">{error || 'This link is invalid or no longer available.'}</p>
+          {errorKind === 'server' && (
+            <button
+              onClick={() => setRetryCount(c => c + 1)}
+              className="mt-2 px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+            >
+              Try again
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   const s = report.strategy || {};
   const diagnosis = report.strategyDiagnosis;
