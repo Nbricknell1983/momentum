@@ -1874,7 +1874,6 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   }, [lead, orgId, authReady, dispatch]);
 
   const health = useMemo(() => computeDealHealth(lead, activities), [lead, activities]);
-  const summary = useMemo(() => generateDealSummary(lead, activities), [lead, activities]);
   const nextAction = useMemo(() => getNextBestAction(lead, activities), [lead, activities]);
 
   const handleGBPLookup = useCallback(async (placeId: string) => {
@@ -2092,27 +2091,6 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="rounded-lg border bg-card p-3" data-testid="card-deal-summary">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Zap className="h-3.5 w-3.5 text-amber-600" />
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">AI Deal Summary</span>
-        </div>
-        {summary ? (
-          <p className="text-sm text-foreground leading-relaxed">{summary}</p>
-        ) : (autoPrepRunning || generatingPrepPack) ? (
-          <div className="space-y-2">
-            {[0.85, 0.7, 0.9].map((w, i) => (
-              <div key={i} className="h-2.5 rounded-full bg-muted/60 animate-pulse" style={{ width: `${w * 100}%`, animationDelay: `${i * 120}ms` }} />
-            ))}
-            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1.5 pt-0.5">
-              <Loader2 className="h-3 w-3 animate-spin" /> Building first-pass intelligence…
-            </p>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground italic">Not enough information yet. Log a conversation or generate call prep to build a richer summary.</p>
-        )}
       </div>
 
       <AgentIntelligenceCard lead={lead} onRegenerate={handleGeneratePrepPack} isRegenerating={generatingPrepPack} isPrepping={autoPrepRunning} />
