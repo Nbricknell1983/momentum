@@ -66,6 +66,8 @@ Preferred communication style: Simple, everyday language.
 - **Idempotency**: All auto-fires use `useRef` flags (`autoEvidenceFired`, `autoPrepFired`, etc.) — never re-fire within the same mount. Fresh leads (evidence <24h, prep <24h) skip auto-fires entirely.
 - **Prep Specialist card**: Shows `running` while either `evidenceRunning` or `prepRunning`. Task text is state-aware: "Gathering presence signals and building action plan…" during Phase 1.
 - **NBS empty state**: No longer shows "Prepare Action Plan" as a primary CTA gateway. Shows passive "Refresh next steps" retry button — auto-NBS always fires first; the empty state only appears when it completed with insufficient data.
+- **Provisional NBS** (`provisional: true`): Fast-path endpoint mode on `POST /api/leads/:leadId/next-best-steps`. Skips `gatherEvidenceBundle`, uses existing `lead.evidenceBundle` from Firestore. Generates 2-3 quick steps with lighter prompt (max_tokens 900). Does NOT write to Firestore — full NBS overwrites when it lands. Frontend fires provisional auto at mount; full NBS fires concurrently. `NextBestStepsCard` shows provisional steps with amber "Preliminary · refining" banner until full NBS replaces them via Firestore onSnapshot.
+- **Right rail progressive copy**: Stage task text is now state-aware — pending stages show what they're waiting for ("Waiting for site review…", "Waiting for website and search signals…") rather than static descriptions. Pending opacity reduced to 40% (from 50%). "Up next" badge → "In queue".
 
 ### Agent Job System
 - **Purpose**: Firestore-backed job queue for dispatching work to OpenClaw specialist agents.

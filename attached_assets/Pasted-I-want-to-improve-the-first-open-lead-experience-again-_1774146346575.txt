@@ -1,0 +1,78 @@
+I want to improve the first-open lead experience again, specifically the handoff from background specialist activity into visible, useful recommendations.
+
+Problem:
+The system now starts analysis much faster, but the UX still feels incomplete because:
+- the right rail shows activity, but much of it still looks like “Up next”
+- Next Best Steps can remain effectively blank
+- the user still does not get enough early actionable guidance while deeper analysis is in progress
+
+Goal:
+Make partial progress useful earlier.
+The user should see provisional recommendations as soon as enough first-pass context exists, rather than waiting for full deep analysis completion.
+
+What I want:
+1. Add a “provisional next steps” state
+2. Generate early recommendations from partial first-pass evidence
+3. Improve specialist progress language so the right rail feels actively progressive, not inert
+4. Make the center panel feel alive even before deep analysis is complete
+
+Product behaviour:
+- If a lead has only partial first-pass context, show:
+- Initial recommendations
+- Refining as more signals come in
+- Do not leave Next Best Steps as a near-empty waiting state if some useful evidence already exists
+- Once deeper analysis completes, replace or upgrade provisional recommendations with stronger prioritised recommendations
+
+Recommended Next Best Steps progression:
+Phase 1:
+- provisional next steps from lead fields + early evidence
+Phase 2:
+- evidence-backed next steps from prep + website/search signals
+Phase 3:
+- prioritised commercial action plan from deeper specialist synthesis
+
+UX changes:
+1. Next Best Steps panel
+- replace passive “not enough context yet” states with an active in-progress state
+- show helpful interim copy such as:
+- “Initial recommendations are on the way”
+- “We’re building early recommendations now and will sharpen them as more signals arrive”
+- if enough context exists, render 2–4 provisional next steps immediately
+- only show refresh/regenerate controls once there is something meaningful to refresh
+
+2. Right rail / specialist feed
+- reduce repeated “Up next” feeling
+- show clearer stage progression:
+- Gathering evidence
+- Building first-pass brief
+- Expanding website analysis
+- Reviewing search visibility
+- Building growth recommendations
+- distinguish:
+- active
+- waiting on prerequisite data
+- complete
+
+3. Header messaging
+- connect the background system state to the visible recommendation output
+- for example:
+- “We’re building your first-pass recommendations now”
+- “Initial recommendations will appear as signals land”
+
+Implementation guidance:
+- identify the minimum evidence threshold required to generate provisional next steps
+- do not wait for all specialists to complete if useful early recommendations can already be generated
+- allow SEO/website/prep completion to unlock partial recommendation synthesis
+- upgrade provisional next steps automatically once deeper analysis is available
+
+Success criteria:
+- Next Best Steps should no longer feel blank on fresh leads
+- users should receive useful provisional guidance earlier
+- the right rail should feel like a progressing workflow, not a queue of “Up next”
+- the system should visibly evolve recommendations as more intelligence arrives
+
+Please identify:
+1. the current gating logic that prevents early next-step generation
+2. the smallest safe way to add provisional recommendation synthesis
+3. which completed first-pass signals should be sufficient to unlock early recommendations
+4. the best UI states for showing “partial but useful” guidance without implying finality

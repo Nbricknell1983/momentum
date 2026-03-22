@@ -129,7 +129,7 @@ function StatusBadge({ status }: { status: StageStatus }) {
     return <span className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium"><Loader2 className="h-3 w-3 animate-spin" /> On it…</span>;
   if (status === 'blocked')
     return <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><AlertCircle className="h-3 w-3" /> Needs info</span>;
-  return <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium"><Clock className="h-3 w-3" /> Up next</span>;
+  return <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60 font-medium"><Clock className="h-3 w-3" /> In queue</span>;
 }
 
 function HandoffConnector({ from, to, message }: { from: SpecId; to: SpecId; message: string }) {
@@ -181,7 +181,7 @@ function StageCard({ specId, status, task, finding, timestamp, blockedReason, ex
   const dim = status === 'pending' || status === 'blocked';
 
   return (
-    <div className={`flex gap-3 ${dim ? 'opacity-50' : ''} transition-opacity`} data-testid={`feed-stage-${specId}`}>
+    <div className={`flex gap-3 ${dim ? 'opacity-40' : ''} transition-opacity`} data-testid={`feed-stage-${specId}`}>
       <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
         <SpecAvatar id={specId} pulse={status === 'running'} />
       </div>
@@ -931,7 +931,11 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="website"
             status={websiteStatus}
-            task="Reviewing their site — page structure, SEO signals, and conversion gaps"
+            task={
+              websiteStatus === 'running'  ? 'Reviewing their site — page structure, SEO signals, and conversion gaps'
+              : websiteStatus === 'pending' ? 'Will review page quality, CTAs, and conversion gaps once evidence is in'
+              :                              'Reviewing their site — page structure, SEO signals, and conversion gaps'
+            }
             finding={xrayFinding}
             timestamp={xrayAt}
             blockedReason="No website URL on this lead — add one and we'll dig straight in"
@@ -952,7 +956,11 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="seo"
             status={seoStatus}
-            task="Checking where they sit in search and how they stack up against competitors"
+            task={
+              seoStatus === 'running'  ? 'Checking where they sit in search and how they stack up against competitors'
+              : seoStatus === 'pending' ? xrayRunning ? 'Waiting for site review, then mapping search visibility…' : 'Will map their search visibility and key competitors'
+              :                          'Checking where they sit in search and how they stack up against competitors'
+            }
             finding={serpFinding}
             expandable={hasSerp}
             expandContent={seoExpandContent}
@@ -971,7 +979,11 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="growth"
             status={growthStatus}
-            task="Pulling the team's findings together into a growth readiness picture"
+            task={
+              growthStatus === 'running'  ? 'Synthesising findings into a growth readiness assessment'
+              : growthStatus === 'pending' ? (xrayRunning || serpRunning) ? 'Waiting for website and search signals…' : 'Will build the growth readiness picture from the team\'s findings'
+              :                             'Synthesising findings into a growth readiness assessment'
+            }
             finding={growthFinding}
             expandable={hasDiagnosis}
             expandContent={growthExpandContent}
@@ -990,7 +1002,11 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="commercial"
             status={commStatus}
-            task="Turning the team's findings into your specific next moves for this deal"
+            task={
+              commStatus === 'running'  ? 'Turning the team\'s findings into rep-ready next moves for this deal'
+              : commStatus === 'pending' ? diagRunning ? 'Waiting for growth analysis, then building your action plan…' : 'Will translate all findings into your specific next moves'
+              :                           'Turning the team\'s findings into rep-ready next moves for this deal'
+            }
             finding={commFinding}
             timestamp={nbsAt}
             expandable={hasNbs}

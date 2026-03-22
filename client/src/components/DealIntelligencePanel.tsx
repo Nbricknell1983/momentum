@@ -811,7 +811,7 @@ const NBS_URGENCY: Record<string, { cls: string; label: string }> = {
   low:    { cls: 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600', label: 'Low' },
 };
 
-function NextBestStepsCard({ lead, autoRunning }: { lead: Lead; autoRunning: boolean }) {
+function NextBestStepsCard({ lead, autoRunning, provisionalSteps, provRunning }: { lead: Lead; autoRunning: boolean; provisionalSteps?: any[]; provRunning?: boolean }) {
   const dispatch = useDispatch();
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
@@ -867,27 +867,33 @@ function NextBestStepsCard({ lead, autoRunning }: { lead: Lead; autoRunning: boo
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">Next Best Steps</p>
-          {isLoading
-            ? <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Preparing your action plan…</p>
-            : genDate
-              ? <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Updated {genDate}</p>
-              : null}
+          {provRunning && steps.length === 0
+            ? <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Building initial recommendations…</p>
+            : isLoading && steps.length === 0 && provisionalSteps?.length === 0
+              ? <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Preparing your action plan…</p>
+              : steps.length === 0 && provisionalSteps?.length > 0
+                ? <p className="text-[10px] text-amber-600 dark:text-amber-400">Preliminary · refining as signals arrive</p>
+                : genDate
+                  ? <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Updated {genDate}</p>
+                  : null}
         </div>
-        <button
-          onClick={generate}
-          disabled={isLoading}
-          className="shrink-0 text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 disabled:opacity-30 transition-colors p-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
-          title={steps.length > 0 ? 'Refresh' : 'Prepare steps'}
-          data-testid="button-refresh-next-steps"
-        >
-          {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-        </button>
+        {steps.length > 0 && (
+          <button
+            onClick={generate}
+            disabled={isLoading}
+            className="shrink-0 text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 disabled:opacity-30 transition-colors p-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+            title="Refresh"
+            data-testid="button-refresh-next-steps"
+          >
+            {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          </button>
+        )}
       </div>
 
       <div className="p-3">
-        {/* Auto-generating loading state */}
-        {isLoading && steps.length === 0 && (
-          <div className="py-6 flex flex-col items-center gap-3 text-center">
+        {/* Initial loading — provisional NBS in flight, nothing to show yet */}
+        {(provRunning || isLoading) && steps.length === 0 && !provisionalSteps?.length && (
+          <div className="py-5 flex flex-col items-center gap-3 text-center">
             <div className="flex items-center gap-1.5">
               {[0, 1, 2, 3].map(i => (
                 <div
@@ -898,16 +904,60 @@ function NextBestStepsCard({ lead, autoRunning }: { lead: Lead; autoRunning: boo
               ))}
             </div>
             <div>
-              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Analysing deal intelligence…</p>
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                {provRunning ? 'Building initial recommendations…' : 'Sharpening recommendations…'}
+              </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Preparing a personalised action sequence for {lead.companyName || 'this deal'}
+                {provRunning
+                  ? 'Getting your first-pass action plan ready'
+                  : `Preparing a personalised action sequence for ${lead.companyName || 'this deal'}`}
               </p>
             </div>
           </div>
         )}
 
-        {/* Not enough data — retry state (auto-run has already fired; this is not the first trigger) */}
-        {!isLoading && steps.length === 0 && (
+        {/* Provisional steps — shown while full NBS is still in progress */}
+        {steps.length === 0 && (provisionalSteps?.length ?? 0) > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 mb-2.5">
+              {isLoading
+                ? <Loader2 className="h-3 w-3 text-amber-500 dark:text-amber-400 animate-spin shrink-0" />
+                : <Sparkles className="h-3 w-3 text-amber-500 dark:text-amber-400 shrink-0" />}
+              <p className="text-[10px] text-amber-700 dark:text-amber-300">
+                {isLoading ? 'Refining with deeper signals…' : 'Initial recommendations · more detail coming'}
+              </p>
+            </div>
+            {provisionalSteps!.map((step: any, i: number) => {
+              const cfg = NBS_TYPE_CONFIG[step.actionType] || { icon: ArrowRight, color: 'bg-slate-500', bg: 'bg-muted/30', label: step.actionType };
+              const Icon = cfg.icon;
+              return (
+                <div key={i} className="rounded-md border border-border/60 bg-background/80 overflow-hidden">
+                  <div className={`px-3 py-2 flex items-center gap-2 ${cfg.bg} border-b border-border/40`}>
+                    <div className={`w-6 h-6 rounded-full ${cfg.color} flex items-center justify-center shrink-0`}>
+                      <Icon className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-foreground flex-1 min-w-0">{step.label}</span>
+                    {step.urgency === 'high' && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-red-500 dark:text-red-400 shrink-0">Urgent</span>
+                    )}
+                  </div>
+                  {step.why && (
+                    <p className="px-3 pt-1.5 pb-1 text-[11px] text-muted-foreground leading-relaxed">{step.why}</p>
+                  )}
+                  {step.draftContent && (
+                    <div className="px-3 pb-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wide mb-0.5">Draft</p>
+                      <p className="text-[11px] text-foreground/80 line-clamp-3">{step.draftContent}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* No data at all — retry (only shown when both provisional and full NBS have nothing) */}
+        {!provRunning && !isLoading && steps.length === 0 && !provisionalSteps?.length && (
           <div className="py-4 text-center space-y-2.5">
             <p className="text-xs text-muted-foreground leading-relaxed">
               Not enough context yet — the team will sharpen recommendations as more data comes in. Log a conversation or add a note to help.
@@ -1164,9 +1214,12 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [mockWebsiteModalOpen, setMockWebsiteModalOpen] = useState(false);
   const [generatingPrepPack, setGeneratingPrepPack] = useState(false);
   const [autoNbsRunning, setAutoNbsRunning] = useState(false);
+  const [provisionalSteps, setProvisionalSteps] = useState<any[]>([]);
+  const [provNbsRunning, setProvNbsRunning] = useState(false);
   const autoEnrichFired = useRef(false);
   const autoPrepFired = useRef(false);
   const autoNbsFired = useRef(false);
+  const autoProvNbsFired = useRef(false);
 
   // Auto-enrich silently on panel open if enrichment is stale/missing
   useEffect(() => {
@@ -1196,7 +1249,35 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
       })).catch(() => {});
   }, [orgId, authReady, lead.id]);
 
-  // Auto-generate Next Best Steps silently if not yet generated
+  // Auto-fire PROVISIONAL Next Best Steps — fast path, no evidence re-gather, not saved to Firestore.
+  // Shows immediate recommendations while the full NBS run is still in progress.
+  useEffect(() => {
+    if (!orgId || !authReady || autoProvNbsFired.current) return;
+    if ((lead as any).nextBestSteps?.steps?.length > 0) return;
+    if (!lead.companyName) return;
+    autoProvNbsFired.current = true;
+    setProvNbsRunning(true);
+    (auth.currentUser?.getIdToken() ?? Promise.resolve(null))
+      .then(token => fetch(`/api/leads/${lead.id}/next-best-steps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ orgId, provisional: true }),
+      }))
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.steps?.length) setProvisionalSteps(data.steps);
+      })
+      .catch(() => {})
+      .finally(() => setProvNbsRunning(false));
+  }, [orgId, authReady, lead.id]);
+
+  // Clear provisional steps once full NBS lands (Firestore onSnapshot drives this)
+  useEffect(() => {
+    if ((lead as any).nextBestSteps?.steps?.length > 0) setProvisionalSteps([]);
+  }, [(lead as any).nextBestSteps?.steps?.length]);
+
+  // Auto-generate full Next Best Steps — runs evidence re-gather, writes to Firestore.
+  // Fires after provisional so the rep already has something to read while this runs.
   useEffect(() => {
     if (!orgId || !authReady || autoNbsFired.current) return;
     if ((lead as any).nextBestSteps?.steps?.length > 0) return;
@@ -1662,7 +1743,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
 
       <AgentIntelligenceCard lead={lead} onRegenerate={handleGeneratePrepPack} isRegenerating={generatingPrepPack} />
 
-      <NextBestStepsCard lead={lead} autoRunning={autoNbsRunning} />
+      <NextBestStepsCard lead={lead} autoRunning={autoNbsRunning} provisionalSteps={provisionalSteps} provRunning={provNbsRunning} />
 
       <StrategyUrlCard lead={lead} />
 

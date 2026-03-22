@@ -8282,6 +8282,64 @@ Return ONLY a JSON object with ALL these fields:
 
       // Normalise GPT array fields — GPT sometimes returns strings instead of arrays
       const toArr = (v: any): string[] => Array.isArray(v) ? v : (v ? [String(v)] : []);
+
+      // ── Provisional fast-path — skip evidence re-gather, use existing bundle ──
+      // Used by the auto-fire on first lead open. Returns 2-3 quick steps without
+      // writing to Firestore, so the full NBS run can overwrite when it arrives.
+      if (req.body?.provisional === true) {
+        const eb = lead.evidenceBundle || {};
+        const ebGbp = eb.gbp || null;
+        const ebWebsite = eb.website || null;
+        const ebSocial = eb.social || null;
+
+        const provPack = pack ? `Prep intel: ${pack.businessSnapshot?.slice(0, 150) || ''}${pack.commercialAngle ? ` | Angle: ${pack.commercialAngle}` : ''}${toArr(pack.gaps).length ? ` | Key gaps: ${toArr(pack.gaps).slice(0, 2).join('; ')}` : ''}` : '';
+        const provGbp = ebGbp ? `GBP: ${ebGbp.reviewCount ?? '?'} reviews${ebGbp.rating ? `, ${ebGbp.rating}/5★` : ''}${ebGbp.category ? ` — ${ebGbp.category}` : ''}` : (lead.address ? `Location on file: ${lead.address}` : '');
+        const provWeb = ebWebsite?.success
+          ? `Website: ${ebWebsite.url}${ebWebsite.ctaSignals?.length ? ` (CTAs: ${ebWebsite.ctaSignals.slice(0, 2).join(', ')})` : ''}${ebWebsite.conversionGaps?.length ? ` — gaps: ${ebWebsite.conversionGaps.slice(0, 2).join('; ')}` : ''}`
+          : (lead.website ? `Website on file: ${lead.website} (not yet crawled)` : 'No website on file');
+        const provSocial = [ebSocial?.facebook?.detected && 'Facebook', ebSocial?.instagram?.detected && 'Instagram', ebSocial?.linkedin?.detected && 'LinkedIn'].filter(Boolean).join(', ');
+
+        const provPrompt = `You are a senior agency sales strategist. Generate 2-3 initial next best steps for a rep opening this prospect for the first time.
+
+PROSPECT: ${lead.companyName || 'Unknown'}
+INDUSTRY: ${lead.industry || enr.industry || 'Unknown'}
+STAGE: ${lead.stage || 'prospect'}
+${provPack ? provPack + '\n' : ''}${provGbp ? provGbp + '\n' : ''}${provWeb ? provWeb + '\n' : ''}${provSocial ? `Social: ${provSocial}\n` : ''}NOTES: ${lead.notes?.slice(0, 200) || 'None'}
+
+Generate 2-3 INITIAL next best steps. These are provisional — deeper analysis is running in background.
+Return ONLY valid JSON:
+{
+  "steps": [
+    {
+      "actionType": "call|email|sms|follow_up|internal_review",
+      "label": "Short action label",
+      "urgency": "high|medium|low",
+      "why": "1 sentence — specific to this prospect",
+      "draftContent": "Brief ready-to-use draft — call opening line or email subject + first paragraph"
+    }
+  ]
+}
+Order by urgency. Max 3 steps. Be specific to this business, never generic.`;
+
+        const provRes = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'Generate provisional next best steps from partial evidence. Return only valid JSON.' },
+            { role: 'user', content: provPrompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.4,
+          max_tokens: 900,
+        });
+
+        const provRaw = provRes.choices[0]?.message?.content || '{}';
+        let provParsed: any = {};
+        try { provParsed = JSON.parse(provRaw); } catch { provParsed = { steps: [] }; }
+        const provSteps: any[] = Array.isArray(provParsed.steps) ? provParsed.steps : [];
+        // Do NOT write to Firestore — full NBS overwrites when it lands
+        return res.json({ steps: provSteps, generatedAt: new Date().toISOString(), provisional: true });
+      }
+
       const packContext = pack ? `
 AGENT INTELLIGENCE:
 Business: ${pack.businessSnapshot || ''}
