@@ -7236,6 +7236,38 @@ Make it specific to their industry and location.`;
     }
   });
 
+  // Update strategy report content (regenerate)
+  app.patch("/api/strategy-reports/:reportId/content", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+      const token = authHeader.split(' ')[1];
+      try {
+        const adminModule = (await import('./firebase')).default;
+        await adminModule.auth().verifyIdToken(token);
+      } catch { return res.status(401).json({ error: "Invalid token" }); }
+      const { reportId } = req.params;
+      const docRef = firestore.collection('strategyReports').doc(reportId);
+      const doc = await docRef.get();
+      if (!doc.exists) return res.status(404).json({ error: "Report not found" });
+      const { strategy, strategyDiagnosis, preparedBy, preparedByEmail, phone, industry, location } = req.body;
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (strategy !== undefined) updates.strategy = strategy;
+      if (strategyDiagnosis !== undefined) updates.strategyDiagnosis = strategyDiagnosis;
+      if (preparedBy !== undefined) updates.preparedBy = preparedBy;
+      if (preparedByEmail !== undefined) updates.preparedByEmail = preparedByEmail;
+      if (phone !== undefined) updates.phone = phone;
+      if (industry !== undefined) updates.industry = industry;
+      if (location !== undefined) updates.location = location;
+      await docRef.update(updates);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[strategy-reports PATCH content]", err);
+      res.status(500).json({ error: "Failed to update report" });
+    }
+  });
+
   // AI-generated prospect follow-up email
   app.post("/api/ai/strategy-email", async (req, res) => {
     try {

@@ -1269,8 +1269,74 @@ function RecommendedStrategyCard({ lead }: { lead: Lead }) {
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenPhase, setRegenPhase] = useState('');
 
   const strategy = useMemo(() => deriveRecommendedStrategy(lead), [lead]);
+
+  const regenerateReport = async () => {
+    const reportId = (lead as any).strategyReportId;
+    if (!reportId || !authReady) return;
+    setRegenerating(true);
+    setRegenPhase('Generating strategy content…');
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const businessName = lead.companyName || (lead as any).businessName || 'Business';
+      const strategyDiagnosis = (lead as any).aiGrowthPlan?.strategyDiagnosis || null;
+
+      // Run twelve-month strategy AI
+      const stratRes = await fetch('/api/ai/growth-plan/twelve-month-strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          businessName,
+          websiteUrl: lead.website || '',
+          industry: lead.industry || '',
+          location: lead.address || '',
+          strategyDiagnosis: strategyDiagnosis || undefined,
+          sitemapPages: (lead as any).sitemapPages || [],
+          crawledPages: (lead as any).crawledPages || [],
+          reviewCount: (lead as any).sourceData?.reviewCount ?? null,
+          rating: (lead as any).sourceData?.rating ?? null,
+          gbpLink: (lead as any).sourceData?.googleMapsUrl || null,
+          facebookUrl: (lead as any).facebookUrl || null,
+          instagramUrl: (lead as any).instagramUrl || null,
+          linkedinUrl: (lead as any).linkedinUrl || null,
+          conversationNotes: lead.notes || null,
+          dealStage: lead.stage || null,
+          mrr: (lead as any).mrr || null,
+          strategyIntelligence: (lead as any).strategyIntelligence || null,
+        }),
+      });
+      if (!stratRes.ok) throw new Error('Strategy generation failed');
+      const freshStrategy = await stratRes.json();
+
+      setRegenPhase('Saving to report…');
+
+      // Patch existing report doc with fresh strategy content
+      const patchRes = await fetch(`/api/strategy-reports/${reportId}/content`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          strategy: freshStrategy,
+          strategyDiagnosis: strategyDiagnosis,
+          preparedBy: auth.currentUser?.displayName || 'Momentum Agent',
+          preparedByEmail: auth.currentUser?.email || '',
+          phone: lead.phone || '',
+          industry: lead.industry || '',
+          location: lead.address || '',
+        }),
+      });
+      if (!patchRes.ok) throw new Error('Failed to update report');
+
+      toast({ title: 'Report refreshed', description: 'The strategy page now has full AI-generated content.' });
+    } catch (err: any) {
+      toast({ title: 'Refresh failed', description: err.message || 'Something went wrong', variant: 'destructive' });
+    } finally {
+      setRegenerating(false);
+      setRegenPhase('');
+    }
+  };
 
   // Show nothing if there's genuinely no intelligence available yet
   const hasAnyData = !!(
@@ -1422,6 +1488,19 @@ function RecommendedStrategyCard({ lead }: { lead: Lead }) {
               <p className="text-[9.5px] text-muted-foreground/60 pl-5">
                 Paste into email or SMS to share with your prospect
               </p>
+              {/* Refresh report button */}
+              <div className="pt-1.5 pl-5">
+                <button
+                  onClick={regenerateReport}
+                  disabled={regenerating || !authReady}
+                  className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 disabled:opacity-40 transition-colors"
+                  data-testid="button-refresh-strategy-report"
+                >
+                  {regenerating
+                    ? <><Loader2 className="h-3 w-3 animate-spin" />{regenPhase || 'Refreshing…'}</>
+                    : <><RefreshCw className="h-3 w-3" />Refresh report content</>}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center gap-2">
