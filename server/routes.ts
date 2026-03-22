@@ -8090,7 +8090,9 @@ Return JSON:
 
     const gpSummary = gp ? `Growth Prescription: ${gp.businessDiagnosis}. Urgency: ${gp.urgencyLevel}. Recommended: ${(gp.recommendedStack || []).slice(0, 3).map((p: any) => p.product).join(', ')}.` : '';
 
-    const prompt = `You are a senior marketing strategist preparing a call brief for an agency sales rep. The system has gathered real evidence about this business — interpret it commercially. Every claim you make must be grounded in the actual evidence below.
+    const prompt = `You are a senior marketing strategist preparing a call brief for an agency sales rep. Your job is to produce a COMPLETE, USEFUL first-pass intelligence pack for every viable lead — not a minimal stub. Use confirmed evidence where it exists; use professional inference grounded in business type, industry, and location where evidence is thin. Mark inferences as "likely" or "inferred from business type" rather than omitting sections.
+
+CRITICAL RULE: A complete first-pass pack is ALWAYS more valuable than a thin one. If evidence is sparse, use your deep knowledge of this type of business, their typical customers, and their common digital gaps to fill each section with commercially useful insight. Do not wait for perfect data — produce the best available intelligence now.
 
 PROSPECT DATA:
 Business: ${lead.companyName}
@@ -8116,53 +8118,62 @@ ${siSummary ? `── STRATEGY INTELLIGENCE ────────────
 ${gpSummary ? `── GROWTH PRESCRIPTION ──────────────────────────────────────\n${gpSummary}` : ''}
 ${src.businessSignals?.length ? `── BUSINESS SIGNALS ─────────────────────────────────────────\n${src.businessSignals.join(', ')}` : ''}
 
-CRITICAL INSTRUCTIONS:
-1. The website evidence above is real — it was crawled. Use the specific H1s, CTAs, trust signals, and conversion gaps to make every observation concrete.
-2. The GBP data is real — it came from Google Places API. Quote actual numbers (reviews, rating) and note what's missing vs what's confirmed.
-3. If any section says "Not yet verified", treat it as genuinely unknown — do not invent absence or presence.
-4. Be commercially specific — every observation must feel like it was written for THIS specific business.
-5. Think like a strategy team that has already walked through this lead's digital presence before the rep calls.
-6. Identify WHERE conversion is breaking down based on the actual evidence — missing CTAs, no phone visible, no trust signals.
+INSTRUCTIONS:
+1. Confirmed evidence (crawled website, GBP data, real review counts): quote specific numbers and signals.
+2. "Not yet verified" sections: acknowledge the gap, then provide the most commercially useful first-pass inference you can from business type, industry, and location — always end with a call-confirm note.
+3. Every section must be populated. A well-informed inference with "likely:" prefix is always better than leaving a field empty.
+4. Be commercially sharp — write as a strategy team who has researched this business before the rep's call.
+5. Surface WHERE conversion is likely breaking down based on evidence and industry norms.
 
-PRESENCE SNAPSHOT — STRICT RULES (non-negotiable):
-- If a URL or crawl data is confirmed: assess commercial quality — strong/moderate/weak — with specific evidence.
-- If reviews > 0 or a Maps URL exists: GBP IS PRESENT. Assess it based on actual numbers.
-- If CTA signals are listed: quote them. If NO CTAs DETECTED: say that explicitly and explain the commercial impact.
-- Only write "None" or "absent" if evidence positively confirms absence.
-- "Not yet verified" means data was not gathered — do not turn it into an absence claim.
+PRESENCE SNAPSHOT — RULES:
+- Confirmed URL or crawl data: assess commercial quality (strong/moderate/weak) with specific evidence.
+- Reviews > 0 or Maps URL confirmed: GBP IS PRESENT — assess listing completeness and local trust.
+- CTA signals listed: quote them. NO CTAs DETECTED: say so and explain the commercial impact.
+- "Not yet verified" fields: write a concise unverified note PLUS a brief inference about what to look for and why it matters.
 
-Return ONLY a JSON object with ALL these fields:
+GRACEFUL DEGRADATION RULES (apply when evidence is thin):
+- businessSnapshot: even with minimal data, summarise what is known + likely market position for this business type in this location.
+- customerProfile: use industry knowledge — service/trade businesses have well-understood customer profiles. Do not leave blank.
+- searchIntentAnalysis: every service category has predictable search intent. Provide specific terms for this category and location.
+- websiteAnalysis: if crawl failed, assess what a business of this type typically gets wrong on their site and what the rep should look for.
+- opportunities: identify 3-4 opportunities typical of this business type and size — flag which are inferred vs confirmed.
+- gaps: identify 3-4 typical gaps — even without crawl data, most service/trade businesses have common digital weaknesses.
+- callPriorities: always produce 3 sharp call priorities grounded in the lead's current stage and situation.
+- discoveryQuestions: always produce 5+ specific questions for this type of business — generic is better than none.
+- commercialAngle: every viable lead has a commercial hook — find it from the business name, location, and industry if nothing else is available.
+
+Return ONLY a valid JSON object with ALL these fields populated:
 {
   "businessSnapshot": "2-3 sentence synthesis — what this business does, their market position, their competitive situation, what type of customer they serve",
   "customerProfile": {
-    "likelyCustomer": "Who the typical customer of this business is — their situation, demographics, mindset",
-    "jobsToBeDone": "What job the customer is hiring this business to do — be specific about the outcome they want",
+    "likelyCustomer": "Who the typical customer of this business is — their situation, demographics, mindset. Use industry inference if evidence is thin.",
+    "jobsToBeDone": "What job the customer is hiring this business to do — specific outcome they want",
     "urgencyEmotion": "The urgency level and emotional state driving this customer's search or enquiry",
     "trustFactors": "The specific trust and conversion signals that matter most to this customer before they'll contact or buy"
   },
   "searchIntentAnalysis": {
-    "primarySearchTerms": ["2-4 likely search terms this business's customers use"],
+    "primarySearchTerms": ["2-4 likely search terms this business's customers use — include location modifier if known"],
     "whyTheySearch": "Why a customer searches this category — what triggered the search, what problem they need solved right now",
     "whatTheyNeedToSee": "What this customer needs to see on a website or in search results before they'll contact or convert",
     "conversionBarriers": "What typically stops this type of customer from converting — what uncertainty or friction they face"
   },
   "websiteAnalysis": {
-    "whatItTries": "What the current website appears to be trying to do commercially — its apparent purpose and strategy",
-    "whoItsFor": "Who the site appears to have been built for — the intended audience based on content, language, structure",
-    "keyWeaknesses": ["2-3 specific commercial weaknesses of this website — what it fails to do for the customer"],
-    "missedOpportunity": "The single biggest commercial opportunity this website is failing to capture right now"
+    "whatItTries": "What the current website appears to be trying to do commercially. If crawl failed, describe what a site for this business type typically does and should do.",
+    "whoItsFor": "Who the site appears built for — based on crawl data or inferred from business type",
+    "keyWeaknesses": ["2-3 specific commercial weaknesses — from crawl data if available, otherwise common weaknesses for this business type"],
+    "missedOpportunity": "The single biggest commercial opportunity this website is likely failing to capture"
   },
   "presenceSnapshot": {
-    "website": "Website assessment. If URL or crawl data is confirmed: assess commercial quality (strong/moderate/weak) + specific observations about what the site does and fails to do. If field is 'not yet verified': write 'Not yet verified — confirm URL on the call and note what to look for'",
-    "gbp": "GBP/Maps assessment. If Maps URL, Place ID, or review count confirms GBP: assess review volume, star rating, listing completeness, and local trust signal. If field is 'not yet verified': write 'Not yet verified — check Google Maps for their listing during the call'",
-    "social": "Social presence assessment. List each confirmed platform and assess activity level + commercial signal. If a platform URL is provided, it IS present — do not contradict it. If field is 'not yet verified': write 'Not yet verified — ask which platforms they manage on the call'",
-    "searchVisibility": "Search visibility assessment: synthesise all confirmed presence signals (website, GBP, reviews, social) to assess likely organic and local visibility. Base this only on confirmed signals — do not penalise for unverified data"
+    "website": "Assessment based on crawl data. If not crawled: note unverified + describe what to look for on the call and why it matters commercially.",
+    "gbp": "Assessment based on GBP data. If not verified: note unverified + describe typical GBP health for this business type and what to check.",
+    "social": "Assessment of confirmed platforms. If not verified: note unverified + describe typical social presence for this industry.",
+    "searchVisibility": "Synthesise all presence signals into a likely search visibility rating — if data is sparse, give a baseline assessment for this business type in this location"
   },
-  "opportunities": ["up to 4 specific commercial opportunities for THIS prospect — concrete, not generic"],
-  "gaps": ["up to 4 specific gaps or weaknesses that create the opening to sell — reference their actual situation"],
+  "opportunities": ["3-4 specific commercial opportunities — mark confirmed vs likely"],
+  "gaps": ["3-4 specific gaps that create the opening to sell — reference situation or infer from business type"],
   "callPriorities": ["top 3 things to focus on in THIS specific call — ordered by commercial importance"],
-  "discoveryQuestions": ["5-7 sharp, specific questions designed for THIS business — not generic sales questions"],
-  "commercialAngle": "The single strongest commercial angle — the hook that will resonate with this specific prospect and their situation",
+  "discoveryQuestions": ["5-7 sharp, specific questions designed for THIS type of business and situation"],
+  "commercialAngle": "The single strongest commercial angle — the hook that will resonate with this specific prospect",
   "missingDataNotes": ["specific things still unknown that must be confirmed on the call to sharpen the strategy"],
   "confidence": "high|medium|low"
 }`;
@@ -8170,12 +8181,12 @@ Return ONLY a JSON object with ALL these fields:
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a senior marketing strategist producing commercially sharp prep call briefs for agency sales reps. You think like a strategy team that has already researched the business. Be specific to THIS business — never generic. Use what is known and what is inferable. Never let missing data collapse your usefulness. IMPORTANT: Any established business with a real name and physical location almost certainly has SOME digital presence — do not assume zero presence. If presence data shows "not yet verified", say so explicitly rather than assuming absence. Your job is to identify WHERE presence is strong or weak, not to fabricate absence where data is simply missing.' },
+        { role: 'system', content: 'You are a senior marketing strategist producing commercially sharp, COMPLETE prep call briefs for agency sales reps. Your #1 rule: every field in the JSON must be populated — a well-informed inference is always better than an empty field. You think like a strategy team that has already researched the business. When evidence is sparse, use your deep knowledge of this business type, industry, and location to produce a coherent, useful first-pass pack. Mark inferences clearly as "likely:" or "inferred from business type:" — never leave sections blank. Any established business with a real name and physical location almost certainly has digital presence and typical customers — use industry knowledge to fill gaps. Do not let missing evidence collapse any section — produce the best commercially useful output possible from what you know.' },
         { role: 'user', content: prompt },
       ],
       response_format: { type: 'json_object' },
       temperature: 0.4,
-      max_tokens: 2000,
+      max_tokens: 3000,
     });
 
     const raw = response.choices[0]?.message?.content || '{}';

@@ -1,0 +1,68 @@
+I want the agents to consistently produce a full first-pass intelligence pack for leads, similar to what they generated for First Parking.
+
+Problem:
+Some leads still do not feel like they are getting a complete Deal Intelligence output, even though First Parking shows the intended standard:
+- Presence Snapshot
+- Customer Profile
+- Search Intent
+- Website Interpretation
+- Opportunities
+- Key Gaps
+- Commercial Angle
+- Call Priorities
+- Discovery Questions
+
+Goal:
+Make this richer intelligence pack the default behaviour for viable leads, not the exception.
+
+Product rule:
+If a lead has enough baseline information (business name, website, location, plus any early evidence), the agent should generate a useful first-pass intelligence pack even if some deeper signals are still missing.
+
+What I want:
+1. Support a minimum viable intelligence pack mode
+2. Generate the best available first-pass intelligence from partial evidence
+3. Progressively enrich that pack as deeper specialist outputs arrive
+4. Avoid all-or-nothing behaviour where sparse evidence leads end up with weak or missing intelligence
+
+Desired intelligence pack structure:
+- Presence Snapshot
+- Customer Profile
+- Search Intent
+- Website Interpretation
+- Opportunities
+- Key Gaps
+- Commercial Angle
+- Call Priorities
+- Discovery Questions
+
+Implementation guidance:
+1. Identify where the Agent Intelligence / prep pack synthesis prompt is currently gated
+2. Relax hard dependencies so a first-pass pack can still generate from partial evidence
+3. Introduce a “minimum viable intelligence pack” path for leads with:
+- business name
+- website or domain
+- location/suburb
+- any early presence/search/GBP/website evidence
+4. Allow sections to degrade gracefully when evidence is thin:
+- shorter customer profile
+- likely search intent instead of highly specific intent
+- provisional opportunities/gaps
+- fewer discovery questions
+5. Continue upgrading the pack automatically as richer evidence arrives
+
+Important UX rule:
+Do not make the pack feel empty or withheld just because some signals are incomplete.
+It is better to show a lighter but coherent first-pass pack than to wait for perfect evidence.
+
+Success criteria:
+- more leads produce a Deal Intelligence pack shaped like the First Parking example
+- sparse-evidence leads still get a useful first-pass intelligence view
+- the intelligence pack progressively improves as more specialist outputs arrive
+- the system feels consistently proactive and insightful across leads, not only on the strongest examples
+
+Please identify:
+1. what minimum evidence threshold should unlock first-pass intelligence generation
+2. which current gating rules are too strict
+3. the smallest safe refactor to support a minimum viable intelligence pack
+4. how to gracefully degrade each intelligence section when evidence is partial
+5. how to preserve progressive enrichment without regressions to the stronger full-pack cases
