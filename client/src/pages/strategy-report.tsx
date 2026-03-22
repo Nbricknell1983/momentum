@@ -1105,8 +1105,8 @@ export default function StrategyReportPage() {
             <h2 className="text-3xl md:text-4xl font-black mt-2 mb-3">What happens if nothing changes</h2>
             <p className="text-slate-400 text-sm mb-8 max-w-2xl">This is not about fear — it's about understanding the ongoing cost of the current visibility gap, in real business terms.</p>
 
-            {/* Daily cost callout */}
-            {coi.missedMonthlySearches > 0 && (
+            {/* Daily cost callout — only show when volume is observed from keyword data */}
+            {coi.missedMonthlySearches > 0 && coi.searchVolumeSource === 'observed-keyword-data' && (
               <div className="bg-red-500/6 border border-red-500/20 rounded-xl px-5 py-4 flex items-center gap-5 mb-8">
                 <div className="text-center shrink-0 min-w-[4rem]">
                   <p className="text-3xl font-black text-red-400 tabular-nums">{Math.round(coi.missedMonthlySearches / 30)}</p>
@@ -1120,16 +1120,18 @@ export default function StrategyReportPage() {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-              {coi.missedMonthlySearches > 0 && (
+              {coi.missedMonthlySearches > 0 && coi.searchVolumeSource === 'observed-keyword-data' && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 text-center">
                   <div className="text-3xl font-black text-red-400 mb-1">{Number(coi.missedMonthlySearches).toLocaleString()}</div>
                   <p className="text-xs text-red-300/70 uppercase tracking-wider font-semibold">Monthly searches not captured</p>
+                  <p className="text-[10px] text-red-400/40 mt-1">From uploaded keyword data</p>
                 </div>
               )}
-              {coi.businessImpact && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 text-center md:col-span-2">
-                  <p className="text-xs text-amber-400 uppercase tracking-wider font-bold mb-2">Annual opportunity cost</p>
-                  <p className="text-base text-white font-semibold leading-relaxed">{coi.businessImpact}</p>
+              {/* businessImpactNote (new) or businessImpact (legacy) */}
+              {(coi.businessImpactNote || coi.businessImpact) && (
+                <div className={`bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 ${coi.missedMonthlySearches > 0 && coi.searchVolumeSource === 'observed-keyword-data' ? 'md:col-span-2' : 'md:col-span-3'}`}>
+                  <p className="text-xs text-amber-400 uppercase tracking-wider font-bold mb-2">Opportunity scenario</p>
+                  <p className="text-sm text-white/80 leading-relaxed">{coi.businessImpactNote || coi.businessImpact}</p>
                 </div>
               )}
             </div>
@@ -1141,15 +1143,17 @@ export default function StrategyReportPage() {
                   const intensity = i === 0 ? { bg: 'bg-amber-500/8 border-amber-500/20', label: 'text-amber-400', icon: 'text-amber-300' }
                     : i === 1 ? { bg: 'bg-orange-500/8 border-orange-500/20', label: 'text-orange-400', icon: 'text-orange-300' }
                     : { bg: 'bg-red-500/8 border-red-500/20', label: 'text-red-400', icon: 'text-red-300' };
+                  const searchesNum = Number(t.searchesLost);
                   return (
                     <div key={i} className={`border rounded-2xl p-5 space-y-3 ${intensity.bg}`}>
                       <div className="flex items-center gap-2">
                         <Clock className={`h-4 w-4 ${intensity.icon}`} />
                         <span className={`text-xs font-bold uppercase tracking-wider ${intensity.label}`}>{t.period}</span>
                       </div>
-                      {t.searchesLost > 0 && (
+                      {/* Only show search number when it's from real keyword data */}
+                      {searchesNum > 0 && coi.searchVolumeSource === 'observed-keyword-data' && (
                         <div>
-                          <p className={`text-2xl font-black ${intensity.label}`}>{Number(t.searchesLost).toLocaleString()}</p>
+                          <p className={`text-2xl font-black ${intensity.label}`}>{searchesNum.toLocaleString()}</p>
                           <p className="text-xs text-slate-500 font-medium">searches pass to competitors</p>
                         </div>
                       )}
@@ -1168,10 +1172,11 @@ export default function StrategyReportPage() {
             )}
 
             <div className="space-y-3">
-              {coi.missedEnquiriesNote && (
+              {/* missedEnquiriesEstimate (new) or missedEnquiriesNote (legacy) */}
+              {(coi.missedEnquiriesEstimate || coi.missedEnquiriesNote) && (
                 <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-start gap-3">
                   <Clock className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                  <p className="text-sm text-slate-300 leading-relaxed">{coi.missedEnquiriesNote}</p>
+                  <p className="text-sm text-slate-300 leading-relaxed">{coi.missedEnquiriesEstimate || coi.missedEnquiriesNote}</p>
                 </div>
               )}
               {coi.competitorNote && (
@@ -1199,9 +1204,12 @@ export default function StrategyReportPage() {
                   <div key={i} className="bg-gray-50 border border-gray-100 rounded-2xl p-5 text-center shadow-sm">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{outcome.month}</p>
                     <div className="text-3xl font-black text-blue-600 mb-1">{outcome.estimatedLeads}</div>
-                    <p className="text-xs text-gray-500 mb-3">leads/month</p>
+                    <p className="text-xs text-gray-500 mb-3">leads/month (scenario estimate)</p>
                     {outcome.rankingKeywords && <p className="text-xs text-gray-400 mb-2">~{outcome.rankingKeywords} ranking keywords</p>}
                     <span className={`inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${confColor}`}>{outcome.confidence} confidence</span>
+                    {outcome.scenarioCaveat && (
+                      <p className="text-[10px] text-gray-400 mt-3 leading-relaxed">{outcome.scenarioCaveat}</p>
+                    )}
                   </div>
                 );
               })}
@@ -1221,13 +1229,23 @@ export default function StrategyReportPage() {
                 <div className="px-5 py-3 text-center">Baseline</div>
                 <div className="px-5 py-3 text-center">12-Month Target</div>
               </div>
-              {kpis.map((kpi: any, i: number) => (
-                <div key={i} className={`grid grid-cols-3 text-sm border-b border-gray-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                  <div className="px-5 py-3.5 font-medium text-gray-900">{kpi.metric}</div>
-                  <div className="px-5 py-3.5 text-center text-gray-500">{kpi.baseline}</div>
-                  <div className="px-5 py-3.5 text-center font-bold text-green-600">{kpi.target12Month}</div>
-                </div>
-              ))}
+              {kpis.map((kpi: any, i: number) => {
+                const dq = kpi.dataQuality;
+                const dqColor = dq === 'observed' ? 'text-emerald-600' : dq === 'estimated' ? 'text-amber-500' : 'text-gray-400';
+                const dqLabel = dq === 'observed' ? 'observed' : dq === 'estimated' ? 'estimated' : null;
+                return (
+                  <div key={i} className={`grid grid-cols-3 text-sm border-b border-gray-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                    <div className="px-5 py-3.5 font-medium text-gray-900">{kpi.metric}</div>
+                    <div className="px-5 py-3.5 text-center text-gray-500">
+                      <span>{kpi.baseline}</span>
+                      {dqLabel && (
+                        <span className={`block text-[9px] font-bold uppercase tracking-wider mt-0.5 ${dqColor}`}>{dqLabel}</span>
+                      )}
+                    </div>
+                    <div className="px-5 py-3.5 text-center font-bold text-green-600">{kpi.target12Month}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>

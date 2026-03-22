@@ -6564,8 +6564,8 @@ Respond with this EXACT JSON — every field must be specific, evidence-based, a
     { "category": "Decision Intent", "coverage": "strong|partial|missing", "evidence": "...", "suggestedMove": "..." }
   ],
   "momentumMoment": {
-    "summary": "3 sentences that create a moment of strategic clarity: (1) name the real-world demand that exists in this market using the keyword volume data, (2) name the exact visibility gap this business has right now with specific evidence, (3) frame the competitive opportunity — what's available to capture if action is taken. This should feel like a senior advisor just told them something they hadn't seen before.",
-    "clientQuestion": "One NEPQ-style reflective question that creates realisation. NOT: 'Would you like to improve your rankings?' DO: Something like 'If [X] people are searching for [service] in [location] every month and your competitors are capturing most of them — what would it mean for your business if even [Y%] of those found you first?' Calibrated, not salesy."
+    "summary": "3 sentences that create a moment of strategic clarity: (1) describe the real-world demand that exists in this market — if keyword data is available use it, if not use directional language like 'hundreds of potential buyers searching monthly'; (2) name the specific visibility gap this business has right now with grounded evidence; (3) frame the competitive opportunity. IMPORTANT: do not overstate precision — if volume is estimated say 'estimated' or 'likely hundreds'. This should feel like a senior advisor told them something they hadn't seen before.",
+    "clientQuestion": "One NEPQ-style reflective question that creates realisation. Use ranges, not exact numbers, unless keyword data is available. NOT: 'Would you like to improve your rankings?' DO: Something like 'If hundreds of buyers are searching for [service] in [location] every month and competitors are capturing most of them — what would it mean for your business if even a modest share of those found you first?' Calibrated, not salesy. Never use fabricated exact numbers."
   },
   "growthPhases": [
     {
@@ -6594,14 +6594,15 @@ Respond with this EXACT JSON — every field must be specific, evidence-based, a
     }
   ],
   "costOfInaction": {
-    "missedMonthlySearches": ${totalKwVolume > 0 ? totalKwVolume : 1000},
-    "missedEnquiriesNote": "Specific: at the estimated current capture rate, X enquiries/month are going to competitors — use the actual keyword volume to make this concrete",
-    "competitorNote": "Specific: name how competitors who are already ranking will compound their advantage — links, reviews, maps rankings — over the next 6-12 months if nothing changes",
-    "businessImpact": "Express the annual cost in business language: 'Approximately $X in lost project/job revenue annually, based on [Y] missed enquiries/month at an average job value of $Z' — estimate conservatively",
+    "missedMonthlySearches": ${totalKwVolume > 0 ? totalKwVolume : 'null'},
+    "searchVolumeSource": "${totalKwVolume > 0 ? 'keyword-data' : 'insufficient'}",
+    "missedEnquiriesEstimate": "MODELED — use scenario language: 'At a typical industry conversion rate of X–Y%, this could represent approximately Z–W missed enquiries per month going to competitors. This is a directional estimate based on [evidence], not a guaranteed figure.' If volume data is absent, describe directionally without invented numbers.",
+    "competitorNote": "INFERRED from available signals — describe specifically how competitors already ranking will compound their advantage through reviews, indexed pages, and citation depth over the next 6–12 months. Do not overstate — use 'suggests', 'indicates', 'likely'.",
+    "businessImpactNote": "MODELED — frame conservatively as a scenario: 'If even X–Y additional enquiries per month were captured, and if average job value is approximately $Z (estimate based on industry norms for this business type), this could represent $W–$V in additional annual revenue. These are directional scenario figures, not forecasts.' Do not present as certain.",
     "timeline": [
-      { "period": "3 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 3 : 3000}, "estimatedEnquiriesLost": "X–Y", "competitorGain": "What competitors consolidate in this window" },
-      { "period": "6 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 6 : 6000}, "estimatedEnquiriesLost": "X–Y", "competitorGain": "What competitors consolidate in this window" },
-      { "period": "12 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 12 : 12000}, "estimatedEnquiriesLost": "X–Y", "competitorGain": "What competitors consolidate in this window" }
+      { "period": "3 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 3 : 'null'}, "estimatedEnquiriesLost": "MODELED range only — e.g. '6–12 estimated' — with provenance: 'inferred'", "competitorGain": "Specific: what competitors consolidate in this 3-month window based on observed ranking signals — use inferred language" },
+      { "period": "6 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 6 : 'null'}, "estimatedEnquiriesLost": "MODELED range — e.g. '15–25 estimated'", "competitorGain": "Specific: what compounds at 6 months — reviews, Maps Pack rankings, content depth" },
+      { "period": "12 months", "searchesLost": ${totalKwVolume > 0 ? totalKwVolume * 12 : 'null'}, "estimatedEnquiriesLost": "MODELED range — e.g. '30–50 estimated'", "competitorGain": "Specific: the cumulative competitive moat that has formed by 12 months if no action taken" }
     ]
   },
   "insightSnapshots": [
@@ -6625,11 +6626,12 @@ Respond with this EXACT JSON — every field must be specific, evidence-based, a
     "primaryChannels": ["channels relevant to this industry and location"]
   },
   "marketOpportunity": {
-    "totalMonthlySearches": ${totalKwVolume > 0 ? totalKwVolume : 1200},
-    "currentCapture": "Estimated current capture % based on readiness score and ranking data",
-    "potentialCapture": "Achievable capture % with key fixes — include estimated lead count per month",
-    "keyInsight": "1 punchy insight the rep can use verbatim on the call — must reference a specific number",
-    "keywords": [{ "keyword": "...", "monthlySearches": "...", "currentRank": "...", "opportunity": "high|medium|low", "intent": "commercial|informational" }]
+    "totalMonthlySearches": ${totalKwVolume > 0 ? totalKwVolume : 'null'},
+    "searchVolumeSource": "${totalKwVolume > 0 ? 'observed-keyword-data' : 'insufficient — do not substitute a number; describe demand directionally in keyInsight instead'}",
+    "currentCaptureEstimate": "INFERRED — express as a range, e.g. 'Estimated 0–5% of available local search demand, based on limited observed ranking signals'. Never state a precise % without ranking data.",
+    "potentialCaptureNote": "MODELED — scenario language only: 'With key fixes implemented, capturing even 10–20% of available local demand could represent approximately X–Y additional enquiries/month. This is a directional scenario, not a guaranteed outcome.'",
+    "keyInsight": "If keyword data is available: use a specific number. If not: frame directionally, e.g. 'Buyers searching for [service] in [location] have limited ability to find this business in organic results based on observed signals.' Never invent a volume number.",
+    "keywords": [{ "keyword": "EXACT keyword from uploaded data only — do not invent", "monthlySearches": "from data", "currentRank": "from data or 'not in top 100'", "opportunity": "high|medium|low", "intent": "commercial|informational" }]
   },
   "digitalAudit": {
     "website": { "score": 0-100, "strengths": ["specific strengths grounded in sitemap and crawl data"], "gaps": ["specific gaps from diagnosis — name actual missing pages or signals"] },
@@ -6653,17 +6655,17 @@ Respond with this EXACT JSON — every field must be specific, evidence-based, a
     { "number": 4, "title": "...", "goal": "...", "timeframe": "Month X–X", "actions": [{ "action": "...", "detail": "...", "examples": ["..."] }] }
   ],
   "projectedOutcomes": [
-    { "month": "Month 3", "estimatedLeads": "X–Y", "rankingKeywords": "X–Y", "confidence": "low" },
-    { "month": "Month 6", "estimatedLeads": "X–Y", "rankingKeywords": "X–Y", "confidence": "medium" },
-    { "month": "Month 12", "estimatedLeads": "X–Y", "rankingKeywords": "X–Y", "confidence": "medium" }
+    { "month": "Month 3", "estimatedLeads": "MODELED range — always a range, e.g. '3–7'. Calibrate conservatively against available evidence. Add caveat: '(directional estimate — actual results depend on implementation pace and competitive activity)'", "rankingKeywords": "MODELED range — e.g. '5–15 new keywords entering top 20'. Calibrate to business scale.", "confidence": "low", "provenance": "modeled", "scenarioCaveat": "Early-phase outcomes are directional. Actual results depend on implementation quality, competitive conditions, and search engine update cycles." },
+    { "month": "Month 6", "estimatedLeads": "MODELED range — e.g. '8–15'. Should be higher than Month 3 but not dramatically so.", "rankingKeywords": "MODELED range", "confidence": "medium", "provenance": "modeled", "scenarioCaveat": "Mid-phase estimate. Assumes consistent implementation and no major algorithm changes." },
+    { "month": "Month 12", "estimatedLeads": "MODELED range — e.g. '12–25'. Calibrate to the market size and readiness score.", "rankingKeywords": "MODELED range", "confidence": "medium", "provenance": "modeled", "scenarioCaveat": "12-month scenario assumes sustained delivery. Market conditions and competitive response will influence actual outcomes." }
   ],
   "kpis": [
-    { "metric": "Inbound Enquiries", "baseline": "current estimate based on data", "target12Month": "target" },
-    { "metric": "Google Ranking Keywords", "baseline": "current (from data or estimated)", "target12Month": "target" },
-    { "metric": "Maps Pack Appearance", "baseline": "current status", "target12Month": "target" },
-    { "metric": "Google Review Count", "baseline": "${reviewCount ?? 0}", "target12Month": "target" }
+    { "metric": "Inbound Enquiries", "baseline": "OBSERVED if data exists, otherwise 'Not currently measured' — never invent a number", "dataQuality": "observed|estimated|unknown", "target12Month": "MODELED range — e.g. '15–25/month by month 12'. Not a guarantee." },
+    { "metric": "Google Ranking Keywords", "baseline": "OBSERVED from keyword data if available, otherwise 'Limited observed ranking presence' — do not state '0 rankings' without evidence", "dataQuality": "observed|estimated|unknown", "target12Month": "MODELED range" },
+    { "metric": "Maps Pack Appearance", "baseline": "OBSERVED: state what GBP data shows. If absent: 'GBP not confirmed in evidence' — not 'no presence'", "dataQuality": "observed|estimated|unknown", "target12Month": "Consistent Maps Pack appearance for [primary service + location terms]" },
+    { "metric": "Google Review Count", "baseline": "${reviewCount != null ? reviewCount + ' reviews (observed)' : 'Not confirmed in evidence'}", "dataQuality": "${reviewCount != null ? 'observed' : 'unknown'}", "target12Month": "MODELED — e.g. '${reviewCount != null ? reviewCount + 40 : '40+'}+ reviews with structured review velocity programme'" }
   ],
-  "repTalkingPoints": ["5 evidence-grounded one-liners the rep can use verbatim on the follow-up call — each tied to a specific number or finding from the strategy"]
+  "repTalkingPoints": ["5 one-liners the rep can use verbatim on the follow-up call. CLASSIFICATION RULE: OBSERVED facts state directly; INFERRED use 'appears to', 'suggests'; MODELED use 'could represent', 'directionally'. Do not fabricate specific numbers — use ranges or evidence-backed figures only. Each talking point must tie to a specific observed or inferred finding, not a generic claim."]
 }`;
 
       const response = await openai.chat.completions.create({
