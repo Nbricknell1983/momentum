@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import GrowthOperatorPanel from './GrowthOperatorPanel';
 import ClientActivationPanel from './ClientActivationPanel';
+import ClientExecutionIntelligence from './ClientExecutionIntelligence';
 import WebsiteEnginePanel from './WebsiteEnginePanel';
 import SEOEnginePanel from './SEOEnginePanel';
 import GBPEnginePanel from './GBPEnginePanel';
@@ -969,6 +970,11 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
+
+        {/* Growth Execution Intelligence — strategic brief, above workstreams */}
+        {client.activationPlan && client.sourceIntelligence && (
+          <ClientExecutionIntelligence client={client} />
+        )}
 
         {/* Client Activation Plan — shown when lead was converted with scope */}
         {client.activationPlan && <ClientActivationPanel client={client} />}

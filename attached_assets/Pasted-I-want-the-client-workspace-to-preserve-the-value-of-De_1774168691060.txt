@@ -1,0 +1,89 @@
+I want the client workspace to preserve the value of Deal Intelligence, but evolve it into an execution-oriented intelligence layer after conversion.
+
+Problem:
+Leads currently have strong Deal Intelligence that explains the strategy, opportunity, and next moves. But once a lead becomes a client, the workspace shifts too quickly into execution/status mode and loses the strategic intelligence layer that explains what we are doing and why.
+
+Goal:
+Add a client-side intelligence layer that acts like Deal Intelligence for execution.
+
+Product direction:
+Leads should have Deal Intelligence.
+Clients should have Execution Intelligence (or Growth Execution Intelligence).
+
+This should sit above the client workstreams and help the team understand:
+- what strategy was sold
+- what scope was selected
+- what the priorities are
+- what the agents should work on first
+- how Website + SEO + GBP work together
+- what the next delivery moves are
+
+Example use case:
+If a client has purchased:
+- Website
+- SEO
+- GBP optimisation
+
+The client workspace should clearly show that this is one coordinated visibility strategy, not three isolated workstreams.
+
+What I want:
+1. Add a new top-of-client-workspace intelligence panel
+2. Base it on:
+- preserved lead intelligence (`sourceIntelligence`)
+- selected scope / activation plan
+- current execution workstream state
+3. Make it execution-oriented rather than sales-oriented
+4. Keep it proactive so agents can use it to guide delivery and optimisation
+
+Suggested section name:
+- Growth Execution Intelligence
+or
+- Client Execution Intelligence
+
+Suggested content structure:
+1. Strategy summary
+- a concise explanation of the growth strategy for this client
+
+2. Scope sold
+- Website
+- SEO
+- GBP
+- Ads
+(show only selected scope items)
+
+3. Execution priorities
+- what should happen first
+- what should happen second
+- what dependencies exist
+
+4. Active agent focus
+- what the agents are currently generating or improving
+- what is waiting on review or prerequisites
+
+5. Next delivery moves
+- clear recommended next actions for the internal team
+
+6. Visibility objective
+- what business outcome this execution is trying to improve
+- examples:
+- local search visibility
+- conversion rate
+- map pack presence
+- enquiries
+
+Implementation guidance:
+1. Reuse preserved lead intelligence rather than regenerating everything from scratch
+2. Transform sales/deal intelligence into execution intelligence after conversion
+3. Place this panel above the existing Client Execution Plan/workstream panels
+4. Make it feel like the strategic brain for delivery, not just another status box
+
+Important product rule:
+The client workspace should not become a checklist-only environment.
+It should retain a strategic intelligence layer that explains why the execution plan exists and what outcome it is trying to create.
+
+Success criteria:
+- client workspace has a clear execution-oriented intelligence layer
+- sold scope is reflected as one coordinated strategy
+- agents have clear strategic guidance for delivery
+- website, SEO, and GBP workstreams feel connected rather than isolated
+- the transition from lead intelligence to client execution feels continuous
