@@ -373,8 +373,8 @@ export default function BullpenDailyBrief() {
             </div>
           )}
 
-          {/* Three-section grid */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Three-section grid — stacked on narrow rail, side-by-side on wider */}
+          <div className="grid grid-cols-1 gap-2">
             <SectionCard
               icon={<Settings2 className="h-3.5 w-3.5 text-slate-400" />}
               label="Operations"
@@ -396,10 +396,9 @@ export default function BullpenDailyBrief() {
           </div>
 
           {/* Scan stats footer */}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground px-1">
-            <span>Trigger scan: {summary.scanItemsCreated} new, {summary.scanItemsSkipped} deduped</span>
-            <span>·</span>
-            <span>Run at {fmtDateTime(summary.runAt)}</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground px-1 min-w-0">
+            <span className="shrink-0">Scan: {summary.scanItemsCreated} new, {summary.scanItemsSkipped} deduped</span>
+            <span className="shrink-0 truncate">Run at {fmtDateTime(summary.runAt)}</span>
           </div>
         </div>
       )}
@@ -421,27 +420,28 @@ function SectionCard({
   itemsCreated: number;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const truncated = summary && summary.length > 80 && !expanded;
+  const PREVIEW_LEN = 120;
+  const truncated = summary && summary.length > PREVIEW_LEN && !expanded;
 
   return (
-    <div className="rounded-lg border border-border/30 bg-muted/10 p-2.5 space-y-1.5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          {icon}
-          <span className="text-xs font-medium text-foreground/80">{label}</span>
+    <div className="rounded-lg border border-border/30 bg-muted/10 p-2.5 space-y-1.5 min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          <span className="shrink-0">{icon}</span>
+          <span className="text-xs font-medium text-foreground/80 truncate">{label}</span>
         </div>
         {itemsCreated > 0 && (
-          <Badge className="bg-violet-500/15 text-violet-400 border border-violet-500/20 text-[10px] px-1 py-0">
+          <Badge className="bg-violet-500/15 text-violet-400 border border-violet-500/20 text-[10px] px-1 py-0 shrink-0">
             +{itemsCreated}
           </Badge>
         )}
       </div>
       {summary ? (
-        <div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            {truncated ? summary.slice(0, 80) + '…' : summary}
+        <div className="min-w-0">
+          <p className="text-[11px] text-muted-foreground leading-relaxed break-words overflow-hidden">
+            {truncated ? summary.slice(0, PREVIEW_LEN) + '…' : summary}
           </p>
-          {summary.length > 80 && (
+          {summary.length > PREVIEW_LEN && (
             <button
               className="text-[10px] text-violet-400 hover:underline mt-0.5 flex items-center gap-0.5"
               onClick={() => setExpanded(e => !e)}

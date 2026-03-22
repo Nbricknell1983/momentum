@@ -66,6 +66,52 @@ function fmtAgo(iso?: string | null) {
   try { return formatDistanceToNow(parseISO(iso), { addSuffix: true }); } catch { return null; }
 }
 
+// Condense a raw technical error string to a short human-readable summary.
+// Raw Firestore/gRPC error strings can be hundreds of chars with doc IDs and
+// paths — we show a clean 1-line summary and put the full text behind a toggle.
+function summariseError(raw: string): string {
+  if (!raw) return 'Unknown error';
+  const lower = raw.toLowerCase();
+  if (lower.includes('permission') || lower.includes('permission_denied')) return 'Permission denied — check Firestore security rules';
+  if (lower.includes('not found') || lower.includes('not_found'))           return 'Document or resource not found';
+  if (lower.includes('unauthenticated'))                                     return 'Authentication error — token may be invalid';
+  if (lower.includes('quota') || lower.includes('resource_exhausted'))      return 'API quota exceeded';
+  if (lower.includes('network') || lower.includes('unavailable'))           return 'Network or service unavailable';
+  if (lower.includes('timeout') || lower.includes('deadline_exceeded'))     return 'Request timed out';
+  // Generic: take the first sentence / first 100 chars
+  const firstSentence = raw.split(/[.\n]/)[0].trim();
+  return firstSentence.length > 100 ? firstSentence.slice(0, 97) + '…' : firstSentence;
+}
+
+// ── Error detail toggle ────────────────────────────────────────────────────────
+
+function ErrorDetail({ raw }: { raw: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = summariseError(raw);
+  const hasMore = raw !== summary;
+
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] text-muted-foreground mt-0.5 break-words">{summary}</p>
+      {hasMore && (
+        <>
+          <button
+            className="text-[10px] text-red-400/70 hover:text-red-400 underline mt-0.5 flex items-center gap-0.5 transition-colors"
+            onClick={() => setExpanded(v => !v)}
+          >
+            {expanded ? <><ChevronUp className="h-2.5 w-2.5" /> hide detail</> : <><ChevronDown className="h-2.5 w-2.5" /> show full error</>}
+          </button>
+          {expanded && (
+            <pre className="mt-1.5 text-[10px] text-muted-foreground/70 bg-muted/20 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+              {raw}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function BullpenEnrichmentPanel() {
@@ -113,20 +159,20 @@ export default function BullpenEnrichmentPanel() {
 
   // ── Render ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4" data-testid="bullpen-enrichment-panel">
+    <div className="space-y-4 min-w-0" data-testid="bullpen-enrichment-panel">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-violet-400" />
-          <span className="text-sm font-semibold text-foreground">Intelligence Enrichment</span>
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+          <Brain className="h-4 w-4 text-violet-400 shrink-0" />
+          <span className="text-sm font-semibold text-foreground truncate">Intelligence Enrichment</span>
           {isRunning && (
-            <Badge className="bg-violet-500/15 text-violet-400 border border-violet-500/20 text-xs px-1.5 py-0.5 animate-pulse">
+            <Badge className="bg-violet-500/15 text-violet-400 border border-violet-500/20 text-xs px-1.5 py-0.5 animate-pulse shrink-0">
               Running…
             </Badge>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {hasResult && (
             <>
               <Button
@@ -158,9 +204,9 @@ export default function BullpenEnrichmentPanel() {
 
       {/* ── Running indicator ── */}
       {isRunning && (
-        <div className="rounded-lg border border-violet-500/20 bg-violet-500/8 p-3 flex items-center gap-3">
-          <Loader2 className="h-4 w-4 text-violet-400 animate-spin flex-shrink-0" />
-          <div>
+        <div className="rounded-lg border border-violet-500/20 bg-violet-500/8 p-3 flex items-center gap-3 min-w-0 overflow-hidden">
+          <Loader2 className="h-4 w-4 text-violet-400 animate-spin shrink-0" />
+          <div className="min-w-0">
             <p className="text-xs font-medium text-violet-300">Enrichment batch running</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Processing leads and clients with 3-pass intelligence analysis. This may take several minutes depending on your pipeline size.
@@ -171,11 +217,11 @@ export default function BullpenEnrichmentPanel() {
 
       {/* ── Error state ── */}
       {batchStatus?.status === 'error' && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/8 p-3 flex items-start gap-2">
-          <XCircle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
-          <div>
+        <div className="rounded-lg border border-red-500/20 bg-red-500/8 p-3 flex items-start gap-2 min-w-0 overflow-hidden">
+          <XCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-red-300">Batch run failed</p>
-            {batchStatus.error && <p className="text-[11px] text-muted-foreground mt-0.5">{batchStatus.error}</p>}
+            {batchStatus.error && <ErrorDetail raw={batchStatus.error} />}
           </div>
         </div>
       )}
@@ -183,55 +229,55 @@ export default function BullpenEnrichmentPanel() {
       {/* ── Results card ── */}
       {batchStatus?.status === 'complete' && (
         <div className="space-y-3">
-          {/* Stats grid */}
-          <div className="grid grid-cols-4 gap-2">
+          {/* Stats grid — 2-col to keep tiles wide enough in the 360px rail */}
+          <div className="grid grid-cols-2 gap-2">
             <StatTile
               label="Leads enriched"
               value={batchStatus.enrichedLeads ?? 0}
               sub={`${batchStatus.skippedLeads ?? 0} skipped`}
-              icon={<TrendingUp className="h-3.5 w-3.5 text-violet-400" />}
+              icon={<TrendingUp className="h-3.5 w-3.5 text-violet-400 shrink-0" />}
             />
             <StatTile
               label="Clients enriched"
               value={batchStatus.enrichedClients ?? 0}
               sub={`${batchStatus.skippedClients ?? 0} skipped`}
-              icon={<Users className="h-3.5 w-3.5 text-sky-400" />}
+              icon={<Users className="h-3.5 w-3.5 text-sky-400 shrink-0" />}
             />
             <StatTile
               label="Fields auto-filled"
               value={batchStatus.fieldsAutoFilled ?? 0}
               sub="high confidence"
-              icon={<Zap className="h-3.5 w-3.5 text-emerald-400" />}
+              icon={<Zap className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
             />
             <StatTile
               label="Dependency blockers"
               value={blockerEntries.length}
               sub="unique types"
-              icon={<ShieldAlert className="h-3.5 w-3.5 text-amber-400" />}
+              icon={<ShieldAlert className="h-3.5 w-3.5 text-amber-400 shrink-0" />}
             />
           </div>
 
           {/* Last run timestamp */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1">
-            <Clock className="h-3 w-3" />
-            Completed {fmtAgo(batchStatus.completedAt)} — {fmtDt(batchStatus.completedAt)}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 min-w-0 overflow-hidden">
+            <Clock className="h-3 w-3 shrink-0" />
+            <span className="truncate">Completed {fmtAgo(batchStatus.completedAt)} — {fmtDt(batchStatus.completedAt)}</span>
           </div>
 
           {/* Dependency blockers */}
           {blockerEntries.length > 0 && (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 overflow-hidden">
               <button
-                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-amber-500/5 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-amber-500/5 transition-colors min-w-0"
                 onClick={() => setShowBlockers(s => !s)}
                 data-testid="toggle-blockers-btn"
               >
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="text-xs font-semibold text-amber-300">
+                <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                  <span className="text-xs font-semibold text-amber-300 truncate">
                     {blockerEntries.length} integration gap{blockerEntries.length !== 1 ? 's' : ''} blocking enrichment
                   </span>
                 </div>
-                {showBlockers ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                {showBlockers ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
               </button>
 
               {showBlockers && (
@@ -240,15 +286,15 @@ export default function BullpenEnrichmentPanel() {
                     const meta = DEP_LABELS[dep] ?? { label: dep, severity: 'low' };
                     const severityColor = meta.severity === 'high' ? 'text-red-400' : meta.severity === 'medium' ? 'text-amber-400' : 'text-muted-foreground';
                     return (
-                      <div key={dep} className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-2">
-                          <ShieldAlert className={`h-3 w-3 flex-shrink-0 mt-0.5 ${severityColor}`} />
-                          <div>
-                            <p className="text-xs text-foreground/80">{meta.label}</p>
+                      <div key={dep} className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="flex items-start gap-2 min-w-0 overflow-hidden">
+                          <ShieldAlert className={`h-3 w-3 shrink-0 mt-0.5 ${severityColor}`} />
+                          <div className="min-w-0">
+                            <p className="text-xs text-foreground/80 break-words">{meta.label}</p>
                             <p className="text-[11px] text-muted-foreground">Affects {count} record{count !== 1 ? 's' : ''}</p>
                           </div>
                         </div>
-                        <Badge className={`border text-[10px] px-1.5 py-0 flex-shrink-0 ${
+                        <Badge className={`border text-[10px] px-1.5 py-0 shrink-0 ${
                           meta.severity === 'high'   ? 'bg-red-500/15 text-red-400 border-red-500/20' :
                           meta.severity === 'medium' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
                                                        'bg-muted/20 text-muted-foreground border-border/30'
@@ -261,7 +307,7 @@ export default function BullpenEnrichmentPanel() {
 
                   <div className="mt-2 pt-2 border-t border-amber-500/15">
                     <div className="flex items-start gap-2 text-[11px] text-muted-foreground">
-                      <Info className="h-3 w-3 flex-shrink-0 mt-0.5 text-amber-400/60" />
+                      <Info className="h-3 w-3 shrink-0 mt-0.5 text-amber-400/60" />
                       <span>These gaps cannot be resolved by the enrichment engine alone. Each requires a specific integration, API key, or manual data entry to unlock.</span>
                     </div>
                   </div>
@@ -293,7 +339,7 @@ export default function BullpenEnrichmentPanel() {
       {/* ── Field coverage guide ── */}
       <details className="group">
         <summary className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors list-none">
-          <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180 transition-transform" />
+          <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180 transition-transform shrink-0" />
           What gets enriched
         </summary>
         <div className="mt-2 space-y-2 pl-5">
@@ -329,13 +375,13 @@ export default function BullpenEnrichmentPanel() {
 
 function StatTile({ label, value, sub, icon }: { label: string; value: number; sub: string; icon: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-border/30 bg-muted/10 p-2.5 space-y-1">
-      <div className="flex items-center gap-1.5">
+    <div className="rounded-lg border border-border/30 bg-muted/10 p-2.5 space-y-1 min-w-0 overflow-hidden">
+      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
         {icon}
-        <span className="text-[11px] text-muted-foreground">{label}</span>
+        <span className="text-[11px] text-muted-foreground truncate">{label}</span>
       </div>
-      <p className="text-lg font-bold text-foreground">{value}</p>
-      <p className="text-[10px] text-muted-foreground">{sub}</p>
+      <p className="text-lg font-bold text-foreground tabular-nums">{value}</p>
+      <p className="text-[10px] text-muted-foreground truncate">{sub}</p>
     </div>
   );
 }

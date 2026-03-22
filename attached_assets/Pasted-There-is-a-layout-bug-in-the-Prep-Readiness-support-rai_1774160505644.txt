@@ -1,0 +1,48 @@
+There is a layout bug in the Prep Readiness / support-rail cards where long error text is not being contained properly and overflows horizontally instead of wrapping or truncating cleanly.
+
+Observed behaviour:
+A long raw Firestore error string / document ID is rendering inside a narrow metric card and blows out the card layout. The text appears to wrap badly in one place but also overflows horizontally outside the intended bounds.
+
+Goal:
+Fix text containment for long technical/error strings in narrow cards and improve how raw error content is presented.
+
+What I want:
+1. Fix the CSS/layout issue so long strings cannot break the card layout
+2. Improve the UX for raw technical error content in metric cards
+3. Keep summary cards clean and readable even when error payloads are ugly
+
+Likely technical causes to inspect:
+- missing `min-w-0` on grid/flex children
+- missing `overflow-hidden`
+- missing `break-words` / `break-all`
+- missing truncation / line clamp on raw error text
+- a parent grid/flex item refusing to shrink properly
+
+Recommended implementation direction:
+1. Audit the Prep Readiness card and its metric/error cells for shrink/overflow handling
+2. Add the appropriate containment utilities where needed:
+- `min-w-0`
+- `overflow-hidden`
+- `break-words` or `break-all` for unbroken IDs/tokens
+- optional `line-clamp-2` / `line-clamp-3`
+3. Do not show giant raw error blobs inline in compact metric cards
+4. Instead, show a short summary or truncated preview in-card
+5. Add a tooltip, popover, expand state, or detail modal for the full raw error message if needed
+
+Preferred UX:
+Compact card:
+- show a short human-readable error summary
+- keep the layout intact
+
+Expanded/detail state:
+- show full raw Firestore/doc ID/error text for debugging
+
+Important design rule:
+Summary cards should not become raw debug consoles.
+They should stay readable and contained even when underlying error strings are ugly.
+
+Success criteria:
+- long IDs and technical error strings no longer overflow the card
+- the support rail layout remains intact
+- error information is still accessible without wrecking the UI
+- compact cards stay clean and scannable
