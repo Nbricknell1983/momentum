@@ -256,16 +256,40 @@ export function EvidencePresenceSection({
         >
           {hasGbpObs ? (
             <div className="space-y-0.5">
-              {/* Static identity info */}
+              {/* ── Multi-location network banner ──────────────────────────── */}
+              {gbp.networkSummary?.totalLocations > 1 && (() => {
+                const net = gbp.networkSummary;
+                return (
+                  <div className="rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/40 px-1.5 py-1 mb-1 space-y-0.5">
+                    <div className="flex items-center gap-1 text-[9px] font-semibold text-violet-700 dark:text-violet-300">
+                      <Users className="h-2.5 w-2.5" />
+                      Multi-location brand · {net.totalLocations} locations
+                    </div>
+                    <div className="flex flex-wrap gap-1 text-[9px]">
+                      {net.totalReviews > 0 && (
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {net.totalReviews.toLocaleString()} reviews total
+                        </span>
+                      )}
+                      {net.avgRating != null && (
+                        <span className="text-slate-500 dark:text-slate-400">
+                          · {net.avgRating.toFixed(1)}★ avg
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Static identity info — primary location */}
               {gbp.name && (
                 <p className="text-[9px] font-medium text-slate-600 dark:text-slate-300 truncate leading-snug">
-                  {gbp.name}
+                  {gbp.networkSummary?.totalLocations > 1 ? `Primary: ${gbp.name}` : gbp.name}
                 </p>
               )}
               {gbp.category && (
                 <p className="text-[9px] text-slate-400 leading-snug">{gbp.category}</p>
               )}
-              {gbp.candidates?.length > 1 && (
+              {gbp.candidates?.length > 1 && !gbp.networkSummary?.totalLocations && (
                 <p className="text-[9px] text-slate-400 italic leading-snug">
                   Best match · {gbp.candidates.length} listings found
                 </p>
@@ -290,7 +314,7 @@ export function EvidencePresenceSection({
                   "{gbp.editorialSummary}"
                 </p>
               )}
-              {/* Insight rows — rating + health notes */}
+              {/* Insight rows — network summary + rating + health notes */}
               {gbpInsights.map(insight => (
                 <PresenceInsightRow key={insight.id} insight={insight} onOpen={setActiveDetail} />
               ))}

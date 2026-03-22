@@ -200,26 +200,71 @@ export function buildGbpInsights(gbp: any): PresenceInsightDetail[] {
   if (!gbp?.placeId && !gbp?.name) return [];
   const insights: PresenceInsightDetail[] = [];
 
-  // Listing quality (rating + reviews)
+  const hasNetwork = (gbp.networkSummary?.totalLocations ?? 0) > 1;
+  const net = gbp.networkSummary;
+
+  // ── Multi-location network insight ────────────────────────────────────────
+  if (hasNetwork) {
+    const totalLocs  = net.totalLocations as number;
+    const totalRevs  = net.totalReviews as number;
+    const avgRating  = net.avgRating as number | null;
+    const high       = net.highestRated;
+    const low        = net.lowestRated;
+    const siblings   = (gbp.siblingLocations ?? []) as any[];
+
+    const netStatus: InsightStatus = avgRating == null ? 'neutral' : avgRating >= 4.2 ? 'positive' : avgRating >= 3.8 ? 'neutral' : 'warning';
+
+    insights.push({
+      id: 'gbp-network',
+      label: `${totalLocs} locations detected across brand`,
+      status: netStatus,
+      summary: `${totalLocs} Google Business Profile locations were detected for this brand, with ${totalRevs.toLocaleString()} total reviews across the network${avgRating != null ? ` and an average rating of ${avgRating.toFixed(1)}★` : ''}.`,
+      whyItMatters: 'Multi-location brands have uneven reputations across their network. A poorly performing location can drag down perception of the whole brand, while the highest-rated location sets the ceiling. Keeping all GBP listings optimised is essential for maintaining consistent Maps Pack visibility.',
+      recommendedImprovement: avgRating != null && avgRating < 4.3
+        ? 'Prioritise review generation at underperforming locations. Standardise GBP profiles across all branches — consistent categories, photos, and descriptions improve the network-wide ranking baseline.'
+        : 'Maintain review velocity across all locations. Ensure each branch has complete GBP profiles with accurate hours, photos, and service descriptions.',
+      evidence: [
+        { label: 'Total locations', value: String(totalLocs), type: 'count' },
+        { label: 'Total reviews', value: totalRevs.toLocaleString(), type: 'count' },
+        ...(avgRating != null ? [{ label: 'Average rating', value: `${avgRating.toFixed(1)} / 5.0`, type: 'count' as const }] : []),
+        ...(high ? [{ label: 'Highest rated', value: `${high.name}${high.rating != null ? ` — ${high.rating.toFixed(1)}★ (${high.reviewCount ?? 0} reviews)` : ''}` }] : []),
+        ...(low  ? [{ label: 'Lowest rated',  value: `${low.name}${low.rating != null ? ` — ${low.rating.toFixed(1)}★ (${low.reviewCount ?? 0} reviews)` : ''}` }] : []),
+        ...siblings.slice(0, 5).map((s: any) => ({
+          label: s.relation === 'domain-match' ? 'Same website' : 'Brand location',
+          value: `${s.name}${s.address ? ` — ${s.address}` : ''}${s.rating != null ? ` | ${s.rating.toFixed(1)}★` : ''}`,
+        })),
+        ...(siblings.length > 5 ? [{ value: `+${siblings.length - 5} more locations` }] : []),
+      ],
+      technicalDetails: [
+        `Detection method: brand-name expansion (second-pass)`,
+        ...(siblings.map((s: any, i: number) => `Sibling ${i + 1}: ${s.name} | confidence=${s.confidence} | ${s.reasons?.join(', ')}`)),
+      ],
+    });
+  }
+
+  // ── Primary location rating + reviews ─────────────────────────────────────
   if (gbp.rating != null || gbp.reviewCount != null) {
-    const rating = gbp.rating ?? null;
+    const rating     = gbp.rating ?? null;
     const reviewCount = gbp.reviewCount ?? 0;
-    const ratingStatus: InsightStatus =
-      (rating ?? 0) >= 4.5 ? 'positive' : (rating ?? 0) >= 4.0 ? 'neutral' : 'warning';
+    const ratingStatus: InsightStatus = (rating ?? 0) >= 4.5 ? 'positive' : (rating ?? 0) >= 4.0 ? 'neutral' : 'warning';
+
     insights.push({
       id: 'gbp-rating',
-      label: rating != null ? `${rating.toFixed(1)} ★ · ${reviewCount} reviews` : `${reviewCount} reviews`,
+      label: hasNetwork
+        ? `Primary: ${rating != null ? `${rating.toFixed(1)}★` : '—'} · ${reviewCount} reviews`
+        : rating != null ? `${rating.toFixed(1)} ★ · ${reviewCount} reviews` : `${reviewCount} reviews`,
       status: ratingStatus,
       summary: rating != null
-        ? `This business has a ${rating.toFixed(1)}-star Google rating from ${reviewCount} review${reviewCount !== 1 ? 's' : ''}.`
+        ? `The primary matched location has a ${rating.toFixed(1)}-star Google rating from ${reviewCount} review${reviewCount !== 1 ? 's' : ''}.`
         : `${reviewCount} Google reviews found with no aggregate rating available.`,
       whyItMatters: 'Google rating directly affects Maps Pack placement and click-through rates. Listings below 4.0 stars see significantly lower enquiry volumes. Reviews are also a confirmed local ranking signal.',
       recommendedImprovement: (rating ?? 5) < 4.5
         ? 'Implement a post-job review request process. Even 1–2 new positive reviews per week can shift ranking position within 60–90 days.'
         : 'Maintain review velocity — consistent new reviews signal to Google that the business is active and trustworthy.',
       evidence: [
-        ...(rating != null ? [{ label: 'Average rating', value: `${rating.toFixed(1)} / 5.0`, type: 'count' as const }] : []),
-        { label: 'Total reviews', value: String(reviewCount), type: 'count' },
+        ...(rating != null ? [{ label: 'Rating', value: `${rating.toFixed(1)} / 5.0`, type: 'count' as const }] : []),
+        { label: 'Reviews', value: String(reviewCount), type: 'count' },
+        ...(gbp.address ? [{ label: 'Address', value: gbp.address }] : []),
         ...(gbp.mapsUrl ? [{ label: 'Google Maps listing', value: gbp.mapsUrl, type: 'link' as const }] : []),
       ],
       technicalDetails: [
@@ -229,7 +274,7 @@ export function buildGbpInsights(gbp: any): PresenceInsightDetail[] {
     });
   }
 
-  // Health notes — each note as its own insight
+  // ── Health notes — each note as its own insight ────────────────────────────
   (gbp.healthNotes ?? []).forEach((note: string, i: number) => {
     insights.push({
       id: `gbp-health-${i}`,

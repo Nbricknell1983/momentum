@@ -20,7 +20,7 @@ import { writeSettingsAudit } from "./lib/settingsAudit";
 import { resolveAgentId, getSupportedTaskTypes } from "./agent-jobs/router";
 import { createAgentJob, getAgentJob, listAgentJobs } from "./agent-jobs/firestore-helpers";
 import { processAgentJob } from "./agent-jobs/processor";
-import { scoreGbpCandidate, buildLeadContext, type GbpLeadContext } from "./lib/gbp-scorer";
+import { scoreGbpCandidate, buildLeadContext, scoreGbpSibling, type GbpLeadContext } from "./lib/gbp-scorer";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -7527,6 +7527,7 @@ Return JSON:
       gbpCategory: null as string | null, discoverySource: [] as string[],
       gbpEditorialSummary: null as string | null, gbpIsOpen: null as boolean | null,
       gbpName: null as string | null, gbpCandidates: [] as any[],
+      gbpSiblings: [] as any[],
     };
     const businessName = lead.businessName || lead.companyName || lead.contactName || '';
     if (!businessName) return result;
@@ -7595,6 +7596,55 @@ Return JSON:
                   ? ` | runner-up="${scored[1].place.displayName?.text}" score=${scored[1].score}`
                   : '')
               );
+
+              // ── Pass 2: Sibling brand expansion ────────────────────────────
+              // After locking in the primary location, search for additional GBP
+              // listings belonging to the same brand (e.g. other car parks in the
+              // "First Parking" network). Uses brand name only — no suburb — to
+              // cast a wide net, then filters by domain/name confidence.
+              try {
+                const siblingResp = await fetch('https://places.googleapis.com/v1/places:searchText', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': apiKey,
+                    'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.formattedAddress,places.primaryType,places.primaryTypeDisplayName,places.googleMapsUri,places.businessStatus',
+                  },
+                  body: JSON.stringify({ textQuery: businessName, languageCode: 'en', regionCode: 'AU', maxResultCount: 10 }),
+                });
+                if (siblingResp.ok) {
+                  const { places: sibPlaces } = await siblingResp.json();
+                  if (sibPlaces?.length) {
+                    const siblings: any[] = [];
+                    for (const sp of sibPlaces) {
+                      const sibScore = scoreGbpSibling(sp, leadCtx, result.gbpPlaceId);
+                      if (!sibScore) continue;
+                      const sibCat = sp.primaryTypeDisplayName?.text || sp.primaryType || null;
+                      siblings.push({
+                        placeId:     sp.id || null,
+                        name:        sp.displayName?.text || null,
+                        address:     sp.formattedAddress || null,
+                        rating:      sp.rating ?? null,
+                        reviewCount: sp.userRatingCount ?? null,
+                        mapsUrl:     sp.googleMapsUri || null,
+                        phone:       sp.nationalPhoneNumber || null,
+                        category:    sibCat ? sibCat.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null,
+                        website:     sp.websiteUri || null,
+                        isOpen:      sp.regularOpeningHours?.openNow ?? null,
+                        confidence:  sibScore.confidence,
+                        relation:    sibScore.relation,
+                        reasons:     sibScore.reasons,
+                      });
+                    }
+                    result.gbpSiblings = siblings;
+                    if (siblings.length > 0) {
+                      console.log(`[active-discovery] GBP siblings: ${siblings.length} additional locations for "${businessName}" | relations=[${[...new Set(siblings.map(s => s.relation))].join(',')}]`);
+                    }
+                  }
+                }
+              } catch (e: any) {
+                console.warn('[active-discovery] GBP sibling expansion error:', e.message);
+              }
             }
           }
         }
@@ -7788,6 +7838,36 @@ Return JSON:
       if (discovered.gbpEditorialSummary) healthNotes.push(`Google editorial summary present`);
       if (!discovered.gbpCategory) healthNotes.push('Primary category not retrieved — check GBP setup');
 
+      // ── Network summary for multi-location brands ──────────────────────
+      let networkSummary: any = undefined;
+      const siblings = discovered.gbpSiblings ?? [];
+      if (siblings.length > 0) {
+        // All detected locations: primary + siblings
+        const allLocs = [
+          { name: discovered.gbpName, rating, reviewCount: reviews },
+          ...siblings.map((s: any) => ({ name: s.name, rating: s.rating, reviewCount: s.reviewCount })),
+        ].filter(l => l.name);
+
+        const totalReviews = allLocs.reduce((sum, l) => sum + (l.reviewCount || 0), 0);
+        const withRatings = allLocs.filter(l => l.rating != null);
+        const avgRating = withRatings.length > 0
+          ? Math.round((withRatings.reduce((s, l) => s + l.rating!, 0) / withRatings.length) * 10) / 10
+          : null;
+
+        const sortedByRating = [...withRatings].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        networkSummary = {
+          totalLocations: allLocs.length,
+          totalReviews,
+          avgRating,
+          highestRated: sortedByRating.length > 0
+            ? { name: sortedByRating[0].name, rating: sortedByRating[0].rating, reviewCount: sortedByRating[0].reviewCount }
+            : undefined,
+          lowestRated: sortedByRating.length > 1
+            ? { name: sortedByRating[sortedByRating.length - 1].name, rating: sortedByRating[sortedByRating.length - 1].rating, reviewCount: sortedByRating[sortedByRating.length - 1].reviewCount }
+            : undefined,
+        };
+      }
+
       gbpEvidence = {
         placeId: discovered.gbpPlaceId,
         name: discovered.gbpName,
@@ -7802,6 +7882,9 @@ Return JSON:
         healthNotes,
         // All scored candidates — enables UI disambiguation for multi-branch businesses
         candidates: discovered.gbpCandidates.length > 1 ? discovered.gbpCandidates : undefined,
+        // Multi-location: additional brand locations and network summary
+        siblingLocations: siblings.length > 0 ? siblings : undefined,
+        networkSummary,
       };
     }
 

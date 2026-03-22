@@ -1,0 +1,118 @@
+I need to upgrade the GBP / Maps detection logic so the agent can detect and surface multiple Google Business Profiles when a business has more than one location.
+
+Problem:
+Right now the presence snapshot appears to select a single GBP result, which is not enough for multi-location brands like First Parking. This can produce an incomplete or misleading picture because rating, review count, and reputation may vary across locations.
+
+Goal:
+Support multi-location GBP detection while still choosing one primary matched location for the current lead/client.
+
+What I want:
+1. Detect all plausible GBP locations for the same business/brand when available
+2. Select the best-fit primary location for the current lead
+3. Preserve additional matched/sibling GBP locations in the payload
+4. Show a compact multi-location summary in the GBP / Maps card
+5. Support drilldown modal inspection of all detected locations
+
+Matching logic:
+Use a two-pass approach.
+
+Pass 1: primary location match
+Score the best-fit GBP for the lead/client based on:
+- business name similarity
+- suburb/city match
+- postcode/address relevance
+- phone number match
+- website domain match
+- category relevance
+
+Pass 2: sibling brand expansion
+After selecting the primary location, search for and preserve additional GBP locations that likely belong to the same brand using:
+- same brand name prefix or naming pattern
+- same website/root domain
+- same category/operator pattern
+- same known chain/network identity
+
+Output requirements:
+Return a richer GBP structure instead of a single flat result.
+
+Suggested TypeScript shape:
+
+type GbpLocationMatch = {
+id?: string;
+name: string;
+address?: string;
+suburb?: string;
+state?: string;
+postcode?: string;
+rating?: number;
+reviewCount?: number;
+mapsUrl?: string;
+website?: string;
+phone?: string;
+category?: string;
+openNow?: boolean;
+confidence: number;
+matchReason?: string;
+relation?: "primary" | "brand-match" | "domain-match" | "name-match";
+};
+
+type GbpPresenceBundle = {
+primaryLocation?: GbpLocationMatch | null;
+siblingLocations?: GbpLocationMatch[];
+detectedLocationCount?: number;
+totalReviewCount?: number;
+averageRating?: number;
+highestRatedLocation?: {
+name: string;
+rating?: number;
+reviewCount?: number;
+};
+lowestRatedLocation?: {
+name: string;
+rating?: number;
+reviewCount?: number;
+};
+};
+
+UI requirements:
+Update the GBP / Maps presence card to support two states:
+
+Single-location state:
+- show current simple layout
+
+Multi-location state:
+- show:
+- “Multiple GBP locations detected”
+- primary matched location
+- total locations found
+- total reviews across detected locations if available
+- average rating if available
+
+Drilldown modal requirements:
+When the GBP card or row is clicked, show:
+1. Primary matched location
+2. Other detected locations
+3. Network summary
+4. Why it matters
+5. Recommended improvement
+
+Example summary copy:
+- Multiple GBP locations detected
+- Primary match: 53 Albert Street Car Park
+- 8 locations found
+- 1,240 reviews across network
+- Reputation varies by location
+
+Implementation notes:
+- Do not break the single-location case
+- Keep backward compatibility where possible
+- If only one confident location is found, preserve current behaviour
+- If multiple are found, choose one primary but keep the rest for drilldown
+- Avoid false positives by using a confidence threshold for sibling inclusion
+- If sibling confidence is weak, either omit them or label them as possible related locations
+
+Please identify:
+1. the current GBP data acquisition path
+2. where the single-result assumption currently happens
+3. the smallest safe refactor to support multi-location outputs
+4. any downstream UI/data contracts that need updating

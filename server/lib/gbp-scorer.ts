@@ -104,3 +104,70 @@ export function buildLeadContext(lead: {
     })(),
   };
 }
+
+// ── Sibling brand scorer ──────────────────────────────────────────────────
+// Used in the second-pass brand expansion: determines whether a Places API
+// result is a plausible additional location for the same brand (e.g. another
+// car park belonging to "First Parking"). Unlike the primary scorer, this one
+// intentionally ignores location signals (suburb/city/phone) because sibling
+// locations WILL have different addresses by definition. Instead it focuses
+// on brand-name overlap and website domain — the two signals that indicate
+// "same company, different branch".
+//
+// Confidence thresholds:
+//   ≥ 50 pts → high confidence (domain match OR strong name overlap)
+//   30–49    → moderate confidence (meaningful brand-word overlap)
+//   < 30     → excluded — too much risk of false positives
+
+export interface GbpSiblingScore {
+  confidence: number;  // 0–100
+  relation: 'brand-match' | 'domain-match' | 'name-match';
+  reasons: string[];
+}
+
+export function scoreGbpSibling(
+  place: any,
+  ctx: GbpLeadContext,
+  primaryPlaceId: string | null,
+): GbpSiblingScore | null {
+  // Never include the primary location as its own sibling
+  if (place.id && place.id === primaryPlaceId) return null;
+  // Skip permanently closed listings — they're not operational locations
+  if (place.businessStatus === 'CLOSED_PERMANENTLY') return null;
+
+  let confidence = 0;
+  const reasons: string[] = [];
+  let relation: GbpSiblingScore['relation'] = 'name-match';
+
+  const pName = (place.displayName?.text || '').toLowerCase();
+  const pDomain = (() => {
+    try { return place.websiteUri ? new URL(place.websiteUri).hostname.replace(/^www\./, '') : ''; }
+    catch { return ''; }
+  })();
+
+  // ── Domain match (strongest sibling signal — same website, different location) ──
+  if (ctx.leadDomain && pDomain && ctx.leadDomain === pDomain) {
+    confidence += 50;
+    relation = 'domain-match';
+    reasons.push('same-domain(+50)');
+  }
+
+  // ── Brand name word overlap ────────────────────────────────────────────────
+  // Require words with ≥ 3 chars to exclude filler words (of, the, a, etc.)
+  const brandWords = ctx.nameLower.split(/\s+/).filter(w => w.length >= 3);
+  if (brandWords.length > 0) {
+    const matchedWords = brandWords.filter(w => pName.includes(w));
+    const ratio = matchedWords.length / brandWords.length;
+    const pts = Math.round(ratio * 40);
+    if (pts >= 16) {  // At least ~40% brand-word overlap
+      confidence += pts;
+      if (relation === 'name-match') relation = 'brand-match';
+      reasons.push(`brand-words(+${pts})`);
+    }
+  }
+
+  // Minimum confidence gate — exclude weak matches to avoid false positives
+  if (confidence < 30) return null;
+
+  return { confidence, relation, reasons };
+}
