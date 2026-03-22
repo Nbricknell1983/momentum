@@ -2,10 +2,10 @@ import { useState, useMemo } from 'react';
 import {
   BrainCircuit, ChevronDown, ChevronUp, Globe, MapPin, Search, Megaphone,
   Target, Zap, ArrowRight, CheckCircle2, Clock, Loader2, Eye,
-  TrendingUp, AlertCircle, Layers, Activity, Radio,
+  TrendingUp, AlertCircle, Layers, Activity, Radio, ScanLine, Sparkles,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Client, WorkstreamScope, WorkstreamStatus, ActivationPlan, SourceIntelligence, ChannelStatus } from '@/lib/types';
+import { Client, WorkstreamScope, WorkstreamStatus, ActivationPlan, SourceIntelligence, ChannelStatus, ScopeAudit, ChannelReadinessStatus } from '@/lib/types';
 
 // ─── Scope helpers ────────────────────────────────────────────────────────────
 
@@ -282,20 +282,25 @@ export default function ClientExecutionIntelligence({ client }: { client: Client
   [plan]);
 
   // ── Non-activated path ────────────────────────────────────────────────────
+  const audit = client.scopeAudit;
+  const liveCount       = Object.values(client.channelStatus).filter(s => s === 'live').length;
+  const inProgressCount = Object.values(client.channelStatus).filter(s => s === 'in_progress').length;
+  const isAuditMode     = !isActivated && liveCount < 2 && inProgressCount === 0;
+
   const channelStates = useMemo(() =>
-    !isActivated ? deriveChannelStates(client) : [],
-  [isActivated, client]);
+    !isActivated && !isAuditMode ? deriveChannelStates(client) : [],
+  [isActivated, isAuditMode, client]);
 
   const nonActivatedHeadline = useMemo(() =>
-    !isActivated ? deriveNonActivatedHeadline(client) : null,
-  [isActivated, client]);
+    !isActivated && !isAuditMode ? deriveNonActivatedHeadline(client) : null,
+  [isActivated, isAuditMode, client]);
 
   const nextMovesNonActivated = useMemo(() =>
-    !isActivated ? deriveNonActivatedMoves(client) : [],
-  [isActivated, client]);
+    !isActivated && !isAuditMode ? deriveNonActivatedMoves(client) : [],
+  [isActivated, isAuditMode, client]);
 
-  const panelTitle = isActivated ? 'Growth Execution Intelligence' : 'Delivery Intelligence';
-  const panelSubtitle = isActivated ? (strategyName ?? '') : 'Live channel status and recommended actions';
+  const panelTitle    = isActivated ? 'Growth Execution Intelligence' : isAuditMode ? 'Growth Audit' : 'Delivery Intelligence';
+  const panelSubtitle = isActivated ? (strategyName ?? '') : isAuditMode ? (audit ? 'Scope recommendations ready' : 'Scanning account…') : 'Live channel status and recommended actions';
 
   return (
     <div
@@ -504,8 +509,162 @@ export default function ClientExecutionIntelligence({ client }: { client: Client
             </>
           )}
 
-          {/* ── NON-ACTIVATED CLIENTS ─────────────────────────────────────── */}
-          {!isActivated && nonActivatedHeadline && (
+          {/* ── AUDIT MODE (non-activated, idle channels) ─────────────────── */}
+          {!isActivated && isAuditMode && (
+            <>
+              {/* Audit status banner */}
+              {!audit ? (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50">
+                  <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-blue-800 dark:text-blue-200">Growth audit running</p>
+                    <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">
+                      Scanning channel presence, identifying what can begin immediately, and generating scope recommendations…
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Audit complete</span>
+                  </div>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{audit.auditSummary}</p>
+                </div>
+              )}
+
+              <div className="w-full h-px bg-slate-100 dark:bg-slate-700/60" />
+
+              {/* Channel readiness */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <ScanLine className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Channel readiness</span>
+                </div>
+                <div className="space-y-2" data-testid="channel-readiness-list">
+                  {([
+                    { scope: 'website' as WorkstreamScope, label: 'Website', icon: Globe, color: 'text-blue-600 dark:text-blue-400' },
+                    { scope: 'gbp'     as WorkstreamScope, label: 'GBP / Local', icon: MapPin, color: 'text-emerald-600 dark:text-emerald-400' },
+                    { scope: 'seo'     as WorkstreamScope, label: 'SEO', icon: Search, color: 'text-violet-600 dark:text-violet-400' },
+                    { scope: 'ads'     as WorkstreamScope, label: 'Paid Ads', icon: Megaphone, color: 'text-amber-600 dark:text-amber-400' },
+                  ] as const).map(({ scope, label, icon: Icon, color }) => {
+                    const readiness = audit?.channelReadiness?.[scope];
+                    const status: ChannelReadinessStatus | undefined = readiness?.status;
+                    const cfg = !audit ? {
+                      badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500', dot: 'bg-slate-300',
+                      label: 'Scanning…', icon: <Loader2 className="h-2.5 w-2.5 animate-spin" />,
+                    } : status === 'can_begin_immediately' ? {
+                      badge: 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500',
+                      label: 'Can begin immediately', icon: <Zap className="h-2.5 w-2.5" />,
+                    } : status === 'recommended' ? {
+                      badge: 'bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800', dot: 'bg-violet-500',
+                      label: 'Recommended', icon: <Sparkles className="h-2.5 w-2.5" />,
+                    } : status === 'needs_setup' ? {
+                      badge: 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800', dot: 'bg-amber-400',
+                      label: 'Needs setup', icon: <AlertCircle className="h-2.5 w-2.5" />,
+                    } : {
+                      badge: 'bg-slate-100 dark:bg-slate-800 text-slate-400', dot: 'bg-slate-200',
+                      label: 'Not applicable', icon: null,
+                    };
+                    const isHighlight = status === 'can_begin_immediately' || status === 'recommended';
+                    return (
+                      <div key={scope} className={`flex items-start gap-2.5 ${!isHighlight && audit ? 'opacity-60' : ''}`}>
+                        <div className={`shrink-0 mt-0.5 h-5 w-5 rounded-md flex items-center justify-center ${
+                          status === 'can_begin_immediately' ? 'bg-emerald-100 dark:bg-emerald-950/50' :
+                          status === 'recommended' ? 'bg-violet-100 dark:bg-violet-950/50' :
+                          'bg-slate-100 dark:bg-slate-800'
+                        }`}>
+                          <span className={`h-2 w-2 rounded-full ${cfg.dot}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <Icon className={`h-3 w-3 ${color}`} />
+                            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{label}</span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-px rounded-full font-medium ${cfg.badge}`}>
+                              {cfg.icon}{cfg.label}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {readiness?.note || (audit ? '' : 'Assessing…')}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Recommended scope */}
+              {audit && audit.recommendedScope.length > 0 && (
+                <>
+                  <div className="w-full h-px bg-slate-100 dark:bg-slate-700/60" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recommended scope</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5" data-testid="recommended-scope-pills">
+                      {audit.recommendedScope.map(s => {
+                        const meta = { website: { label: 'Website Build', icon: Globe }, gbp: { label: 'GBP / Local', icon: MapPin }, seo: { label: 'SEO', icon: Search }, ads: { label: 'Paid Ads', icon: Megaphone } }[s];
+                        const Icon = meta.icon;
+                        return (
+                          <span key={s} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800/50 font-medium">
+                            <Icon className="h-3 w-3" />{meta.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Assign these channels in the client profile to begin execution.</p>
+                  </div>
+                </>
+              )}
+
+              {/* Immediate opportunities */}
+              {audit && audit.immediateOpportunities.length > 0 && (
+                <>
+                  <div className="w-full h-px bg-slate-100 dark:bg-slate-700/60" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-amber-500" />
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Immediate opportunities</span>
+                    </div>
+                    <ul className="space-y-1.5" data-testid="immediate-opportunities-list">
+                      {audit.immediateOpportunities.map((opp, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <ArrowRight className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
+                          <span className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{opp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+
+              {/* Blockers */}
+              {audit && audit.blockers.length > 0 && (
+                <>
+                  <div className="w-full h-px bg-slate-100 dark:bg-slate-700/60" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Blockers</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {audit.blockers.map((b, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-400 shrink-0 mt-1.5" />
+                          <span className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── NON-ACTIVATED WITH ACTIVE CHANNELS (standard delivery view) ── */}
+          {!isActivated && !isAuditMode && nonActivatedHeadline && (
             <>
               {/* Delivery headline */}
               <div className="space-y-1">

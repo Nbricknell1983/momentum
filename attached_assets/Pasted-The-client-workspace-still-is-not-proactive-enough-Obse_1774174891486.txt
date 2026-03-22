@@ -1,0 +1,61 @@
+The client workspace still is not proactive enough.
+
+Observed issue:
+On clients like “Our Sparky”, the page shows:
+- No products assigned
+- 0 services
+- channels inactive
+- agents sitting in “Ready to start”
+- center copy saying channels can be activated when ready
+
+From a product perspective, this is still wrong.
+I should not need to manually assign products or activate scope just to see the agents working.
+
+Goal:
+Make the client workspace proactively useful even for legacy or non-activated clients.
+
+New product rule:
+If a client does not yet have assigned products / activation scope, the system should enter a lightweight “client audit / scope recommendation mode” automatically instead of looking idle.
+
+Desired behaviour:
+1. If execution scope is already assigned:
+- agents auto-start the relevant workstreams as already implemented
+
+2. If execution scope is NOT assigned:
+- agents should still begin a lightweight client audit automatically
+- the workspace should show visible activity
+- the system should identify:
+- what channels are present
+- what channels are missing
+- what can begin immediately
+- what recommended scope should be assigned
+
+Examples of useful agent states for non-activated clients:
+- Growth Operator — auditing current growth setup
+- Website Strategist — assessing website readiness
+- GBP Optimiser — checking profile readiness
+- SEO Architect — assessing baseline search visibility
+- Paid Ads Agent — evaluating paid opportunity
+- Waiting on scope confirmation
+- Recommended for activation
+- Can begin immediately
+- Blocked until scope is confirmed
+
+Important:
+“No products assigned” should not equal “nothing happens”.
+It should trigger a proactive pre-execution audit mode.
+
+Implementation goals:
+1. Detect clients without activationPlan / selectedScope / assigned products
+2. Add a lightweight auto-fire client audit flow for those clients
+3. Populate the center and right rail with real activity/status based on that audit
+4. Distinguish clearly between:
+- audit mode
+- active delivery mode
+5. Make the page feel alive and informative without requiring manual setup first
+
+Success criteria:
+- legacy/non-activated clients no longer look idle
+- agents visibly do useful work automatically
+- the workspace suggests what should be activated next
+- users can see immediate activity in the right rail without having to do something first

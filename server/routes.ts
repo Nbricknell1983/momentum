@@ -10652,6 +10652,140 @@ Output valid JSON only, no markdown.`;
     }
   });
 
+  // ── Client Scope Audit ─────────────────────────────────────────────────────
+  // Proactive audit for non-activated clients — fires automatically on workspace open.
+  // Identifies channel readiness and recommends scope without requiring manual setup.
+  app.post('/api/clients/:clientId/scope-audit', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const client = clientDoc.data() as any;
+
+      // Skip if already has a fresh audit (< 48h)
+      if (client.scopeAudit?.auditedAt) {
+        const age = Date.now() - new Date(client.scopeAudit.auditedAt).getTime();
+        if (age < 48 * 60 * 60 * 1000) {
+          return res.json({ success: true, audit: client.scopeAudit, cached: true });
+        }
+      }
+
+      const businessName   = client.businessName || 'this business';
+      const industry       = client.businessProfile?.industry || client.sourceIntelligence?.industry || 'local service business';
+      const location       = client.address || client.regionName || client.areaName || 'Australia';
+      const website        = client.website || '';
+      const channelStatus  = client.channelStatus || { website: 'not_started', gbp: 'not_started', seo: 'not_started', ppc: 'not_started' };
+      const products       = client.products || [];
+      const healthStatus   = client.healthStatus || 'amber';
+
+      const hasWebsite   = !!website || channelStatus.website !== 'not_started';
+      const gbpEngineCtx = client.gbpEngine ? JSON.stringify(client.gbpEngine).slice(0, 400) : '';
+      const websiteCtx   = client.websiteEngine ? JSON.stringify(client.websiteEngine).slice(0, 400) : '';
+      const seoCtx       = client.seoEngine ? JSON.stringify(client.seoEngine).slice(0, 300) : '';
+
+      const prompt = `You are a senior digital growth strategist auditing a client account that has NOT yet been set up with a digital marketing scope.
+
+Business: ${businessName}
+Industry: ${industry}
+Location: ${location}
+Website URL: ${website || 'Unknown / not provided'}
+Channel status: website=${channelStatus.website}, gbp=${channelStatus.gbp}, seo=${channelStatus.seo}, ppc=${channelStatus.ppc}
+Products/services assigned: ${products.length > 0 ? products.map((p: any) => p.name).join(', ') : 'None assigned yet'}
+Account health: ${healthStatus}
+${gbpEngineCtx ? `GBP data: ${gbpEngineCtx}` : ''}
+${websiteCtx ? `Website data: ${websiteCtx}` : ''}
+${seoCtx ? `SEO data: ${seoCtx}` : ''}
+
+Your job: produce a concise growth readiness audit that tells the account manager exactly what this client needs and what can start now.
+
+Respond in this exact JSON format:
+{
+  "auditSummary": "2-sentence plain English summary of where this client sits and what they need most urgently",
+  "recommendedScope": ["gbp", "website"],
+  "channelReadiness": {
+    "website": {
+      "status": "recommended",
+      "note": "Specific, actionable note about this channel for this business (1 sentence)"
+    },
+    "gbp": {
+      "status": "can_begin_immediately",
+      "note": "Specific note"
+    },
+    "seo": {
+      "status": "recommended",
+      "note": "Specific note"
+    },
+    "ads": {
+      "status": "needs_setup",
+      "note": "Specific note"
+    }
+  },
+  "immediateOpportunities": [
+    "Specific opportunity 1",
+    "Specific opportunity 2",
+    "Specific opportunity 3"
+  ],
+  "blockers": [
+    "Blocker 1 if any — or omit array if none"
+  ]
+}
+
+Status rules for channelReadiness:
+- "can_begin_immediately" — no dependencies, can start today (e.g. GBP when profile exists)
+- "recommended" — high value, should be scoped next
+- "needs_setup" — requires inputs or client decisions before starting
+- "not_applicable" — genuinely not relevant for this business type
+
+recommendedScope must be a subset of: ["website", "gbp", "seo", "ads"]
+immediateOpportunities: 2-4 specific, actionable items (not generic)
+blockers: only real blockers — leave empty array [] if none
+
+Output valid JSON only, no markdown.`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 900,
+        response_format: { type: 'json_object' },
+      });
+
+      const raw = completion.choices[0]?.message?.content || '{}';
+      let audit: any;
+      try {
+        audit = JSON.parse(raw);
+      } catch {
+        audit = {
+          auditSummary: 'Audit complete — scope recommendations ready.',
+          recommendedScope: ['gbp', 'website'],
+          channelReadiness: {
+            website: { status: 'recommended', note: 'Website build recommended for this business.' },
+            gbp: { status: 'can_begin_immediately', note: 'GBP optimisation can begin immediately.' },
+            seo: { status: 'recommended', note: 'SEO campaign recommended once website is live.' },
+            ads: { status: 'needs_setup', note: 'Paid ads require scope confirmation first.' },
+          },
+          immediateOpportunities: ['Begin GBP optimisation sprint', 'Generate website brief'],
+          blockers: [],
+        };
+      }
+
+      audit.auditedAt = new Date().toISOString();
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        scopeAudit: audit,
+        updatedAt: new Date(),
+      });
+
+      res.json({ success: true, audit });
+    } catch (err: any) {
+      console.error('[clients/scope-audit]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Activate workstream manually ──────────────────────────────────────────
 
   app.patch('/api/clients/:clientId/activation-plan', async (req, res) => {

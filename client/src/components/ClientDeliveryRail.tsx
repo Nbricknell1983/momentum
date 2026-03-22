@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Client, WorkstreamScope, WorkstreamStatus, ChannelStatus,
+  Client, WorkstreamScope, WorkstreamStatus, ChannelStatus, ChannelReadiness,
 } from '@/lib/types';
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -31,7 +31,11 @@ type AgentId = 'growth_operator' | 'website_strategist' | 'content_agent' | 'gbp
 
 type AgentStatus =
   | 'active'
+  | 'auditing'
   | 'generating'
+  | 'recommended'
+  | 'can_start'
+  | 'pending_scope'
   | 'ready_for_review'
   | 'waiting_dep'
   | 'queued'
@@ -53,13 +57,17 @@ interface AgentState {
 
 function statusConfig(status: AgentStatus): { label: string; dotColor: string; badgeCls: string } {
   switch (status) {
-    case 'active':           return { label: 'Active',              dotColor: 'bg-emerald-500',  badgeCls: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' };
-    case 'generating':       return { label: 'Generating',          dotColor: 'bg-blue-500 animate-pulse',    badgeCls: 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300' };
-    case 'ready_for_review': return { label: 'Awaiting review',     dotColor: 'bg-amber-400',    badgeCls: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300' };
-    case 'waiting_dep':      return { label: 'Waiting',             dotColor: 'bg-slate-300 dark:bg-slate-600', badgeCls: 'bg-slate-100 dark:bg-slate-800 text-slate-500' };
-    case 'queued':           return { label: 'Ready to start',      dotColor: 'bg-violet-400',   badgeCls: 'bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300' };
-    case 'completed':        return { label: 'Completed',           dotColor: 'bg-emerald-500',  badgeCls: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' };
-    case 'not_in_scope':     return { label: 'Not in scope',        dotColor: 'bg-slate-200 dark:bg-slate-700', badgeCls: 'bg-slate-100 dark:bg-slate-800/80 text-slate-400' };
+    case 'active':           return { label: 'Active',                  dotColor: 'bg-emerald-500',                             badgeCls: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' };
+    case 'auditing':         return { label: 'Auditing…',               dotColor: 'bg-blue-500 animate-pulse',                  badgeCls: 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300' };
+    case 'generating':       return { label: 'Generating',              dotColor: 'bg-blue-500 animate-pulse',                  badgeCls: 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300' };
+    case 'recommended':      return { label: 'Recommended',             dotColor: 'bg-violet-500',                              badgeCls: 'bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300' };
+    case 'can_start':        return { label: 'Can begin immediately',   dotColor: 'bg-emerald-500',                             badgeCls: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' };
+    case 'pending_scope':    return { label: 'Awaiting scope',          dotColor: 'bg-amber-400',                               badgeCls: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300' };
+    case 'ready_for_review': return { label: 'Awaiting review',         dotColor: 'bg-amber-400',                               badgeCls: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300' };
+    case 'waiting_dep':      return { label: 'Waiting',                 dotColor: 'bg-slate-300 dark:bg-slate-600',             badgeCls: 'bg-slate-100 dark:bg-slate-800 text-slate-500' };
+    case 'queued':           return { label: 'Ready to start',          dotColor: 'bg-violet-400',                              badgeCls: 'bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300' };
+    case 'completed':        return { label: 'Completed',               dotColor: 'bg-emerald-500',                             badgeCls: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' };
+    case 'not_in_scope':     return { label: 'Not in scope',            dotColor: 'bg-slate-200 dark:bg-slate-700',             badgeCls: 'bg-slate-100 dark:bg-slate-800/80 text-slate-400' };
     default:                 return { label: 'Unknown', dotColor: 'bg-slate-300', badgeCls: '' };
   }
 }
@@ -71,8 +79,19 @@ function channelStatusToAgent(cs: ChannelStatus): AgentStatus {
     case 'live':        return 'completed';
     case 'in_progress': return 'active';
     case 'paused':      return 'waiting_dep';
-    case 'not_started': return 'queued';
-    default:            return 'queued';
+    case 'not_started': return 'auditing';
+    default:            return 'auditing';
+  }
+}
+
+function auditReadinessToAgent(r?: ChannelReadiness): AgentStatus {
+  if (!r) return 'auditing';
+  switch (r.status) {
+    case 'can_begin_immediately': return 'can_start';
+    case 'recommended':           return 'recommended';
+    case 'needs_setup':           return 'pending_scope';
+    case 'not_applicable':        return 'not_in_scope';
+    default:                      return 'auditing';
   }
 }
 
@@ -90,24 +109,27 @@ function wsToAgentStatus(wss: WorkstreamStatus | undefined): AgentStatus {
 }
 
 function deriveAgents(client: Client): AgentState[] {
-  const plan = client.activationPlan;
+  const plan  = client.activationPlan;
   const scope = plan?.selectedScope ?? [];
-  const ws = plan?.workstreams ?? {};
-  const cs = client.channelStatus;
+  const ws    = plan?.workstreams ?? {};
+  const cs    = client.channelStatus;
+  const audit = client.scopeAudit;
 
-  const websiteStatus  = ws.website?.status;
-  const gbpStatus      = ws.gbp?.status;
-  const seoStatus      = ws.seo?.status;
-  const adsStatus      = ws.ads?.status;
+  const websiteStatus      = ws.website?.status;
+  const gbpStatus          = ws.gbp?.status;
+  const seoStatus          = ws.seo?.status;
+  const adsStatus          = ws.ads?.status;
   const websiteBriefReady  = !!plan?.websiteWorkstream?.brief;
   const pageStructureReady = !!plan?.websiteWorkstream?.pageStructure?.length;
 
-  const liveCount = Object.values(cs).filter(s => s === 'live').length;
+  const liveCount      = Object.values(cs).filter(s => s === 'live').length;
   const inProgressCount = Object.values(cs).filter(s => s === 'in_progress').length;
+  const isAuditMode    = !plan && liveCount < 2 && inProgressCount === 0;
 
   const agents: AgentState[] = [];
 
   // ── Growth Operator — always present ────────────────────────────────────────
+  let goStatus: AgentStatus = 'active';
   let goNote = '';
   if (plan) {
     goNote = `Orchestrating ${scope.length} active workstream${scope.length !== 1 ? 's' : ''} — coordinating delivery and dependencies`;
@@ -115,20 +137,20 @@ function deriveAgents(client: Client): AgentState[] {
     goNote = `${liveCount} channels live — monitoring performance and flagging growth opportunities`;
   } else if (inProgressCount > 0) {
     goNote = 'Tracking in-progress delivery across channels — watching for blockers';
+  } else if (isAuditMode && !audit) {
+    goStatus = 'auditing';
+    goNote   = 'Running proactive growth audit — assessing channel readiness and identifying immediate opportunities';
+  } else if (isAuditMode && audit) {
+    goNote = `Audit complete — ${audit.recommendedScope.length} channel${audit.recommendedScope.length !== 1 ? 's' : ''} recommended for activation. ${audit.immediateOpportunities[0] || ''}`;
   } else if (client.healthStatus === 'red') {
     goNote = 'At-risk account — monitoring health signals and flagging immediate actions';
   } else {
-    goNote = 'Monitoring account health and surface growth signals for this client';
+    goNote = 'Monitoring account health and surfacing growth signals for this client';
   }
   agents.push({
-    id: 'growth_operator',
-    name: 'Growth Operator',
-    specialty: 'Delivery orchestration',
-    initial: 'G',
-    avatarColor: 'bg-indigo-500',
-    status: 'active',
-    statusLabel: 'Active',
-    statusNote: goNote,
+    id: 'growth_operator', name: 'Growth Operator', specialty: 'Delivery orchestration',
+    initial: 'G', avatarColor: 'bg-indigo-500',
+    status: goStatus, statusLabel: statusConfig(goStatus).label, statusNote: goNote,
   });
 
   // ── Website Strategist ───────────────────────────────────────────────────────
@@ -146,14 +168,18 @@ function deriveAgents(client: Client): AgentState[] {
     }
     agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
   } else if (!plan) {
-    const agentStatus = channelStatusToAgent(cs.website);
-    const noteMap: Record<ChannelStatus, string> = {
-      live:        'Website live — reviewing performance, conversion signals, and improvement opportunities',
-      in_progress: 'Website project underway — tracking progress and coordinating content delivery',
-      paused:      'Website project paused — check client approval or missing assets',
-      not_started: 'Website build not yet started — brief can be generated when scope is confirmed',
-    };
-    agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.website] });
+    if (cs.website === 'live') {
+      agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: 'completed', statusLabel: 'Completed', statusNote: 'Website live — reviewing performance, conversion signals, and improvement opportunities' });
+    } else if (cs.website === 'in_progress') {
+      agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: 'active', statusLabel: 'Active', statusNote: 'Website project underway — tracking progress and coordinating content delivery' });
+    } else if (cs.website === 'paused') {
+      agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: 'waiting_dep', statusLabel: 'Waiting', statusNote: 'Website project paused — check client approval or missing assets' });
+    } else {
+      const agentStatus = auditReadinessToAgent(audit?.channelReadiness?.website);
+      const note = audit?.channelReadiness?.website?.note
+        || (audit ? 'Website build recommended — brief can be generated once scope is confirmed' : 'Assessing website readiness and conversion potential…');
+      agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
+    }
   }
 
   // ── Content Agent — only with website in scope (activated) ──────────────────
@@ -191,14 +217,18 @@ function deriveAgents(client: Client): AgentState[] {
     }
     agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
   } else if (!plan) {
-    const agentStatus = channelStatusToAgent(cs.gbp);
-    const noteMap: Record<ChannelStatus, string> = {
-      live:        'GBP active and optimised — posting content, managing reviews, and tracking map pack position',
-      in_progress: 'GBP optimisation underway — working through tasks and building review volume',
-      paused:      'GBP optimisation paused — check what is blocking progress',
-      not_started: 'GBP optimisation can begin immediately — no dependencies required',
-    };
-    agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.gbp] });
+    if (cs.gbp === 'live') {
+      agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: 'completed', statusLabel: 'Completed', statusNote: 'GBP active and optimised — posting content, managing reviews, and tracking map pack position' });
+    } else if (cs.gbp === 'in_progress') {
+      agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: 'active', statusLabel: 'Active', statusNote: 'GBP optimisation underway — working through tasks and building review volume' });
+    } else if (cs.gbp === 'paused') {
+      agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: 'waiting_dep', statusLabel: 'Waiting', statusNote: 'GBP optimisation paused — check what is blocking progress' });
+    } else {
+      const agentStatus = auditReadinessToAgent(audit?.channelReadiness?.gbp);
+      const note = audit?.channelReadiness?.gbp?.note
+        || (audit ? 'GBP optimisation ready to begin — no dependencies required' : 'Checking GBP profile readiness and local search visibility…');
+      agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
+    }
   }
 
   // ── SEO Architect ────────────────────────────────────────────────────────────
@@ -216,16 +246,18 @@ function deriveAgents(client: Client): AgentState[] {
     }
     agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: seoAgentStatus, statusLabel: statusConfig(seoAgentStatus).label, statusNote: note });
   } else if (!plan) {
-    const agentStatus = channelStatusToAgent(cs.seo);
-    const noteMap: Record<ChannelStatus, string> = {
-      live:        'SEO campaign active — tracking keyword rankings and organic traffic growth',
-      in_progress: 'SEO strategy underway — building content authority and keyword coverage',
-      paused:      'SEO paused — confirm whether site structure is ready before resuming',
-      not_started: cs.website !== 'not_started'
-        ? 'Website in progress — SEO keyword mapping ready to begin once page structure is confirmed'
-        : 'SEO not yet started — begin after website page structure is defined',
-    };
-    agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.seo] });
+    if (cs.seo === 'live') {
+      agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: 'completed', statusLabel: 'Completed', statusNote: 'SEO campaign active — tracking keyword rankings and organic traffic growth' });
+    } else if (cs.seo === 'in_progress') {
+      agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: 'active', statusLabel: 'Active', statusNote: 'SEO strategy underway — building content authority and keyword coverage' });
+    } else if (cs.seo === 'paused') {
+      agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: 'waiting_dep', statusLabel: 'Waiting', statusNote: 'SEO paused — confirm whether site structure is ready before resuming' });
+    } else {
+      const agentStatus = auditReadinessToAgent(audit?.channelReadiness?.seo);
+      const note = audit?.channelReadiness?.seo?.note
+        || (audit ? 'SEO baseline assessed — keyword opportunity ready to map' : 'Assessing baseline search visibility and organic ranking opportunity…');
+      agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
+    }
   }
 
   // ── Paid Ads Agent ───────────────────────────────────────────────────────────
@@ -242,14 +274,18 @@ function deriveAgents(client: Client): AgentState[] {
     }
     agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
   } else if (!plan) {
-    const agentStatus = channelStatusToAgent(cs.ppc);
-    const noteMap: Record<ChannelStatus, string> = {
-      live:        'Paid campaign live — optimising bids, tracking conversions, and adjusting targeting',
-      in_progress: 'Campaign being set up — building ad structure and refining targeting parameters',
-      paused:      'Paid ads paused — review budget, performance data, or client sign-off status',
-      not_started: 'Paid search not yet active — high-intent traffic can be captured immediately when ready',
-    };
-    agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.ppc] });
+    if (cs.ppc === 'live') {
+      agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: 'completed', statusLabel: 'Completed', statusNote: 'Paid campaign live — optimising bids, tracking conversions, and adjusting targeting' });
+    } else if (cs.ppc === 'in_progress') {
+      agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: 'active', statusLabel: 'Active', statusNote: 'Campaign being set up — building ad structure and refining targeting parameters' });
+    } else if (cs.ppc === 'paused') {
+      agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: 'waiting_dep', statusLabel: 'Waiting', statusNote: 'Paid ads paused — review budget, performance data, or client sign-off status' });
+    } else {
+      const agentStatus = auditReadinessToAgent(audit?.channelReadiness?.ads);
+      const note = audit?.channelReadiness?.ads?.note
+        || (audit ? 'Paid search opportunity identified — ready to scope campaign structure' : 'Evaluating paid search opportunity and competitive landscape…');
+      agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
+    }
   }
 
   // ── Out-of-scope hints (only for activated clients with explicit scope) ───────
@@ -305,10 +341,12 @@ function AgentCard({ agent }: { agent: AgentState }) {
         <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug mt-1">
           {agent.statusNote}
         </p>
-        {agent.status === 'generating' && (
+        {(agent.status === 'generating' || agent.status === 'auditing') && (
           <div className="mt-1.5 flex items-center gap-1.5">
             <Loader2 className="h-3 w-3 text-blue-500 animate-spin" />
-            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Working…</span>
+            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+              {agent.status === 'auditing' ? 'Scanning…' : 'Working…'}
+            </span>
           </div>
         )}
       </div>

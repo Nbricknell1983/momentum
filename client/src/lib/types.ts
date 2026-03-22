@@ -1956,6 +1956,8 @@ export interface Client {
   // Lead → Client execution system
   sourceIntelligence?: SourceIntelligence;
   activationPlan?: ActivationPlan;
+  // Proactive scope audit (non-activated clients)
+  scopeAudit?: ScopeAudit;
 }
 
 // ── Lead → Client Execution System ─────────────────────────────────────────
@@ -1985,6 +1987,33 @@ export interface WorkstreamState {
   activatedAt: string;
   updatedAt: string;
   note?: string;
+}
+
+// ── Proactive Scope Audit ────────────────────────────────────────────────────
+
+export type ChannelReadinessStatus =
+  | 'can_begin_immediately'
+  | 'recommended'
+  | 'needs_setup'
+  | 'not_applicable';
+
+export interface ChannelReadiness {
+  status: ChannelReadinessStatus;
+  note: string;
+}
+
+export interface ScopeAudit {
+  auditedAt: string;
+  auditSummary: string;
+  recommendedScope: WorkstreamScope[];
+  channelReadiness: {
+    website: ChannelReadiness;
+    gbp: ChannelReadiness;
+    seo: ChannelReadiness;
+    ads: ChannelReadiness;
+  };
+  immediateOpportunities: string[];
+  blockers: string[];
 }
 
 export interface WebsitePageSpec {
