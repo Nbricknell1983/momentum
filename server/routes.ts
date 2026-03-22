@@ -8292,19 +8292,23 @@ Return ONLY a JSON object with ALL these fields:
         const ebWebsite = eb.website || null;
         const ebSocial = eb.social || null;
 
+        const ebPaid = eb.paidSearch || null;
         const provPack = pack ? `Prep intel: ${pack.businessSnapshot?.slice(0, 150) || ''}${pack.commercialAngle ? ` | Angle: ${pack.commercialAngle}` : ''}${toArr(pack.gaps).length ? ` | Key gaps: ${toArr(pack.gaps).slice(0, 2).join('; ')}` : ''}` : '';
         const provGbp = ebGbp ? `GBP: ${ebGbp.reviewCount ?? '?'} reviews${ebGbp.rating ? `, ${ebGbp.rating}/5★` : ''}${ebGbp.category ? ` — ${ebGbp.category}` : ''}` : (lead.address ? `Location on file: ${lead.address}` : '');
         const provWeb = ebWebsite?.success
           ? `Website: ${ebWebsite.url}${ebWebsite.ctaSignals?.length ? ` (CTAs: ${ebWebsite.ctaSignals.slice(0, 2).join(', ')})` : ''}${ebWebsite.conversionGaps?.length ? ` — gaps: ${ebWebsite.conversionGaps.slice(0, 2).join('; ')}` : ''}`
           : (lead.website ? `Website on file: ${lead.website} (not yet crawled)` : 'No website on file');
         const provSocial = [ebSocial?.facebook?.detected && 'Facebook', ebSocial?.instagram?.detected && 'Instagram', ebSocial?.linkedin?.detected && 'LinkedIn'].filter(Boolean).join(', ');
+        const provPaid = ebPaid?.confirmedActive
+          ? `Paid Search: Active Google Ads (${ebPaid.transparency?.adCount ?? 'some'} ads running)`
+          : ebPaid?.activityState === 'active' ? 'Paid Search: Active' : '';
 
         const provPrompt = `You are a senior agency sales strategist. Generate 2-3 initial next best steps for a rep opening this prospect for the first time.
 
 PROSPECT: ${lead.companyName || 'Unknown'}
 INDUSTRY: ${lead.industry || enr.industry || 'Unknown'}
 STAGE: ${lead.stage || 'prospect'}
-${provPack ? provPack + '\n' : ''}${provGbp ? provGbp + '\n' : ''}${provWeb ? provWeb + '\n' : ''}${provSocial ? `Social: ${provSocial}\n` : ''}NOTES: ${lead.notes?.slice(0, 200) || 'None'}
+${provPack ? provPack + '\n' : ''}${provGbp ? provGbp + '\n' : ''}${provWeb ? provWeb + '\n' : ''}${provSocial ? `Social: ${provSocial}\n` : ''}${provPaid ? provPaid + '\n' : ''}NOTES: ${lead.notes?.slice(0, 200) || 'None'}
 
 Generate 2-3 INITIAL next best steps. These are provisional — deeper analysis is running in background.
 Return ONLY valid JSON:
@@ -8315,10 +8319,12 @@ Return ONLY valid JSON:
       "label": "Short action label",
       "urgency": "high|medium|low",
       "why": "1 sentence — specific to this prospect",
-      "draftContent": "Brief ready-to-use draft — call opening line or email subject + first paragraph"
+      "draftContent": "Brief ready-to-use draft — call opening line or email subject + first paragraph",
+      "source": "website|gbp|search|social|prep|paid-search|multi-source"
     }
   ]
 }
+source = which evidence type most directly drove this recommendation. Use "multi-source" if two or more signals contributed equally.
 Order by urgency. Max 3 steps. Be specific to this business, never generic.`;
 
         const provRes = await openai.chat.completions.create({

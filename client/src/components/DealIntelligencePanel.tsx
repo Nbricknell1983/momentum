@@ -811,6 +811,24 @@ const NBS_URGENCY: Record<string, { cls: string; label: string }> = {
   low:    { cls: 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600', label: 'Low' },
 };
 
+const PROV_SOURCE_LABELS: Record<string, string> = {
+  website:       'From website scan',
+  gbp:           'From GBP signal',
+  search:        'From search visibility',
+  social:        'From social presence scan',
+  prep:          'From early prep analysis',
+  'paid-search': 'From paid search detection',
+  'multi-source':'From multiple signals',
+};
+
+const VALID_SOURCES = new Set(Object.keys(PROV_SOURCE_LABELS));
+
+function provSourceLabel(source: string | undefined): string | null {
+  if (!source) return null;
+  const key = source.toLowerCase().trim();
+  return VALID_SOURCES.has(key) ? PROV_SOURCE_LABELS[key] : null;
+}
+
 function NextBestStepsCard({ lead, autoRunning, provisionalSteps, provRunning }: { lead: Lead; autoRunning: boolean; provisionalSteps?: any[]; provRunning?: boolean }) {
   const dispatch = useDispatch();
   const { orgId, authReady } = useAuth();
@@ -930,13 +948,19 @@ function NextBestStepsCard({ lead, autoRunning, provisionalSteps, provRunning }:
             {provisionalSteps!.map((step: any, i: number) => {
               const cfg = NBS_TYPE_CONFIG[step.actionType] || { icon: ArrowRight, color: 'bg-slate-500', bg: 'bg-muted/30', label: step.actionType };
               const Icon = cfg.icon;
+              const srcLabel = provSourceLabel(step.source);
               return (
                 <div key={i} className="rounded-md border border-border/60 bg-background/80 overflow-hidden">
                   <div className={`px-3 py-2 flex items-center gap-2 ${cfg.bg} border-b border-border/40`}>
                     <div className={`w-6 h-6 rounded-full ${cfg.color} flex items-center justify-center shrink-0`}>
                       <Icon className="h-3 w-3 text-white" />
                     </div>
-                    <span className="text-[11px] font-semibold text-foreground flex-1 min-w-0">{step.label}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] font-semibold text-foreground">{step.label}</span>
+                      {srcLabel && (
+                        <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-none">{srcLabel}</p>
+                      )}
+                    </div>
                     {step.urgency === 'high' && (
                       <span className="text-[9px] font-bold uppercase tracking-wide text-red-500 dark:text-red-400 shrink-0">Urgent</span>
                     )}

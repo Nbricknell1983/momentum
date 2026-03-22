@@ -1,0 +1,81 @@
+I want to add lightweight provenance/source hints to provisional Next Best Steps so users can see where each early recommendation is coming from.
+
+Context:
+The Next Best Steps panel now supports:
+- initial loading
+- provisional recommendations
+- full recommendations
+- retry fallback
+
+This is much better, but provisional recommendations would feel more trustworthy if each one carried a subtle hint about what evidence triggered it.
+
+Goal:
+Increase trust and clarity by showing a small source label or provenance hint on provisional recommendations, without making the UI feel technical or cluttered.
+
+What I want:
+1. Add lightweight source/provenance hints to provisional Next Best Steps
+2. Keep the UI premium, minimal, and human-readable
+3. Only show provenance where it adds trust and clarity
+4. Avoid turning the card into a technical audit or evidence dump
+
+Examples of good source hints:
+- From website scan
+- From GBP signal
+- From search visibility review
+- From early prep analysis
+- From social presence scan
+- From paid search detection
+
+Examples of where these should appear:
+- small muted line under the recommendation title
+- subtle pill/tag
+- compact “Source:” label in helper text
+- only on provisional recommendations, not necessarily full final ones unless it still feels useful
+
+Data model suggestion:
+If provisional recommendation objects do not already support this, extend them with something like:
+
+type RecommendationSource =
+| "website"
+| "gbp"
+| "search"
+| "social"
+| "prep"
+| "paid-search"
+| "multi-source";
+
+type ProvisionalNextStep = {
+id: string;
+title: string;
+description?: string;
+source?: RecommendationSource;
+sourceLabel?: string;
+};
+
+UX rules:
+- Keep the provenance hint subtle and secondary
+- Do not show raw system IDs, internal stage names, or technical payload fields
+- Prefer plain-English labels
+- If a recommendation is driven by multiple signals, use a label like:
+- From multiple signals
+- From website + search review
+- If provenance is weak or unclear, omit it rather than showing low-quality noise
+
+Implementation guidance:
+1. Identify where provisional Next Best Steps are assembled
+2. Extend the provisional recommendation model to carry source metadata
+3. Map source metadata into plain-English UI labels
+4. Render the source hint only in the provisional state
+5. Keep final/full recommendations clean unless there is a strong reason to keep provenance visible there too
+
+Success criteria:
+- provisional recommendations feel more trustworthy
+- users can quickly understand why a recommendation is appearing
+- the UI stays premium and uncluttered
+- provenance hints improve clarity without feeling technical
+
+Please identify:
+1. where provisional NBS items are generated
+2. the smallest safe way to add source metadata
+3. the best UI treatment for provenance hints within the current card design
+4. whether any existing evidence objects already provide enough metadata to infer source cleanly
