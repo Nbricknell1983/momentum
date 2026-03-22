@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDispatch } from 'react-redux';
 import { patchLead } from '@/store';
 import { Lead } from '@/lib/types';
@@ -16,6 +16,8 @@ import {
   Sparkles, Copy, Check, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 import { timeAgo } from '@/lib/utils';
+import { runWatchdog } from '@/lib/watchdog';
+import { WatchdogPanel } from '@/components/WatchdogPanel';
 
 type SpecId = 'prep' | 'website' | 'seo' | 'growth' | 'commercial';
 type StageStatus = 'pending' | 'running' | 'complete' | 'blocked';
@@ -301,6 +303,9 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     return () => clearInterval(id);
   }, []);
 
+  // Watchdog — dismissed finding IDs (per mount session)
+  const [dismissedWatchdogIds, setDismissedWatchdogIds] = useState<Set<string>>(new Set());
+
   const [dealContext, setDealContext] = useState((lead as any).dealContext || '');
   const [contextSaving, setContextSaving] = useState(false);
 
@@ -574,6 +579,36 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     if (hasPrepPack) return 'initial-ready';
     return 'scanning';
   })();
+
+  // ── Watchdog — re-runs on every tick (8s) and on key state changes ───────
+  const watchdogFindings = useMemo(() => {
+    const raw = runWatchdog({
+      lead,
+      mountedAtMs:      mountedAt.current,
+      nowMs:            Date.now(),
+      prepRunning,
+      evidenceRunning,
+      xrayRunning,
+      serpRunning,
+      diagRunning,
+      xrayStartedAtMs:  xrayStartedAt.current,
+      serpStartedAtMs:  serpStartedAt.current,
+      diagStartedAtMs:  diagStartedAt.current,
+      prepStartedAtMs:  prepStartedAt.current,
+      autoXrayFired:    autoXrayFired.current,
+      autoSerpFired:    autoSerpFired.current,
+      autoDiagFired:    autoDiagFired.current,
+      autoPrepFired:    autoPrepFired.current,
+      autoEvidenceFired: autoEvidenceFired.current,
+    });
+    return raw.filter(f => !dismissedWatchdogIds.has(f.id));
+  // tick drives the 8s refresh; running states trigger immediate re-eval on transition
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick, lead, prepRunning, evidenceRunning, xrayRunning, serpRunning, diagRunning, dismissedWatchdogIds]);
+
+  const handleDismissWatchdogFinding = useCallback((id: string) => {
+    setDismissedWatchdogIds(prev => new Set([...prev, id]));
+  }, []);
 
   // ── Derive statuses and findings ─────────────────────────────────────────
 
@@ -1095,6 +1130,17 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
                   <p className="text-[10px] text-muted-foreground mt-0.5">The team's been updated with your notes</p>
                 </div>
               </div>
+            </>
+          )}
+
+          {/* Watchdog self-audit panel */}
+          {watchdogFindings.length > 0 && (
+            <>
+              <div className="h-3" />
+              <WatchdogPanel
+                findings={watchdogFindings}
+                onDismiss={handleDismissWatchdogFinding}
+              />
             </>
           )}
 

@@ -1,0 +1,75 @@
+I want Momentum to become proactive about detecting product bugs, workflow failures, and misleading UI states instead of waiting for the user to notice them manually.
+
+Problem:
+Right now, when something goes wrong or feels off, the user is often the one spotting it first (for example:
+- GBP lookup fails but the UI falls back to misleading “Not yet verified”
+- specialists appear queued without enough context about whether they are stuck
+- a panel stays empty even though analysis is running
+- a prompt/pipeline issue causes incomplete intelligence output)
+
+Goal:
+Add a proactive QA / watchdog layer that can detect likely workflow bugs and recommend fixes automatically.
+
+What I want:
+1. Add a lightweight product QA / workflow watchdog capability
+2. Detect mismatches between backend/runtime truth and UI presentation
+3. Detect misleading fallback states
+4. Detect orchestration bottlenecks, stuck queues, missing auto-starts, and incomplete output patterns
+5. Surface likely bug diagnoses and suggested fixes proactively
+
+Examples of things this watchdog should catch:
+- lookup/auth failure rendered as business insight
+- a panel remaining empty while analysis is actively in progress
+- a stage staying queued too long after dependencies finish
+- a known evidence payload existing but not rendering in UI
+- a model repeatedly truncating later sections because of token limits
+- a new lead still requiring clicks to trigger default workflow
+- full intelligence being suppressed by stage-gating or overly strict prompt rules
+
+Suggested output shape:
+type WatchdogFinding = {
+id: string;
+severity: "low" | "medium" | "high";
+confidence: "low" | "medium" | "high";
+category:
+| "ui-state-mismatch"
+| "fallback-copy"
+| "orchestration"
+| "auth"
+| "prompt-output"
+| "data-pipeline"
+| "workflow-friction";
+summary: string;
+likelyCause?: string;
+recommendedFix?: string;
+evidence?: string[];
+};
+
+Where it should run:
+- after important workflow transitions such as:
+- lead open
+- evidence gather completion
+- prep pack completion
+- GBP lookup
+- next best steps generation
+- optionally as a lightweight background pass over active leads
+
+Important product rule:
+If the system can infer a likely bug from observable runtime state, it should surface that proactively instead of hiding behind generic fallback copy.
+
+Implementation guidance:
+1. Identify the most useful places to hook a lightweight watchdog/audit pass into the existing lead workflow
+2. Start with a narrow first version covering high-value issues such as:
+- auth failure vs business-state mismatch
+- stuck/delayed queue states
+- empty panel despite active analysis
+- missing card render despite evidence existing
+- incomplete structured output due to prompt/token issues
+3. Keep findings internal/admin-facing at first if needed
+4. Return plain-English suspected issue + likely cause + recommended fix
+
+Success criteria:
+- Momentum proactively flags likely bugs or UX problems
+- misleading fallback states are more likely to be caught automatically
+- runtime/UI mismatches become visible without relying on manual user detection
+- the system starts acting like an operator that audits itself, not just a workflow engine

@@ -59,6 +59,15 @@ Preferred communication style: Simple, everyday language.
 - **Bullpen Daily Brief**: Scheduled daily agent review and GPT synthesis into a morning brief.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for leads and clients, identifying industry, category, location, strategic intelligence, and deterministic dependencies.
 
+### Proactive Watchdog / Self-Audit System
+- **Purpose**: Runtime QA layer that detects workflow bugs, UI-state mismatches, and misleading fallback states automatically — without waiting for the user to notice.
+- **Core function**: `client/src/lib/watchdog.ts` → `runWatchdog(WatchdogInput): WatchdogFinding[]` — pure function, no network calls.
+- **UI**: `WatchdogPanel` component renders in the specialist queue (bottom of `DealLiveActivityFeed`) when findings exist. Collapsible with severity count badges. Per-finding dismiss. Session-scoped.
+- **Triggers**: Recomputes via `useMemo` on every 8s tick + on key running-state transitions (prepRunning, xrayRunning, etc.).
+- **Detection scenarios**: evidence bundle ↔ sourceData mismatch, truncated prep pack (missing sections), stuck X-Ray/SERP/Prep (>90-120s), Strategy Diagnosis not triggered despite deps done, prep fired but no data (silent failure), lead has website but X-Ray never fired, crawl error in evidence, NBS empty despite evidence, stale evidence bundle not refreshed.
+- **WatchdogFinding shape**: `{ id, severity, confidence, category, summary, likelyCause, recommendedFix, evidence[] }`
+- **Categories**: `ui-state-mismatch | fallback-copy | orchestration | auth | prompt-output | data-pipeline | workflow-friction`
+
 ### First-Open Lead Orchestration (Two-Speed)
 - **Phase 1 — Fast first pass (auto, ~300–500ms)**: On lead open, `DealLiveActivityFeed` fires `gather-evidence` at 300ms (if no evidence or evidence >24h stale) and `generate-prep-pack` at 500ms (if pack missing or >24h stale). Both fire in parallel; the server's `gatherEvidenceBundle` call inside prep-pack is idempotent so a race is safe.
 - **Phase 2 — Deeper background analysis (auto, 800ms+)**: Website X-Ray fires at 800ms, SERP at 1500ms, Strategy Diagnosis when both complete. These continue asynchronously while Phase 1 output is already visible.
