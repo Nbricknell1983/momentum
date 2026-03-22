@@ -38,11 +38,21 @@ function shouldAutoFireScopeAudit(client: Client): boolean {
 }
 
 function shouldAutoFireIntelligenceBrief(client: Client): boolean {
-  if (client.intelligenceBrief?.generatedAt) {
-    const age = Date.now() - new Date(client.intelligenceBrief.generatedAt).getTime();
-    if (age < 48 * 60 * 60 * 1000) return false;
+  const brief = client.intelligenceBrief;
+  if (brief?.generatedAt) {
+    const age = Date.now() - new Date(brief.generatedAt).getTime();
+    if (age >= 48 * 60 * 60 * 1000) return true; // stale — regenerate
+
+    // Detect a "bad" cached brief: presence signals are empty but client clearly
+    // has known presence data (website, social, GBP). Force regeneration.
+    const ps = brief.presenceSnapshot;
+    const hasKnownPresence = !!(client.website || client.facebookUrl || client.instagramUrl || client.linkedinUrl || client.gbpLocationName);
+    const briefHasEmptyPresence = !ps?.websiteSignals?.length && !ps?.socialSignals?.length && !ps?.gbpSignals?.length;
+    if (hasKnownPresence && briefHasEmptyPresence) return true; // stale bad data — regenerate
+
+    return false; // fresh + valid
   }
-  return true;
+  return true; // no brief at all
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

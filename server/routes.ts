@@ -10850,35 +10850,67 @@ Output valid JSON only, no markdown.`;
       const address = client.address || '';
       const isTakeover = !!website;
 
-      // Build intelligence context from all available data
       const channelStatus = client.channelStatus || {};
-      const socialProfiles = [
-        client.facebookUrl ? 'Facebook' : null,
-        client.instagramUrl ? 'Instagram' : null,
-        client.linkedinUrl ? 'LinkedIn' : null,
-      ].filter(Boolean).join(', ') || 'none found';
 
+      // ── CONFIRMED PRESENCE FACTS (deterministic — always accurate) ──────────
+      // These are facts we know from client record fields, not engine analysis.
+      // They must appear in the AI output regardless of engine data availability.
+      const confirmedWebsite   = website || '';
+      const confirmedFacebook  = client.facebookUrl || si.prepCallPack?.facebookUrl || '';
+      const confirmedInstagram = client.instagramUrl || si.prepCallPack?.instagramUrl || '';
+      const confirmedLinkedIn  = client.linkedinUrl || si.prepCallPack?.linkedinUrl || '';
+      const confirmedGBP       = client.gbpLocationName ? `GBP profile linked (${client.gbpLocationName})` : '';
+      const gbpChannelStatus   = channelStatus.gbp || '';
+      const websiteChannelStatus = channelStatus.website || '';
+      const seoChannelStatus   = channelStatus.seo || '';
+      const adsChannelStatus   = channelStatus.ads || '';
+
+      // Build a bullet list of confirmed facts for the AI to draw on
+      const confirmedFacts: string[] = [];
+      if (confirmedWebsite)   confirmedFacts.push(`Website URL confirmed: ${confirmedWebsite}`);
+      if (confirmedFacebook)  confirmedFacts.push(`Facebook profile: ${confirmedFacebook}`);
+      if (confirmedInstagram) confirmedFacts.push(`Instagram profile: ${confirmedInstagram}`);
+      if (confirmedLinkedIn)  confirmedFacts.push(`LinkedIn profile: ${confirmedLinkedIn}`);
+      if (confirmedGBP)       confirmedFacts.push(confirmedGBP);
+      if (gbpChannelStatus && gbpChannelStatus !== 'not_started') confirmedFacts.push(`GBP/Local channel is active (status: ${gbpChannelStatus})`);
+      if (websiteChannelStatus && websiteChannelStatus !== 'not_started') confirmedFacts.push(`Website channel is active (status: ${websiteChannelStatus})`);
+      if (seoChannelStatus && seoChannelStatus !== 'not_started') confirmedFacts.push(`SEO channel is active (status: ${seoChannelStatus})`);
+      if (adsChannelStatus && adsChannelStatus !== 'not_started') confirmedFacts.push(`Paid search channel active (status: ${adsChannelStatus})`);
+
+      // Carry over presence signals from pre-sale intelligence (lead stage)
+      const prepPresence = si.prepCallPack?.presenceSnapshot;
+      if (prepPresence) {
+        if (typeof prepPresence === 'string') confirmedFacts.push(`Pre-sale presence: ${prepPresence}`);
+        else if (prepPresence.website) confirmedFacts.push(`Pre-sale: website observed at ${prepPresence.website}`);
+      }
+      if (si.prepCallPack?.businessSnapshot) confirmedFacts.push(`Business context: ${String(si.prepCallPack.businessSnapshot).slice(0, 200)}`);
+
+      const confirmedFactsBlock = confirmedFacts.length
+        ? `\nCONFIRMED DIGITAL PRESENCE (verified facts — MUST appear in presenceSnapshot signals):\n${confirmedFacts.map(f => `  • ${f}`).join('\n')}\n`
+        : '\nNo confirmed presence facts on record.\n';
+
+      // ── ENGINE ANALYSIS (deeper data when available) ─────────────────────
       const websiteCtx = client.websiteEngine
-        ? `Website Engine: health=${client.websiteEngine.healthScore}/100 (${client.websiteEngine.healthLabel}). ${client.websiteEngine.summary}. Conversion=${client.websiteEngine.conversionGrade}, Structure=${client.websiteEngine.structureGrade}, Content=${client.websiteEngine.contentGrade}. Top tasks: ${(client.websiteEngine.tasks || []).slice(0, 3).map((t: any) => t.task).join('; ')}. Quick wins: ${(client.websiteEngine.quickWins || []).slice(0, 2).join('; ')}.`
-        : website ? `Website exists at ${website} — not yet analysed.` : 'No website.';
+        ? `Website Engine analysis: health=${client.websiteEngine.healthScore}/100 (${client.websiteEngine.healthLabel}). ${client.websiteEngine.summary}. Conversion=${client.websiteEngine.conversionGrade}, Structure=${client.websiteEngine.structureGrade}, Content=${client.websiteEngine.contentGrade}. Top issues: ${(client.websiteEngine.tasks || []).filter((t: any) => t.priority === 1).map((t: any) => t.task).slice(0, 3).join('; ')}. Quick wins: ${(client.websiteEngine.quickWins || []).slice(0, 2).join('; ')}.`
+        : confirmedWebsite ? `Website URL on record (${confirmedWebsite}) — full analysis not yet run.` : '';
 
       const seoCtx = client.seoEngine
-        ? `SEO Engine: visibility=${client.seoEngine.visibilityScore}/100 (${client.seoEngine.visibilityLabel}). ${client.seoEngine.summary}. Keywords: ${(client.seoEngine.keywordTargets || []).slice(0, 5).join(', ')}. Content gaps: ${(client.seoEngine.contentGaps || []).slice(0, 2).map((g: any) => g.title).join('; ')}.`
-        : `SEO channel: ${channelStatus.seo || 'not_started'}.`;
+        ? `SEO analysis: visibility=${client.seoEngine.visibilityScore}/100 (${client.seoEngine.visibilityLabel}). ${client.seoEngine.summary}. Keyword targets: ${(client.seoEngine.keywordTargets || []).slice(0, 5).join(', ')}. Content gaps: ${(client.seoEngine.contentGaps || []).slice(0, 2).map((g: any) => g.title).join('; ')}.`
+        : seoChannelStatus ? `SEO channel status: ${seoChannelStatus} — full audit not yet run.` : '';
 
       const gbpCtx = client.gbpEngine
-        ? `GBP Engine: optimisation=${client.gbpEngine.optimizationScore}/100. ${client.gbpEngine.summary}. Profile=${client.gbpEngine.profileGrade}, Reviews=${client.gbpEngine.reviewGrade}. Quick wins: ${(client.gbpEngine.quickWins || []).slice(0, 2).join('; ')}.`
-        : `GBP channel: ${channelStatus.gbp || 'not_started'}.`;
+        ? `GBP analysis: optimisation=${client.gbpEngine.optimizationScore}/100. ${client.gbpEngine.summary}. Profile=${client.gbpEngine.profileGrade}, Reviews=${client.gbpEngine.reviewGrade}. Quick wins: ${(client.gbpEngine.quickWins || []).slice(0, 2).join('; ')}.`
+        : confirmedGBP ? `${confirmedGBP} — full GBP audit not yet run.` : gbpChannelStatus ? `GBP channel status: ${gbpChannelStatus}.` : '';
 
       const adsCtx = client.adsEngine
-        ? `Ads Engine: readiness=${client.adsEngine.readinessScore}/100. ${client.adsEngine.summary}. Budget: $${client.adsEngine.recommendedMonthlyBudget}/mo.`
-        : `Ads channel: ${channelStatus.ads || 'not_started'}.`;
+        ? `Ads analysis: readiness=${client.adsEngine.readinessScore}/100. ${client.adsEngine.summary}. Budget: $${client.adsEngine.recommendedMonthlyBudget}/mo.`
+        : adsChannelStatus ? `Paid search channel: ${adsChannelStatus}.` : '';
 
       const siCtx = si.strategyIntelligence
-        ? `Strategy: ${JSON.stringify(si.strategyIntelligence).slice(0, 600)}`
+        ? `Business strategy: ${JSON.stringify(si.strategyIntelligence).slice(0, 600)}`
         : '';
       const prepCtx = si.prepCallPack
-        ? `Pre-sale intelligence: businessSnapshot=${si.prepCallPack.businessSnapshot || ''}. customerProfile=${JSON.stringify(si.prepCallPack.customerProfile || '').slice(0, 300)}. searchIntentAnalysis=${JSON.stringify(si.prepCallPack.searchIntentAnalysis || '').slice(0, 300)}.`
+        ? `Pre-sale intelligence (from lead): businessSnapshot="${si.prepCallPack.businessSnapshot || ''}". customerProfile=${JSON.stringify(si.prepCallPack.customerProfile || '').slice(0, 300)}. searchIntentAnalysis=${JSON.stringify(si.prepCallPack.searchIntentAnalysis || '').slice(0, 300)}.`
         : '';
       const prescriptionCtx = si.growthPrescription
         ? `Growth prescription: ${si.growthPrescription.businessDiagnosis || ''}. Recommended stack: ${(si.growthPrescription.recommendedStack || []).map((r: any) => r.product).join(', ')}.`
@@ -10888,20 +10920,20 @@ Output valid JSON only, no markdown.`;
         : '';
 
       const preservationInstruction = isTakeover
-        ? `IMPORTANT: This client has an existing live website at ${website}. This may be a WEBSITE TAKEOVER/REBUILD project. The intelligence brief MUST surface SEO preservation risks in the websiteInterpretation.seoValueToPreserve array and in the risks array (type="preservation"). Include risks like URL structure changes, lost backlinks, metadata migration, GBP-linked domain changes, and ranking signals that must be preserved.`
+        ? `IMPORTANT: This client has an existing live website at ${website}. This is potentially a WEBSITE TAKEOVER/REBUILD project. The brief MUST surface SEO preservation risks in websiteInterpretation.seoValueToPreserve and in the risks array (type="preservation").`
         : '';
 
-      const prompt = `You are a senior digital strategist generating a rich Client Intelligence Brief for a client workspace. This brief acts as the "execution intelligence" layer — showing what already exists online, what is working, what is weak, what must be preserved, and what the execution strategy is.
+      const prompt = `You are a senior digital strategist generating a rich Client Intelligence Brief for a client workspace. This brief is the primary intelligence layer — showing what already exists online, what is working, what is weak, what must be preserved, and what the execution strategy is.
+
+CRITICAL INSTRUCTION: You must use the CONFIRMED PRESENCE FACTS below as the foundation for presenceSnapshot signals. Do NOT output empty arrays for channels where confirmed data exists. If engines have not yet been run, use honest language like "Website confirmed at [url] — full audit not yet run" rather than leaving arrays empty or saying "no signals detected."
 
 Business: ${businessName}
 Industry: ${industry}
 Location: ${address}
-Website: ${website || 'none'}
-Social profiles: ${socialProfiles}
-
+${confirmedFactsBlock}
 ${preservationInstruction}
 
-Intelligence data available:
+Deeper analysis data (when available):
 ${websiteCtx}
 ${seoCtx}
 ${gbpCtx}
@@ -10916,11 +10948,11 @@ Generate the Client Intelligence Brief in this exact JSON format:
 {
   "presenceSnapshot": {
     "overallReadout": "one sharp sentence: what is the overall state of this client's online presence right now",
-    "websiteSignals": ["specific signal about the website, e.g. 'Site exists but has critical conversion issues'", "another signal"],
-    "gbpSignals": ["specific GBP/local presence signal", "another"],
-    "searchSignals": ["specific search visibility signal", "another"],
-    "socialSignals": ["specific social presence signal — or 'No social profiles detected'"],
-    "paidSearchSignals": ["paid search observation — or 'No paid search activity detected'"]
+    "websiteSignals": ["use confirmed website URL from facts above if present, e.g. 'Site confirmed at domain.com.au — not yet audited' or 'Health 62/100 — needs conversion work'"],
+    "gbpSignals": ["use confirmed GBP facts above if present, e.g. 'GBP profile linked — audit pending' or 'GBP optimisation score: 74/100'"],
+    "searchSignals": ["describe actual search presence, e.g. 'Organic visibility not yet measured' or 'Ranking for 3 local service terms'"],
+    "socialSignals": ["list confirmed social profiles from facts above — e.g. 'Facebook profile confirmed', 'Instagram linked'. If none confirmed say 'Social profiles not yet linked'"],
+    "paidSearchSignals": ["'No paid search activity' only if strongly evidenced — otherwise 'Paid search potential not yet assessed'"]
   },
   "marketContext": {
     "targetCustomer": "specific description of who their ideal customer is and what they need",

@@ -1,0 +1,60 @@
+There is a trust-breaking bug in the new ClientIntelligencePanel.
+
+Observed behaviour:
+For a client like “Our Sparky”, the panel is saying:
+- no online presence
+- no website signals detected
+- no GBP/local signals detected
+- no search signals detected
+- no social profiles detected
+
+But in reality, this client does have:
+- a website
+- social media
+- GBP
+- and existing online presence
+
+Problem:
+The client intelligence layer is presenting absence as fact when the underlying presence data is either not being loaded, not being mapped correctly, or not being reused from existing lead/client intelligence.
+
+Goal:
+Fix the client intelligence presence layer so it accurately reflects known existing digital presence and does not default to false “no signals detected” states.
+
+What I want investigated:
+1. Identify what data sources the ClientIntelligencePanel / intelligence-brief endpoint currently uses for:
+- website presence
+- GBP/local presence
+- search signals
+- social profiles
+2. Compare that against the lead-side evidence/presence model, which appears to have richer and more accurate presence detection
+3. Determine whether legacy clients are missing:
+- carried-over lead evidence
+- sourceIntelligence mapping
+- client-side audit hydration
+- website/social/GBP field mapping
+4. Fix the client intelligence layer so it reuses known existing presence before falling back to “no signals detected”
+
+Required product behaviour:
+- If a website URL is known, do not say “No signals detected”
+- If GBP is known or linked, do not say “No signals detected”
+- If social profiles are known from lead data or prior audits, surface them
+- If evidence is incomplete, use honest language like:
+- “Not yet verified in client audit”
+- “Existing channels not yet fully mapped”
+- “Presence data incomplete — refresh audit”
+- Do not present absence as fact unless absence is strongly evidenced
+
+Implementation guidance:
+1. Reuse existing lead-side/sourceIntelligence/client fields wherever possible
+2. Merge known carried-over signals with fresh client audit signals
+3. Only show true “no signals detected” states when the system has strong reason to believe that is correct
+4. Distinguish between:
+- known present
+- observed in fresh audit
+- not yet verified
+- genuinely not found
+
+Success criteria:
+- clients with existing website / GBP / social presence show that presence correctly in Client Intelligence
+- legacy clients no longer look like they have zero digital footprint when they do not
+- client intelligence feels trustworthy and reality-aligned
