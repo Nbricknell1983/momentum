@@ -610,6 +610,10 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     setDismissedWatchdogIds(prev => new Set([...prev, id]));
   }, []);
 
+  const handleDismissWatchdogGroup = useCallback((ids: string[]) => {
+    setDismissedWatchdogIds(prev => new Set([...prev, ...ids]));
+  }, []);
+
   // ── Derive statuses and findings ─────────────────────────────────────────
 
   const prepStatus: StageStatus = hasPrepPack ? 'complete' : (prepRunning || evidenceRunning) ? 'running' : 'pending';
@@ -1140,6 +1144,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
               <WatchdogPanel
                 findings={watchdogFindings}
                 onDismiss={handleDismissWatchdogFinding}
+                onDismissGroup={handleDismissWatchdogGroup}
               />
             </>
           )}

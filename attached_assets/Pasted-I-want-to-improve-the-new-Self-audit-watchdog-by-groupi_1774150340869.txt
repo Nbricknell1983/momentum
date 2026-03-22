@@ -1,0 +1,100 @@
+I want to improve the new Self-audit watchdog by grouping and deduplicating related findings into cleaner root-issue cards.
+
+Context:
+The watchdog system is now live and useful, but as more detections fire, there is a risk that users will see multiple related findings that are really symptoms of the same underlying issue.
+
+Goal:
+Reduce noise and improve trust by collapsing related findings into a smaller number of clearer root-issue summaries.
+
+Problem examples:
+- Prep is stuck
+- NBS is absent despite evidence
+- diagnosis never triggered
+
+These may all be caused by one orchestration bottleneck rather than three separate issues.
+
+What I want:
+1. Group related watchdog findings into parent/root issues when appropriate
+2. Preserve the underlying evidence and child findings, but avoid noisy duplicate surfacing
+3. Make the panel feel more like intelligent diagnosis and less like a raw issue list
+4. Keep the existing severity system, but allow grouped findings to roll up a parent severity
+
+Suggested concept:
+Introduce a grouped/root finding layer above individual detections.
+
+Example shape:
+
+type WatchdogFinding = {
+id: string;
+severity: "low" | "medium" | "high";
+confidence: "low" | "medium" | "high";
+category:
+| "ui-state-mismatch"
+| "fallback-copy"
+| "orchestration"
+| "auth"
+| "prompt-output"
+| "data-pipeline"
+| "workflow-friction";
+summary: string;
+likelyCause?: string;
+recommendedFix?: string;
+evidence?: string[];
+};
+
+type WatchdogRootIssue = {
+id: string;
+severity: "low" | "medium" | "high";
+confidence: "low" | "medium" | "high";
+summary: string;
+likelyCause?: string;
+recommendedFix?: string;
+childFindingIds: string[];
+childFindings: WatchdogFinding[];
+};
+
+Examples of useful grouping:
+1. Orchestration bottleneck root issue
+Groups:
+- orchestration-prep-stuck
+- orchestration-xray-stuck
+- orchestration-serp-stuck
+- orchestration-diag-not-triggered
+- data-prep-silent-failure
+- data-nbs-absent-despite-evidence
+
+2. GBP data integrity root issue
+Groups:
+- data-gbp-bundle-sourcefield-mismatch
+- auth-related GBP lookup failure findings if those are later added
+
+3. Workflow friction root issue
+Groups:
+- workflow-friction-xray-skipped
+- workflow-friction-stale-evidence-not-refreshed
+
+UX requirements:
+- Default panel should show grouped/root issues first
+- Each root issue should expand to reveal child findings
+- Severity badge on the parent should reflect the highest child severity
+- Parent summary should be plain-English and operator-friendly
+- Child findings should still be accessible for debugging detail
+- Preserve per-finding dismiss behaviour, but consider whether dismissing a root issue should dismiss all child findings for the session
+
+Implementation guidance:
+1. Keep the existing individual detectors intact
+2. Add a grouping/aggregation layer after findings are generated
+3. Use deterministic grouping rules rather than fuzzy heuristics for the first version
+4. Prefer a small number of high-signal root issue groups over excessive granularity
+
+Success criteria:
+- watchdog output becomes easier to scan
+- duplicate/symptom findings are rolled up into clearer diagnoses
+- the panel feels more like an intelligent self-audit and less like a noisy error feed
+- users can still drill into detailed child findings when needed
+
+Please identify:
+1. the cleanest place to add a grouping layer on top of existing watchdog findings
+2. the first 2–4 root issue groups that would reduce the most noise
+3. the best UI treatment for collapsed root issues with drilldown child findings
+4. how dismiss behaviour should work for parent vs child findings

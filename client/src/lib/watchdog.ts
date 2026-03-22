@@ -285,3 +285,139 @@ export function runWatchdog(input: WatchdogInput): WatchdogFinding[] {
 
   return findings;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Grouping layer — collapses related individual findings into root-issue cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WatchdogRootIssue {
+  id: string;
+  severity: WatchdogSeverity;
+  confidence: WatchdogConfidence;
+  summary: string;
+  likelyCause?: string;
+  recommendedFix?: string;
+  childFindings: WatchdogFinding[];
+  childFindingIds: string[];
+  /** true when this root issue was synthesised from >1 finding */
+  grouped: boolean;
+}
+
+interface RootGroupDef {
+  id: string;
+  summary: string;
+  likelyCause: string;
+  recommendedFix: string;
+  matchIds: string[];
+}
+
+const ROOT_GROUP_DEFS: RootGroupDef[] = [
+  {
+    id: 'root-orchestration-bottleneck',
+    summary: 'Analysis pipeline is stalled or stuck',
+    likelyCause:
+      'A server-side timeout is not propagating correctly, or a derived dependency flag (xrayDone/serpDone) did not update after Firestore onSnapshot fired.',
+    recommendedFix:
+      'Add hard timeouts to all async analysis routes. Verify Redux lead state reflects the latest Firestore data before triggering downstream stages.',
+    matchIds: [
+      'orchestration-prep-stuck',
+      'orchestration-xray-stuck',
+      'orchestration-serp-stuck',
+      'orchestration-diag-not-triggered',
+    ],
+  },
+  {
+    id: 'root-data-pipeline-failure',
+    summary: 'Pipeline ran but data did not land — outputs missing or mismatched',
+    likelyCause:
+      'A silent catch in an auto-fire effect likely swallowed a server error, or a Firestore write failed after generation completed.',
+    recommendedFix:
+      'Add explicit error logging to auto-fire effects. Surface failure state to the client so the UI shows a retry option instead of an empty panel.',
+    matchIds: [
+      'data-prep-silent-failure',
+      'data-nbs-absent-despite-evidence',
+      'data-gbp-bundle-sourcefield-mismatch',
+      'data-pipeline-crawl-failed',
+    ],
+  },
+  {
+    id: 'root-workflow-friction',
+    summary: 'Expected auto-start behaviours did not fire',
+    likelyCause:
+      'Auto-fire guard refs (useRef) may be blocking re-fires after stale state, or mount-time conditions were not met when the lead was opened.',
+    recommendedFix:
+      'Check auto-fire guard logic in DealLiveActivityFeed. Ensure all conditions are evaluated against the latest lead state, not stale closure values.',
+    matchIds: [
+      'workflow-friction-xray-skipped',
+      'workflow-friction-stale-evidence-not-refreshed',
+    ],
+  },
+];
+
+function severityRank(s: WatchdogSeverity): number {
+  return s === 'high' ? 2 : s === 'medium' ? 1 : 0;
+}
+
+function maxSeverity(findings: WatchdogFinding[]): WatchdogSeverity {
+  return findings.reduce<WatchdogSeverity>((max, f) =>
+    severityRank(f.severity) > severityRank(max) ? f.severity : max,
+    'low',
+  );
+}
+
+function maxConfidence(findings: WatchdogFinding[]): WatchdogConfidence {
+  const rank = (c: WatchdogConfidence) => c === 'high' ? 2 : c === 'medium' ? 1 : 0;
+  return findings.reduce<WatchdogConfidence>((max, f) =>
+    rank(f.confidence) > rank(max) ? f.confidence : max,
+    'low',
+  );
+}
+
+/**
+ * Collapses individual WatchdogFindings into a smaller list of WatchdogRootIssues.
+ * Findings that match a group definition are rolled up under that group.
+ * Unmatched findings become standalone root issues (grouped: false).
+ * The result is sorted high → medium → low severity.
+ */
+export function groupWatchdogFindings(findings: WatchdogFinding[]): WatchdogRootIssue[] {
+  const claimed = new Set<string>();
+  const roots: WatchdogRootIssue[] = [];
+
+  for (const def of ROOT_GROUP_DEFS) {
+    const children = findings.filter(f => def.matchIds.includes(f.id));
+    if (children.length === 0) continue;
+
+    children.forEach(f => claimed.add(f.id));
+
+    roots.push({
+      id: def.id,
+      severity: maxSeverity(children),
+      confidence: maxConfidence(children),
+      summary: def.summary,
+      likelyCause: def.likelyCause,
+      recommendedFix: def.recommendedFix,
+      childFindings: children,
+      childFindingIds: children.map(f => f.id),
+      grouped: children.length > 1,
+    });
+  }
+
+  // Wrap unclaimed findings as standalone root issues
+  for (const f of findings) {
+    if (claimed.has(f.id)) continue;
+    roots.push({
+      id: `standalone-${f.id}`,
+      severity: f.severity,
+      confidence: f.confidence,
+      summary: f.summary,
+      likelyCause: f.likelyCause,
+      recommendedFix: f.recommendedFix,
+      childFindings: [f],
+      childFindingIds: [f.id],
+      grouped: false,
+    });
+  }
+
+  // Sort high → medium → low
+  return roots.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+}
