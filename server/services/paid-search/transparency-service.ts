@@ -24,8 +24,8 @@ export interface KeywordAuctionEntry {
 export interface PaidSearchEvidence {
   activityState: 'confirmed' | 'detected' | 'unknown' | 'not-detected';
   confirmedActive: boolean;
-  confirmationSource: 'manual' | 'custom-scraper' | 'auction-report' | 'tag-detection' | 'inferred';
-  sourceTypes: Array<'auction-report' | 'ads-transparency' | 'manual' | 'csv-import'>;
+  confirmationSource: 'manual' | 'custom-scraper' | 'serpapi' | 'auction-report' | 'tag-detection' | 'inferred';
+  sourceTypes: Array<'auction-report' | 'ads-transparency' | 'manual' | 'csv-import' | 'serpapi'>;
   lastEvaluatedAt: string;
 
   // Keyword auction data (populated from auction report / CSV import — not from scraper)
@@ -37,11 +37,11 @@ export interface PaidSearchEvidence {
     entries?: KeywordAuctionEntry[];
   };
 
-  // Transparency Center data (populated by this service)
+  // Transparency Center data (populated by transparency-service or serpapi-service)
   transparency?: {
     advertiserName?: string;
     advertiserId?: string;
-    source: 'custom-scraper';
+    source: 'custom-scraper' | 'serpapi';
     activeAdsDetected: boolean;
     recentAdsDetected: boolean;
     adCount?: number;

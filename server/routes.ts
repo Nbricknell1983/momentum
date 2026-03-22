@@ -22,6 +22,7 @@ import { createAgentJob, getAgentJob, listAgentJobs } from "./agent-jobs/firesto
 import { processAgentJob } from "./agent-jobs/processor";
 import { scoreGbpCandidate, buildLeadContext, scoreGbpSibling, type GbpLeadContext } from "./lib/gbp-scorer";
 import { gatherPaidSearchEvidence } from "./services/paid-search/transparency-service";
+import { gatherPaidSearchViaSerpApi, isSerpApiConfigured } from "./services/paid-search/serpapi-service";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -7929,17 +7930,31 @@ Return JSON:
       twitter: { url: lead.twitterUrl || null, detected: !!lead.twitterUrl },
     };
 
-    // Step 5: Paid search evidence (Google Ads Transparency Center — non-blocking)
-    // Runs concurrently with Firestore save. Uses 24h in-memory cache per domain.
-    // Any failure returns null and is swallowed — does not block evidence bundle.
+    // Step 5: Paid search evidence — SerpApi primary, transparency scraper fallback.
+    // Both sources are non-blocking and fail gracefully.
     let paidSearchEvidence: any = null;
     try {
       const psDomain = websiteUrl || lead.website || lead.sourceData?.googleWebsite || null;
-      paidSearchEvidence = await gatherPaidSearchEvidence({
-        businessName : businessName,
-        domain       : psDomain ?? undefined,
-        region       : 'AU',
-      });
+
+      // Primary: SerpApi (Google Ads Transparency Center engine)
+      if (isSerpApiConfigured()) {
+        console.log(`[gather-evidence] paid search → SerpApi for ${businessName}`);
+        paidSearchEvidence = await gatherPaidSearchViaSerpApi({
+          businessName,
+          domain: psDomain ?? undefined,
+          region: 'AU',
+        });
+      }
+
+      // Fallback: custom Google Ads Transparency Center scraper
+      if (!paidSearchEvidence) {
+        console.log(`[gather-evidence] paid search → transparency scraper fallback for ${businessName}`);
+        paidSearchEvidence = await gatherPaidSearchEvidence({
+          businessName,
+          domain: psDomain ?? undefined,
+          region: 'AU',
+        });
+      }
     } catch (pse: any) {
       console.warn(`[gather-evidence] paid search lookup failed for ${businessName}:`, pse?.message ?? pse);
     }
