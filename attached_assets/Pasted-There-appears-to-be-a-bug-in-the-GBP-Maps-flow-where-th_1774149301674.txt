@@ -1,0 +1,68 @@
+There appears to be a bug in the GBP / Maps flow where the system can find a GBP candidate, but the actual lookup/verification step fails and the Presence Snapshot falls back to misleading “Not yet verified” copy.
+
+Observed behaviour:
+- The GBP search/discovery UI can find a listing candidate for the business
+- But after selection / lookup, the UI shows:
+- “Lookup Failed”
+- “Unauthorized”
+- Meanwhile, the Presence Snapshot GBP card displays generic fallback copy like:
+- “Not yet verified…”
+
+Problem:
+The system is treating a lookup/auth failure as if it were a business-intelligence result. That is misleading. “Not yet verified” sounds like the business lacks a confirmed GBP, when the actual problem appears to be an authorization or integration failure during lookup.
+
+Goal:
+1. Identify why the GBP lookup request is returning Unauthorized
+2. Fix the auth/integration issue
+3. Separate system failure states from business-intelligence states in the UI
+4. Ensure the GBP card does not present false fallback intelligence when the underlying lookup failed
+
+What I want investigated:
+1. Identify which endpoint powers:
+- GBP candidate search
+- GBP lookup / verification
+- any save-to-lead or evidence-bundle write step
+2. Determine why search can succeed but lookup/confirm fails with Unauthorized
+3. Check whether the failing route expects:
+- Firebase auth token
+- org access
+- manager role
+- shared secret / server-side-only access
+4. Check whether the frontend request is missing credentials, auth headers, or org context
+
+Important product rule:
+System/integration failures must not be rendered as business truths.
+
+Desired UI behaviour:
+- If no GBP is found legitimately:
+show normal “not found / not verified” style business copy
+- If GBP lookup fails due to auth/system error:
+show a system-status message such as:
+- “GBP lookup could not be completed”
+- “Possible listing found, but verification failed”
+- “Lookup failed due to an authorization issue”
+- Do not collapse auth errors into generic business insight copy
+
+Implementation tasks:
+1. Trace the GBP search flow end-to-end
+2. Identify where the Unauthorized error is coming from
+3. Fix the request/auth path
+4. Update the GBP card state model so it can distinguish:
+- no listing found
+- unverified listing
+- verified listing found
+- lookup failed
+- auth error
+5. Update Presence Snapshot copy so lookup failure states are honest and non-misleading
+
+Success criteria:
+- manual GBP candidate selection can complete without Unauthorized errors
+- GBP evidence writes correctly into the lead/evidence bundle
+- Presence Snapshot reflects true lookup status
+- auth or system failures do not masquerade as business intelligence
+
+Please identify:
+1. the exact route returning Unauthorized
+2. why auth context differs between search and lookup
+3. the smallest safe fix
+4. any UI fallback states that need to be split apart

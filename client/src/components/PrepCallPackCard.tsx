@@ -366,9 +366,12 @@ export function EvidencePresenceSection({
               )}
             </div>
           ) : psAi?.gbp ? (
-            <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.gbp}</p>
+            <div className="space-y-1">
+              <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-snug">{psAi.gbp}</p>
+              <p className="text-[9px] text-slate-400 dark:text-slate-500 italic">AI inference — no confirmed GBP data. Link a listing to verify.</p>
+            </div>
           ) : (
-            <p className="text-[10px] text-slate-400 italic">No GBP data gathered</p>
+            <p className="text-[10px] text-slate-400 italic">No GBP data — link a listing from the lead's presence panel</p>
           )}
         </PresenceCard>
 

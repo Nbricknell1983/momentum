@@ -1548,8 +1548,13 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
 
   const handleCompetitorGBPLookup = useCallback(async (domain: string, placeId: string) => {
     if (!orgId || !authReady) return;
-    const res = await fetch(`/api/google-places/details/${placeId}`);
-    if (!res.ok) throw new Error('Failed to fetch GBP data');
+    const token = await auth.currentUser?.getIdToken();
+    const res = await fetch(`/api/google-places/details/${placeId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error('GBP lookup could not complete — authorization issue');
+      throw new Error(err.error || 'Failed to fetch GBP data');
+    }
     const data = await res.json();
     const gbp: CompetitorGBPData = {
       placeId: data.placeId || placeId,
@@ -1577,9 +1582,11 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const handleGBPLookup = useCallback(async (placeId: string) => {
     if (!placeId.trim() || !orgId || !authReady) return;
     try {
-      const res = await fetch(`/api/google-places/details/${placeId.trim()}`);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/google-places/details/${placeId.trim()}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (res.status === 401) throw new Error('GBP lookup could not complete — authorization issue. Please try again.');
         throw new Error(err.error || 'Failed to fetch GBP data');
       }
       const data = await res.json();
@@ -2405,6 +2412,8 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
   const [pastedMapsUrl, setPastedMapsUrl] = useState('');
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
+  // Tracks system/auth failures from the lookup step (distinct from "no GBP found")
+  const [lookupError, setLookupError] = useState<string | null>(null);
   // Auto-loaded suggestions (shown inline without entering search mode)
   const [suggestions, setSuggestions] = useState<GBPSearchResult[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
@@ -2491,10 +2500,19 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
 
   const handleSelect = async (placeId: string) => {
     setSelectLoading(placeId);
+    setLookupError(null);
     try {
       await onLookup(placeId);
       closeSearch();
       setSuggestions([]);
+    } catch (e: any) {
+      const msg = e.message || 'GBP lookup could not be completed';
+      const isAuthErr = msg.toLowerCase().includes('authoriz') || msg.toLowerCase().includes('unauthori');
+      setLookupError(
+        isAuthErr
+          ? 'Possible listing found, but verification failed — authorization issue. Please try again.'
+          : `Lookup failed: ${msg}`
+      );
     } finally {
       setSelectLoading(null);
     }
@@ -2512,9 +2530,13 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
     try {
       const params = new URLSearchParams({ url: pastedMapsUrl.trim() });
       if (query.trim()) params.set('name', query.trim());
-      const res = await fetch(`/api/google-places/from-url?${params}`);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/google-places/from-url?${params}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to resolve link');
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('Authorization issue — please try again');
+        throw new Error(data.error || 'Failed to resolve link');
+      }
       await handleSelect(data.placeId);
     } catch (e: any) {
       setUrlError(e.message || 'Could not link that URL. Try again.');
@@ -2691,6 +2713,20 @@ function GBPLookupRow({ lead, onLookup }: { lead: Lead; onLookup: (placeId: stri
               Dismiss
             </button>
           </div>
+        </div>
+      )}
+
+      {/* System-level lookup failure — shown when lookup failed for auth/network reasons, NOT a business-intelligence fact */}
+      {lookupError && !hasGBP && (
+        <div className="ml-5 flex items-start gap-1.5 py-1 px-1.5 rounded border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30">
+          <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-amber-700 dark:text-amber-300 font-medium leading-tight">GBP lookup could not be completed</p>
+            <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 leading-tight mt-0.5">{lookupError}</p>
+          </div>
+          <button onClick={() => setLookupError(null)} className="shrink-0 p-0.5 text-amber-500 hover:text-amber-700">
+            <X className="h-2.5 w-2.5" />
+          </button>
         </div>
       )}
 
