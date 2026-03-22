@@ -34,6 +34,7 @@ import { updateClientInFirestore } from '@/lib/firestoreService';
 import { useDispatch } from 'react-redux';
 import { updateClient } from '@/store/index';
 import { useToast } from '@/hooks/use-toast';
+import { useClientAutoFire } from '@/hooks/useClientAutoFire';
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = {
@@ -954,6 +955,7 @@ function GBPReviewsSection({ client }: { client: Client }) {
 }
 
 export default function ClientGrowthIntelligencePanel({ client }: { client: Client }) {
+  const { orgId, authReady } = useAuth();
   const [expandedSection, setExpandedSection] = useState<string | null>('health');
   const healthScore = healthScoreFromClient(client);
   const activeProducts = client.products?.filter(p => p.status === 'active') || [];
@@ -965,6 +967,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
   const daysOverdue = client.nextContactDate
     ? Math.max(0, Math.floor((Date.now() - new Date(client.nextContactDate).getTime()) / 86400000))
     : null;
+
+  // Auto-fire workstream generation for activated clients
+  const { websiteRunning, gbpRunning } = useClientAutoFire(client, orgId, authReady);
 
   const toggle = (key: string) => setExpandedSection(prev => prev === key ? null : key);
 

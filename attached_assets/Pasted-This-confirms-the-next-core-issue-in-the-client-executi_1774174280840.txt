@@ -1,0 +1,71 @@
+This confirms the next core issue in the client execution experience:
+
+The delivery agents now appear visually in the right rail, but they are not actually auto-working.
+They are all stuck in “Ready to start”, which makes the system feel passive rather than proactive.
+
+That is not the intended behaviour.
+
+What I’m seeing:
+- Growth Operator shows active
+- Website Strategist shows Ready to start
+- GBP Optimiser shows Ready to start
+- SEO Architect shows Ready to start
+- Paid Ads Agent shows Ready to start
+- Center panel still shows Website / GBP / SEO / Paid Ads as Not started
+
+This means the UI now has the shape of a live delivery team, but not the behaviour.
+
+What needs to change:
+The client workstreams need the same kind of auto-fire/auto-activation logic that we already implemented on the lead side.
+
+Desired product behaviour:
+If a client has:
+- selected scope
+- sufficient baseline context
+- no blocker preventing execution
+and no generated output yet,
+the relevant delivery agents should automatically begin their first valid task.
+
+Examples:
+- Website Strategist:
+auto-start website brief generation, then page structure
+- GBP Optimiser:
+auto-start GBP optimisation plan and content calendar generation
+- SEO Architect:
+auto-start SEO foundation planning when website structure exists, or show a true dependency state if blocked
+- Paid Ads Agent:
+auto-start setup/planning if in scope and enough context exists, otherwise show a clear dependency state
+
+Important:
+“Ready to start” should not be the default resting state for active scoped clients.
+It should only appear if:
+- a dependency is missing
+- user approval is required
+- scope is inactive
+- context is insufficient
+
+Implementation tasks:
+1. Identify where client workstream activation currently requires manual clicks
+2. Add auto-fire logic for client execution workstreams on:
+- client activation
+- first open of an activated client
+- stale/incomplete execution states
+3. Reuse the same philosophy as the lead auto-analysis workflow:
+- start automatically
+- show progress clearly
+- avoid duplicate reruns
+4. Update statuses so they reflect true runtime state:
+- Queued
+- Running
+- Waiting on dependency
+- Ready for review
+- Approved
+- Live
+- Optimising
+5. Ensure the right rail and center execution panels both reflect these real active states
+
+Success criteria:
+- active scoped clients no longer sit in passive “Ready to start” states
+- delivery agents auto-begin execution work when appropriate
+- the client workspace feels like agents are actively working, not waiting to be manually triggered
+- the right rail feels alive in the same way the lead specialist rail now does

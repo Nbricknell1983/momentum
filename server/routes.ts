@@ -10364,6 +10364,12 @@ Rules:
       if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
       const client = clientDoc.data() as any;
 
+      // Mark as generating immediately so UI reflects running state even on reload
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'activationPlan.workstreams.website.status': 'generating',
+        'activationPlan.workstreams.website.startedAt': new Date().toISOString(),
+      });
+
       const si = client.sourceIntelligence || {};
       const businessName = client.businessName || 'this business';
       const industry = si.industry || client.businessProfile?.industry || 'local service business';
@@ -10490,6 +10496,16 @@ Rules:
       res.json({ success: true, workstream });
     } catch (err: any) {
       console.error('[clients/website-workstream]', err);
+      // Reset generating status on failure so client can retry
+      try {
+        const { clientId } = req.params;
+        const { orgId } = req.body;
+        if (firestore && orgId && clientId) {
+          await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+            'activationPlan.workstreams.website.status': 'queued',
+          });
+        }
+      } catch {}
       res.status(500).json({ error: err.message });
     }
   });
@@ -10506,6 +10522,12 @@ Rules:
       const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
       if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
       const client = clientDoc.data() as any;
+
+      // Mark as generating immediately so UI reflects running state even on reload
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'activationPlan.workstreams.gbp.status': 'generating',
+        'activationPlan.workstreams.gbp.startedAt': new Date().toISOString(),
+      });
 
       const si = client.sourceIntelligence || {};
       const businessName = client.businessName || 'this business';
@@ -10616,6 +10638,16 @@ Output valid JSON only, no markdown.`;
       res.json({ success: true, workstream });
     } catch (err: any) {
       console.error('[clients/gbp-workstream]', err);
+      // Reset generating status on failure so client can retry
+      try {
+        const { clientId } = req.params;
+        const { orgId } = req.body;
+        if (firestore && orgId && clientId) {
+          await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+            'activationPlan.workstreams.gbp.status': 'queued',
+          });
+        }
+      } catch {}
       res.status(500).json({ error: err.message });
     }
   });

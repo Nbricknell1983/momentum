@@ -646,9 +646,11 @@ export default function ClientActivationPanel({ client }: ClientActivationPanelP
           const ws = plan.workstreams[scope];
           const Icon = cfg.icon;
           const isOpen = openWorkstream === scope;
-          const isGenerating = generatingScope === scope;
+          const isManualGenerating = generatingScope === scope;
+          const isAutoGenerating = ws?.status === 'generating';
+          const isGenerating = isManualGenerating || isAutoGenerating;
           const hasOutput = scope === 'website' ? !!plan.websiteWorkstream : scope === 'gbp' ? !!plan.gbpWorkstream : false;
-          const canGenerate = (scope === 'website' || scope === 'gbp') && !hasOutput;
+          const canGenerate = (scope === 'website' || scope === 'gbp') && !hasOutput && !isAutoGenerating;
           const wsState = ws?.status || 'queued';
 
           return (
