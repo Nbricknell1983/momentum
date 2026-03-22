@@ -6481,15 +6481,35 @@ ${crawledCompsContext}
 
       const prompt = `You are a senior digital marketing strategist producing a 12-month Digital Visibility Strategy for a sales presentation. This strategy is the commercial bridge between the agency and the prospect — it must be sharp enough to win the deal, clear enough to discuss on a call, and specific enough to convert into real delivery work.
 
+CLAIM CLASSIFICATION SYSTEM — apply this to every data point, number, and assertion you write:
+Classify each claim before writing it:
+  OBSERVED  → directly supported by evidence provided. State directly and factually.
+  INFERRED  → reasonably derived from evidence. Use: "suggests", "indicates", "appears to", "likely", "based on the evidence".
+  MODELED   → calculated or estimated without direct evidence. Present as scenarios or directional ranges, never as fixed facts.
+  INSUFFICIENT → not enough evidence to make a confident claim. Do not force precision. Use "limited observed evidence", "unclear from available data", or omit the claim.
+
+Rendering rules by classification:
+  OBSERVED:      State directly. "The site has 3 service pages targeting [X]."
+  INFERRED:      Qualify. "This suggests limited local intent coverage."
+  MODELED:       Use ranges with caveats. "Could represent approximately 8–15 additional enquiries/month, depending on conversion performance and competitive movement."
+  INSUFFICIENT:  Never invent numbers to fill a gap. Use safer language: "limited observed visibility", "no strong evidence of ranking presence", "weak observed local search signals".
+
+FALSE PRECISION RULES (non-negotiable):
+  - Never state exact search volumes, enquiry counts, or revenue figures unless directly from provided keyword data.
+  - Never use "0 visibility", "0 rankings", "0 presence" unless explicitly proven by the data.
+  - Prefer ranges over exact numbers for any modeled output: "8–15" not "12", "$2,000–$4,000" not "$3,000".
+  - Modeled revenue, leads, and enquiry forecasts must always include a caveat acknowledging assumptions.
+
 COMMERCIAL WRITING RULES (non-negotiable):
 - Every insight follows: Evidence → Interpretation → Strategic Implication → Recommended Move
 - DO NOT write: "improve SEO", "optimise keywords", "build backlinks", "enhance online presence"
 - DO write: "buyers searching for X cannot find this business because Y", "the website signals Z to search engines instead of W"
 - Frame this as a "Digital Visibility Strategy" — NOT an SEO audit or keyword report
-- If conversation notes or client goals are provided, reference their stated goals throughout
+- If conversation notes, client goals, or deal context are provided, directly reference them — the strategy must feel written for THIS specific deal, not a generic business.
+- DEAL AWARENESS RULE: If conversationNotes, strategyIntelligence, or dealStage is provided, reference at least 2 specific elements from that context in the strategy narrative. The strategy must acknowledge where the conversation is, not just what the website looks like.
 - All numbers and evidence must be grounded in the provided data — no generic filler
 - KEYWORD RULE: Use EXACT uploaded keywords in marketOpportunity.keywords — do not invent
-- VOLUME RULE: totalMonthlySearches = ${totalKwVolume > 0 ? totalKwVolume : 'estimate realistically based on industry/location'}
+- VOLUME RULE: totalMonthlySearches = ${totalKwVolume > 0 ? totalKwVolume : 'null — do NOT invent a number; use null and describe demand directionally in narrative fields instead'}
 
 COMMERCIALLY CRITICAL SECTIONS — write these with particular care:
 - oneSentenceStrategy: This is the strategy's north star. Make it memorable and specific.

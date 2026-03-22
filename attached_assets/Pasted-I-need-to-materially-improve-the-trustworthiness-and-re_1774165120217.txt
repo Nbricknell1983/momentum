@@ -1,0 +1,143 @@
+I need to materially improve the trustworthiness and reasoning discipline of the Growth Plan / Strategy Page generation engine.
+
+Important:
+This is not a redesign.
+The structure and UI can largely remain as they are.
+The problem is in how the reasoning layer constructs and presents information.
+
+Core issue:
+The current strategy output is blending observed data, inferred reasoning, modeled assumptions, and fallback/default logic into a single narrative voice and presenting them with too much equal confidence.
+
+This makes parts of the strategy feel credible, while other parts feel overstated, inaccurate, or falsely precise.
+
+Goal:
+Tighten the content-generation logic so the Growth Plan becomes:
+- more grounded
+- more trustworthy
+- more deal-aware
+- less reliant on overconfident modeled numbers
+- still premium, persuasive, and conversion-oriented
+
+What must change:
+
+1. Introduce internal claim classification
+Every meaningful data point / claim / metric in the strategy engine should be classified as one of:
+- observed
+- inferred
+- modeled
+- insufficient
+
+This classification should directly control wording and output behaviour.
+
+2. Apply rendering rules by classification
+Observed:
+- use direct factual language
+- only for things directly supported by evidence
+
+Inferred:
+- use interpretation language such as:
+- suggests
+- indicates
+- likely
+- appears to
+
+Modeled:
+- present only as scenarios or directional estimates
+- use ranges where possible
+- never present modeled numbers as fixed facts
+
+Insufficient:
+- do not force precision
+- avoid confident outputs when evidence is too weak
+
+3. Remove false precision
+The strategy should avoid exact-looking numbers unless they are clearly grounded.
+Do not present precise search demand, enquiry, revenue, or lost-opportunity numbers without:
+- a clear source
+- a visible calculation path internally
+- sufficient evidence quality
+- a confidence threshold
+
+Prefer approximate ranges and scenario language instead.
+
+4. Rewrite modeled sections to acknowledge assumptions
+Instead of outputs like:
+- 120 additional enquiries per month
+Use:
+- If visibility improved and the business captured a modest share of available demand, this could represent approximately 8–12 additional enquiries per month depending on conversion performance and positioning.
+
+The point is not to weaken the page.
+It is to make it honest and therefore more persuasive.
+
+5. Remove unsafe absolute language
+Replace statements like:
+- 0 visibility
+- 0 rankings
+- 0 presence
+unless they are explicitly proven
+
+Use safer alternatives such as:
+- limited observed visibility
+- no strong evidence of ranking presence
+- weak observed local search presence
+
+6. Prioritise the highest-risk sections first
+Audit and tighten these sections first:
+- Market Opportunity
+- Cost of Inaction
+- Projected Outcomes
+- KPI Table
+
+These are the biggest trust-risk areas if the numbers are weakly grounded.
+
+7. Preserve and refine the stronger narrative sections
+These sections are directionally stronger and should be improved, not replaced:
+- visibility gaps
+- website structure issues
+- strategic direction
+- roadmap/phases
+- growth pillars
+
+8. Enforce a structured reasoning pattern in each section
+Each strategy section should follow:
+- evidence
+- interpretation
+- strategic implication
+- recommended move
+
+This should make the strategy feel grounded and commercially useful rather than generic or formulaic.
+
+9. Improve deal awareness
+The strategy should use more than website/search evidence.
+It should better reflect:
+- conversation context
+- client priorities
+- deal context
+- current business situation
+- what the client appears to care about
+
+The output should feel specific to the deal, not just the website.
+
+10. Align scenario modeling with the Live Strategy Simulator
+Static strategy sections should introduce opportunity directionally and conservatively.
+Interactive scenario modeling should live primarily in the Live Strategy Simulator.
+
+Do not let static sections overstate modeled outcomes as fixed truths.
+
+What I want from you:
+1. Audit the current Growth Plan generation logic
+2. Identify which sections are currently:
+- observed-driven
+- inferred-driven
+- modeled/default-heavy
+3. Refactor the highest-risk sections so modeled outputs are clearly directional/scenario-based
+4. Introduce internal provenance/confidence handling for claims and numbers
+5. Preserve the existing premium structure/UI while improving trust and reasoning quality
+
+Success criteria:
+- the Growth Plan clearly distinguishes fact from assumption
+- modeled outputs feel honest and commercially credible
+- false precision is reduced
+- absolute unsupported statements are removed
+- the plan remains persuasive and premium without overstating certainty
+- the strategy feels more aligned to the actual deal, not just generic website analysis
