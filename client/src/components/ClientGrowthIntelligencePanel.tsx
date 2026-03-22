@@ -9,6 +9,7 @@ import {
 import GrowthOperatorPanel from './GrowthOperatorPanel';
 import ClientActivationPanel from './ClientActivationPanel';
 import ClientExecutionIntelligence from './ClientExecutionIntelligence';
+import ClientOverviewStrip from './ClientOverviewStrip';
 import WebsiteEnginePanel from './WebsiteEnginePanel';
 import SEOEnginePanel from './SEOEnginePanel';
 import GBPEnginePanel from './GBPEnginePanel';
@@ -971,7 +972,10 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
 
-        {/* Growth Execution Intelligence — strategic brief, above workstreams */}
+        {/* Client Overview Strip — health, channels, key action — shown for ALL clients */}
+        <ClientOverviewStrip client={client} />
+
+        {/* Growth Execution Intelligence — shown for activated clients with sourceIntelligence */}
         {client.activationPlan && client.sourceIntelligence && (
           <ClientExecutionIntelligence client={client} />
         )}

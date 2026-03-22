@@ -407,53 +407,57 @@ export default function ClientDeliveryRail({ client }: { client: Client }) {
     <ScrollArea className="h-full">
       <div className="p-4 space-y-5">
 
-        {/* ── Delivery Team header ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-              <Bot className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        {/* ── Delivery Team header + agents (only when plan exists) ─────────── */}
+        {hasPlan && (
+          <>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                  <Bot className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Delivery Team</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Live agent activity</p>
+                </div>
+              </div>
+              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
+              </span>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Delivery Team</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {hasPlan ? 'Live agent activity' : 'Account management tools'}
-              </p>
-            </div>
-          </div>
-          {hasPlan && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live
-            </span>
-          )}
-        </div>
 
-        {/* ── Delivery agents ──────────────────────────────────────────────── */}
-        {hasPlan ? (
-          <div className="rounded-xl border border-border overflow-hidden bg-white dark:bg-slate-900/50" data-testid="delivery-agents-panel">
-            <div className="px-3">
-              {agents.map(agent => <AgentCard key={agent.id} agent={agent} />)}
+            <div className="rounded-xl border border-border overflow-hidden bg-white dark:bg-slate-900/50" data-testid="delivery-agents-panel">
+              <div className="px-3">
+                {agents.map(agent => <AgentCard key={agent.id} agent={agent} />)}
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-border p-4 text-center space-y-1">
-            <Bot className="h-6 w-6 text-slate-300 dark:text-slate-600 mx-auto" />
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">No active delivery scope</p>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">Delivery agents appear when a client is activated with a scope from the pipeline.</p>
-          </div>
+
+            {/* Divider between agents and tools */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border/60" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="px-2 text-[10px] font-medium uppercase tracking-wider bg-background text-muted-foreground">
+                  Growth tools
+                </span>
+              </div>
+            </div>
+          </>
         )}
 
-        {/* ── Divider ─────────────────────────────────────────────────────── */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border/60" />
+        {/* ── Growth tools header (only when NO plan — appears at top) ─────── */}
+        {!hasPlan && (
+          <div className="flex items-center gap-2 pb-1">
+            <div className="h-7 w-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Growth Tools</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Account intelligence, expansion & retention</p>
+            </div>
           </div>
-          <div className="relative flex justify-center">
-            <span className="px-2 text-[10px] font-medium uppercase tracking-wider bg-background text-muted-foreground">
-              Growth tools
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* ── Growth tools (preserved from AIClientGrowthEngine) ───────────── */}
         <div className="space-y-2">
