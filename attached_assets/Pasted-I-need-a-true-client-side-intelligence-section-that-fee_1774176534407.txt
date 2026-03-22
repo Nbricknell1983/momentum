@@ -1,0 +1,88 @@
+I need a true client-side intelligence section that feels much closer to the lead-side Deal Intelligence / Agent Intelligence experience.
+
+Problem:
+Right now the client workspace (example: Our Sparky) shows a Growth Audit plus mostly empty engine panels. It does not provide the rich, structured, strategic intelligence layer that exists on the lead side (example: First Parking).
+
+This creates a continuity problem:
+- leads have deep intelligence
+- clients lose that intelligence feel and drop into a lighter audit/status experience
+
+That is the wrong direction.
+
+Goal:
+Add a `Client Intelligence` section at the top of the client workspace that acts as the client-side equivalent of Deal Intelligence, but adapted for execution and preservation.
+
+Product rule:
+The client workspace should not just show what we plan to activate.
+It should show:
+- what online presence already exists
+- what is working now
+- what is weak
+- what must be preserved
+- what the execution strategy is
+- what agents are actively doing next
+
+Recommended section name:
+- Client Intelligence
+(alternative: Execution Intelligence / Growth Execution Intelligence)
+
+What I want in Client Intelligence:
+1. Presence Snapshot
+- website
+- GBP / Maps
+- search
+- social
+- paid search
+- current observed signals
+- what already exists online
+
+2. Customer / Market Context
+- target customer
+- search intent themes
+- commercial context
+
+3. Website Interpretation
+- what the current site is doing well
+- what is weak
+- what affects conversion
+- what existing SEO value should be preserved
+
+4. Opportunities
+- biggest immediate growth opportunities
+- strongest execution upside
+
+5. Key Gaps / Risks
+- what is missing
+- what is weak
+- what could be lost during rebuild/migration if not handled carefully
+
+6. Commercial / Execution Angle
+- how Website + SEO + GBP fit together for this client
+- what the actual execution strategy is now
+
+7. Delivery Priorities
+- what should happen first
+- what agents are doing now
+- what comes next
+
+Important preservation requirement:
+If a client already has a live website, the section must explicitly surface SEO-preservation intelligence, such as:
+- pages/URLs worth preserving
+- service/location pages with likely equity
+- redirects likely required in a rebuild
+- metadata/schema worth keeping
+- current GBP/search visibility that should not be lost
+
+Implementation guidance:
+1. Reuse the existing lead-side intelligence/presence model where possible
+2. Transform it into a client-facing execution/preservation version instead of rebuilding from scratch
+3. Place this section at the top of the center column above the engine panels
+4. Make it rich and structured like the lead-side intelligence experience, not a lightweight audit summary
+5. Ensure it works for legacy/non-activated clients too, not just newly activated ones
+
+Success criteria:
+- client workspace gets a rich intelligence section comparable to the lead experience
+- users can see what digital presence already exists
+- SEO-preservation risks are visible before website rebuild work begins
+- client strategy and execution feel connected
+- the client page feels intelligent and proactive, not like a downgraded audit shell

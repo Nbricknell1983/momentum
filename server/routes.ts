@@ -10821,6 +10821,174 @@ Output valid JSON only, no markdown.`;
     }
   });
 
+  // ── Client Intelligence Brief ─────────────────────────────────────────────
+
+  app.post('/api/clients/:clientId/intelligence-brief', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientRef = firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId);
+      const clientDoc = await clientRef.get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const client = clientDoc.data() as any;
+
+      // Cache: skip if fresh brief exists (< 48h)
+      if (client.intelligenceBrief?.generatedAt) {
+        const age = Date.now() - new Date(client.intelligenceBrief.generatedAt).getTime();
+        if (age < 48 * 60 * 60 * 1000) {
+          return res.json({ brief: client.intelligenceBrief, cached: true });
+        }
+      }
+
+      const si = client.sourceIntelligence || {};
+      const businessName = client.businessName || 'this business';
+      const industry = si.industry || client.businessProfile?.industry || 'local service business';
+      const website = si.website || client.website || '';
+      const address = client.address || '';
+      const isTakeover = !!website;
+
+      // Build intelligence context from all available data
+      const channelStatus = client.channelStatus || {};
+      const socialProfiles = [
+        client.facebookUrl ? 'Facebook' : null,
+        client.instagramUrl ? 'Instagram' : null,
+        client.linkedinUrl ? 'LinkedIn' : null,
+      ].filter(Boolean).join(', ') || 'none found';
+
+      const websiteCtx = client.websiteEngine
+        ? `Website Engine: health=${client.websiteEngine.healthScore}/100 (${client.websiteEngine.healthLabel}). ${client.websiteEngine.summary}. Conversion=${client.websiteEngine.conversionGrade}, Structure=${client.websiteEngine.structureGrade}, Content=${client.websiteEngine.contentGrade}. Top tasks: ${(client.websiteEngine.tasks || []).slice(0, 3).map((t: any) => t.task).join('; ')}. Quick wins: ${(client.websiteEngine.quickWins || []).slice(0, 2).join('; ')}.`
+        : website ? `Website exists at ${website} — not yet analysed.` : 'No website.';
+
+      const seoCtx = client.seoEngine
+        ? `SEO Engine: visibility=${client.seoEngine.visibilityScore}/100 (${client.seoEngine.visibilityLabel}). ${client.seoEngine.summary}. Keywords: ${(client.seoEngine.keywordTargets || []).slice(0, 5).join(', ')}. Content gaps: ${(client.seoEngine.contentGaps || []).slice(0, 2).map((g: any) => g.title).join('; ')}.`
+        : `SEO channel: ${channelStatus.seo || 'not_started'}.`;
+
+      const gbpCtx = client.gbpEngine
+        ? `GBP Engine: optimisation=${client.gbpEngine.optimizationScore}/100. ${client.gbpEngine.summary}. Profile=${client.gbpEngine.profileGrade}, Reviews=${client.gbpEngine.reviewGrade}. Quick wins: ${(client.gbpEngine.quickWins || []).slice(0, 2).join('; ')}.`
+        : `GBP channel: ${channelStatus.gbp || 'not_started'}.`;
+
+      const adsCtx = client.adsEngine
+        ? `Ads Engine: readiness=${client.adsEngine.readinessScore}/100. ${client.adsEngine.summary}. Budget: $${client.adsEngine.recommendedMonthlyBudget}/mo.`
+        : `Ads channel: ${channelStatus.ads || 'not_started'}.`;
+
+      const siCtx = si.strategyIntelligence
+        ? `Strategy: ${JSON.stringify(si.strategyIntelligence).slice(0, 600)}`
+        : '';
+      const prepCtx = si.prepCallPack
+        ? `Pre-sale intelligence: businessSnapshot=${si.prepCallPack.businessSnapshot || ''}. customerProfile=${JSON.stringify(si.prepCallPack.customerProfile || '').slice(0, 300)}. searchIntentAnalysis=${JSON.stringify(si.prepCallPack.searchIntentAnalysis || '').slice(0, 300)}.`
+        : '';
+      const prescriptionCtx = si.growthPrescription
+        ? `Growth prescription: ${si.growthPrescription.businessDiagnosis || ''}. Recommended stack: ${(si.growthPrescription.recommendedStack || []).map((r: any) => r.product).join(', ')}.`
+        : '';
+      const auditCtx = client.scopeAudit
+        ? `Scope audit: ${client.scopeAudit.auditSummary}. Recommended scope: ${(client.scopeAudit.recommendedScope || []).join(', ')}.`
+        : '';
+
+      const preservationInstruction = isTakeover
+        ? `IMPORTANT: This client has an existing live website at ${website}. This may be a WEBSITE TAKEOVER/REBUILD project. The intelligence brief MUST surface SEO preservation risks in the websiteInterpretation.seoValueToPreserve array and in the risks array (type="preservation"). Include risks like URL structure changes, lost backlinks, metadata migration, GBP-linked domain changes, and ranking signals that must be preserved.`
+        : '';
+
+      const prompt = `You are a senior digital strategist generating a rich Client Intelligence Brief for a client workspace. This brief acts as the "execution intelligence" layer — showing what already exists online, what is working, what is weak, what must be preserved, and what the execution strategy is.
+
+Business: ${businessName}
+Industry: ${industry}
+Location: ${address}
+Website: ${website || 'none'}
+Social profiles: ${socialProfiles}
+
+${preservationInstruction}
+
+Intelligence data available:
+${websiteCtx}
+${seoCtx}
+${gbpCtx}
+${adsCtx}
+${siCtx}
+${prepCtx}
+${prescriptionCtx}
+${auditCtx}
+
+Generate the Client Intelligence Brief in this exact JSON format:
+
+{
+  "presenceSnapshot": {
+    "overallReadout": "one sharp sentence: what is the overall state of this client's online presence right now",
+    "websiteSignals": ["specific signal about the website, e.g. 'Site exists but has critical conversion issues'", "another signal"],
+    "gbpSignals": ["specific GBP/local presence signal", "another"],
+    "searchSignals": ["specific search visibility signal", "another"],
+    "socialSignals": ["specific social presence signal — or 'No social profiles detected'"],
+    "paidSearchSignals": ["paid search observation — or 'No paid search activity detected'"]
+  },
+  "marketContext": {
+    "targetCustomer": "specific description of who their ideal customer is and what they need",
+    "searchIntentThemes": ["what people search when looking for this business", "another search theme", "another"],
+    "commercialContext": "2-3 sentences: the competitive and commercial landscape this business operates in"
+  },
+  "websiteInterpretation": {
+    "workingWell": ["specific thing the current website does well — or omit if no website"],
+    "weaknesses": ["specific weakness affecting performance or conversions"],
+    "conversionIssues": ["specific conversion problem on the current site"],
+    "seoValueToPreserve": ["specific SEO asset worth protecting during any rebuild/migration — URLs, schema, rankings, metadata"]
+  },
+  "opportunities": [
+    { "title": "short opportunity title", "impact": "high", "channel": "website", "rationale": "why this is the biggest opportunity right now" },
+    { "title": "another opportunity", "impact": "medium", "channel": "gbp", "rationale": "rationale" }
+  ],
+  "risks": [
+    { "title": "short risk title", "severity": "high", "type": "gap", "detail": "specific detail about this risk and its impact" }
+  ],
+  "executionStrategy": {
+    "channelSynergy": "how website + SEO + GBP + Ads work together for this specific client",
+    "strategy": "2-3 sentences: the actual execution approach — what to do, in what order, and why",
+    "keyPrinciple": "the single most important principle to get right during execution for this client"
+  },
+  "deliveryPriorities": [
+    { "priority": 1, "action": "specific first action", "channel": "website", "why": "why this comes first" },
+    { "priority": 2, "action": "specific second action", "channel": "gbp", "why": "why this is second" },
+    { "priority": 3, "action": "specific third action", "channel": "seo", "why": "why this is third" }
+  ],
+  "isTakeover": ${isTakeover}
+}
+
+Rules:
+- Every field must be specific to THIS business, not generic marketing advice
+- opportunities: 3-4 items, always include at least one high-impact item
+- risks: 2-4 items; for takeover clients always include at least one preservation/migration risk
+- websiteInterpretation: only include if website data exists
+- deliveryPriorities: 3-4 items in priority order
+- seoValueToPreserve: for clients with existing websites, always include 2-3 specific items
+- Output valid JSON only, no markdown`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+      });
+
+      const raw = completion.choices[0]?.message?.content || '{}';
+      let brief: any;
+      try {
+        brief = JSON.parse(raw);
+      } catch {
+        brief = {};
+      }
+
+      brief.generatedAt = new Date().toISOString();
+      brief.isTakeover = isTakeover;
+
+      await clientRef.update({ intelligenceBrief: brief });
+
+      res.json({ brief });
+    } catch (err: any) {
+      console.error('[clients/intelligence-brief]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Activate workstream manually ──────────────────────────────────────────
 
   app.patch('/api/clients/:clientId/activation-plan', async (req, res) => {

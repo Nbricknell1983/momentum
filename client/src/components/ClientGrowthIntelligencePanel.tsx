@@ -36,6 +36,7 @@ import { updateClient } from '@/store/index';
 import { useToast } from '@/hooks/use-toast';
 import { useClientAutoFire } from '@/hooks/useClientAutoFire';
 import ClientVisibilityBaseline from '@/components/ClientVisibilityBaseline';
+import ClientIntelligencePanel from '@/components/ClientIntelligencePanel';
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = {
@@ -970,7 +971,7 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
     : null;
 
   // Auto-fire workstream generation for activated clients
-  const { websiteRunning, gbpRunning } = useClientAutoFire(client, orgId, authReady);
+  const { websiteRunning, gbpRunning, briefRunning, refetchBrief } = useClientAutoFire(client, orgId, authReady);
 
   const toggle = (key: string) => setExpandedSection(prev => prev === key ? null : key);
 
@@ -981,7 +982,14 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
         {/* Client Overview Strip — health, channels, key action — shown for ALL clients */}
         <ClientOverviewStrip client={client} />
 
-        {/* Current Digital Presence — existing website, SEO, GBP baseline + SEO preservation risks */}
+        {/* Client Intelligence — AI-synthesized presence, opportunities, risks & execution strategy */}
+        <ClientIntelligencePanel
+          client={client}
+          briefRunning={briefRunning}
+          onRefresh={refetchBrief}
+        />
+
+        {/* Current Digital Presence — static baseline (website, GBP, SEO, social) */}
         <ClientVisibilityBaseline client={client} />
 
         {/* Delivery Intelligence — shown for ALL clients; adapts between activated and non-activated */}

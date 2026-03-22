@@ -1958,6 +1958,61 @@ export interface Client {
   activationPlan?: ActivationPlan;
   // Proactive scope audit (non-activated clients)
   scopeAudit?: ScopeAudit;
+  // Client Intelligence Brief — AI-synthesized execution intelligence
+  intelligenceBrief?: ClientIntelligenceBrief;
+}
+
+// ── Client Intelligence Brief ────────────────────────────────────────────────
+
+export interface ClientIntelligenceOpportunity {
+  title: string;
+  impact: 'high' | 'medium' | 'low';
+  channel: 'website' | 'seo' | 'gbp' | 'ads' | 'cross-channel';
+  rationale: string;
+}
+
+export interface ClientIntelligenceRisk {
+  title: string;
+  severity: 'high' | 'medium' | 'low';
+  type: 'gap' | 'migration' | 'preservation' | 'missed-revenue';
+  detail: string;
+}
+
+export interface ClientIntelligenceBrief {
+  presenceSnapshot: {
+    overallReadout: string;
+    websiteSignals: string[];
+    gbpSignals: string[];
+    searchSignals: string[];
+    socialSignals: string[];
+    paidSearchSignals: string[];
+  };
+  marketContext: {
+    targetCustomer: string;
+    searchIntentThemes: string[];
+    commercialContext: string;
+  };
+  websiteInterpretation?: {
+    workingWell: string[];
+    weaknesses: string[];
+    conversionIssues: string[];
+    seoValueToPreserve: string[];
+  };
+  opportunities: ClientIntelligenceOpportunity[];
+  risks: ClientIntelligenceRisk[];
+  executionStrategy: {
+    channelSynergy: string;
+    strategy: string;
+    keyPrinciple: string;
+  };
+  deliveryPriorities: Array<{
+    priority: number;
+    action: string;
+    channel: 'website' | 'seo' | 'gbp' | 'ads';
+    why: string;
+  }>;
+  isTakeover: boolean;
+  generatedAt: string;
 }
 
 // ── Lead → Client Execution System ─────────────────────────────────────────
