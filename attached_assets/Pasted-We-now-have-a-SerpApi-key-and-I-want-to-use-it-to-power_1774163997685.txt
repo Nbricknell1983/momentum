@@ -1,0 +1,110 @@
+We now have a SerpApi key and I want to use it to power real Paid Search Insights inside Momentum.
+
+Context:
+- The Paid Search Insights UI already exists
+- It renders when `evidenceBundle.paidSearch` is populated
+- We already support a `paidSearch` evidence model with transparency/ad-presence fields
+- We want to use SerpApi as the first real upstream source
+
+Goal:
+Integrate SerpApi so Momentum can populate `evidenceBundle.paidSearch` with real ad-activity / ad-transparency evidence.
+
+What I want:
+1. Add a SerpApi-backed paid search service
+2. Use it during evidence gathering
+3. Write normalised results into `evidenceBundle.paidSearch`
+4. Make the existing Paid Search Insights card light up automatically with real data
+
+Preferred data source use:
+Use SerpApi for:
+- advertiser/domain lookup
+- Google Ads transparency/ad activity
+- ad creatives/examples
+- region/platform/date metadata where available
+
+Do not expose raw SerpApi response shapes directly to the UI.
+
+Implementation requirements:
+
+1. Add config support
+- introduce a server-side env var for the SerpApi key
+- fail gracefully if the key is missing
+
+2. Build a dedicated SerpApi integration module
+Suggested file:
+- `server/services/paid-search/serpapi-service.ts`
+
+Responsibilities:
+- call SerpApi
+- search by business domain and/or business name
+- retrieve advertiser/ad data
+- normalise the response
+- handle retries / timeouts / rate limits gracefully
+
+3. Integrate into evidence gathering
+- locate `gatherEvidenceBundle()`
+- add a paid search enrichment step using SerpApi
+- write output to `evidenceBundle.paidSearch`
+
+4. Use / preserve this internal model shape
+
+```ts
+type PaidSearchEvidence = {
+activityState?: "confirmed" | "detected" | "unknown" | "not-detected";
+confirmedActive?: boolean;
+confirmationSource?:
+| "manual"
+| "custom-scraper"
+| "serpapi"
+| "auction-report"
+| "tag-detection"
+| "inferred";
+
+sourceTypes?: Array<
+"auction-report" |
+"ads-transparency" |
+"manual" |
+"csv-import" |
+"serpapi"
+>;
+
+lastEvaluatedAt?: string;
+
+transparency?: {
+advertiserName?: string;
+advertiserId?: string;
+source?: "serpapi";
+activeAdsDetected?: boolean;
+recentAdsDetected?: boolean;
+adCount?: number;
+regions?: string[];
+platforms?: string[];
+exampleAds?: Array<{
+headline?: string;
+body?: string;
+format?: string;
+region?: string;
+date?: string;
+url?: string;
+}>;
+fetchedAt?: string;
+};
+
+auction?: {
+overallImpressionShare?: number;
+overallTopOfPageRate?: number;
+brandedStrength?: "strong" | "moderate" | "weak";
+nonBrandStrength?: "strong" | "moderate" | "weak";
+entries?: Array<{
+keyword: string;
+impressionShare?: number;
+topOfPageRate?: number;
+competitorImpressionShare?: Array<{ domain: string; value: number }>;
+competitorTopOfPageRate?: Array<{ domain: string; value: number }>;
+}>;
+};
+
+summary?: string;
+keyWins?: string[];
+keyGaps?: string[];
+};
