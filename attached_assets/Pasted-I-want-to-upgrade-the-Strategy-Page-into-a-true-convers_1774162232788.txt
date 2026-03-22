@@ -1,0 +1,234 @@
+I want to upgrade the Strategy Page into a true conversion asset + strategy engine + sales narrative, not just a generic report.
+
+Core objective:
+Agents must collaboratively generate a complete client-ready Strategy Page that:
+- diagnoses the client’s current position
+- identifies visibility and intent gaps
+- quantifies market opportunity
+- presents a structured growth plan
+- drives the user toward accepting scope or booking a call
+
+Core narrative rule:
+The page must follow this journey:
+Problem → Visibility → Gap → Opportunity → Plan → Outcome → Action
+
+Every section must help move the prospect forward through that journey.
+If a section does not deepen the problem, quantify the gap, clarify the plan, increase urgency, or support action, it should be reworked.
+
+Product rule:
+This is not a generic report.
+It is a strategy presentation designed to convert.
+
+Implementation approach:
+Build this as a strategy page engine with:
+1. a structured content/data schema
+2. strict section ownership/purpose
+3. graceful degradation rules when evidence is partial
+4. a polished public-facing rendered experience
+5. strong CTA and scope-conversion flow
+
+MANDATORY PAGE STRUCTURE
+
+1. Sticky Nav
+- logo
+- primary CTA: Book a Call
+
+2. Hero
+Inputs:
+- business name
+- industry
+- location
+- audit summary
+Output:
+- business identity line
+- Readiness Score (0–100)
+- one-sentence strategy insight
+- confidence explanation
+
+3. Digital Visibility Triangle (dark)
+Output:
+- relevance score
+- distance score
+- prominence score
+- visual explanation of imbalance
+
+4. Search Engine View (dark)
+Output:
+- simulated or real search result positioning
+- competitor comparison
+- visibility gaps
+
+5. Market Opportunity (white)
+Output:
+- keyword opportunities
+- monthly search volume
+- channel breakdown:
+- organic
+- paid
+- maps
+
+6. Market Capture Map (light grey)
+Output:
+- target service areas
+- covered vs uncovered locations
+- expansion opportunities
+
+7. Discovery Path Simulator (dark)
+Output:
+- buyer journey:
+- search
+- click
+- website
+- conversion
+- drop-off points
+
+8. Buyer Reality Gap (dark)
+Output:
+- what customers expect
+- what they currently experience
+- clear contrast
+
+9. Intent Gap Engine (dark)
+Output:
+- high-intent searches not captured
+- missing services/pages
+- ranking gaps
+
+10. Digital Audit (dark)
+Output:
+- website performance
+- Google Business Profile
+- reviews
+- ads presence
+
+11. Momentum Moment (gradient dark)
+Output:
+- why action is needed now
+- market timing
+- competitive pressure
+
+12. Growth Phases (dark)
+Output:
+- Phase 1: Foundation
+- Phase 2: Visibility
+- Phase 3: Scale
+Each phase must include actions and expected outcomes.
+
+13. Growth Pillars (light grey)
+Output:
+- SEO
+- Google Ads
+- Website
+- GBP
+- Retargeting
+Each pillar must explain its role in growth.
+
+14. Live Strategy Simulator (dark) — MUST IMPLEMENT
+This is a high-priority interactive section.
+
+Inputs:
+- monthly market demand
+- visibility share %
+- enquiry rate % of visitors
+- conversion rate % of enquiries
+- average job / project value
+
+Outputs:
+- estimated monthly visitors
+- estimated monthly enquiries
+- estimated new customers
+- estimated monthly revenue
+
+Rules:
+- make it interactive
+- keep it visually premium
+- treat outputs as directional planning estimates, not fake precision
+- include explanatory helper copy so prospects understand assumptions
+
+15. Cost of Inaction (dark)
+Output:
+- estimated lost leads per month
+- estimated lost revenue
+
+16. Projected Outcomes (white)
+Output:
+- lead increase
+- revenue projections
+- timeframe expectations
+
+17. KPI Table (light grey)
+Output:
+- leads
+- conversion rate
+- cost per lead
+- ROI
+
+18. Insight Snapshots (dark)
+Output:
+- short high-impact findings
+- sharp strategic statements
+
+19. Acceptance / Scope Selection (dark)
+Output:
+- service selections
+- summary of scope
+- CTA: Accept this scope
+
+20. CTA Banner (gradient)
+Output:
+- strong action CTA
+- Book a Call
+- Contact
+
+21. Footer
+
+AGENT COORDINATION RULES
+- each agent should only produce output for its assigned section
+- no duplication of responsibility
+- all outputs must be specific to the client
+- strategy agent acts as orchestrator
+- final page must read like one cohesive narrative
+
+IMPORTANT ENGINE RULES
+1. Every section must have:
+- purpose
+- required inputs
+- fallback behaviour if data is partial
+- conversion role in the narrative
+
+2. Use graceful degradation:
+- if exact data is missing, provide directional but honest estimates
+- do not let thin evidence collapse the page
+- label assumptions clearly where needed
+
+3. Avoid generic language:
+- every section must feel specific to the client
+- use actual findings, inferred commercial implications, and visible opportunity
+
+4. Keep the page persuasive:
+- this should feel like a high-level strategy presentation designed to convert
+- not a disconnected audit dump
+
+QUALITY BAR
+Reject output if:
+- language is generic
+- sections are disconnected
+- no data/reasoning is provided
+- the page does not clearly progress toward action
+- the Live Strategy Simulator is omitted or weak
+
+DELIVERABLES
+Please implement:
+1. a structured strategy page schema
+2. generation logic aligned to the section order above
+3. frontend rendering for the full page
+4. the Live Strategy Simulator as an interactive premium section
+5. graceful fallback behaviour for partial-data cases
+6. a cohesive public-facing page designed to convert
+
+Please identify:
+1. the best data schema for these 21 sections
+2. the smallest safe rollout path
+3. which existing intelligence/report inputs can already feed each section
+4. what must be added for the Live Strategy Simulator
+5. how to keep the full page cohesive, specific, and conversion-oriented

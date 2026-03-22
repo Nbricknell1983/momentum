@@ -165,62 +165,156 @@ function IntentCoverageRow({ category, coverage, evidence, suggestedMove }: {
   );
 }
 
-function LiveSimulator({ totalMonthlySearches, mrr }: { totalMonthlySearches: number; mrr?: number }) {
+function LiveSimulator({ totalMonthlySearches, mrr, businessName }: { totalMonthlySearches: number; mrr?: number; businessName?: string }) {
+  type Scenario = 'conservative' | 'realistic' | 'optimistic';
   const defaultJobValue = mrr || 5000;
+
+  const PRESETS: Record<Scenario, { visShare: number; enquiryRate: number; convRate: number }> = {
+    conservative: { visShare: 1,   enquiryRate: 10, convRate: 15 },
+    realistic:    { visShare: 3,   enquiryRate: 20, convRate: 25 },
+    optimistic:   { visShare: 8,   enquiryRate: 30, convRate: 40 },
+  };
+
+  const [scenario, setScenario] = useState<Scenario>('realistic');
   const [demand, setDemand] = useState(Math.max(100, Math.min(totalMonthlySearches, 10000)));
-  const [visShare, setVisShare] = useState(3);
-  const [enquiryRate, setEnquiryRate] = useState(20);
-  const [convRate, setConvRate] = useState(25);
+  const [visShare, setVisShare] = useState(PRESETS.realistic.visShare);
+  const [enquiryRate, setEnquiryRate] = useState(PRESETS.realistic.enquiryRate);
+  const [convRate, setConvRate] = useState(PRESETS.realistic.convRate);
   const [jobValue, setJobValue] = useState(defaultJobValue);
+
+  const applyPreset = (s: Scenario) => {
+    setScenario(s);
+    setVisShare(PRESETS[s].visShare);
+    setEnquiryRate(PRESETS[s].enquiryRate);
+    setConvRate(PRESETS[s].convRate);
+  };
+
   const visitors = Math.round(demand * visShare / 100);
   const enquiries = Math.round(visitors * enquiryRate / 100);
   const customers = Math.round(enquiries * convRate / 100);
-  const revenue = customers * jobValue;
+  const monthlyRevenue = customers * jobValue;
+  const annualRevenue = monthlyRevenue * 12;
+
+  const funnelSteps = [
+    { label: 'Monthly Searches in Market', value: demand,    pct: 100, bar: 'bg-slate-400/25 border-slate-400/15', text: 'text-slate-300' },
+    { label: 'Est. Visitors to Site',       value: visitors,  pct: demand   > 0 ? Math.max(3, Math.round(visitors / demand * 100))    : 0, bar: 'bg-blue-500/35 border-blue-500/20',    text: 'text-blue-300'    },
+    { label: 'Est. Enquiries Received',     value: enquiries, pct: visitors > 0 ? Math.max(3, Math.round(enquiries / visitors * 100)) : 0, bar: 'bg-violet-500/35 border-violet-500/20', text: 'text-violet-300'  },
+    { label: 'Est. New Clients Won',        value: customers, pct: enquiries > 0 ? Math.max(3, Math.round(customers / enquiries * 100)) : 0, bar: 'bg-emerald-500/35 border-emerald-500/20', text: 'text-emerald-300' },
+  ];
+
+  const scenarioMeta: Record<Scenario, { label: string; sub: string; active: string; idle: string }> = {
+    conservative: { label: 'Conservative', sub: 'Minimal gains, slow build',       active: 'border-amber-500/60 bg-amber-500/10 text-amber-300',   idle: 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300' },
+    realistic:    { label: 'Realistic',    sub: 'Solid execution, steady growth',   active: 'border-blue-500/60 bg-blue-500/10 text-blue-300',      idle: 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300' },
+    optimistic:   { label: 'Optimistic',   sub: 'Strong execution, full capture',   active: 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300', idle: 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300' },
+  };
+
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      {/* Scenario presets */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Choose a planning scenario</p>
+        <div className="grid grid-cols-3 gap-3">
+          {(['conservative', 'realistic', 'optimistic'] as Scenario[]).map(s => {
+            const m = scenarioMeta[s];
+            return (
+              <button key={s} onClick={() => applyPreset(s)}
+                className={`text-left p-3.5 rounded-xl border transition-all ${scenario === s ? m.active : m.idle}`}>
+                <p className="text-xs font-bold">{m.label}</p>
+                <p className="text-[10px] opacity-70 mt-0.5 leading-tight">{m.sub}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+
+        {/* Left: sliders */}
         <div className="space-y-5">
-          <p className="text-sm font-bold text-white uppercase tracking-wider">Adjust these assumptions</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Adjust the assumptions</p>
           {[
-            { label: 'Monthly Market Demand (searches)', value: demand, min: 100, max: 50000, step: 100, set: setDemand, format: (v: number) => v.toLocaleString() },
-            { label: 'Visibility Share (%)', value: visShare, min: 0.5, max: 30, step: 0.5, set: setVisShare, format: (v: number) => v + '%' },
-            { label: 'Enquiry Rate (% of visitors)', value: enquiryRate, min: 1, max: 50, step: 1, set: setEnquiryRate, format: (v: number) => v + '%' },
-            { label: 'Conversion Rate (% of enquiries)', value: convRate, min: 1, max: 80, step: 1, set: setConvRate, format: (v: number) => v + '%' },
-            { label: 'Average Job / Project Value ($)', value: jobValue, min: 500, max: 100000, step: 500, set: setJobValue, format: (v: number) => '$' + v.toLocaleString() },
+            { label: 'Monthly Market Demand (searches)',    value: demand,       min: 100,  max: 50000, step: 100, set: setDemand,       format: (v: number) => v.toLocaleString() },
+            { label: 'Visibility Share (% of searches)',   value: visShare,     min: 0.5,  max: 30,    step: 0.5, set: setVisShare,     format: (v: number) => v + '%' },
+            { label: 'Enquiry Rate (% of visitors)',       value: enquiryRate,  min: 1,    max: 50,    step: 1,   set: setEnquiryRate,  format: (v: number) => v + '%' },
+            { label: 'Conversion Rate (% of enquiries)',   value: convRate,     min: 1,    max: 80,    step: 1,   set: setConvRate,     format: (v: number) => v + '%' },
+            { label: 'Average Job / Project Value ($)',    value: jobValue,     min: 500,  max: 100000,step: 500, set: setJobValue,     format: (v: number) => '$' + v.toLocaleString() },
           ].map(({ label, value, min, max, step, set, format }) => (
             <div key={label} className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-400">{label}</span>
-                <span className="text-sm font-bold text-white">{format(value)}</span>
+                <span className="text-sm font-black text-white tabular-nums">{format(value)}</span>
               </div>
               <input type="range" min={min} max={max} step={step} value={value}
-                onChange={e => set(Number(e.target.value))}
+                onChange={e => { set(Number(e.target.value)); setScenario('realistic'); }}
                 className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-blue-500" />
             </div>
           ))}
-        </div>
-        <div className="space-y-4">
-          <p className="text-sm font-bold text-white uppercase tracking-wider">Estimated monthly outcomes</p>
-          {[
-            { label: 'Estimated Monthly Visitors', value: visitors.toLocaleString(), icon: Eye, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
-            { label: 'Estimated Monthly Enquiries', value: enquiries.toLocaleString(), icon: Phone, color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/20' },
-            { label: 'Estimated New Customers', value: customers.toLocaleString(), icon: Users, color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20' },
-            { label: 'Estimated Monthly Revenue', value: '$' + revenue.toLocaleString(), icon: TrendingUp, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className={`flex items-center gap-4 border rounded-xl p-4 ${bg}`}>
-              <div className={`w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shrink-0 ${color}`}>
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-slate-400">{label}</p>
-                <p className={`text-xl font-black mt-0.5 ${color}`}>{value}</p>
-              </div>
-            </div>
-          ))}
-          <p className="text-[10px] text-slate-500 leading-relaxed pt-2 border-t border-white/10">
-            These are directional estimates for scenario exploration. Actual results depend on competition, implementation quality, and market conditions.
+          <p className="text-[10px] text-slate-600 leading-relaxed pt-3 border-t border-white/5">
+            Adjusting any slider switches to custom mode. All outputs are directional planning estimates — not guarantees. Actual results depend on execution quality, competition, and market conditions.
           </p>
         </div>
+
+        {/* Right: funnel + outputs */}
+        <div className="space-y-5">
+
+          {/* Conversion funnel */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Conversion funnel</p>
+            {funnelSteps.map((step, i) => (
+              <div key={step.label} className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className={`text-xs flex items-center gap-1.5 ${step.text}`}>
+                    {i > 0 && <ChevronRight className="h-3 w-3 text-slate-600 shrink-0" />}
+                    {step.label}
+                  </span>
+                  <span className={`text-sm font-black tabular-nums ${step.text}`}>{step.value.toLocaleString()}</span>
+                </div>
+                <div className="h-5 bg-white/5 rounded-lg overflow-hidden">
+                  <div className={`h-full rounded-lg border transition-all duration-500 ${step.bar}`} style={{ width: `${step.pct}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Annual revenue callout */}
+          <div className="rounded-2xl p-6 text-center"
+            style={{ background: 'linear-gradient(135deg, rgba(217,119,6,0.14) 0%, rgba(180,83,9,0.07) 100%)', border: '1px solid rgba(217,119,6,0.28)' }}>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80 mb-2">Est. Annual Revenue Potential</p>
+            <div className="text-4xl font-black text-amber-400 tabular-nums">${annualRevenue.toLocaleString()}</div>
+            <p className="text-xs text-slate-500 mt-2">
+              <span className="text-amber-500/70 font-semibold">${monthlyRevenue.toLocaleString()}</span>/month × 12
+            </p>
+          </div>
+
+          {/* Monthly metric cards */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Visitors / mo',   value: visitors.toLocaleString(),          icon: Eye,       color: 'text-blue-400',    bg: 'bg-blue-500/8 border-blue-500/20'    },
+              { label: 'Enquiries / mo',  value: enquiries.toLocaleString(),          icon: Phone,     color: 'text-violet-400',  bg: 'bg-violet-500/8 border-violet-500/20' },
+              { label: 'New clients / mo',value: customers.toLocaleString(),          icon: Users,     color: 'text-emerald-400', bg: 'bg-emerald-500/8 border-emerald-500/20' },
+              { label: 'Revenue / mo',    value: '$' + monthlyRevenue.toLocaleString(),icon: TrendingUp,color: 'text-amber-400',  bg: 'bg-amber-500/8 border-amber-500/20'  },
+            ].map(({ label, value, icon: Icon, color, bg }) => (
+              <div key={label} className={`flex items-center gap-3 border rounded-xl p-3.5 ${bg}`}>
+                <Icon className={`h-4 w-4 shrink-0 ${color}`} />
+                <div className="min-w-0">
+                  <p className={`text-base font-black tabular-nums ${color}`}>{value}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Contextual callout */}
+      <div className="bg-white/3 border border-white/8 rounded-xl p-4 flex items-start gap-3">
+        <Sparkles className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+        <p className="text-xs text-slate-400 leading-relaxed">
+          At the <strong className="text-white">{scenarioMeta[scenario].label.toLowerCase()}</strong> scenario
+          {businessName ? `, ${businessName}` : ''} could capture <strong className="text-white">{visShare}%</strong> of an estimated <strong className="text-white">{demand.toLocaleString()}</strong> monthly searches — generating roughly <strong className="text-white">{visitors.toLocaleString()}</strong> visitors, <strong className="text-white">{enquiries.toLocaleString()}</strong> enquiries, and <strong className="text-white">{customers.toLocaleString()}</strong> new clients per month. These are planning estimates, not forecasts.
+        </p>
       </div>
     </div>
   );
@@ -473,6 +567,40 @@ export default function StrategyReportPage() {
                 <p className="text-sm text-slate-400 leading-relaxed">{confidence.explanation}</p>
               )}
 
+              {/* Key findings strip */}
+              {diagnosis && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    {
+                      icon: AlertTriangle,
+                      label: 'Primary Gap',
+                      value: diagnosis.gaps?.[0]?.title || diagnosis.gaps?.[0] || 'Visibility gap identified',
+                      border: 'border-red-500/25', bg: 'bg-red-500/8', iconColor: 'text-red-400', labelColor: 'text-red-400/80',
+                    },
+                    {
+                      icon: Target,
+                      label: 'Top Priority',
+                      value: diagnosis.priorities?.[0] || 'Digital presence growth',
+                      border: 'border-blue-500/25', bg: 'bg-blue-500/8', iconColor: 'text-blue-400', labelColor: 'text-blue-400/80',
+                    },
+                    {
+                      icon: TrendingUp,
+                      label: 'Growth Potential',
+                      value: diagnosis.growthPotential?.summary?.split('.')?.[0] || diagnosis.currentPosition || 'Market opportunity exists',
+                      border: 'border-emerald-500/25', bg: 'bg-emerald-500/8', iconColor: 'text-emerald-400', labelColor: 'text-emerald-400/80',
+                    },
+                  ].map(({ icon: Icon, label, value, border, bg, iconColor, labelColor }, i) => (
+                    <div key={i} className={`border rounded-xl p-3.5 space-y-1.5 ${border} ${bg}`}>
+                      <div className={`flex items-center gap-1.5 ${labelColor}`}>
+                        <Icon className={`h-3 w-3 ${iconColor}`} />
+                        <p className="text-[9px] font-bold uppercase tracking-widest">{label}</p>
+                      </div>
+                      <p className="text-xs text-white font-medium leading-snug">{String(value).substring(0, 90)}{String(value).length > 90 ? '…' : ''}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Hero stats */}
               {diagnosis?.growthPotential?.forecastBand && (
                 <div className="grid grid-cols-3 gap-3">
@@ -531,6 +659,29 @@ export default function StrategyReportPage() {
               {dvt.authority && <TriangleScoreCard label="Authority" icon={Shield} score={dvt.authority.score || 0} evidence={dvt.authority.evidence || ''} interpretation={dvt.authority.interpretation || ''} color="bg-violet-600/80" />}
               {dvt.trust && <TriangleScoreCard label="Trust" icon={Star} score={dvt.trust.score || 0} evidence={dvt.trust.evidence || ''} interpretation={dvt.trust.interpretation || ''} color="bg-emerald-600/80" />}
             </div>
+            {/* Imbalance diagnosis */}
+            {(() => {
+              const scores: { name: string; score: number; fix: string }[] = [
+                { name: 'Relevance', score: dvt.relevance?.score || 0, fix: 'adding service-specific content and location signals' },
+                { name: 'Authority', score: dvt.authority?.score || 0, fix: 'building backlinks and digital citations' },
+                { name: 'Trust', score: dvt.trust?.score || 0,     fix: 'growing reviews and consistent brand signals' },
+              ];
+              const weakest = scores.reduce((a, b) => a.score <= b.score ? a : b);
+              const strongest = scores.reduce((a, b) => a.score >= b.score ? a : b);
+              if (weakest.score >= 70) return null;
+              return (
+                <div className="mt-8 bg-amber-500/8 border border-amber-500/20 rounded-xl p-5 flex items-start gap-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-amber-300">Triangle imbalance detected</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      <strong className="text-white">{weakest.name}</strong> ({weakest.score}/100) is the weakest force — holding back the gains from{' '}
+                      <strong className="text-white">{strongest.name}</strong> ({strongest.score}/100). Until this gap closes, overall visibility will remain suppressed. The fastest path forward is {weakest.fix}.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </section>
       )}
@@ -940,9 +1091,9 @@ export default function StrategyReportPage() {
       <section className="bg-[#0d1123]">
         <div className="max-w-5xl mx-auto px-6 py-16 md:py-20">
           <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Live Strategy Simulator</span>
-          <h2 className="text-3xl md:text-4xl font-black mt-2 mb-3">What improved visibility could mean</h2>
-          <p className="text-slate-400 text-sm mb-10 max-w-2xl">Adjust the assumptions to explore what different visibility scenarios could mean for this business. These are directional estimates for planning purposes.</p>
-          <LiveSimulator totalMonthlySearches={mo.totalMonthlySearches || 1000} />
+          <h2 className="text-3xl md:text-4xl font-black mt-2 mb-3">Model the revenue impact of better visibility</h2>
+          <p className="text-slate-400 text-sm mb-10 max-w-2xl">Choose a planning scenario or adjust the inputs to explore what capturing more of this market could mean for {report.businessName}. All figures are directional estimates — use them to frame conversations, not make promises.</p>
+          <LiveSimulator totalMonthlySearches={mo.totalMonthlySearches || 1000} businessName={report.businessName} />
         </div>
       </section>
 
@@ -952,7 +1103,22 @@ export default function StrategyReportPage() {
           <div className="max-w-5xl mx-auto px-6 py-16 md:py-20">
             <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Cost of Inaction</span>
             <h2 className="text-3xl md:text-4xl font-black mt-2 mb-3">What happens if nothing changes</h2>
-            <p className="text-slate-400 text-sm mb-10 max-w-2xl">This is not about fear — it's about understanding the ongoing cost of the current visibility gap, in business terms.</p>
+            <p className="text-slate-400 text-sm mb-8 max-w-2xl">This is not about fear — it's about understanding the ongoing cost of the current visibility gap, in real business terms.</p>
+
+            {/* Daily cost callout */}
+            {coi.missedMonthlySearches > 0 && (
+              <div className="bg-red-500/6 border border-red-500/20 rounded-xl px-5 py-4 flex items-center gap-5 mb-8">
+                <div className="text-center shrink-0 min-w-[4rem]">
+                  <p className="text-3xl font-black text-red-400 tabular-nums">{Math.round(coi.missedMonthlySearches / 30)}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-red-400/60 mt-0.5">per day</p>
+                </div>
+                <div className="w-px h-10 bg-white/10 shrink-0" />
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  searches pass to competitors <em className="text-slate-300">every single day</em> while this visibility gap remains open — roughly <strong className="text-white">{Math.round(coi.missedMonthlySearches / 30 * 7).toLocaleString()}</strong> per week and <strong className="text-white">{Number(coi.missedMonthlySearches).toLocaleString()}</strong> per month. Each one is a buyer who found a competitor instead.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
               {coi.missedMonthlySearches > 0 && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 text-center">
