@@ -59,6 +59,14 @@ Preferred communication style: Simple, everyday language.
 - **Bullpen Daily Brief**: Scheduled daily agent review and GPT synthesis into a morning brief.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for leads and clients, identifying industry, category, location, strategic intelligence, and deterministic dependencies.
 
+### First-Open Lead Orchestration (Two-Speed)
+- **Phase 1 — Fast first pass (auto, ~300–500ms)**: On lead open, `DealLiveActivityFeed` fires `gather-evidence` at 300ms (if no evidence or evidence >24h stale) and `generate-prep-pack` at 500ms (if pack missing or >24h stale). Both fire in parallel; the server's `gatherEvidenceBundle` call inside prep-pack is idempotent so a race is safe.
+- **Phase 2 — Deeper background analysis (auto, 800ms+)**: Website X-Ray fires at 800ms, SERP at 1500ms, Strategy Diagnosis when both complete. These continue asynchronously while Phase 1 output is already visible.
+- **`AnalysisState` type**: `'idle' | 'queued' | 'scanning' | 'initial-ready' | 'deepening' | 'complete' | 'failed'` — derived in `DealLiveActivityFeed` from running booleans + data presence. Drives state-aware header copy ("Gathering signals…" / "Deepening analysis…" / "First pass ready" / "All specialists done").
+- **Idempotency**: All auto-fires use `useRef` flags (`autoEvidenceFired`, `autoPrepFired`, etc.) — never re-fire within the same mount. Fresh leads (evidence <24h, prep <24h) skip auto-fires entirely.
+- **Prep Specialist card**: Shows `running` while either `evidenceRunning` or `prepRunning`. Task text is state-aware: "Gathering presence signals and building action plan…" during Phase 1.
+- **NBS empty state**: No longer shows "Prepare Action Plan" as a primary CTA gateway. Shows passive "Refresh next steps" retry button — auto-NBS always fires first; the empty state only appears when it completed with insufficient data.
+
 ### Agent Job System
 - **Purpose**: Firestore-backed job queue for dispatching work to OpenClaw specialist agents.
 - **Task → Agent routing**: Routes tasks like `strategy`, `seo`, `gbp`, `ads`, `website` to corresponding specialists.

@@ -19,6 +19,7 @@ import { timeAgo } from '@/lib/utils';
 
 type SpecId = 'prep' | 'website' | 'seo' | 'growth' | 'commercial';
 type StageStatus = 'pending' | 'running' | 'complete' | 'blocked';
+type AnalysisState = 'idle' | 'queued' | 'scanning' | 'initial-ready' | 'deepening' | 'complete' | 'failed';
 
 const SPEC = {
   prep:       { name: 'Prep Specialist',        initial: 'P', color: 'bg-blue-500',    ring: 'ring-blue-200 dark:ring-blue-800',   text: 'text-blue-600 dark:text-blue-400',   Icon: Phone      },
@@ -237,12 +238,14 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
 
+  const [evidenceRunning, setEvidenceRunning] = useState(false);
   const [prepRunning, setPrepRunning] = useState(false);
   const [xrayRunning, setXrayRunning] = useState(false);
   const [serpRunning, setSerpRunning] = useState(false);
   const [diagRunning, setDiagRunning] = useState(false);
   const [evidenceRefreshing, setEvidenceRefreshing] = useState(false);
 
+  const autoEvidenceFired = useRef(false);
   const autoPrepFired = useRef(false);
   const autoXrayFired = useRef(false);
   const autoSerpFired = useRef(false);
@@ -321,7 +324,36 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     dispatch(patchLead({ id: lead.id, updates: { aiGrowthPlan } as any }));
   }, [orgId, authReady, lead, dispatch]);
 
-  // Auto-fire Prep Pack on mount — if missing OR stale (>24h)
+  // Auto-fire evidence gathering on first open — if missing or stale (>24h).
+  // Fires at 300ms so presence signals (GBP, crawl, social) populate fast,
+  // giving the rep something useful before the AI analysis arrives.
+  useEffect(() => {
+    if (!orgId || !authReady || autoEvidenceFired.current) return;
+    if (!businessName) return;
+    const gatheredAt = eb.gatheredAt as string | undefined;
+    const isMissing = !eb.gbp && !eb.website;
+    const isStale = evidenceIsStale(gatheredAt, OBSERVED_STALE_MS);
+    if (!isMissing && !isStale) return;
+    autoEvidenceFired.current = true;
+    const timer = setTimeout(async () => {
+      setEvidenceRunning(true);
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch(`/api/leads/${lead.id}/gather-evidence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ orgId }),
+        });
+      } catch { /* silent — onSnapshot delivers the result regardless */ }
+      finally { setEvidenceRunning(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id, orgId, authReady]);
+
+  // Auto-fire Prep Pack on mount — if missing OR stale (>24h).
+  // Fires at 500ms so it overlaps with evidence gathering. The server also runs
+  // gatherEvidenceBundle internally, so both writes are idempotent.
   useEffect(() => {
     if (!orgId || !authReady || autoPrepFired.current) return;
     if (!businessName) return;
@@ -348,7 +380,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
       } catch { /* silent */ } finally {
         setPrepRunning(false);
       }
-    }, 8000);
+    }, 500);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id, orgId, authReady]);
@@ -473,11 +505,25 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     setContextSaving(false);
   }, [orgId, authReady, dealContext, lead.id, dispatch]);
 
-  const anyRunning = prepRunning || xrayRunning || serpRunning || diagRunning;
+  const anyRunning = evidenceRunning || prepRunning || xrayRunning || serpRunning || diagRunning;
+
+  // Derive a named analysis state for state-aware header copy and progress indicators.
+  const analysisState: AnalysisState = (() => {
+    if (!orgId || !authReady) return 'queued';
+    const hasAny = hasPrepPack || hasXray || hasSerp || hasDiagnosis || hasNbs;
+    const phase1Running = evidenceRunning || prepRunning;
+    const phase2Running = xrayRunning || serpRunning || diagRunning;
+    if (phase1Running) return hasAny ? 'deepening' : 'scanning';
+    if (phase2Running) return hasPrepPack ? 'deepening' : 'scanning';
+    if (!hasAny) return 'idle';
+    if (hasPrepPack && hasXray && hasSerp && hasDiagnosis && hasNbs) return 'complete';
+    if (hasPrepPack) return 'initial-ready';
+    return 'scanning';
+  })();
 
   // ── Derive statuses and findings ─────────────────────────────────────────
 
-  const prepStatus: StageStatus = hasPrepPack ? 'complete' : prepRunning ? 'running' : 'pending';
+  const prepStatus: StageStatus = hasPrepPack ? 'complete' : (prepRunning || evidenceRunning) ? 'running' : 'pending';
   const prepPack = (lead as any).prepCallPack;
   const prepFinding = hasPrepPack
     ? `${prepPack.businessSnapshot?.slice(0, 100)}${(prepPack.businessSnapshot?.length ?? 0) > 100 ? '…' : ''}`
@@ -833,12 +879,24 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           ) : (
             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
           )}
-          <p className="text-xs font-bold text-foreground">
-            {anyRunning ? 'Team is on it' : 'Your deal team'}
+          <p className="text-xs font-bold text-foreground" data-testid="feed-header-title">
+            {analysisState === 'queued'       ? 'Starting up…'
+           : analysisState === 'scanning'     ? 'Gathering signals…'
+           : analysisState === 'deepening'    ? 'Deepening analysis…'
+           : analysisState === 'initial-ready'? 'First pass ready'
+           : analysisState === 'complete'     ? 'Your deal team'
+           :                                   'Your deal team'}
           </p>
           <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[120px]">{lead.companyName}</span>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-0.5">Working this deal together</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5" data-testid="feed-header-subtitle">
+          {analysisState === 'queued'        ? 'Waiting for auth…'
+         : analysisState === 'scanning'      ? 'Building your first-pass action plan'
+         : analysisState === 'deepening'     ? 'Running deeper specialist analysis'
+         : analysisState === 'initial-ready' ? 'Continuing deeper specialist work'
+         : analysisState === 'complete'      ? 'All specialists done'
+         :                                    'Working this deal together'}
+        </p>
       </div>
 
       <ScrollArea className="flex-1">
@@ -848,7 +906,12 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
           <StageCard
             specId="prep"
             status={prepStatus}
-            task="Pulling together everything we know about this business before the call"
+            task={
+              evidenceRunning && prepRunning ? 'Gathering presence signals and building action plan…'
+              : evidenceRunning              ? 'Gathering presence signals — GBP, crawl, social…'
+              : prepRunning                 ? 'Building action plan from what we\'ve found so far…'
+              :                               'Pulling together everything we know about this business before the call'
+            }
             finding={prepFinding}
             timestamp={prepAt}
             expandable={hasPrepPack}

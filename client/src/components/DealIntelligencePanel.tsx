@@ -906,18 +906,18 @@ function NextBestStepsCard({ lead, autoRunning }: { lead: Lead; autoRunning: boo
           </div>
         )}
 
-        {/* Not enough data — fallback state */}
+        {/* Not enough data — retry state (auto-run has already fired; this is not the first trigger) */}
         {!isLoading && steps.length === 0 && (
           <div className="py-4 text-center space-y-2.5">
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Building context — log a conversation or generate call prep to get rep-ready next steps.
+              Not enough context yet — the team will sharpen recommendations as more data comes in. Log a conversation or add a note to help.
             </p>
             <button
               onClick={generate}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground px-3 py-1.5 rounded-md bg-muted/60 hover:bg-muted transition-colors"
               data-testid="button-generate-next-steps-fallback"
             >
-              <Sparkles className="h-3.5 w-3.5" /> Prepare Action Plan
+              <RefreshCw className="h-3 w-3" /> Refresh next steps
             </button>
           </div>
         )}

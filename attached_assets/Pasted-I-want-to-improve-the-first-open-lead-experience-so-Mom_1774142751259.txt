@@ -1,0 +1,88 @@
+I want to improve the first-open lead experience so Momentum automatically starts useful analysis without requiring the rep to click buttons to get basic value.
+
+Problem:
+When I open a new lead that has not been analysed yet, the agent takes too long to become useful and the workflow still feels manual. I can see specialists in progress, but it still feels like I need to click things like “Prepare Action Plan” to get the system moving.
+
+Goal:
+Make a newly opened lead feel proactive and fast:
+1. start analysis automatically on open
+2. deliver a useful first-pass quickly
+3. continue deeper specialist work in the background
+4. remove unnecessary “click to begin” friction from the default workflow
+
+Product behaviour I want:
+When a lead is opened for the first time (or is stale), Momentum should automatically kick off analysis.
+
+Two-speed orchestration:
+Phase 1 — fast first pass
+Target: something useful should appear within 5–10 seconds max
+
+Should include:
+- evidence gathering
+- prep context
+- website scan
+- basic GBP / social / search presence
+- AI deal summary refresh
+- first next-best-step draft if enough context exists
+
+Phase 2 — deeper analysis
+Continue in the background after the first pass
+
+Should include:
+- deeper website specialist output
+- SEO specialist synthesis
+- growth analyst synthesis
+- commercial intelligence
+- paid search enrichment where available
+- richer action plan / strategic recommendations
+
+Important UX rules:
+- The rep should not need to click to begin standard analysis
+- Buttons like “Prepare Action Plan” should not be the gateway to the default workflow
+- For new leads, replace passive CTA states with active system states like:
+- Building action plan…
+- Preparing next steps…
+- Gathering presence signals…
+- Once an initial result exists, those controls can switch to:
+- Refresh action plan
+- Rebuild recommendations
+
+State model:
+Please introduce or formalise lead analysis state so the UI can clearly represent progress and avoid duplicate runs.
+
+Suggested shape:
+type AnalysisState =
+| "idle"
+| "queued"
+| "scanning"
+| "initial-ready"
+| "deepening"
+| "complete"
+| "failed";
+
+Suggested orchestration rules:
+- if lead has never been analysed → auto-run on open
+- if analysis is stale beyond a freshness threshold → auto-run lightweight refresh
+- if analysis is already running → show progress, do not restart duplicate jobs
+- if fresh analysis already exists → show existing results immediately
+- make auto-analysis idempotent and debounce rapid re-opens
+
+Implementation goals:
+1. Identify where lead-open behaviour is currently triggering analysis (or not triggering it)
+2. Add automatic first-pass analysis on lead open for cold/stale leads
+3. Split the work into fast first-pass vs deeper background analysis where possible
+4. Remove or reduce any UI states that imply the user must click to get the first useful output
+5. Preserve manual refresh/regenerate controls for optional reruns
+
+Success criteria:
+- Opening a fresh lead should automatically kick off analysis
+- The user should see meaningful output begin populating quickly
+- The system should feel like it is already working for the rep
+- The user should not need to click “Prepare Action Plan” just to start getting value
+- Existing leads with fresh analysis should not trigger wasteful reruns
+
+Please identify:
+1. where the current first-open orchestration bottleneck is
+2. which parts of the pipeline can be promoted into the fast first-pass path
+3. which current manual actions should become automatic defaults
+4. the smallest safe refactor to make the lead-open experience feel proactive and fast
