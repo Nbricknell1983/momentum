@@ -12,6 +12,7 @@ import { cn, timeAgo } from '@/lib/utils';
 import { PresenceInsightModal } from '@/components/PresenceInsightModal';
 import {
   buildWebsiteInsights, buildGbpInsights, buildSocialInsights, buildSearchInsights,
+  buildPaidSearchInsights,
   type PresenceInsightDetail, type InsightStatus,
 } from '@/lib/presenceInsights';
 
@@ -217,7 +218,11 @@ export function EvidencePresenceSection({
   const searchInsights  = buildSearchInsights(w, serp);
 
   // Extract the network insight so the banner and the row can share one click handler
-  const networkInsight  = gbpInsights.find(i => i.id === 'gbp-network') ?? null;
+  const networkInsight      = gbpInsights.find(i => i.id === 'gbp-network') ?? null;
+
+  // Paid search — only populated when auction data has been gathered
+  const paidSearch          = eb?.paidSearch ?? null;
+  const paidSearchInsights  = buildPaidSearchInsights(paidSearch);
 
   return (
     <>
@@ -420,6 +425,49 @@ export function EvidencePresenceSection({
             <p className="text-[10px] text-slate-400 italic">No search visibility data</p>
           )}
         </PresenceCard>
+
+        {/* ── Paid Search Insights — spans both columns, only when data present ── */}
+        {paidSearch && (
+          <div className="col-span-2">
+            <PresenceCard
+              icon={TrendingUp}
+              title="Paid Search"
+              headerRight={
+                <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                  {(paidSearchInsights.find(i => i.id === 'ps-keywords') != null)
+                    ? `${(paidSearch.entries ?? []).length} keywords`
+                    : 'Insights'}
+                </span>
+              }
+            >
+              {paidSearchInsights.length > 0 ? (
+                <div className="space-y-px">
+                  {paidSearchInsights
+                    .filter(i => i.id !== 'ps-keywords') // keywords row always last
+                    .map(insight => (
+                      <PresenceInsightRow
+                        key={insight.id}
+                        insight={insight}
+                        onClick={() => setActiveDetail(insight)}
+                        data-testid={`ps-insight-${insight.id}`}
+                      />
+                    ))}
+                  {/* Keyword breakdown row always last */}
+                  {paidSearchInsights.filter(i => i.id === 'ps-keywords').map(insight => (
+                    <PresenceInsightRow
+                      key={insight.id}
+                      insight={insight}
+                      onClick={() => setActiveDetail(insight)}
+                      data-testid="ps-insight-ps-keywords"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-slate-400 italic">No paid search data</p>
+              )}
+            </PresenceCard>
+          </div>
+        )}
 
         {/* ── Evidence delta panel — spans both columns ── */}
         {delta && delta.length > 0 && (

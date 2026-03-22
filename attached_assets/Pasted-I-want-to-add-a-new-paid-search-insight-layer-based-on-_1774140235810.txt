@@ -1,0 +1,102 @@
+I want to add a new paid search insight layer based on Google Ads auction-style keyword reporting, but I want the user-facing product language to stay plain English.
+
+Naming direction:
+Use “Paid Search Insights” as the primary user-facing section title.
+Do not use “Keyword Auction Insights” in the main UI.
+Auction-style terminology can exist under the hood or inside drilldown detail if needed, but the product should feel commercially useful and human, not like a raw Google Ads export.
+
+Context:
+We now have access to keyword-level paid search competitive data such as:
+- impression share %
+- top of page rate
+- competitor impression share
+- competitor top of page rate
+
+Goal:
+Turn this raw auction data into a commercially useful Paid Search Insights layer inside Momentum.
+
+What I want:
+1. Parse keyword-level auction data into a structured model
+2. Generate a compact plain-English paid-search summary for the card
+3. Support drilldown modal inspection for keyword-by-keyword paid search performance
+4. Translate the raw numbers into strategic interpretation a rep can actually use
+
+User-facing output direction:
+The section title should be:
+- Paid Search Insights
+
+The compact card should use plain-English summaries like:
+- Paid search activity is confirmed
+- Brand keyword coverage is strong
+- Competitors are winning more visibility on non-brand terms
+- Top-of-page presence is inconsistent
+- Overall paid search share looks modest
+
+Avoid overly technical labels in the compact card.
+
+Suggested TypeScript shape:
+
+type KeywordAuctionCompetitor = {
+domain: string;
+value: number;
+};
+
+type KeywordAuctionEntry = {
+keyword: string;
+impressionShare?: number;
+topOfPageRate?: number;
+competitorImpressionShare?: KeywordAuctionCompetitor[];
+competitorTopOfPageRate?: KeywordAuctionCompetitor[];
+};
+
+type PaidSearchInsights = {
+overallImpressionShare?: number;
+overallTopOfPageRate?: number;
+brandedStrength?: "strong" | "moderate" | "weak";
+nonBrandStrength?: "strong" | "moderate" | "weak";
+summary: string;
+keyWins: string[];
+keyGaps: string[];
+entries: KeywordAuctionEntry[];
+};
+
+UX requirements:
+
+Compact card:
+- show short plain-English summary bullets only
+- do not dump raw keyword tables inline
+- prioritise commercially useful interpretation over technical terminology
+
+Modal:
+1. Overall position
+2. Strongest keyword coverage
+3. Competitive pressure
+4. Top-of-page competitiveness
+5. Keyword-level breakdown
+6. Why it matters
+7. Recommended improvements
+
+Interpretation rules:
+- distinguish branded vs non-brand performance
+- identify keywords where impression share is weak
+- identify keywords where competitors dominate top-of-page rate
+- surface over-reliance on brand terms if branded performance is much stronger than non-brand performance
+- generate commercially useful summaries rather than just displaying percentages
+- keep auction-specific terminology inside the detail layer only when it improves clarity
+
+Preferred example card copy:
+- Paid search activity is confirmed
+- Brand keyword coverage is strong
+- Competitors are winning more visibility on non-brand terms
+- Top-of-page presence is inconsistent
+- Overall paid search share looks modest
+
+Important:
+This should feel like paid-search strategy intelligence, not a raw Google Ads export.
+
+Please identify:
+1. where this auction-style data would enter the system
+2. how to parse competitor domain/value pairs cleanly
+3. the smallest safe way to turn this into a reusable insight model + drilldown modal
+4. whether this should live under Search, Ads, or a dedicated Paid Search insight section
+5. what naming/microcopy changes are needed so the UI consistently uses plain-English “Paid Search Insights” language

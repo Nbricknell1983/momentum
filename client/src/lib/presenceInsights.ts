@@ -389,3 +389,220 @@ export function buildSearchInsights(w: any, serp: any): PresenceInsightDetail[] 
 
   return insights;
 }
+
+// ── Paid Search insights ────────────────────────────────────────────────────
+// Converts raw keyword auction data into plain-English insight rows.
+// All auction terminology (impression share, top-of-page rate) is confined to
+// evidence + technical sections — the card and modal summary use commercial language.
+
+// Module-private helpers
+function _pct(v: number): string { return `${Math.round(v * 100)}%`; }
+function _shareLabel(v: number): string { return v >= 0.65 ? 'strong' : v >= 0.35 ? 'modest' : 'limited'; }
+function _shareStatus(v: number): InsightStatus { return v >= 0.65 ? 'positive' : v >= 0.35 ? 'neutral' : 'warning'; }
+function _strengthStatus(s: string): InsightStatus { return s === 'strong' ? 'positive' : s === 'moderate' ? 'neutral' : 'warning'; }
+function _cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+export function buildPaidSearchInsights(ps: any): PresenceInsightDetail[] {
+  if (!ps) return [];
+  const insights: PresenceInsightDetail[] = [];
+
+  const overallShare: number | null = ps.overallImpressionShare ?? null;
+  const topOfPage:    number | null = ps.overallTopOfPageRate  ?? null;
+  const branded:      string | null = ps.brandedStrength   ?? null;
+  const nonBrand:     string | null = ps.nonBrandStrength  ?? null;
+  const entries:      any[]         = ps.entries ?? [];
+  const keyWins:      string[]      = ps.keyWins ?? [];
+  const keyGaps:      string[]      = ps.keyGaps ?? [];
+
+  // ── 1. Overall activity status ─────────────────────────────────────────────
+  const hasActivity = overallShare != null ? overallShare > 0 : entries.length > 0 || !!ps.summary;
+  insights.push({
+    id: 'ps-activity',
+    label: hasActivity ? 'Paid search activity confirmed' : 'No paid search activity detected',
+    status: hasActivity ? 'positive' : 'neutral',
+    summary: ps.summary || (hasActivity
+      ? `Paid search activity is confirmed${overallShare != null ? ` — capturing approximately ${_pct(overallShare)} of available impressions across tracked keywords` : ' across tracked keywords'}.`
+      : 'No paid search activity was detected for this business across the tracked keyword set.'),
+    whyItMatters: 'Paid search activity signals investment in keyword-level visibility. For a sales conversation, it confirms budget intent and lets you position your agency around improving efficiency — not just awareness.',
+    recommendedImprovement: hasActivity
+      ? 'Ensure paid and organic strategies are complementary. High-cost paid keywords that also rank organically should be reviewed — consolidating spend on genuinely competitive terms reduces wasted budget.'
+      : 'Explore whether paid search is commercially viable. A focused pilot on 5–10 high-intent service keywords can quickly validate opportunity before committing to ongoing spend.',
+    evidence: [
+      ...(overallShare != null ? [{ label: 'Impression share', value: _pct(overallShare), type: 'count' as const }] : []),
+      ...(topOfPage     != null ? [{ label: 'Top-of-page rate', value: _pct(topOfPage),   type: 'count' as const }] : []),
+      { label: 'Keywords tracked', value: String(entries.length), type: 'count' as const },
+      ...keyWins.map(w => ({ label: 'Win', value: w })),
+      ...keyGaps.map(g => ({ label: 'Gap', value: g })),
+    ],
+  });
+
+  // ── 2. Overall impression share ───────────────────────────────────────────
+  if (overallShare != null) {
+    const lbl = _shareLabel(overallShare);
+    insights.push({
+      id: 'ps-overall-share',
+      label: `Overall paid search share looks ${lbl}`,
+      status: _shareStatus(overallShare),
+      summary: `Across tracked keywords, this business captures approximately ${_pct(overallShare)} of available paid search impressions. ${
+        lbl === 'strong'
+          ? 'This is a competitive position — the business is winning a majority of relevant auction opportunities.'
+          : lbl === 'modest'
+            ? 'There is meaningful room to grow — more than half of available impressions are going to other advertisers.'
+            : 'Most available impressions are being won by competitors. Budget constraints or bidding strategy likely need attention.'
+      }`,
+      whyItMatters: 'Impression share measures how often an ad appeared versus how often it was eligible to appear. Lost impression share represents leads that went to a competitor — often at the moment of highest purchase intent.',
+      recommendedImprovement: overallShare < 0.65
+        ? 'Review bidding strategy and Quality Score health. Improving ad relevance and landing page experience simultaneously reduces cost-per-click while lifting impression share.'
+        : 'Protect top-performing terms with exact match and bid adjustments by device and hour. Monitor for competitor budget changes that could erode share.',
+      evidence: [
+        { label: 'Impression share', value: _pct(overallShare), type: 'count' },
+        { label: 'Benchmark', value: overallShare >= 0.65 ? '≥ 65% — above competitive threshold' : overallShare >= 0.35 ? '35–65% — growth opportunity' : '< 35% — limited presence' },
+      ],
+    });
+  }
+
+  // ── 3. Brand keyword coverage ─────────────────────────────────────────────
+  if (branded) {
+    const brandedEntries = entries.filter((e: any) => e.isBranded === true);
+    insights.push({
+      id: 'ps-brand',
+      label: `Brand keyword coverage is ${branded}`,
+      title: 'Brand keyword performance',
+      status: _strengthStatus(branded),
+      summary: branded === 'strong'
+        ? 'The business is appearing strongly for its own brand terms — protecting brand-aware searches from competitor conquest campaigns.'
+        : branded === 'moderate'
+          ? 'Brand keyword coverage is partial. Some brand-aware searches may be captured by competitors running conquest campaigns.'
+          : "Brand keyword protection looks weak. Competitors may be actively bidding on this brand's name — intercepting traffic from customers who are already brand-aware.",
+      whyItMatters: 'Branded keyword coverage is the highest-ROI form of paid search for most businesses — it protects the bottom of the funnel. When brand searches go unanswered by the brand itself, they are often won by a direct competitor.',
+      recommendedImprovement: branded !== 'strong'
+        ? 'Run a dedicated brand keyword campaign with exact match. Brand CPC is typically low and Quality Score is high — this is the most cost-efficient paid search investment available.'
+        : 'Maintain brand protection with consistent top-of-page position. Monitor competitor activity on brand terms — if conquest campaigns appear, increase bids selectively.',
+      evidence: [
+        { label: 'Brand coverage', value: _cap(branded) },
+        ...brandedEntries.slice(0, 4).map((e: any) => ({
+          label: 'Brand keyword',
+          value: `${e.keyword}${e.impressionShare != null ? ` — ${_pct(e.impressionShare)} share` : ''}`,
+        })),
+      ],
+    });
+  }
+
+  // ── 4. Non-brand competitive position ────────────────────────────────────
+  if (nonBrand) {
+    const nbEntries = entries.filter((e: any) => e.isBranded !== true);
+
+    // Aggregate competitor share across non-brand keywords
+    const competitorMap: Record<string, number[]> = {};
+    for (const e of nbEntries) {
+      for (const c of (e.competitorImpressionShare ?? [])) {
+        if (!competitorMap[c.domain]) competitorMap[c.domain] = [];
+        competitorMap[c.domain].push(c.value);
+      }
+    }
+    const topCompetitors = Object.entries(competitorMap)
+      .map(([domain, vals]) => ({ domain, avg: vals.reduce((s, v) => s + v, 0) / vals.length }))
+      .sort((a, b) => b.avg - a.avg)
+      .slice(0, 3);
+
+    insights.push({
+      id: 'ps-nonbrand',
+      label: nonBrand === 'strong'
+        ? 'Non-brand terms are well-covered'
+        : nonBrand === 'moderate'
+          ? 'Non-brand coverage is moderate'
+          : 'Competitors are winning on non-brand terms',
+      title: 'Non-brand competitive position',
+      status: _strengthStatus(nonBrand),
+      summary: nonBrand === 'strong'
+        ? "The business has solid coverage of non-brand service terms — capturing category-level demand from prospects who aren't yet brand-aware."
+        : nonBrand === 'moderate'
+          ? 'Non-brand coverage is partial. Competitors are capturing a meaningful share of category-level service searches.'
+          : "Competitors are dominating non-brand search impressions for service terms. The business risks being invisible to prospects at the top of the funnel.",
+      whyItMatters: "Non-brand keywords represent the top of the acquisition funnel — customers searching for services without a preferred provider. Winning these searches builds the pipeline beyond brand-loyal traffic. Losing them consistently means ceding the category to competitors.",
+      recommendedImprovement: nonBrand !== 'strong'
+        ? 'Develop a structured service + location keyword strategy. Start with highest-value terms, then expand into longer-tail variations to improve impression share without exhausting budget.'
+        : 'Monitor competitor bidding on non-brand terms. Landing page relevance and ad copy differentiation become the key lever for maintaining share without proportional bid increases.',
+      evidence: [
+        { label: 'Non-brand performance', value: _cap(nonBrand) },
+        { label: 'Non-brand keywords', value: String(nbEntries.length), type: 'count' as const },
+        ...topCompetitors.map(c => ({
+          label: 'Competitor',
+          value: `${c.domain} — ${_pct(c.avg)} avg share`,
+        })),
+      ],
+    });
+  }
+
+  // ── 5. Top-of-page presence ───────────────────────────────────────────────
+  if (topOfPage != null) {
+    const isConsistent = topOfPage >= 0.6;
+    insights.push({
+      id: 'ps-top-of-page',
+      label: isConsistent ? 'Top-of-page presence is consistent' : 'Top-of-page presence is inconsistent',
+      status: isConsistent ? 'positive' : 'warning',
+      summary: `Ads appear in the top positions on the page approximately ${_pct(topOfPage)} of the time. ${
+        isConsistent
+          ? 'This indicates consistent top-placement performance — where click-through rates are highest.'
+          : 'Many eligible impressions are appearing in lower positions where visibility and click-through rates drop significantly.'
+      }`,
+      whyItMatters: "Top-of-page placements generate substantially higher click-through rates than below-the-fold ads. A low top-of-page rate means spend is going to impressions with limited commercial value.",
+      recommendedImprovement: !isConsistent
+        ? 'Review Quality Scores for underperforming keywords — improving ad relevance and landing page experience lifts top-of-page rate without necessarily increasing bids.'
+        : 'Maintain Quality Score health through regular ad copy testing. Protect top positions on highest-converting terms with bid adjustments for high-value time windows and devices.',
+      evidence: [
+        { label: 'Top-of-page rate', value: _pct(topOfPage), type: 'count' as const },
+        { label: 'Benchmark', value: isConsistent ? '≥ 60% — consistent top placement' : '< 60% — inconsistent — below-fold impressions dominant' },
+      ],
+    });
+  }
+
+  // ── 6. Keyword-level breakdown ────────────────────────────────────────────
+  if (entries.length > 0) {
+    const withPressure = entries
+      .filter((e: any) => (e.competitorImpressionShare?.length ?? 0) > 0)
+      .map((e: any) => {
+        const top = [...(e.competitorImpressionShare ?? [])].sort((a: any, b: any) => b.value - a.value)[0];
+        return { ...e, topComp: top };
+      })
+      .sort((a: any, b: any) => (b.topComp?.value ?? 0) - (a.topComp?.value ?? 0));
+
+    insights.push({
+      id: 'ps-keywords',
+      label: `${entries.length} keyword${entries.length !== 1 ? 's' : ''} tracked — view breakdown`,
+      title: 'Keyword-level paid search breakdown',
+      status: 'neutral',
+      summary: `${entries.length} keyword${entries.length !== 1 ? 's are' : ' is'} being tracked in paid search. The breakdown below shows impression share and competitive pressure at the individual keyword level.`,
+      whyItMatters: 'Keyword-level data pinpoints exactly where paid spend is efficient and where competitors are winning. It enables precise decisions: where to increase budget, which terms to cut, and which gaps in competitor coverage to exploit.',
+      recommendedImprovement: 'Focus budget on keywords with high commercial intent and manageable competition. Keywords with impression share below 40% should be assessed — increase bids, improve Quality Score, or reallocate to better-performing terms.',
+      evidence: [
+        { label: 'Keywords tracked', value: String(entries.length), type: 'count' as const },
+        ...entries.slice(0, 8).map((e: any) => ({
+          label: e.keyword,
+          value: [
+            e.impressionShare != null ? `${_pct(e.impressionShare)} share` : null,
+            e.topOfPageRate   != null ? `${_pct(e.topOfPageRate)} top-of-page` : null,
+          ].filter(Boolean).join(' · ') || 'No data',
+        })),
+        ...(entries.length > 8 ? [{ value: `+${entries.length - 8} more keywords` }] : []),
+        ...(withPressure.length > 0 ? [{
+          label: 'Highest competitor pressure',
+          value: `${withPressure[0].keyword} — ${withPressure[0].topComp?.domain} at ${_pct(withPressure[0].topComp?.value ?? 0)}`,
+        }] : []),
+      ],
+      technicalDetails: entries.map((e: any) => {
+        const cs = (e.competitorImpressionShare ?? []).map((c: any) => `${c.domain}:${_pct(c.value)}`).join(', ');
+        const ct = (e.competitorTopOfPageRate  ?? []).map((c: any) => `${c.domain}:${_pct(c.value)}`).join(', ');
+        return [
+          e.keyword,
+          `IS:${e.impressionShare != null ? _pct(e.impressionShare) : 'n/a'}`,
+          `ToP:${e.topOfPageRate  != null ? _pct(e.topOfPageRate)  : 'n/a'}`,
+          cs ? `CompIS:[${cs}]` : null,
+          ct ? `CompToP:[${ct}]` : null,
+        ].filter(Boolean).join(' | ');
+      }),
+    });
+  }
+
+  return insights;
+}
