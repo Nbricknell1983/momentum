@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import {
   Globe, MapPin, Search, Megaphone, Sparkles, Loader2, ChevronDown, ChevronRight,
   CheckCircle2, Clock, Zap, FileText, Layout, Type, Star, Check,
-  AlertTriangle, ListChecks, CalendarDays, Tag, TrendingUp, Eye,
+  AlertTriangle, ListChecks, CalendarDays, Tag, TrendingUp, Eye, Shield,
+  ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -292,6 +293,88 @@ function WebsiteWorkstreamOutput({ client }: { client: Client }) {
           )}
         </div>
       )}
+
+      {/* SEO Preservation Plan — only for takeover/rebuild clients */}
+      {ww.seoFoundations?.preservationPlan && (() => {
+        const pp = ww.seoFoundations!.preservationPlan!;
+        return (
+          <div className="border border-amber-200 dark:border-amber-800 rounded-lg overflow-hidden">
+            <button
+              className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-amber-50/50 dark:hover:bg-amber-950/20 transition-colors bg-amber-50/30 dark:bg-amber-950/10"
+              onClick={() => toggle('preservation')}
+            >
+              <div className="flex items-center gap-2">
+                <Shield className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="text-xs font-medium text-amber-800 dark:text-amber-200">SEO Migration Plan</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">TAKEOVER</span>
+              </div>
+              {openSection === 'preservation' ? <ChevronDown className="h-3.5 w-3.5 text-amber-500" /> : <ChevronRight className="h-3.5 w-3.5 text-amber-500" />}
+            </button>
+            {openSection === 'preservation' && (
+              <div className="border-t border-amber-200 dark:border-amber-800 px-3 py-3 space-y-3 bg-amber-50/20 dark:bg-amber-950/10">
+                {pp.seoRiskNote && (
+                  <div className="flex items-start gap-2 p-2 rounded bg-amber-100/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">{pp.seoRiskNote}</p>
+                  </div>
+                )}
+                {pp.preserveItems?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1.5">Preserve</p>
+                    <div className="space-y-1">
+                      {pp.preserveItems.map((item, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0 mt-0.5" />
+                          <span className="text-[11px] text-slate-600 dark:text-slate-400">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {pp.improveItems?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">Improve</p>
+                    <div className="space-y-1">
+                      {pp.improveItems.map((item, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <TrendingUp className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
+                          <span className="text-[11px] text-slate-600 dark:text-slate-400">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {pp.replaceItems?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-red-500 dark:text-red-400 mb-1.5">Replace</p>
+                    <div className="space-y-1">
+                      {pp.replaceItems.map((item, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <ArrowRight className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
+                          <span className="text-[11px] text-slate-600 dark:text-slate-400">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {pp.redirectsRequired?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">301 Redirects Required</p>
+                    <div className="space-y-1">
+                      {pp.redirectsRequired.map((item, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <ArrowRight className="h-3 w-3 text-slate-400 shrink-0 mt-0.5" />
+                          <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

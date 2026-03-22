@@ -2049,6 +2049,13 @@ export interface WebsiteWorkstream {
     secondaryKeywords: string[];
     schemaType: string;
     internalLinkingPlan: string[];
+    preservationPlan?: {
+      preserveItems: string[];
+      improveItems: string[];
+      replaceItems: string[];
+      redirectsRequired: string[];
+      seoRiskNote: string;
+    };
   };
   generatedAt?: string;
   deploymentStatus?: 'not_deployed' | 'preparing' | 'deployed';

@@ -1,0 +1,67 @@
+Yes — the client workspace needs to show the client’s current online presence and SEO baseline, especially if we are taking over or rebuilding an existing website.
+
+Problem:
+Right now the client page focuses on recommended scope and execution activation, but it does not clearly surface what digital presence already exists and what SEO/value needs to be preserved.
+
+This is risky.
+If a client already has pages, rankings, metadata, internal links, schema, or GBP-connected visibility, the system should not behave like we are starting from zero.
+
+Goal:
+Add a client-side “current presence / baseline” layer so execution is informed by what already exists, what is working, and what must be preserved during website/SEO/GBP work.
+
+Product rule:
+If we are taking over an existing website, the system must preserve SEO equity rather than accidentally destroying it.
+
+What I want:
+1. Add a “Current Visibility Baseline” (or similar) section to the client workspace
+2. Reuse lead-style presence intelligence where possible
+3. Surface the existing digital footprint before or alongside execution recommendations
+4. Explicitly identify SEO-preservation risks for website rebuild/takeover clients
+
+This section should show:
+
+Website baseline
+- current website exists or not
+- HTTPS / sitemap / schema presence
+- detected service/location pages
+- technical or conversion issues
+
+SEO preservation baseline
+- pages/URLs likely worth preserving
+- existing metadata/schema worth keeping
+- current search/ranking signals if known
+- pages that may require redirects if the website is rebuilt
+- existing authority/visibility signals that should not be lost
+
+GBP baseline
+- linked GBP present or not
+- review/rating state
+- profile completeness/opportunity
+
+Search visibility baseline
+- what visibility is already observed
+- what appears weak
+- what should be preserved vs improved
+
+Execution impact
+- what can be improved immediately
+- what must be protected during rebuild/migration
+
+Implementation guidance:
+1. Reuse existing presence/evidence intelligence from the lead side wherever possible
+2. Add a client-facing baseline layer near the top of the center column
+3. For website takeover clients, explicitly distinguish:
+- preserve
+- improve
+- replace
+4. Ensure website execution agents can use this baseline when generating website strategy/brief/page structure
+
+Important:
+The client workspace should not imply that everything starts from zero.
+It should show what the client already has online and what we must not lose.
+
+Success criteria:
+- client workspace clearly shows existing digital presence
+- website takeover projects surface SEO-preservation considerations
+- agents can execute with awareness of current assets, not just desired future scope
+- the system feels safer and more strategically aware when rebuilding a live site

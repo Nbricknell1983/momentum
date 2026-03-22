@@ -35,6 +35,7 @@ import { useDispatch } from 'react-redux';
 import { updateClient } from '@/store/index';
 import { useToast } from '@/hooks/use-toast';
 import { useClientAutoFire } from '@/hooks/useClientAutoFire';
+import ClientVisibilityBaseline from '@/components/ClientVisibilityBaseline';
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = {
@@ -979,6 +980,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
 
         {/* Client Overview Strip — health, channels, key action — shown for ALL clients */}
         <ClientOverviewStrip client={client} />
+
+        {/* Current Digital Presence — existing website, SEO, GBP baseline + SEO preservation risks */}
+        <ClientVisibilityBaseline client={client} />
 
         {/* Delivery Intelligence — shown for ALL clients; adapts between activated and non-activated */}
         <ClientExecutionIntelligence client={client} />

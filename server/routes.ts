@@ -10375,6 +10375,7 @@ Rules:
       const industry = si.industry || client.businessProfile?.industry || 'local service business';
       const website = si.website || client.website || '';
       const address = client.address || '';
+      const isTakeover = !!website;
 
       const strategyContext = si.strategyIntelligence
         ? `Strategy positioning: ${JSON.stringify(si.strategyIntelligence).slice(0, 800)}`
@@ -10386,16 +10387,41 @@ Rules:
         ? `Growth prescription: ${JSON.stringify(si.growthPrescription).slice(0, 600)}`
         : '';
 
+      // Existing presence context for preservation-aware brief generation
+      const websiteEngineCtx = client.websiteEngine
+        ? `Existing website analysis: Health=${client.websiteEngine.healthScore}/100 (${client.websiteEngine.healthLabel}). ${client.websiteEngine.summary}. Top issues: ${(client.websiteEngine.tasks || []).filter((t: any) => t.priority === 1).map((t: any) => t.task).slice(0, 3).join('; ')}.`
+        : '';
+      const seoEngineCtx = client.seoEngine
+        ? `Existing SEO signals: Visibility=${client.seoEngine.visibilityScore}/100. Current keyword targets: ${(client.seoEngine.keywordTargets || []).slice(0, 6).join(', ')}. ${client.seoEngine.summary}`
+        : '';
+      const scopeAuditCtx = client.scopeAudit
+        ? `Scope audit: ${client.scopeAudit.auditSummary}. Website readiness: ${client.scopeAudit.channelReadiness?.website?.note || ''}`
+        : '';
+
+      const preservationNote = isTakeover
+        ? `IMPORTANT — This is a WEBSITE TAKEOVER/REBUILD project. The client has an existing live site at ${website}.
+You must factor in SEO preservation. The brief must include guidance to:
+- Preserve existing URL structure where possible (to protect backlink equity)
+- Migrate/replicate any existing page metadata and schema
+- Ensure all existing service and location pages are accounted for in the new page structure
+- Flag any pages that will need 301 redirects if URLs change
+- Carry forward any keyword signals the existing site currently targets
+${websiteEngineCtx}
+${seoEngineCtx}`
+        : '';
+
       const prompt = `You are a senior digital strategist generating a complete website delivery brief for a client.
 
 Business: ${businessName}
 Industry: ${industry}
 Location: ${address}
-Existing website: ${website || 'none'}
+Existing website: ${website || 'none — new build from scratch'}
 
+${preservationNote}
 ${strategyContext}
 ${prepContext}
 ${prescriptionContext}
+${scopeAuditCtx}
 
 Generate a high-converting website delivery workstream in this exact JSON format:
 
@@ -10456,7 +10482,14 @@ Generate a high-converting website delivery workstream in this exact JSON format
     "primaryKeyword": "main target keyword",
     "secondaryKeywords": ["kw1", "kw2", "kw3"],
     "schemaType": "LocalBusiness schema type (e.g., Plumber, ElectricalContractor)",
-    "internalLinkingPlan": ["description of linking strategy"]
+    "internalLinkingPlan": ["description of linking strategy"]${isTakeover ? `,
+    "preservationPlan": {
+      "preserveItems": ["URL patterns / pages to preserve unchanged", "schema / metadata worth carrying forward", "keyword signals currently ranking"],
+      "improveItems": ["elements to redesign but keep in concept (e.g. existing service structure)"],
+      "replaceItems": ["elements to replace entirely (e.g. outdated design, broken pages)"],
+      "redirectsRequired": ["old-url → new-url pairs that will need 301 redirects if structure changes"],
+      "seoRiskNote": "brief note on the main SEO risk during migration and how to mitigate it"
+    }` : ''}
   }
 }
 
@@ -10464,7 +10497,9 @@ Rules:
 - pageStructure must include 1 homepage + 2-4 service/location pages specific to this business
 - homepageContent must be real, specific copy — not placeholders
 - All content must be conversion-focused, mobile-first, and locally relevant
-- trustSignals must be specific and believable (not generic)
+- trustSignals must be specific and believable (not generic)${isTakeover ? `
+- preservationPlan is REQUIRED for this takeover project — it must contain real, specific items not generic placeholders
+- redirectsRequired should list specific pages or URL patterns that will need redirects` : ''}
 - Output valid JSON only, no markdown`;
 
       const completion = await openai.chat.completions.create({
