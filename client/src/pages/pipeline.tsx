@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RootState, updateLeadStage, addLead, updateLead, setStageFilter, setRegionFilter, setAreaFilter, addClient, archiveLead } from '@/store';
-import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS, Client, DEFAULT_CLIENT_FIELDS, calculateNextTouchDate } from '@/lib/types';
+import { Stage, STAGE_ORDER, STAGE_LABELS, Lead, DEFAULT_NURTURE_FIELDS, Client, DEFAULT_CLIENT_FIELDS, calculateNextTouchDate, WorkstreamScope, ActivationPlan, SourceIntelligence } from '@/lib/types';
+import ConversionModal from '@/components/ConversionModal';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, isAreaRequiredForRegion, validateTerritorySelection } from '@/lib/territoryConfig';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import LeadFocusView from '@/components/LeadFocusView';
@@ -45,6 +46,7 @@ export default function PipelinePage() {
   const [showArchivedWarning, setShowArchivedWarning] = useState(false);
   const [matchingArchivedLead, setMatchingArchivedLead] = useState<Lead | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingConversionLead, setPendingConversionLead] = useState<Lead | null>(null);
 
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -103,77 +105,12 @@ export default function PipelinePage() {
         const leadId = active.id as string;
         const lead = leads.find(l => l.id === leadId);
         
-        // Handle conversion to client when moved to "won" stage
+        // Handle conversion to client when moved to "won" stage — show modal first
         if (stage === 'won' && lead && orgId && authReady) {
-          try {
-            // Create client from lead data - spread defaults first, then override with lead values
-            const clientData: Omit<Client, 'id'> = {
-              ...DEFAULT_CLIENT_FIELDS,
-              userId: lead.userId,
-              businessName: lead.companyName,
-              primaryContactName: lead.contactName || '',
-              phone: lead.phone,
-              email: lead.email,
-              address: lead.address,
-              regionId: lead.regionId,
-              regionName: lead.regionName,
-              areaId: lead.areaId,
-              areaName: lead.areaName,
-              territoryKey: lead.territoryKey,
-              ownerId: lead.userId,
-              sourceType: 'deal',
-              sourceDealId: lead.id,
-              totalMRR: lead.mrr || 0,
-              notes: lead.notes,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              archived: false,
-            };
-            
-            const savedClient = await createClientInFirestore(orgId, clientData, authReady);
-            dispatch(addClient(savedClient));
-            
-            // Create client history entry
-            await createClientHistoryEntry(orgId, savedClient.id, {
-              clientId: savedClient.id,
-              type: 'converted',
-              summary: `Converted from deal: ${lead.companyName}`,
-              userId: authUser?.uid,
-              metadata: { sourceDealId: lead.id, sourceCompanyName: lead.companyName },
-              createdAt: new Date(),
-            }, authReady);
-            
-            // Archive the lead
-            await updateLeadInFirestore(orgId, leadId, { stage: 'won', archived: true, updatedAt: new Date() }, authReady);
-            dispatch(archiveLead(leadId));
-            dispatch(updateLeadStage({ leadId, stage: 'won' }));
-            
-            toast({
-              title: "Deal Won!",
-              description: (
-                <span>
-                  {lead.companyName} is now a client.{' '}
-                  <a 
-                    href={`/clients?openId=${savedClient.id}`} 
-                    className="underline font-medium"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setLocation(`/clients?openId=${savedClient.id}`);
-                    }}
-                  >
-                    View Client
-                  </a>
-                </span>
-              ),
-            });
-          } catch (error) {
-            console.error('Error converting lead to client:', error);
-            toast({
-              title: "Error",
-              description: "Failed to convert deal to client. Please try again.",
-              variant: "destructive",
-            });
-          }
+          // Optimistically move card to won column in UI
+          dispatch(updateLeadStage({ leadId, stage: 'won' }));
+          // Open the conversion modal — actual creation happens on confirm
+          setPendingConversionLead(lead);
         } else {
           // Normal stage update
           dispatch(updateLeadStage({ leadId, stage }));
@@ -217,6 +154,110 @@ export default function PipelinePage() {
           }
         }
       }
+    }
+  };
+
+  const handleConversionConfirm = async (mrr: number, selectedScope: WorkstreamScope[]) => {
+    if (!pendingConversionLead || !orgId || !authReady) return;
+    const lead = pendingConversionLead;
+
+    try {
+      const now = new Date();
+      const nowStr = now.toISOString();
+
+      // Build source intelligence from lead data
+      const sourceIntelligence: SourceIntelligence = {
+        prepCallPack: lead.prepCallPack,
+        strategyIntelligence: lead.strategyIntelligence,
+        growthPrescription: lead.growthPrescription,
+        aiGrowthPlan: lead.aiGrowthPlan,
+        industry: lead.industry,
+        website: lead.website,
+        capturedAt: nowStr,
+      };
+
+      // Build activation plan for selected scope
+      const activationPlan: ActivationPlan | undefined = selectedScope.length > 0 ? {
+        selectedScope,
+        status: 'active',
+        activatedAt: nowStr,
+        workstreams: Object.fromEntries(
+          selectedScope.map(s => [s, { status: 'queued', activatedAt: nowStr, updatedAt: nowStr }])
+        ) as ActivationPlan['workstreams'],
+      } : undefined;
+
+      const clientData: Omit<Client, 'id'> = {
+        ...DEFAULT_CLIENT_FIELDS,
+        userId: lead.userId,
+        businessName: lead.companyName,
+        primaryContactName: lead.contactName || '',
+        phone: lead.phone,
+        email: lead.email,
+        website: lead.website,
+        address: lead.address,
+        regionId: lead.regionId,
+        regionName: lead.regionName,
+        areaId: lead.areaId,
+        areaName: lead.areaName,
+        territoryKey: lead.territoryKey,
+        ownerId: lead.userId,
+        sourceType: 'deal',
+        sourceDealId: lead.id,
+        totalMRR: mrr,
+        notes: lead.notes,
+        createdAt: now,
+        updatedAt: now,
+        archived: false,
+        sourceIntelligence,
+        ...(activationPlan ? { activationPlan } : {}),
+      };
+
+      const savedClient = await createClientInFirestore(orgId, clientData, authReady);
+      dispatch(addClient(savedClient));
+
+      await createClientHistoryEntry(orgId, savedClient.id, {
+        clientId: savedClient.id,
+        type: 'converted',
+        summary: `Converted from deal: ${lead.companyName}${selectedScope.length > 0 ? ` · Scope: ${selectedScope.join(', ')}` : ''}`,
+        userId: authUser?.uid,
+        metadata: {
+          sourceDealId: lead.id,
+          sourceCompanyName: lead.companyName,
+          selectedScope,
+        },
+        createdAt: now,
+      }, authReady);
+
+      await updateLeadInFirestore(orgId, lead.id, { stage: 'won', archived: true, updatedAt: now }, authReady);
+      dispatch(archiveLead(lead.id));
+
+      setPendingConversionLead(null);
+
+      toast({
+        title: '🏆 Client activated!',
+        description: (
+          <span>
+            {lead.companyName} is now a client.{' '}
+            <a
+              href={`/clients?openId=${savedClient.id}`}
+              className="underline font-medium"
+              onClick={(e) => {
+                e.preventDefault();
+                setLocation(`/clients?openId=${savedClient.id}`);
+              }}
+            >
+              Open client workspace
+            </a>
+          </span>
+        ),
+      });
+    } catch (error) {
+      console.error('Error converting lead to client:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to activate client. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -442,6 +483,21 @@ export default function PipelinePage() {
           onNavigate={handleFocusNavigate}
           hasPrev={focusedLeadIndex > 0}
           hasNext={focusedLeadIndex < totalVisibleLeads - 1}
+        />
+      )}
+
+      {pendingConversionLead && (
+        <ConversionModal
+          lead={pendingConversionLead}
+          open={!!pendingConversionLead}
+          onClose={() => {
+            // Revert the optimistic stage update if user cancels
+            if (pendingConversionLead) {
+              dispatch(updateLeadStage({ leadId: pendingConversionLead.id, stage: 'prospect' }));
+            }
+            setPendingConversionLead(null);
+          }}
+          onConfirm={handleConversionConfirm}
         />
       )}
 

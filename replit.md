@@ -42,6 +42,14 @@ Preferred communication style: Simple, everyday language.
 - **Evidence Fields**: Includes detailed website, GBP, social, and paid search data.
 - **Delta Tracking**: `computeEvidenceDelta` tracks meaningful changes between evidence bundles, saved to `leads/{leadId}.evidenceDelta`.
 
+### Lead → Client Execution System
+- **Conversion Modal**: When a lead is dragged to "Won" in the pipeline, a `ConversionModal` intercepts the drop. Shows lead intelligence highlights (strategy intel, prep pack, growth prescription). Lets user select delivery scope: Website, GBP/Local, SEO, Ads. Carries all lead intelligence into `sourceIntelligence` on the client record. Creates an `activationPlan` with per-workstream status tracking.
+- **`ActivationPlan` / `SourceIntelligence`** fields on Client (Firestore): `selectedScope`, `status`, `activatedAt`, per-workstream `WorkstreamState`, `websiteWorkstream`, `gbpWorkstream`. Source intelligence captures: `prepCallPack`, `strategyIntelligence`, `growthPrescription`, `aiGrowthPlan`, industry, website.
+- **Website Workstream** (`POST /api/clients/:clientId/website-workstream`): AI generates conversion-focused brief (positioning, UVP, CTA, trust signals), page structure (homepage + service/location pages with SEO metadata), homepage content (hero, services, trust section, FAQ, local section), and SEO foundations. Stored on `client.activationPlan.websiteWorkstream`.
+- **GBP Workstream** (`POST /api/clients/:clientId/gbp-workstream`): AI generates 8-12 optimisation tasks (with priority, category, action steps, timeline, impact), 8-week content calendar, category recommendations, and review strategy. Stored on `client.activationPlan.gbpWorkstream`.
+- **`ClientActivationPanel`**: Shown at the top of `ClientGrowthIntelligencePanel` when `client.activationPlan` exists. Displays active workstreams with status pills, Generate buttons per workstream, and collapsible output sections (brief, page structure, homepage content, GBP tasks, content calendar, category recommendations, review strategy). GBP task completion is tracked via checkboxes and persisted to Firestore.
+- **`PATCH /api/clients/:clientId/activation-plan`**: Generic activation plan update endpoint.
+
 ### Core Features
 - **Sales Operating System**: Pipeline Management (Kanban, Lead Focus View), Conversation Intelligence, Lead & Client Management, Territory System, Nurture System, Activity Tracking, and Momentum Scoring.
 - **AI Sales Engine**: 5-section AI layer powered by GPT-4o-mini for stage-aware defaults, conversation intelligence, insights, and email generation.

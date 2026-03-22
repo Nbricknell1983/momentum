@@ -1,0 +1,107 @@
+I want to extend Momentum so that when a lead converts and goes ahead with a website project, the system can move from lead intelligence into active client execution.
+
+Goal:
+When a lead becomes a client, Momentum should not stop at analysis. It should activate an execution workflow where agents proactively work on:
+1. building a high-converting website
+2. hosting/deploying that website to Firebase
+3. actively improving GBP and local visibility over time
+
+Core product direction:
+This should be a client execution mode, not just a lead-analysis mode.
+
+What I want:
+1. Add a clear lead → client conversion workflow
+2. Preserve all lead intelligence/history during conversion
+3. If website scope is selected, generate a high-converting website delivery workflow
+4. If GBP / local visibility scope is selected, generate an active GBP optimisation workflow
+5. Use Firebase Hosting as the deployment target for generated websites
+6. Support ongoing proactive agent work after conversion, not just one-time output
+
+Key product behaviours:
+
+A. Lead → Client conversion
+When a lead is converted:
+- create or update the client record
+- carry over:
+- strategy intelligence
+- prep pack
+- presence snapshot
+- opportunities / gaps
+- recommended strategy
+- relevant deal history
+- mark selected scope/services for delivery
+
+B. Website execution workflow
+If website scope is selected:
+- generate a website brief
+- generate conversion-focused messaging
+- generate sitemap / page structure
+- generate homepage + service pages + location pages where relevant
+- include:
+- CTA structure
+- trust/review sections
+- metadata
+- schema recommendations
+- internal linking suggestions
+- page goals
+- produce build-ready output suitable for deployment
+- support deployment to Firebase Hosting
+
+C. GBP / local visibility workflow
+If GBP scope is selected:
+- move from GBP audit mode into active optimisation mode
+- generate tasks/recommendations for:
+- category optimisation
+- business description improvements
+- review/reputation improvements
+- services/products completeness
+- posting/content suggestions
+- local visibility expansion opportunities
+- keep this as an active ongoing improvement workflow, not a one-time analysis
+
+D. Proactive client execution
+After conversion, agents should continue working proactively via queued jobs/tasks.
+This should include:
+- website improvement tasks
+- SEO/content expansion tasks
+- GBP optimisation tasks
+- visibility monitoring / follow-up opportunities
+
+Recommended architecture:
+1. Add a client activation / execution plan flow triggered on conversion
+2. Create Firestore-backed job records for execution workstreams
+3. Support at least two workstreams:
+- Website Workstream
+- GBP / Local Visibility Workstream
+4. Track status for:
+- queued
+- in progress
+- ready for review
+- deployed
+- optimisation ongoing
+
+Suggested implementation areas to identify:
+1. where lead → client conversion should live
+2. how to preserve and map lead intelligence into the client record
+3. how to represent selected service scope for execution
+4. where generated website projects/files should live
+5. how Firebase Hosting deployment should be structured
+6. how to queue proactive agent work after conversion
+
+Important output standard:
+The website should be high-converting, not just visually acceptable.
+It should be built around:
+- clear offer positioning
+- strong CTA flow
+- local trust
+- mobile-first conversion
+- SEO structure
+- GBP support
+- lead generation
+
+Success criteria:
+- a converted lead can become an active client with execution work immediately created
+- the system can generate a website delivery workflow
+- the system can deploy or prepare websites for Firebase Hosting
+- GBP optimisation becomes an active ongoing workstream
+- agents continue working proactively to improve visibility after the sale

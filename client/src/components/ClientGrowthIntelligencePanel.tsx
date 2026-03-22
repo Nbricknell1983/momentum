@@ -7,6 +7,7 @@ import {
   ThumbsUp, Building2, Unlink, Target, Radio, Image as ImageIcon,
 } from 'lucide-react';
 import GrowthOperatorPanel from './GrowthOperatorPanel';
+import ClientActivationPanel from './ClientActivationPanel';
 import WebsiteEnginePanel from './WebsiteEnginePanel';
 import SEOEnginePanel from './SEOEnginePanel';
 import GBPEnginePanel from './GBPEnginePanel';
@@ -968,6 +969,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
+
+        {/* Client Activation Plan — shown when lead was converted with scope */}
+        {client.activationPlan && <ClientActivationPanel client={client} />}
 
         {/* AI Growth Operator — Phase 1 Panel */}
         <GrowthOperatorPanel client={client} />

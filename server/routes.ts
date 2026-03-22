@@ -10351,6 +10351,294 @@ Rules:
     }
   });
 
+  // ── Website Workstream ──────────────────────────────────────────────────────
+
+  app.post('/api/clients/:clientId/website-workstream', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const client = clientDoc.data() as any;
+
+      const si = client.sourceIntelligence || {};
+      const businessName = client.businessName || 'this business';
+      const industry = si.industry || client.businessProfile?.industry || 'local service business';
+      const website = si.website || client.website || '';
+      const address = client.address || '';
+
+      const strategyContext = si.strategyIntelligence
+        ? `Strategy positioning: ${JSON.stringify(si.strategyIntelligence).slice(0, 800)}`
+        : '';
+      const prepContext = si.prepCallPack
+        ? `Prep intelligence: ${JSON.stringify(si.prepCallPack).slice(0, 600)}`
+        : '';
+      const prescriptionContext = si.growthPrescription
+        ? `Growth prescription: ${JSON.stringify(si.growthPrescription).slice(0, 600)}`
+        : '';
+
+      const prompt = `You are a senior digital strategist generating a complete website delivery brief for a client.
+
+Business: ${businessName}
+Industry: ${industry}
+Location: ${address}
+Existing website: ${website || 'none'}
+
+${strategyContext}
+${prepContext}
+${prescriptionContext}
+
+Generate a high-converting website delivery workstream in this exact JSON format:
+
+{
+  "brief": {
+    "positioning": "one-sentence positioning statement",
+    "targetAudience": "specific description of who this site must convert",
+    "coreOffer": "primary service/offer to lead with",
+    "primaryCTA": "main call-to-action text and goal",
+    "trustSignals": ["signal1", "signal2", "signal3"],
+    "toneOfVoice": "tone guidance (e.g., professional but approachable, direct, local-focused)",
+    "uniqueValueProposition": "what makes this business the obvious choice"
+  },
+  "pageStructure": [
+    {
+      "pageName": "Home",
+      "pageType": "homepage",
+      "primaryKeyword": "main keyword",
+      "goalStatement": "what this page must achieve",
+      "keySections": ["Hero + CTA", "Services overview", "Trust/reviews", "Service areas", "FAQ", "Contact"],
+      "metaTitle": "SEO title tag (55 chars max)",
+      "metaDescription": "SEO meta description (155 chars max)"
+    },
+    {
+      "pageName": "Service page name",
+      "pageType": "service",
+      "primaryKeyword": "service keyword",
+      "goalStatement": "convert visitors researching this service",
+      "keySections": ["Service hero", "What's included", "Benefits", "Process", "Reviews", "CTA"],
+      "metaTitle": "Service page title",
+      "metaDescription": "Service meta description"
+    }
+  ],
+  "homepageContent": {
+    "hero": {
+      "headline": "primary headline (benefit-focused, location-aware)",
+      "subheadline": "supporting statement that reinforces the offer",
+      "cta": "Call to action text",
+      "supportingPoints": ["point1", "point2", "point3"]
+    },
+    "services": [
+      { "title": "Service name", "description": "2-sentence description focused on customer outcome", "cta": "CTA text" }
+    ],
+    "trustSection": {
+      "reviewSnippets": ["review snippet 1", "review snippet 2"],
+      "credentialPoints": ["Years in business", "Licences/certifications", "Awards/recognition"]
+    },
+    "faq": [
+      { "question": "Common customer question", "answer": "Clear, concise answer" }
+    ],
+    "localSection": {
+      "headline": "Serving [location] and surrounds",
+      "suburbs": ["suburb1", "suburb2", "suburb3"],
+      "localClaim": "local trust statement"
+    }
+  },
+  "seoFoundations": {
+    "primaryKeyword": "main target keyword",
+    "secondaryKeywords": ["kw1", "kw2", "kw3"],
+    "schemaType": "LocalBusiness schema type (e.g., Plumber, ElectricalContractor)",
+    "internalLinkingPlan": ["description of linking strategy"]
+  }
+}
+
+Rules:
+- pageStructure must include 1 homepage + 2-4 service/location pages specific to this business
+- homepageContent must be real, specific copy — not placeholders
+- All content must be conversion-focused, mobile-first, and locally relevant
+- trustSignals must be specific and believable (not generic)
+- Output valid JSON only, no markdown`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 3500,
+        response_format: { type: 'json_object' },
+      });
+
+      const raw = completion.choices[0]?.message?.content || '{}';
+      let workstream: any;
+      try {
+        workstream = JSON.parse(raw);
+      } catch {
+        workstream = {};
+      }
+
+      workstream.generatedAt = new Date().toISOString();
+      workstream.deploymentStatus = 'not_deployed';
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'activationPlan.websiteWorkstream': workstream,
+        'activationPlan.workstreams.website.status': 'ready_for_review',
+        'activationPlan.workstreams.website.updatedAt': new Date().toISOString(),
+        'activationPlan.status': 'in_progress',
+        updatedAt: new Date(),
+      });
+
+      res.json({ success: true, workstream });
+    } catch (err: any) {
+      console.error('[clients/website-workstream]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GBP / Local Visibility Workstream ───────────────────────────────────────
+
+  app.post('/api/clients/:clientId/gbp-workstream', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const client = clientDoc.data() as any;
+
+      const si = client.sourceIntelligence || {};
+      const businessName = client.businessName || 'this business';
+      const industry = si.industry || client.businessProfile?.industry || 'local service business';
+      const address = client.address || '';
+
+      const gbpEngine = client.gbpEngine ? `Current GBP audit: ${JSON.stringify(client.gbpEngine).slice(0, 800)}` : '';
+      const prescriptionContext = si.growthPrescription
+        ? `Growth prescription: ${JSON.stringify(si.growthPrescription).slice(0, 600)}`
+        : '';
+      const strategyContext = si.strategyIntelligence
+        ? `Strategy intelligence: ${JSON.stringify(si.strategyIntelligence).slice(0, 500)}`
+        : '';
+
+      const prompt = `You are a Google Business Profile specialist generating an active optimisation workstream for a client.
+
+Business: ${businessName}
+Industry: ${industry}
+Location: ${address}
+
+${gbpEngine}
+${prescriptionContext}
+${strategyContext}
+
+Generate a comprehensive, ongoing GBP optimisation workstream in this exact JSON format:
+
+{
+  "tasks": [
+    {
+      "id": "task-001",
+      "priority": "high",
+      "category": "profile",
+      "title": "Task title",
+      "description": "What needs to be done and why",
+      "actionSteps": ["step 1", "step 2", "step 3"],
+      "timeline": "7_days",
+      "estimatedImpact": "Specific expected improvement"
+    }
+  ],
+  "contentCalendar": [
+    {
+      "week": 1,
+      "postType": "update",
+      "topic": "Post topic relevant to business",
+      "cta": "Call to action text",
+      "hashtags": ["#relevant", "#local"]
+    }
+  ],
+  "categoryRecommendations": {
+    "current": ["current primary category"],
+    "recommended": ["Primary Category", "Secondary Category 1", "Secondary Category 2"],
+    "rationale": "Why these categories improve Maps Pack ranking"
+  },
+  "reviewStrategy": {
+    "askScript": "Script for asking customers for reviews (2-3 sentences, natural)",
+    "responseTemplate": "Template for responding to positive reviews",
+    "targetMonthly": 4
+  }
+}
+
+Rules for tasks:
+- Include 8-12 tasks across all categories: profile, content, reviews, services, photos, visibility
+- High priority tasks must have 7_days or 30_days timelines
+- At least 3 tasks must be "ongoing" (repeating monthly activities)
+- Action steps must be specific and executable, not generic
+- estimatedImpact must be specific (e.g. "Improve Maps Pack appearance in search results", "Increase review velocity by 2x")
+
+Rules for contentCalendar:
+- Include 8 weeks of posts with variety (update, offer, photo, event types)
+- Topics must be specific to the business type and location
+- Each post must have a clear local angle
+
+Output valid JSON only, no markdown.`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 3000,
+        response_format: { type: 'json_object' },
+      });
+
+      const raw = completion.choices[0]?.message?.content || '{}';
+      let workstream: any;
+      try {
+        workstream = JSON.parse(raw);
+      } catch {
+        workstream = {};
+      }
+
+      workstream.generatedAt = new Date().toISOString();
+
+      if (workstream.tasks && Array.isArray(workstream.tasks)) {
+        workstream.tasks = workstream.tasks.map((t: any, i: number) => ({
+          ...t,
+          id: t.id || `task-${String(i + 1).padStart(3, '0')}`,
+          done: false,
+        }));
+      }
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'activationPlan.gbpWorkstream': workstream,
+        'activationPlan.workstreams.gbp.status': 'ready_for_review',
+        'activationPlan.workstreams.gbp.updatedAt': new Date().toISOString(),
+        'activationPlan.status': 'in_progress',
+        updatedAt: new Date(),
+      });
+
+      res.json({ success: true, workstream });
+    } catch (err: any) {
+      console.error('[clients/gbp-workstream]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Activate workstream manually ──────────────────────────────────────────
+
+  app.patch('/api/clients/:clientId/activation-plan', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, updates } = req.body;
+      if (!orgId || !updates) return res.status(400).json({ error: 'orgId and updates required' });
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        ...updates,
+        updatedAt: new Date(),
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[clients/activation-plan]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/clients/:clientId/ai-actions', async (req, res) => {
     try {
       if (!firestore) return res.status(503).json({ error: 'Firestore not available' });

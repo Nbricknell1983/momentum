@@ -1953,6 +1953,124 @@ export interface Client {
   // Phase 5 — Playbook & Learning
   appliedPlays?: AppliedPlay[];
   learningInsight?: LearningInsight;
+  // Lead → Client execution system
+  sourceIntelligence?: SourceIntelligence;
+  activationPlan?: ActivationPlan;
+}
+
+// ── Lead → Client Execution System ─────────────────────────────────────────
+
+export interface SourceIntelligence {
+  prepCallPack?: any;
+  strategyIntelligence?: StrategyIntelligence;
+  growthPrescription?: GrowthPrescription;
+  aiGrowthPlan?: AiGrowthPlanOutput;
+  industry?: string;
+  website?: string;
+  capturedAt: string;
+}
+
+export type WorkstreamScope = 'website' | 'gbp' | 'seo' | 'ads';
+
+export type WorkstreamStatus =
+  | 'queued'
+  | 'generating'
+  | 'ready_for_review'
+  | 'approved'
+  | 'live'
+  | 'optimising';
+
+export interface WorkstreamState {
+  status: WorkstreamStatus;
+  activatedAt: string;
+  updatedAt: string;
+  note?: string;
+}
+
+export interface WebsitePageSpec {
+  pageName: string;
+  pageType: 'homepage' | 'service' | 'location' | 'about' | 'contact';
+  primaryKeyword: string;
+  goalStatement: string;
+  keySections: string[];
+  metaTitle: string;
+  metaDescription: string;
+}
+
+export interface WebsiteWorkstream {
+  brief?: {
+    positioning: string;
+    targetAudience: string;
+    coreOffer: string;
+    primaryCTA: string;
+    trustSignals: string[];
+    toneOfVoice: string;
+    uniqueValueProposition: string;
+  };
+  pageStructure?: WebsitePageSpec[];
+  homepageContent?: {
+    hero: { headline: string; subheadline: string; cta: string; supportingPoints: string[] };
+    services: { title: string; description: string; cta: string }[];
+    trustSection: { reviewSnippets: string[]; credentialPoints: string[] };
+    faq: { question: string; answer: string }[];
+    localSection: { headline: string; suburbs: string[]; localClaim: string };
+  };
+  seoFoundations?: {
+    primaryKeyword: string;
+    secondaryKeywords: string[];
+    schemaType: string;
+    internalLinkingPlan: string[];
+  };
+  generatedAt?: string;
+  deploymentStatus?: 'not_deployed' | 'preparing' | 'deployed';
+}
+
+export interface GBPTask {
+  id: string;
+  priority: 'high' | 'medium' | 'low';
+  category: 'profile' | 'content' | 'reviews' | 'services' | 'photos' | 'visibility';
+  title: string;
+  description: string;
+  actionSteps: string[];
+  timeline: '7_days' | '30_days' | '60_days' | '90_days' | 'ongoing';
+  estimatedImpact: string;
+  done?: boolean;
+}
+
+export interface GBPWorkstream {
+  tasks?: GBPTask[];
+  contentCalendar?: {
+    week: number;
+    postType: 'update' | 'offer' | 'event' | 'photo' | 'product';
+    topic: string;
+    cta: string;
+    hashtags: string[];
+  }[];
+  categoryRecommendations?: {
+    current?: string[];
+    recommended: string[];
+    rationale: string;
+  };
+  reviewStrategy?: {
+    askScript: string;
+    responseTemplate: string;
+    targetMonthly: number;
+  };
+  generatedAt?: string;
+}
+
+export interface ActivationPlan {
+  selectedScope: WorkstreamScope[];
+  status: 'active' | 'in_progress' | 'review' | 'live';
+  activatedAt: string;
+  workstreams: {
+    website?: WorkstreamState;
+    gbp?: WorkstreamState;
+    seo?: WorkstreamState;
+    ads?: WorkstreamState;
+  };
+  websiteWorkstream?: WebsiteWorkstream;
+  gbpWorkstream?: GBPWorkstream;
 }
 
 export type AutomationMode = 'assisted' | 'supervised' | 'autonomous';
