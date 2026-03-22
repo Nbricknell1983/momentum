@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import OpenAI from "openai";
 import { firestore, bucket, isFirebaseAdminReady } from "./firebase";
-import { crawlWebsite } from "./strategyEngine";
+import { crawlWebsite, clearCrawlCache } from "./strategyEngine";
 import { registerAiActionRoutes } from "./aiActionRoutes";
 import multer from "multer";
 import fs from "fs";
@@ -5560,6 +5560,8 @@ Generate realistic prospect suggestions based on common business patterns in the
         return res.status(400).json({ error: "Website URL is required" });
       }
 
+      // Always clear the crawl cache for this URL so re-runs get fresh sitemap detection
+      clearCrawlCache(websiteUrl);
       const crawlData = await crawlWebsite(websiteUrl);
 
       if (!crawlData.success) {
@@ -5659,6 +5661,7 @@ Rules:
           conversionGaps: crawlData.conversionGaps || [],
           hasSchema: crawlData.hasSchema,
           hasSitemap: crawlData.hasSitemap,
+          sitemapUrl: crawlData.sitemapUrl || null,
           wordCount: crawlData.wordCount,
           serviceKeywords: crawlData.serviceKeywords,
           locationKeywords: crawlData.locationKeywords,
@@ -7863,6 +7866,7 @@ Return JSON:
             conversionGaps: crawl.conversionGaps || [],
             hasSchema: crawl.hasSchema,
             hasSitemap: crawl.hasSitemap,
+            sitemapUrl: crawl.sitemapUrl || null,
             wordCount: crawl.wordCount,
             serviceKeywords: crawl.serviceKeywords,
             locationKeywords: crawl.locationKeywords,

@@ -15,6 +15,7 @@ export interface CrawlResult {
   navLabels: string[];
   hasHttps: boolean;
   hasSitemap: boolean;
+  sitemapUrl?: string;       // the URL where a valid sitemap was actually found
   serviceKeywords: string[];
   locationKeywords: string[];
   images: { total: number; withAlt: number; withoutAlt: number };
@@ -102,6 +103,7 @@ export interface EvidenceBundle {
     conversionGaps: string[];
     hasSchema: boolean;
     hasSitemap: boolean;
+    sitemapUrl?: string | null;
     wordCount: number;
     serviceKeywords: string[];
     locationKeywords: string[];
@@ -407,16 +409,67 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     result.locationPageUrls = locationPageUrls;
     result.conversionGaps = detectConversionGaps($, result);
 
+    // ── Sitemap detection — robots.txt + multi-path + body-sniffing ─────────
+    // Never rely solely on content-type — servers frequently serve sitemaps as
+    // text/plain or with no content-type at all. Read the body to confirm.
     try {
-      const sitemapUrl = new URL('/sitemap.xml', normalizedUrl).href;
-      const sitemapRes = await fetch(sitemapUrl, {
-        signal: AbortSignal.timeout(5000),
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
-      });
-      result.hasSitemap = sitemapRes.ok && (sitemapRes.headers.get('content-type')?.includes('xml') ?? false);
-    } catch {
-      result.hasSitemap = false;
-    }
+      const origin = new URL(normalizedUrl).origin;
+
+      // Step 1: parse robots.txt for declared Sitemap: entries
+      const robotsDeclaredUrls: string[] = [];
+      try {
+        const robotsRes = await fetch(`${origin}/robots.txt`, {
+          signal: AbortSignal.timeout(4000),
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
+          redirect: 'follow',
+        });
+        if (robotsRes.ok) {
+          const robotsText = await robotsRes.text();
+          for (const line of robotsText.split('\n')) {
+            const m = line.match(/^Sitemap:\s*(.+)/i);
+            if (m) robotsDeclaredUrls.push(m[1].trim());
+          }
+        }
+      } catch { /* robots.txt unreachable — continue without it */ }
+
+      // Step 2: build ordered candidate list (robots.txt declarations first)
+      const raw = [
+        ...robotsDeclaredUrls,
+        `${origin}/sitemap.xml`,
+        `${origin}/sitemap_index.xml`,
+        `${origin}/sitemap-index.xml`,
+        `${origin}/wp-sitemap.xml`,
+      ];
+      const seen = new Set<string>();
+      const candidates = raw.filter(u => { if (seen.has(u)) return false; seen.add(u); return true; });
+
+      // Step 3: probe each candidate until one validates as a real sitemap
+      for (const candidate of candidates) {
+        try {
+          const sitemapRes = await fetch(candidate, {
+            signal: AbortSignal.timeout(5000),
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
+            redirect: 'follow',
+          });
+          if (!sitemapRes.ok) continue;
+
+          const ct = sitemapRes.headers.get('content-type') ?? '';
+          const bodySnippet = (await sitemapRes.text()).trimStart().slice(0, 512);
+
+          // Accept if content-type declares XML, OR if the body starts with XML/sitemap markup.
+          // Body sniffing is the authoritative check — it catches servers that serve valid
+          // sitemaps with incorrect or missing content-type headers.
+          const isXmlContentType = ct.includes('xml');
+          const looksLikeSitemap = /^<\?xml|^<urlset|^<sitemapindex/i.test(bodySnippet);
+
+          if (isXmlContentType || looksLikeSitemap) {
+            result.hasSitemap = true;
+            result.sitemapUrl = candidate;
+            break;
+          }
+        } catch { /* this candidate timed out or failed — try next */ }
+      }
+    } catch { /* outer guard — hasSitemap stays false */ }
 
     crawlCache.set(url, { result, timestamp: Date.now() });
     return result;
