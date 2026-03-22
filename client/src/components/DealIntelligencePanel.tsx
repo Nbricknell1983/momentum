@@ -384,12 +384,44 @@ const CONFIDENCE_BADGE: Record<string, { cls: string; label: string }> = {
   low:    { cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700',             label: 'Low — needs data' },
 };
 
-function AgentIntelligenceCard({ lead, onRegenerate, isRegenerating }: { lead: Lead; onRegenerate?: () => void; isRegenerating?: boolean }) {
+function AgentIntelligenceCard({ lead, onRegenerate, isRegenerating, isPrepping }: { lead: Lead; onRegenerate?: () => void; isRegenerating?: boolean; isPrepping?: boolean }) {
   const pack = (lead as any).prepCallPack;
   const [expanded, setExpanded] = useState(true);
   const [showQuestions, setShowQuestions] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
-  if (!pack?.businessSnapshot) return null;
+
+  if (!pack?.businessSnapshot) {
+    if (!isPrepping && !isRegenerating) return null;
+    return (
+      <div className="rounded-lg border border-violet-200 dark:border-violet-800/40 bg-violet-50/30 dark:bg-violet-950/10 overflow-hidden">
+        <div className="flex items-center px-3 py-2.5 border-b border-violet-200 dark:border-violet-800/40 gap-2">
+          <div className="w-6 h-6 rounded bg-violet-500 flex items-center justify-center shrink-0">
+            <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-violet-900 dark:text-violet-200">Agent Intelligence</p>
+            <p className="text-[10px] text-violet-500 dark:text-violet-400">Building intel pack…</p>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-700 text-violet-500 dark:text-violet-400 bg-violet-100/60 dark:bg-violet-900/30 shrink-0">In progress</span>
+        </div>
+        <div className="px-3 py-3 space-y-2.5">
+          <div className="space-y-1.5">
+            {[0.75, 0.9, 0.65].map((w, i) => (
+              <div key={i} className="h-2.5 rounded-full bg-violet-200/60 dark:bg-violet-800/30 animate-pulse" style={{ width: `${w * 100}%`, animationDelay: `${i * 150}ms` }} />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {['Customer profile', 'Search intent', 'Opportunities', 'Call priorities'].map((label, i) => (
+              <div key={i} className="h-5 rounded-full bg-violet-200/50 dark:bg-violet-800/20 animate-pulse px-3" style={{ width: `${80 + i * 12}px`, animationDelay: `${i * 100}ms` }} />
+            ))}
+          </div>
+          <p className="text-[11px] text-violet-600 dark:text-violet-400 flex items-center gap-1.5 pt-0.5">
+            <Loader2 className="h-3 w-3 animate-spin" /> Analysing presence signals and building intelligence pack…
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const cp = pack.customerProfile || {};
   const si = pack.searchIntentAnalysis || {};
@@ -1237,6 +1269,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
   const [mockWebsiteExpanded, setMockWebsiteExpanded] = useState(true);
   const [mockWebsiteModalOpen, setMockWebsiteModalOpen] = useState(false);
   const [generatingPrepPack, setGeneratingPrepPack] = useState(false);
+  const [autoPrepRunning, setAutoPrepRunning] = useState(false);
   const [autoNbsRunning, setAutoNbsRunning] = useState(false);
   const [provisionalSteps, setProvisionalSteps] = useState<any[]>([]);
   const [provNbsRunning, setProvNbsRunning] = useState(false);
@@ -1265,12 +1298,15 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
     if (!orgId || !authReady || autoPrepFired.current) return;
     if ((lead as any).prepCallPack?.businessSnapshot) return;
     autoPrepFired.current = true;
+    setAutoPrepRunning(true);
     (auth.currentUser?.getIdToken() ?? Promise.resolve(null))
       .then(token => fetch(`/api/leads/${lead.id}/generate-prep-pack`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ orgId, force: false }),
-      })).catch(() => {});
+      }))
+      .catch(() => {})
+      .finally(() => setAutoPrepRunning(false));
   }, [orgId, authReady, lead.id]);
 
   // Auto-fire PROVISIONAL Next Best Steps — fast path, no evidence re-gather, not saved to Firestore.
@@ -1760,12 +1796,21 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         </div>
         {summary ? (
           <p className="text-sm text-foreground leading-relaxed">{summary}</p>
+        ) : (autoPrepRunning || generatingPrepPack) ? (
+          <div className="space-y-2">
+            {[0.85, 0.7, 0.9].map((w, i) => (
+              <div key={i} className="h-2.5 rounded-full bg-muted/60 animate-pulse" style={{ width: `${w * 100}%`, animationDelay: `${i * 120}ms` }} />
+            ))}
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1.5 pt-0.5">
+              <Loader2 className="h-3 w-3 animate-spin" /> Building first-pass intelligence…
+            </p>
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">Not enough information yet. Log a conversation or generate call prep to build a richer summary.</p>
         )}
       </div>
 
-      <AgentIntelligenceCard lead={lead} onRegenerate={handleGeneratePrepPack} isRegenerating={generatingPrepPack} />
+      <AgentIntelligenceCard lead={lead} onRegenerate={handleGeneratePrepPack} isRegenerating={generatingPrepPack} isPrepping={autoPrepRunning} />
 
       <NextBestStepsCard lead={lead} autoRunning={autoNbsRunning} provisionalSteps={provisionalSteps} provRunning={provNbsRunning} />
 

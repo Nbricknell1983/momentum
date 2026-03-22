@@ -1,0 +1,58 @@
+I want to fix the Deal Intelligence section so it automatically opens and progressively populates when I open a new or cold lead.
+
+Problem:
+The right rail specialist workflow now auto-runs correctly, and Next Best Steps can begin filling in, but the Deal Intelligence section itself still does not automatically open and feel alive on first open. This creates a mismatch where the system is clearly working, but the main intelligence surface still feels passive.
+
+Goal:
+Make Deal Intelligence behave like the live intelligence brain of the lead:
+1. auto-open on fresh/cold leads
+2. show loading/progressive states immediately
+3. populate progressively as signals and specialist outputs arrive
+4. avoid requiring the user to manually reveal or “wake up” the panel
+
+Desired behaviour:
+When a fresh lead is opened:
+- Deal Intelligence should auto-open by default
+- it should immediately show a loading/progressive state
+- it should begin filling with first-pass intelligence as soon as data is available
+- it should continue refining as deeper specialist outputs arrive
+
+When an already-analysed lead is opened:
+- if fresh intelligence exists, show it immediately
+- do not force unnecessary reruns
+- preserve a sensible non-jarring experience for existing leads
+
+Implementation goals:
+1. Identify where Deal Intelligence open/collapse state is currently controlled
+2. Add logic to auto-open it for:
+- never-analysed leads
+- leads currently in first-pass analysis
+- leads where intelligence is still incomplete but actively populating
+3. Add progressive population states to Deal Intelligence, similar to the improved Next Best Steps behaviour
+4. Ensure the Deal Intelligence panel reflects the same lifecycle as the right rail:
+- gathering signals
+- first-pass ready
+- deepening analysis
+- complete
+5. Avoid blank or passive states while the system is actively working
+
+UX expectations:
+- If no intelligence has landed yet, show a smart loading/skeleton state with clear copy such as:
+- Building first-pass intelligence…
+- First findings will appear as signals land
+- If partial intelligence exists, show it immediately rather than waiting for final completeness
+- If deeper specialist outputs arrive later, progressively enrich the panel
+- Deal Intelligence should feel proactive, not hidden or optional
+
+Success criteria:
+- opening a new lead automatically reveals Deal Intelligence
+- the panel visibly starts working without manual interaction
+- intelligence appears progressively as evidence/specialists return
+- the screen feels coherent: right rail activity, Deal Intelligence, and Next Best Steps all move together
+
+Please identify:
+1. where the current Deal Intelligence open-state is controlled
+2. what currently prevents it from auto-opening on fresh leads
+3. the smallest safe way to auto-open it for cold/in-progress leads
+4. what data thresholds should unlock progressive Deal Intelligence population
+5. any cases where panel state should still remain user-controlled to avoid annoying behaviour
