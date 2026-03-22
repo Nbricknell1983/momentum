@@ -1,0 +1,49 @@
+There is a bug with the public strategy URL flow.
+
+Observed behaviour:
+A strategy link that is being surfaced as a public/shareable URL opens `/strategy/:reportId`, but the page returns:
+- “Strategy not found”
+- “Unauthorized”
+
+Problem:
+The app is treating this as a public share URL, but in practice the route or data fetch still appears to require authentication. That makes the share link unusable for email/SMS prospects.
+
+Goal:
+Fix the public strategy page so a shared strategy URL works without CRM login/authentication.
+
+What I want investigated:
+1. Identify the full route/data flow for the public strategy page:
+- frontend route for `/strategy/:reportId`
+- API/data fetch used by that page
+- backend route serving the strategy report data
+2. Determine why the page is returning Unauthorized
+3. Confirm whether the public page is incorrectly calling an authenticated API route behind `verifyFirebaseToken`, org access checks, or manager-role checks
+4. Make the strategy share link genuinely public for valid shareable reports
+
+Expected product behaviour:
+- A public strategy URL should work for anyone with the link
+- It should not require Firebase auth, org membership, or CRM login
+- It should be safe via:
+- email
+- SMS
+- private/incognito browser
+- mobile
+
+Recommended implementation direction:
+1. Ensure `/strategy/:reportId` uses a public-read path
+2. If needed, add or verify a dedicated unauthenticated backend route such as:
+- `/api/public/strategy/:reportId`
+3. Gate access using the report ID and/or an explicit `isPublic` / `shareEnabled` field on the report record
+4. Do not rely on authenticated CRM routes for public share pages
+
+Also fix the error-state UX:
+- If the report truly does not exist → show “Strategy not found”
+- If the route is accidentally blocked by auth → show a clearer state internally and treat it as a product bug, not a missing report
+- Do not collapse Unauthorized into “not found” on a public share page
+
+Please identify:
+1. which exact backend route is returning Unauthorized
+2. whether the public strategy page is incorrectly using an authenticated data path
+3. the smallest safe fix to make share links genuinely public
+4. whether any report/public-share flags or Firestore rules need updating
+5. any fallback/error-state copy that should be corrected
