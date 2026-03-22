@@ -1,0 +1,56 @@
+Client Intelligence is still not working correctly.
+
+The screenshot shows the panel still claiming:
+- no online presence
+- no website on record
+- no search presence
+- no social profiles detected
+
+for “Our Sparky”, even though this client does have a website, social presence, and GBP.
+
+This means the previous fix was incomplete.
+
+The problem now appears to be a client data mapping / hydration issue, not just an AI brief issue.
+
+What needs to happen now:
+
+1. Inspect the actual client record and all carried-over intelligence sources for “Our Sparky”
+Check:
+- top-level client fields
+- `sourceIntelligence`
+- any carried-over lead website/social/GBP data
+- existing engine/baseline outputs
+- any preserved presence snapshot data from conversion
+
+2. Identify exactly which field(s) currently contain the real website / GBP / social presence for this client
+The deterministic presence layer is still missing them.
+
+3. Update the deterministic presence resolver to read from all valid sources in priority order:
+- confirmed client record fields
+- carried-over `sourceIntelligence`
+- existing baseline / engine outputs
+- AI brief augmentation
+- only then fallback to “not yet verified”
+
+4. Fix the fallback language
+Do not show:
+- “No website on record”
+- “No social profiles detected”
+- “No web presence for search indexing”
+
+unless all valid known sources were checked and came back empty.
+
+If data exists but is not fully audited, say:
+- Website confirmed — audit not yet complete
+- GBP presence identified — verification in progress
+- Social profiles known — not yet fully mapped
+- Search baseline not yet audited
+
+5. Audit production data for legacy clients
+It may be that older client records do not have the necessary presence fields hydrated at the client level even though they exist elsewhere.
+If so, add a migration/backfill path for legacy clients so Client Intelligence can render correctly.
+
+Success criteria:
+- Our Sparky should show its actual website / GBP / social presence in Client Intelligence
+- deterministic presence should no longer collapse to false “no presence” states
+- production client records should be properly hydrated or backfilled for legacy data

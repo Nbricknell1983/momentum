@@ -194,6 +194,11 @@ export default function PipelinePage() {
         phone: lead.phone,
         email: lead.email,
         website: lead.website,
+        // Carry over all social/presence fields from lead so client intelligence
+        // can surface them immediately without needing engine runs
+        facebookUrl: lead.facebookUrl,
+        instagramUrl: lead.instagramUrl,
+        linkedinUrl: lead.linkedinUrl,
         address: lead.address,
         regionId: lead.regionId,
         regionName: lead.regionName,

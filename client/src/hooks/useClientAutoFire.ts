@@ -45,8 +45,18 @@ function shouldAutoFireIntelligenceBrief(client: Client): boolean {
 
     // Detect a "bad" cached brief: presence signals are empty but client clearly
     // has known presence data (website, social, GBP). Force regeneration.
+    // Check all possible data locations — same multi-path logic as ClientIntelligencePanel.
     const ps = brief.presenceSnapshot;
-    const hasKnownPresence = !!(client.website || client.facebookUrl || client.instagramUrl || client.linkedinUrl || client.gbpLocationName);
+    const bp = client.businessProfile;
+    const ob = client.clientOnboarding;
+    const pp = (client.sourceIntelligence?.prepCallPack ?? {}) as Record<string, any>;
+    const hasKnownPresence = !!(
+      client.website || client.sourceIntelligence?.website ||
+      ob?.currentWebsiteUrl || bp?.websiteUrl || pp?.assetLinks?.websiteUrl ||
+      client.facebookUrl || bp?.facebookUrl || pp?.assetLinks?.facebookUrl ||
+      client.instagramUrl || bp?.instagramUrl || pp?.assetLinks?.instagramUrl ||
+      client.linkedinUrl || client.gbpLocationName || bp?.gbpUrl
+    );
     const briefHasEmptyPresence = !ps?.websiteSignals?.length && !ps?.socialSignals?.length && !ps?.gbpSignals?.length;
     if (hasKnownPresence && briefHasEmptyPresence) return true; // stale bad data — regenerate
 

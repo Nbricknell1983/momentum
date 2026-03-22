@@ -10855,23 +10855,98 @@ Output valid JSON only, no markdown.`;
       // ── CONFIRMED PRESENCE FACTS (deterministic — always accurate) ──────────
       // These are facts we know from client record fields, not engine analysis.
       // They must appear in the AI output regardless of engine data availability.
-      const confirmedWebsite   = website || '';
-      const confirmedFacebook  = client.facebookUrl || si.prepCallPack?.facebookUrl || '';
-      const confirmedInstagram = client.instagramUrl || si.prepCallPack?.instagramUrl || '';
-      const confirmedLinkedIn  = client.linkedinUrl || si.prepCallPack?.linkedinUrl || '';
-      const confirmedGBP       = client.gbpLocationName ? `GBP profile linked (${client.gbpLocationName})` : '';
+      // Resolve from ALL known locations in priority order — same logic as frontend.
+      const bp  = client.businessProfile || {};
+      const ob  = client.clientOnboarding || {};
+      const pp  = si.prepCallPack || {};
+
+      const confirmedWebsite =
+        website ||
+        ob.currentWebsiteUrl ||
+        bp.websiteUrl ||
+        pp?.assetLinks?.websiteUrl ||
+        pp?.currentWebsiteUrl ||
+        '';
+
+      const confirmedFacebook =
+        client.facebookUrl ||
+        bp.facebookUrl ||
+        pp?.assetLinks?.facebookUrl ||
+        pp?.facebookUrl ||
+        '';
+
+      const confirmedInstagram =
+        client.instagramUrl ||
+        bp.instagramUrl ||
+        pp?.assetLinks?.instagramUrl ||
+        pp?.instagramUrl ||
+        '';
+
+      const confirmedLinkedIn =
+        client.linkedinUrl ||
+        pp?.assetLinks?.linkedinUrl ||
+        pp?.linkedinUrl ||
+        '';
+
+      let confirmedGBP = client.gbpLocationName ? `GBP profile linked (${client.gbpLocationName})` : (bp.gbpUrl ? `GBP URL on record: ${bp.gbpUrl}` : '');
       const gbpChannelStatus   = channelStatus.gbp || '';
       const websiteChannelStatus = channelStatus.website || '';
       const seoChannelStatus   = channelStatus.seo || '';
       const adsChannelStatus   = channelStatus.ads || '';
 
+      // ── LIVE BACKFILL FROM SOURCE LEAD ───────────────────────────────────────
+      // For legacy clients, presence data may only be on the lead record.
+      // If key fields are still missing, look up the source lead and pull them.
+      let mutableWebsite  = confirmedWebsite;
+      let mutableFacebook = confirmedFacebook;
+      let mutableInstagram = confirmedInstagram;
+      let mutableLinkedIn = confirmedLinkedIn;
+
+      const needsBackfill = !mutableWebsite || (!mutableFacebook && !mutableInstagram);
+      if (needsBackfill && client.sourceDealId) {
+        try {
+          const leadSnap = await adminDb
+            .collection('orgs').doc(orgId)
+            .collection('leads').doc(client.sourceDealId)
+            .get();
+          if (leadSnap.exists) {
+            const ld = leadSnap.data() as Record<string, any>;
+            if (!mutableWebsite  && ld.website)     mutableWebsite  = ld.website;
+            if (!mutableFacebook && ld.facebookUrl) mutableFacebook = ld.facebookUrl;
+            if (!mutableInstagram && ld.instagramUrl) mutableInstagram = ld.instagramUrl;
+            if (!mutableLinkedIn && ld.linkedinUrl) mutableLinkedIn = ld.linkedinUrl;
+            // Also check source data from Google Places evidence
+            if (!mutableWebsite && ld.sourceData?.googleWebsite) mutableWebsite = ld.sourceData.googleWebsite;
+            if (!mutableWebsite && ld.sourceData?.website) mutableWebsite = ld.sourceData.website;
+            if (!mutableFacebook && ld.sourceData?.evidenceBundle?.discovered?.facebookUrl) mutableFacebook = ld.sourceData.evidenceBundle.discovered.facebookUrl;
+            if (!mutableInstagram && ld.sourceData?.evidenceBundle?.discovered?.instagramUrl) mutableInstagram = ld.sourceData.evidenceBundle.discovered.instagramUrl;
+            // Backfill the client record so future opens are fast
+            const clientPatch: Record<string, string> = {};
+            if (mutableWebsite   && !client.website)     clientPatch.website     = mutableWebsite;
+            if (mutableFacebook  && !client.facebookUrl) clientPatch.facebookUrl = mutableFacebook;
+            if (mutableInstagram && !client.instagramUrl) clientPatch.instagramUrl = mutableInstagram;
+            if (mutableLinkedIn  && !client.linkedinUrl) clientPatch.linkedinUrl = mutableLinkedIn;
+            if (Object.keys(clientPatch).length > 0) {
+              await clientRef.update(clientPatch).catch(() => {}); // fire-and-forget
+            }
+          }
+        } catch { /* non-critical — proceed without lead data */ }
+      }
+
+      // Use backfilled values going forward
+      const resolvedWebsite  = mutableWebsite  || confirmedWebsite;
+      const resolvedFacebook = mutableFacebook || confirmedFacebook;
+      const resolvedInstagram = mutableInstagram || confirmedInstagram;
+      const resolvedLinkedIn = mutableLinkedIn || confirmedLinkedIn;
+
       // Build a bullet list of confirmed facts for the AI to draw on
+      // Use resolved values (may include live backfill from source lead)
       const confirmedFacts: string[] = [];
-      if (confirmedWebsite)   confirmedFacts.push(`Website URL confirmed: ${confirmedWebsite}`);
-      if (confirmedFacebook)  confirmedFacts.push(`Facebook profile: ${confirmedFacebook}`);
-      if (confirmedInstagram) confirmedFacts.push(`Instagram profile: ${confirmedInstagram}`);
-      if (confirmedLinkedIn)  confirmedFacts.push(`LinkedIn profile: ${confirmedLinkedIn}`);
-      if (confirmedGBP)       confirmedFacts.push(confirmedGBP);
+      if (resolvedWebsite)   confirmedFacts.push(`Website URL confirmed: ${resolvedWebsite}`);
+      if (resolvedFacebook)  confirmedFacts.push(`Facebook profile: ${resolvedFacebook}`);
+      if (resolvedInstagram) confirmedFacts.push(`Instagram profile: ${resolvedInstagram}`);
+      if (resolvedLinkedIn)  confirmedFacts.push(`LinkedIn profile: ${resolvedLinkedIn}`);
+      if (confirmedGBP)      confirmedFacts.push(confirmedGBP);
       if (gbpChannelStatus && gbpChannelStatus !== 'not_started') confirmedFacts.push(`GBP/Local channel is active (status: ${gbpChannelStatus})`);
       if (websiteChannelStatus && websiteChannelStatus !== 'not_started') confirmedFacts.push(`Website channel is active (status: ${websiteChannelStatus})`);
       if (seoChannelStatus && seoChannelStatus !== 'not_started') confirmedFacts.push(`SEO channel is active (status: ${seoChannelStatus})`);
@@ -10881,7 +10956,7 @@ Output valid JSON only, no markdown.`;
       const prepPresence = si.prepCallPack?.presenceSnapshot;
       if (prepPresence) {
         if (typeof prepPresence === 'string') confirmedFacts.push(`Pre-sale presence: ${prepPresence}`);
-        else if (prepPresence.website) confirmedFacts.push(`Pre-sale: website observed at ${prepPresence.website}`);
+        else if (prepPresence.website) confirmedFacts.push(`Pre-sale: website assessment: ${String(prepPresence.website).slice(0, 150)}`);
       }
       if (si.prepCallPack?.businessSnapshot) confirmedFacts.push(`Business context: ${String(si.prepCallPack.businessSnapshot).slice(0, 200)}`);
 
@@ -10892,7 +10967,7 @@ Output valid JSON only, no markdown.`;
       // ── ENGINE ANALYSIS (deeper data when available) ─────────────────────
       const websiteCtx = client.websiteEngine
         ? `Website Engine analysis: health=${client.websiteEngine.healthScore}/100 (${client.websiteEngine.healthLabel}). ${client.websiteEngine.summary}. Conversion=${client.websiteEngine.conversionGrade}, Structure=${client.websiteEngine.structureGrade}, Content=${client.websiteEngine.contentGrade}. Top issues: ${(client.websiteEngine.tasks || []).filter((t: any) => t.priority === 1).map((t: any) => t.task).slice(0, 3).join('; ')}. Quick wins: ${(client.websiteEngine.quickWins || []).slice(0, 2).join('; ')}.`
-        : confirmedWebsite ? `Website URL on record (${confirmedWebsite}) — full analysis not yet run.` : '';
+        : resolvedWebsite ? `Website URL on record (${resolvedWebsite}) — full analysis not yet run.` : '';
 
       const seoCtx = client.seoEngine
         ? `SEO analysis: visibility=${client.seoEngine.visibilityScore}/100 (${client.seoEngine.visibilityLabel}). ${client.seoEngine.summary}. Keyword targets: ${(client.seoEngine.keywordTargets || []).slice(0, 5).join(', ')}. Content gaps: ${(client.seoEngine.contentGaps || []).slice(0, 2).map((g: any) => g.title).join('; ')}.`
@@ -10919,8 +10994,10 @@ Output valid JSON only, no markdown.`;
         ? `Scope audit: ${client.scopeAudit.auditSummary}. Recommended scope: ${(client.scopeAudit.recommendedScope || []).join(', ')}.`
         : '';
 
-      const preservationInstruction = isTakeover
-        ? `IMPORTANT: This client has an existing live website at ${website}. This is potentially a WEBSITE TAKEOVER/REBUILD project. The brief MUST surface SEO preservation risks in websiteInterpretation.seoValueToPreserve and in the risks array (type="preservation").`
+      const effectiveWebsite = resolvedWebsite || website;
+      const effectiveTakeover = !!effectiveWebsite;
+      const preservationInstruction = effectiveTakeover
+        ? `IMPORTANT: This client has an existing live website at ${effectiveWebsite}. This is potentially a WEBSITE TAKEOVER/REBUILD project. The brief MUST surface SEO preservation risks in websiteInterpretation.seoValueToPreserve and in the risks array (type="preservation").`
         : '';
 
       const prompt = `You are a senior digital strategist generating a rich Client Intelligence Brief for a client workspace. This brief is the primary intelligence layer — showing what already exists online, what is working, what is weak, what must be preserved, and what the execution strategy is.
@@ -11010,7 +11087,7 @@ Rules:
       }
 
       brief.generatedAt = new Date().toISOString();
-      brief.isTakeover = isTakeover;
+      brief.isTakeover = effectiveTakeover;
 
       await clientRef.update({ intelligenceBrief: brief });
 

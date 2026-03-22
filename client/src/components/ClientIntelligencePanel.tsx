@@ -48,45 +48,98 @@ interface LocalSignal {
   url?: string;
 }
 
+// ── Resolve presence URLs from ALL known locations on the client record ───────
+// Legacy clients may have data in businessProfile, clientOnboarding, or
+// sourceIntelligence.prepCallPack rather than top-level fields.
+
+function resolvePresenceUrls(client: Client) {
+  const si  = client.sourceIntelligence;
+  const pp  = (si?.prepCallPack ?? {}) as Record<string, any>;
+  const bp  = client.businessProfile;
+  const ob  = client.clientOnboarding;
+
+  // Website: priority order — top-level → sourceIntelligence → onboarding → businessProfile → prepCallPack
+  const website =
+    client.website?.trim() ||
+    si?.website?.trim() ||
+    ob?.currentWebsiteUrl?.trim() ||
+    bp?.websiteUrl?.trim() ||
+    pp?.assetLinks?.websiteUrl?.trim() ||
+    pp?.currentWebsiteUrl?.trim() ||
+    '';
+
+  // Facebook: top-level → businessProfile → prepCallPack
+  const facebook =
+    client.facebookUrl?.trim() ||
+    bp?.facebookUrl?.trim() ||
+    pp?.assetLinks?.facebookUrl?.trim() ||
+    pp?.facebookUrl?.trim() ||
+    '';
+
+  // Instagram: top-level → businessProfile → prepCallPack
+  const instagram =
+    client.instagramUrl?.trim() ||
+    bp?.instagramUrl?.trim() ||
+    pp?.assetLinks?.instagramUrl?.trim() ||
+    pp?.instagramUrl?.trim() ||
+    '';
+
+  // LinkedIn: top-level → prepCallPack
+  const linkedin =
+    client.linkedinUrl?.trim() ||
+    pp?.assetLinks?.linkedinUrl?.trim() ||
+    pp?.linkedinUrl?.trim() ||
+    '';
+
+  // GBP: direct link (resource name) → businessProfile URL → channel active
+  const gbpLinked = !!client.gbpLocationName;
+  const gbpUrl    = bp?.gbpUrl?.trim() || '';
+  const gbpChannelActive = !!(client.channelStatus?.gbp && client.channelStatus.gbp !== 'not_started');
+
+  return { website, facebook, instagram, linkedin, gbpLinked, gbpUrl, gbpChannelActive };
+}
+
 function deriveLocalPresence(client: Client): LocalPresence {
-  const cs = client.channelStatus ?? {};
-  const si = client.sourceIntelligence;
-  const website = client.website || si?.website || '';
-  const we = client.websiteEngine;
+  const cs  = client.channelStatus ?? {};
+  const pv  = resolvePresenceUrls(client);
+  const we  = client.websiteEngine;
 
   // ── Website ──
   const webSignals: LocalSignal[] = [];
-  if (website) {
-    webSignals.push({
-      text: `Site confirmed: ${website}`,
-      status: 'confirmed',
-      url: website.startsWith('http') ? website : `https://${website}`,
-    });
+  if (pv.website) {
+    const href = pv.website.startsWith('http') ? pv.website : `https://${pv.website}`;
+    webSignals.push({ text: `Site confirmed: ${pv.website}`, status: 'confirmed', url: href });
     if (we) {
-      webSignals.push({ text: `Health: ${we.healthScore}/100 — ${we.healthLabel}`, status: we.healthLabel === 'critical' || we.healthLabel === 'needs-work' ? 'incomplete' : 'active' });
+      webSignals.push({
+        text: `Health: ${we.healthScore}/100 — ${we.healthLabel}`,
+        status: (we.healthLabel === 'critical' || we.healthLabel === 'needs-work') ? 'incomplete' : 'active',
+      });
       if (we.conversionGrade) webSignals.push({ text: `Conversion grade: ${we.conversionGrade}`, status: 'active' });
     } else {
-      webSignals.push({ text: 'Full website audit not yet run', status: 'incomplete' });
+      webSignals.push({ text: 'Full audit not yet run', status: 'incomplete' });
     }
   } else {
-    webSignals.push({ text: 'No website on record', status: 'incomplete' });
+    webSignals.push({ text: 'Website not yet on record — check channels', status: 'incomplete' });
   }
 
   // ── GBP / Local ──
   const gbpSignals: LocalSignal[] = [];
-  if (client.gbpLocationName) {
+  if (pv.gbpLinked) {
     gbpSignals.push({ text: 'GBP profile linked', status: 'confirmed' });
+  } else if (pv.gbpUrl) {
+    gbpSignals.push({ text: `GBP URL on record`, status: 'confirmed', url: pv.gbpUrl });
   }
-  if (cs.gbp && cs.gbp !== 'not_started') {
-    gbpSignals.push({ text: `GBP channel: ${cs.gbp.replace(/_/g, ' ')}`, status: 'active' });
+  if (pv.gbpChannelActive) {
+    gbpSignals.push({ text: `GBP channel: ${cs.gbp!.replace(/_/g, ' ')}`, status: 'active' });
   }
   if (client.gbpEngine) {
     gbpSignals.push({ text: `Profile score: ${client.gbpEngine.optimizationScore}/100`, status: 'active' });
     if (client.gbpEngine.reviewGrade) gbpSignals.push({ text: `Reviews grade: ${client.gbpEngine.reviewGrade}`, status: 'active' });
-  } else if (gbpSignals.length > 0) {
+  }
+  if (gbpSignals.length === 0) {
+    gbpSignals.push({ text: 'GBP not yet linked or verified', status: 'incomplete' });
+  } else if (!client.gbpEngine) {
     gbpSignals.push({ text: 'Full GBP audit not yet run', status: 'incomplete' });
-  } else {
-    gbpSignals.push({ text: 'GBP presence not yet verified', status: 'incomplete' });
   }
 
   // ── Search ──
@@ -94,32 +147,34 @@ function deriveLocalPresence(client: Client): LocalPresence {
   if (client.seoEngine) {
     searchSignals.push({ text: `SEO visibility: ${client.seoEngine.visibilityScore}/100`, status: 'active' });
     if (client.seoEngine.keywordTargets?.length) {
-      searchSignals.push({ text: `Keywords tracked: ${client.seoEngine.keywordTargets.slice(0, 3).join(', ')}`, status: 'active' });
+      searchSignals.push({ text: `Keywords: ${client.seoEngine.keywordTargets.slice(0, 3).join(', ')}`, status: 'active' });
     }
   } else if (cs.seo && cs.seo !== 'not_started') {
     searchSignals.push({ text: `SEO channel: ${cs.seo.replace(/_/g, ' ')}`, status: 'active' });
     searchSignals.push({ text: 'Full SEO audit not yet run', status: 'incomplete' });
-  } else if (website) {
-    searchSignals.push({ text: 'Search signals not yet audited', status: 'incomplete' });
+  } else if (pv.website) {
+    searchSignals.push({ text: 'Organic search baseline not yet audited', status: 'incomplete' });
   } else {
-    searchSignals.push({ text: 'No web presence for search indexing', status: 'incomplete' });
+    searchSignals.push({ text: 'No website — search indexing not applicable', status: 'incomplete' });
   }
 
   // ── Social ──
   const socialSignals: LocalSignal[] = [];
-  if (client.facebookUrl) socialSignals.push({ text: 'Facebook', status: 'confirmed', url: client.facebookUrl });
-  if (client.instagramUrl) socialSignals.push({ text: 'Instagram', status: 'confirmed', url: client.instagramUrl });
-  if (client.linkedinUrl) socialSignals.push({ text: 'LinkedIn', status: 'confirmed', url: client.linkedinUrl });
-  if (socialSignals.length === 0) socialSignals.push({ text: 'Social profiles not yet linked', status: 'incomplete' });
+  if (pv.facebook) socialSignals.push({ text: 'Facebook', status: 'confirmed', url: pv.facebook });
+  if (pv.instagram) socialSignals.push({ text: 'Instagram', status: 'confirmed', url: pv.instagram });
+  if (pv.linkedin) socialSignals.push({ text: 'LinkedIn', status: 'confirmed', url: pv.linkedin });
+  if (socialSignals.length === 0) {
+    socialSignals.push({ text: 'Social profiles not yet linked', status: 'incomplete' });
+  }
 
   // ── Paid search ──
   const paidSearchSignals: LocalSignal[] = [];
   if (client.adsEngine) {
     paidSearchSignals.push({ text: `Ads readiness: ${client.adsEngine.readinessScore}/100`, status: 'active' });
   } else if (cs.ads && cs.ads !== 'not_started') {
-    paidSearchSignals.push({ text: `Ads channel: ${cs.ads.replace(/_/g, ' ')}`, status: 'active' });
+    paidSearchSignals.push({ text: `Paid search channel: ${cs.ads.replace(/_/g, ' ')}`, status: 'active' });
   } else {
-    paidSearchSignals.push({ text: 'No paid search activity detected', status: 'incomplete' });
+    paidSearchSignals.push({ text: 'Paid search not yet assessed', status: 'incomplete' });
   }
 
   return { website: webSignals, gbp: gbpSignals, search: searchSignals, social: socialSignals, paidSearch: paidSearchSignals };
@@ -329,7 +384,8 @@ function IntelligenceContent({
   onRefresh?: () => void;
 }) {
   const local = deriveLocalPresence(client);
-  const ps = brief?.presenceSnapshot;
+  const pv    = resolvePresenceUrls(client);   // for direct URL links
+  const ps    = brief?.presenceSnapshot;
 
   // Merge: local deterministic signals take precedence; brief signals augment
   const websiteSignals  = mergeSignals(local.website,    ps?.websiteSignals);
@@ -399,9 +455,9 @@ function IntelligenceContent({
             label="Social"
             signals={socialSignals}
             socialSlots={{
-              fb: client.facebookUrl || undefined,
-              ig: client.instagramUrl || undefined,
-              li: client.linkedinUrl || undefined,
+              fb: pv.facebook || undefined,
+              ig: pv.instagram || undefined,
+              li: pv.linkedin || undefined,
             }}
           />
         </div>
