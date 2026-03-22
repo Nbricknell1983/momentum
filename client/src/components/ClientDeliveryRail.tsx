@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Client, WorkstreamScope, WorkstreamStatus,
+  Client, WorkstreamScope, WorkstreamStatus, ChannelStatus,
 } from '@/lib/types';
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -64,39 +64,62 @@ function statusConfig(status: AgentStatus): { label: string; dotColor: string; b
   }
 }
 
-// ─── Agent derivation from activationPlan ────────────────────────────────────
+// ─── Agent derivation — works for ALL clients ─────────────────────────────────
+
+function channelStatusToAgent(cs: ChannelStatus): AgentStatus {
+  switch (cs) {
+    case 'live':        return 'completed';
+    case 'in_progress': return 'active';
+    case 'paused':      return 'waiting_dep';
+    case 'not_started': return 'queued';
+    default:            return 'queued';
+  }
+}
+
+function wsToAgentStatus(wss: WorkstreamStatus | undefined): AgentStatus {
+  if (!wss) return 'queued';
+  switch (wss) {
+    case 'queued':           return 'queued';
+    case 'generating':       return 'generating';
+    case 'ready_for_review': return 'ready_for_review';
+    case 'approved':
+    case 'live':
+    case 'optimising':       return 'completed';
+    default:                 return 'queued';
+  }
+}
 
 function deriveAgents(client: Client): AgentState[] {
   const plan = client.activationPlan;
-  const si = client.sourceIntelligence;
   const scope = plan?.selectedScope ?? [];
   const ws = plan?.workstreams ?? {};
-
-  // Helper: map WorkstreamStatus → AgentStatus
-  function wsToAgent(wss: WorkstreamStatus | undefined): AgentStatus {
-    if (!wss) return 'queued';
-    switch (wss) {
-      case 'queued':           return 'queued';
-      case 'generating':       return 'generating';
-      case 'ready_for_review': return 'ready_for_review';
-      case 'approved':         return 'completed';
-      case 'live':             return 'completed';
-      case 'optimising':       return 'completed';
-      default:                 return 'queued';
-    }
-  }
+  const cs = client.channelStatus;
 
   const websiteStatus  = ws.website?.status;
   const gbpStatus      = ws.gbp?.status;
   const seoStatus      = ws.seo?.status;
   const adsStatus      = ws.ads?.status;
-
   const websiteBriefReady  = !!plan?.websiteWorkstream?.brief;
   const pageStructureReady = !!plan?.websiteWorkstream?.pageStructure?.length;
 
+  const liveCount = Object.values(cs).filter(s => s === 'live').length;
+  const inProgressCount = Object.values(cs).filter(s => s === 'in_progress').length;
+
   const agents: AgentState[] = [];
 
-  // ── Growth Operator ─────────────────────────────────────────────────────────
+  // ── Growth Operator — always present ────────────────────────────────────────
+  let goNote = '';
+  if (plan) {
+    goNote = `Orchestrating ${scope.length} active workstream${scope.length !== 1 ? 's' : ''} — coordinating delivery and dependencies`;
+  } else if (liveCount >= 2) {
+    goNote = `${liveCount} channels live — monitoring performance and flagging growth opportunities`;
+  } else if (inProgressCount > 0) {
+    goNote = 'Tracking in-progress delivery across channels — watching for blockers';
+  } else if (client.healthStatus === 'red') {
+    goNote = 'At-risk account — monitoring health signals and flagging immediate actions';
+  } else {
+    goNote = 'Monitoring account health and surface growth signals for this client';
+  }
   agents.push({
     id: 'growth_operator',
     name: 'Growth Operator',
@@ -105,14 +128,12 @@ function deriveAgents(client: Client): AgentState[] {
     avatarColor: 'bg-indigo-500',
     status: 'active',
     statusLabel: 'Active',
-    statusNote: plan
-      ? `Orchestrating ${scope.length} active workstream${scope.length !== 1 ? 's' : ''} — coordinating delivery and dependencies`
-      : 'Monitoring account health and growth signals',
+    statusNote: goNote,
   });
 
-  // ── Website Strategist ──────────────────────────────────────────────────────
-  if (scope.includes('website')) {
-    const agentStatus = wsToAgent(websiteStatus);
+  // ── Website Strategist ───────────────────────────────────────────────────────
+  if (plan && scope.includes('website')) {
+    const agentStatus = wsToAgentStatus(websiteStatus);
     let note = '';
     switch (websiteStatus) {
       case 'queued':           note = 'Website brief and content plan ready to generate'; break;
@@ -123,28 +144,26 @@ function deriveAgents(client: Client): AgentState[] {
       case 'optimising':       note = 'Running conversion optimisation cycle'; break;
       default:                 note = 'Waiting to begin website brief generation';
     }
-    agents.push({
-      id: 'website_strategist',
-      name: 'Website Strategist',
-      specialty: 'Brief · Page structure · Content',
-      initial: 'W',
-      avatarColor: 'bg-blue-500',
-      status: agentStatus,
-      statusLabel: statusConfig(agentStatus).label,
-      statusNote: note,
-    });
+    agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
+  } else if (!plan) {
+    const agentStatus = channelStatusToAgent(cs.website);
+    const noteMap: Record<ChannelStatus, string> = {
+      live:        'Website live — reviewing performance, conversion signals, and improvement opportunities',
+      in_progress: 'Website project underway — tracking progress and coordinating content delivery',
+      paused:      'Website project paused — check client approval or missing assets',
+      not_started: 'Website build not yet started — brief can be generated when scope is confirmed',
+    };
+    agents.push({ id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.website] });
   }
 
-  // ── Content Agent ────────────────────────────────────────────────────────────
-  if (scope.includes('website')) {
+  // ── Content Agent — only with website in scope (activated) ──────────────────
+  if (plan && scope.includes('website')) {
     let contentStatus: AgentStatus = 'waiting_dep';
     let note = '';
-    if (websiteStatus === 'generating') {
-      contentStatus = 'waiting_dep';
-      note = 'Standing by while website brief generates…';
-    } else if (!websiteBriefReady) {
-      contentStatus = 'waiting_dep';
-      note = 'Waiting for website brief — generate brief to unlock content drafting';
+    if (websiteStatus === 'generating' || !websiteBriefReady) {
+      note = websiteStatus === 'generating'
+        ? 'Standing by while website brief generates…'
+        : 'Waiting for website brief — generate brief to unlock content drafting';
     } else if (websiteStatus === 'ready_for_review') {
       contentStatus = 'ready_for_review';
       note = 'Homepage content included in brief — ready for your review';
@@ -152,24 +171,14 @@ function deriveAgents(client: Client): AgentState[] {
       contentStatus = 'completed';
       note = 'Content approved and in production';
     } else {
-      contentStatus = 'waiting_dep';
       note = 'Waiting for website brief to be generated first';
     }
-    agents.push({
-      id: 'content_agent',
-      name: 'Content Agent',
-      specialty: 'Copy · Hero · FAQ · Local',
-      initial: 'C',
-      avatarColor: 'bg-sky-500',
-      status: contentStatus,
-      statusLabel: statusConfig(contentStatus).label,
-      statusNote: note,
-    });
+    agents.push({ id: 'content_agent', name: 'Content Agent', specialty: 'Copy · Hero · FAQ · Local', initial: 'C', avatarColor: 'bg-sky-500', status: contentStatus, statusLabel: statusConfig(contentStatus).label, statusNote: note });
   }
 
   // ── GBP Optimiser ────────────────────────────────────────────────────────────
-  if (scope.includes('gbp')) {
-    const agentStatus = wsToAgent(gbpStatus);
+  if (plan && scope.includes('gbp')) {
+    const agentStatus = wsToAgentStatus(gbpStatus);
     let note = '';
     switch (gbpStatus) {
       case 'queued':           note = 'Optimisation tasks, content calendar, and review strategy ready to generate'; break;
@@ -180,24 +189,24 @@ function deriveAgents(client: Client): AgentState[] {
       case 'optimising':       note = 'Ongoing optimisation — posting content and responding to reviews'; break;
       default:                 note = 'GBP optimisation can begin immediately — no dependencies';
     }
-    agents.push({
-      id: 'gbp_optimiser',
-      name: 'GBP Optimiser',
-      specialty: 'Map pack · Reviews · Content calendar',
-      initial: 'B',
-      avatarColor: 'bg-emerald-500',
-      status: agentStatus,
-      statusLabel: statusConfig(agentStatus).label,
-      statusNote: note,
-    });
+    agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
+  } else if (!plan) {
+    const agentStatus = channelStatusToAgent(cs.gbp);
+    const noteMap: Record<ChannelStatus, string> = {
+      live:        'GBP active and optimised — posting content, managing reviews, and tracking map pack position',
+      in_progress: 'GBP optimisation underway — working through tasks and building review volume',
+      paused:      'GBP optimisation paused — check what is blocking progress',
+      not_started: 'GBP optimisation can begin immediately — no dependencies required',
+    };
+    agents.push({ id: 'gbp_optimiser', name: 'GBP Optimiser', specialty: 'Map pack · Reviews · Content calendar', initial: 'B', avatarColor: 'bg-emerald-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.gbp] });
   }
 
   // ── SEO Architect ────────────────────────────────────────────────────────────
-  if (scope.includes('seo')) {
+  if (plan && scope.includes('seo')) {
     let seoAgentStatus: AgentStatus;
     let note = '';
     if (!scope.includes('website') || pageStructureReady) {
-      seoAgentStatus = wsToAgent(seoStatus);
+      seoAgentStatus = wsToAgentStatus(seoStatus);
       note = pageStructureReady
         ? 'Website page structure ready — keyword architecture can be mapped to pages'
         : 'SEO architecture ready to begin — defining keyword and content strategy';
@@ -205,21 +214,23 @@ function deriveAgents(client: Client): AgentState[] {
       seoAgentStatus = 'waiting_dep';
       note = 'Waiting on website page structure — SEO keyword architecture maps to page structure';
     }
-    agents.push({
-      id: 'seo_architect',
-      name: 'SEO Architect',
-      specialty: 'Keywords · Content strategy · Authority',
-      initial: 'S',
-      avatarColor: 'bg-violet-500',
-      status: seoAgentStatus,
-      statusLabel: statusConfig(seoAgentStatus).label,
-      statusNote: note,
-    });
+    agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: seoAgentStatus, statusLabel: statusConfig(seoAgentStatus).label, statusNote: note });
+  } else if (!plan) {
+    const agentStatus = channelStatusToAgent(cs.seo);
+    const noteMap: Record<ChannelStatus, string> = {
+      live:        'SEO campaign active — tracking keyword rankings and organic traffic growth',
+      in_progress: 'SEO strategy underway — building content authority and keyword coverage',
+      paused:      'SEO paused — confirm whether site structure is ready before resuming',
+      not_started: cs.website !== 'not_started'
+        ? 'Website in progress — SEO keyword mapping ready to begin once page structure is confirmed'
+        : 'SEO not yet started — begin after website page structure is defined',
+    };
+    agents.push({ id: 'seo_architect', name: 'SEO Architect', specialty: 'Keywords · Content strategy · Authority', initial: 'S', avatarColor: 'bg-violet-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.seo] });
   }
 
   // ── Paid Ads Agent ───────────────────────────────────────────────────────────
-  if (scope.includes('ads')) {
-    const agentStatus = wsToAgent(adsStatus);
+  if (plan && scope.includes('ads')) {
+    const agentStatus = wsToAgentStatus(adsStatus);
     let note = '';
     switch (adsStatus) {
       case 'queued':           note = 'Campaign structure and targeting strategy ready to define'; break;
@@ -229,33 +240,30 @@ function deriveAgents(client: Client): AgentState[] {
       case 'live':             note = 'Campaign live — monitoring clicks and conversion costs'; break;
       default:                 note = 'Awaiting campaign strategy generation';
     }
-    agents.push({
-      id: 'ads_agent',
-      name: 'Paid Ads Agent',
-      specialty: 'Campaign structure · Targeting · Conversion',
-      initial: 'A',
-      avatarColor: 'bg-amber-500',
-      status: agentStatus,
-      statusLabel: statusConfig(agentStatus).label,
-      statusNote: note,
-    });
+    agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: note });
+  } else if (!plan) {
+    const agentStatus = channelStatusToAgent(cs.ppc);
+    const noteMap: Record<ChannelStatus, string> = {
+      live:        'Paid campaign live — optimising bids, tracking conversions, and adjusting targeting',
+      in_progress: 'Campaign being set up — building ad structure and refining targeting parameters',
+      paused:      'Paid ads paused — review budget, performance data, or client sign-off status',
+      not_started: 'Paid search not yet active — high-intent traffic can be captured immediately when ready',
+    };
+    agents.push({ id: 'ads_agent', name: 'Paid Ads Agent', specialty: 'Campaign structure · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', status: agentStatus, statusLabel: statusConfig(agentStatus).label, statusNote: noteMap[cs.ppc] });
   }
 
-  // ── Out-of-scope hints ───────────────────────────────────────────────────────
-  const outOfScope: { id: AgentId; name: string; specialty: string; initial: string; avatarColor: string; scope: WorkstreamScope }[] = [
-    { id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', scope: 'website' },
-    { id: 'gbp_optimiser',      name: 'GBP Optimiser',      specialty: 'Map pack · Reviews · Content', initial: 'B', avatarColor: 'bg-emerald-500', scope: 'gbp' },
-    { id: 'seo_architect',      name: 'SEO Architect',       specialty: 'Keywords · Content · Authority', initial: 'S', avatarColor: 'bg-violet-500', scope: 'seo' },
-    { id: 'ads_agent',          name: 'Paid Ads Agent',      specialty: 'Campaign · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', scope: 'ads' },
-  ];
-  for (const a of outOfScope) {
-    if (plan && !scope.includes(a.scope)) {
-      agents.push({
-        ...a,
-        status: 'not_in_scope',
-        statusLabel: 'Not in scope',
-        statusNote: `Not included in the active delivery scope — can be added later`,
-      });
+  // ── Out-of-scope hints (only for activated clients with explicit scope) ───────
+  if (plan) {
+    const outOfScope: { id: AgentId; name: string; specialty: string; initial: string; avatarColor: string; scope: WorkstreamScope }[] = [
+      { id: 'website_strategist', name: 'Website Strategist', specialty: 'Brief · Page structure · Content', initial: 'W', avatarColor: 'bg-blue-500', scope: 'website' },
+      { id: 'gbp_optimiser',      name: 'GBP Optimiser',      specialty: 'Map pack · Reviews · Content', initial: 'B', avatarColor: 'bg-emerald-500', scope: 'gbp' },
+      { id: 'seo_architect',      name: 'SEO Architect',       specialty: 'Keywords · Content · Authority', initial: 'S', avatarColor: 'bg-violet-500', scope: 'seo' },
+      { id: 'ads_agent',          name: 'Paid Ads Agent',      specialty: 'Campaign · Targeting · Conversion', initial: 'A', avatarColor: 'bg-amber-500', scope: 'ads' },
+    ];
+    for (const a of outOfScope) {
+      if (!scope.includes(a.scope)) {
+        agents.push({ ...a, status: 'not_in_scope', statusLabel: 'Not in scope', statusNote: 'Not included in the active delivery scope — can be added later' });
+      }
     }
   }
 
@@ -407,57 +415,43 @@ export default function ClientDeliveryRail({ client }: { client: Client }) {
     <ScrollArea className="h-full">
       <div className="p-4 space-y-5">
 
-        {/* ── Delivery Team header + agents (only when plan exists) ─────────── */}
-        {hasPlan && (
-          <>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                  <Bot className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Delivery Team</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Live agent activity</p>
-                </div>
-              </div>
-              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live
-              </span>
-            </div>
-
-            <div className="rounded-xl border border-border overflow-hidden bg-white dark:bg-slate-900/50" data-testid="delivery-agents-panel">
-              <div className="px-3">
-                {agents.map(agent => <AgentCard key={agent.id} agent={agent} />)}
-              </div>
-            </div>
-
-            {/* Divider between agents and tools */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border/60" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="px-2 text-[10px] font-medium uppercase tracking-wider bg-background text-muted-foreground">
-                  Growth tools
-                </span>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ── Growth tools header (only when NO plan — appears at top) ─────── */}
-        {!hasPlan && (
-          <div className="flex items-center gap-2 pb-1">
-            <div className="h-7 w-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+        {/* ── Delivery Team header — always shown ──────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+              <Bot className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Growth Tools</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Account intelligence, expansion & retention</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Delivery Team</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {hasPlan ? 'Live agent activity' : 'Channel delivery status'}
+              </p>
             </div>
           </div>
-        )}
+          <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Live
+          </span>
+        </div>
+
+        {/* ── Agents — always shown, derived from plan or channelStatus ─────── */}
+        <div className="rounded-xl border border-border overflow-hidden bg-white dark:bg-slate-900/50" data-testid="delivery-agents-panel">
+          <div className="px-3">
+            {agents.map(agent => <AgentCard key={agent.id} agent={agent} />)}
+          </div>
+        </div>
+
+        {/* ── Divider ─────────────────────────────────────────────────────── */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border/60" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="px-2 text-[10px] font-medium uppercase tracking-wider bg-background text-muted-foreground">
+              Growth tools
+            </span>
+          </div>
+        </div>
 
         {/* ── Growth tools (preserved from AIClientGrowthEngine) ───────────── */}
         <div className="space-y-2">

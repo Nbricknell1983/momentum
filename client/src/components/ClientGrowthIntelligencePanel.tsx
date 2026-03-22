@@ -975,24 +975,20 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
         {/* Client Overview Strip — health, channels, key action — shown for ALL clients */}
         <ClientOverviewStrip client={client} />
 
-        {/* Growth Execution Intelligence — shown for activated clients with sourceIntelligence */}
-        {client.activationPlan && client.sourceIntelligence && (
-          <ClientExecutionIntelligence client={client} />
-        )}
+        {/* Delivery Intelligence — shown for ALL clients; adapts between activated and non-activated */}
+        <ClientExecutionIntelligence client={client} />
 
-        {/* Client Activation Plan — shown when lead was converted with scope */}
+        {/* Client Activation Plan — workstream generation + task tracking */}
         {client.activationPlan && <ClientActivationPanel client={client} />}
 
-        {/* AI Growth Operator — Phase 1 Panel */}
-        <GrowthOperatorPanel client={client} />
-
-        {/* Phase 3 — Website & SEO Engines */}
+        {/* Engine panels — Website, SEO, GBP, Ads */}
         <WebsiteEnginePanel client={client} />
         <SEOEnginePanel client={client} />
-
-        {/* Phase 4 — GBP & Ads Engines */}
         <GBPEnginePanel client={client} />
         <AdsEnginePanel client={client} />
+
+        {/* AI Growth Operator — system / admin layer (secondary, below engines) */}
+        <GrowthOperatorPanel client={client} />
 
         {/* Phase 5 — Playbook & Learning */}
         <PlaybookPanel client={client} />

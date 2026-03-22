@@ -1,0 +1,86 @@
+This is not the right end state yet.
+
+You fixed the empty-state problem for non-activated clients, but the client workspace still does not feel like the lead experience evolved into delivery intelligence.
+
+What I’m seeing now:
+- a small overview strip at the top
+- Growth Tools in the right rail
+- the same old AI Growth Operator shell still dominating the center
+
+That is still not the experience I asked for.
+
+The core problem remains:
+The main center column is still anchored around an abstract “AI Growth Operator” module with:
+- intelligence score
+- automation mode
+- not-started execution boxes
+- AI actions
+
+This still feels like a CRM/admin shell, not an intelligence-led execution workspace.
+
+What needs to happen now:
+
+1. Replace the AI Growth Operator as the main center-column anchor
+The top center section should become a true `Growth Execution Intelligence` panel, not a system shell.
+
+It must answer:
+- what strategy was sold
+- what coordinated execution strategy we are running
+- what phase we are in
+- what agents are doing now
+- what should happen next
+- what blockers/dependencies exist
+- what visibility/business outcome we are trying to improve
+
+2. Execution statuses must become intelligent
+The current “Not Started” states are not acceptable.
+
+Do not show:
+- Website: Not Started
+- SEO: Not Started
+- GBP: Not Started
+- Ads: Not Started
+
+Instead show dependency-aware, action-aware execution states such as:
+- Website brief ready for generation
+- Homepage structure in progress
+- SEO architecture depends on approved page structure
+- GBP optimisation can begin immediately
+- Waiting for review
+- Ready to publish
+- Blocked by dependency
+- Not in active scope
+
+3. The right rail still needs actual live delivery agents
+The current right rail shows tools, not agents.
+That does not satisfy the requirement.
+
+I want a live execution-agent rail similar to the lead specialist rail.
+
+Examples:
+- Website Strategist — running now
+- Content Agent — waiting on brief approval
+- SEO Architect — blocked by page structure
+- GBP Optimiser — ready to start
+- Deployment Agent — queued after review
+- Growth Operator — monitoring execution
+
+These should have plain-English, dependency-aware statuses and make the page feel alive.
+
+4. The overall page hierarchy still needs to feel like lead intelligence evolved into delivery intelligence
+The client workspace should not feel flatter or more generic than the lead workspace.
+
+It should feel:
+- more intelligent
+- more proactive
+- more coordinated
+- more alive
+
+So the next implementation pass needs to focus on:
+- replacing the center-column shell
+- adding a real live delivery-agent rail
+- rewriting execution statuses
+- making the whole client page feel like a strategic operating surface
+
+This is the key test:
+When I open a client, it should feel like the AI team is already actively executing the sold strategy — not like I’m looking at a CRM page with some AI modules attached.
