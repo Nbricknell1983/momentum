@@ -2019,10 +2019,10 @@ export default function BullpenPage() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="p-6 max-w-7xl mx-auto w-full space-y-6">
+      <div className="p-5 max-w-[1800px] mx-auto w-full">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
               <Radio className="h-5 w-5 text-violet-500" />
@@ -2043,7 +2043,7 @@ export default function BullpenPage() {
         </div>
 
         {/* ── Summary cards ────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           <SummaryCard label="Active Workloads"   value={summaryActiveWorkloads}  icon={Zap}          color="text-violet-600 dark:text-violet-400" />
           <SummaryCard label="Queued Actions"      value={summaryQueued}            icon={Clock}        color="text-blue-600 dark:text-blue-400" />
           <SummaryCard label="Awaiting Approval"   value={summaryAwaitingApproval}  icon={Timer}        color="text-amber-600 dark:text-amber-400" />
@@ -2052,151 +2052,169 @@ export default function BullpenPage() {
           <SummaryCard label="AI-Managed Clients"  value={summaryClientsAffected}   icon={Users}        color="text-indigo-600 dark:text-indigo-400" />
         </div>
 
-        {/* ── Command Center ───────────────────────────────────────────────── */}
-        <div id="bullpen-command-center">
-          <BullpenCommandCenter />
-        </div>
+        {/* ── Two-column command layout ─────────────────────────────────────
+            Main col (~65%): operational feeds, queues, comms
+            Support rail (~35%): brief, enrichment, prep readiness
+        ────────────────────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
 
-        {/* ── Daily Brief ──────────────────────────────────────────────────── */}
-        <div className="rounded-2xl border border-border/40 bg-card p-4">
-          <BullpenDailyBrief />
-        </div>
+          {/* ── Main operational column ──────────────────────────────────── */}
+          <div className="space-y-5 min-w-0">
 
-        {/* ── Intelligence Enrichment ──────────────────────────────────────── */}
-        <div className="rounded-2xl border border-border/40 bg-card p-4">
-          <BullpenEnrichmentPanel />
-        </div>
-
-        {/* ── Prep Readiness ───────────────────────────────────────────────── */}
-        <div className="rounded-2xl border border-border/40 bg-card p-4">
-          <BullpenPrepReadiness />
-        </div>
-
-        {/* ── Agent Review Passes ──────────────────────────────────────────── */}
-        <BullpenReviewPass />
-
-        {/* ── Work Queue ───────────────────────────────────────────────────── */}
-        <BullpenWorkQueue />
-
-        {/* ── Needs Attention ──────────────────────────────────────────────── */}
-        {attentionItems.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-              Needs Attention — {attentionItems.length} item{attentionItems.length > 1 ? 's' : ''}
-            </h2>
-            <div className="space-y-2">
-              {attentionItems.map(item => <AttentionCard key={item.id} item={item} />)}
+            {/* Command Center */}
+            <div id="bullpen-command-center">
+              <BullpenCommandCenter />
             </div>
-          </div>
-        )}
 
-        {attentionItems.length === 0 && (
-          <div className="flex items-center gap-3 p-4 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">No attention required</p>
-              <p className="text-xs text-muted-foreground">All systems operating normally. No blockers or urgent items detected.</p>
-            </div>
-          </div>
-        )}
+            {/* Work Queue */}
+            <BullpenWorkQueue />
 
-        {/* ── Team Comms ───────────────────────────────────────────────────── */}
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
-            </span>
-            Team Comms — Live
-            {aiCommsLoading && (
-              <span className="ml-1 text-[10px] font-normal text-muted-foreground/60 normal-case tracking-normal animate-pulse">
-                AI generating…
-              </span>
-            )}
-            {aiCommsData && !aiCommsLoading && (
-              <span className="ml-1 text-[10px] font-normal text-violet-500/70 normal-case tracking-normal">
-                · AI-powered
-              </span>
-            )}
-            {clawMessages.length > 0 && (
-              <span className="ml-1 text-[10px] font-normal text-emerald-600/70 normal-case tracking-normal">
-                · {clawMessages.length} live from Claw
-              </span>
-            )}
-          </h2>
-          <Card className="border bg-card">
-            <CardContent className="p-0">
-              <div ref={commsRef} className="max-h-[520px] overflow-y-auto px-5 pb-4">
-                {agentFeed.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-muted-foreground">No agent messages yet.</div>
-                ) : (
-                  <>
-                    {agentFeed.slice(0, visibleCount).map((msg, i) => (
-                      <MessageBubble
-                        key={msg.id}
-                        msg={msg}
-                        grouped={i > 0 && agentFeed[i - 1].from === msg.from}
-                      />
-                    ))}
-                    {typingAgent && (
-                      <TypingIndicator
-                        from={typingAgent.from}
-                        fromBg={typingAgent.fromBg}
-                        fromIcon={typingAgent.fromIcon}
-                      />
-                    )}
-                    {visibleCount === 0 && !typingAgent && (
-                      <div className="py-8 text-center text-sm text-muted-foreground">Starting team comms…</div>
-                    )}
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Agent Review Passes */}
+            <BullpenReviewPass />
 
-        {/* ── Secretary ────────────────────────────────────────────────────── */}
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-            <Bot className="h-3.5 w-3.5 text-violet-500" />
-            Secretary — Action Briefing
-          </h2>
-          <Card className="border bg-card">
-            <div className="px-5 py-4 border-b border-border/50 bg-violet-50/50 dark:bg-violet-950/20 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shrink-0 mt-0.5">
-                <Bot className="h-4 w-4 text-white" />
-              </div>
+            {/* Needs Attention */}
+            {attentionItems.length > 0 && (
               <div>
-                <p className="text-sm font-semibold text-violet-900 dark:text-violet-200">
-                  {secretaryItems.length > 0
-                    ? `I've reviewed the team's conversation and flagged ${secretaryItems.length} thing${secretaryItems.length > 1 ? 's' : ''} that need your direct involvement.`
-                    : 'I\'ve reviewed the team\'s conversation. Everything looks well-resourced — no immediate action required from you.'}
-                </p>
-                <p className="text-xs text-violet-700/70 dark:text-violet-400/70 mt-0.5">
-                  Based on agent feedback from today's comms — sorted by urgency.
-                </p>
-              </div>
-            </div>
-            {secretaryItems.length > 0 ? (
-              <CardContent className="p-0">
-                {secretaryItems.map(item => (
-                  <SecretaryRecommendation key={item.id} item={item} />
-                ))}
-              </CardContent>
-            ) : (
-              <CardContent className="px-5 py-6">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-                  <p className="text-sm text-muted-foreground">All tools and integrations appear to be in good shape. I'll flag anything that changes.</p>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                  Needs Attention — {attentionItems.length} item{attentionItems.length > 1 ? 's' : ''}
+                </h2>
+                <div className="space-y-2">
+                  {attentionItems.map(item => <AttentionCard key={item.id} item={item} />)}
                 </div>
-              </CardContent>
+              </div>
             )}
-          </Card>
-        </div>
 
-        {/* ── Workforce ────────────────────────────────────────────────────── */}
-        <div>
+            {attentionItems.length === 0 && (
+              <div className="flex items-center gap-3 p-4 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20">
+                <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">No attention required</p>
+                  <p className="text-xs text-muted-foreground">All systems operating normally. No blockers or urgent items detected.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Team Comms */}
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+                </span>
+                Team Comms — Live
+                {aiCommsLoading && (
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground/60 normal-case tracking-normal animate-pulse">
+                    AI generating…
+                  </span>
+                )}
+                {aiCommsData && !aiCommsLoading && (
+                  <span className="ml-1 text-[10px] font-normal text-violet-500/70 normal-case tracking-normal">
+                    · AI-powered
+                  </span>
+                )}
+                {clawMessages.length > 0 && (
+                  <span className="ml-1 text-[10px] font-normal text-emerald-600/70 normal-case tracking-normal">
+                    · {clawMessages.length} live from Claw
+                  </span>
+                )}
+              </h2>
+              <Card className="border bg-card">
+                <CardContent className="p-0">
+                  <div ref={commsRef} className="max-h-[520px] overflow-y-auto px-5 pb-4">
+                    {agentFeed.length === 0 ? (
+                      <div className="py-8 text-center text-sm text-muted-foreground">No agent messages yet.</div>
+                    ) : (
+                      <>
+                        {agentFeed.slice(0, visibleCount).map((msg, i) => (
+                          <MessageBubble
+                            key={msg.id}
+                            msg={msg}
+                            grouped={i > 0 && agentFeed[i - 1].from === msg.from}
+                          />
+                        ))}
+                        {typingAgent && (
+                          <TypingIndicator
+                            from={typingAgent.from}
+                            fromBg={typingAgent.fromBg}
+                            fromIcon={typingAgent.fromIcon}
+                          />
+                        )}
+                        {visibleCount === 0 && !typingAgent && (
+                          <div className="py-8 text-center text-sm text-muted-foreground">Starting team comms…</div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Secretary */}
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+                <Bot className="h-3.5 w-3.5 text-violet-500" />
+                Secretary — Action Briefing
+              </h2>
+              <Card className="border bg-card">
+                <div className="px-5 py-4 border-b border-border/50 bg-violet-50/50 dark:bg-violet-950/20 flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Bot className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-violet-900 dark:text-violet-200">
+                      {secretaryItems.length > 0
+                        ? `I've reviewed the team's conversation and flagged ${secretaryItems.length} thing${secretaryItems.length > 1 ? 's' : ''} that need your direct involvement.`
+                        : 'I\'ve reviewed the team\'s conversation. Everything looks well-resourced — no immediate action required from you.'}
+                    </p>
+                    <p className="text-xs text-violet-700/70 dark:text-violet-400/70 mt-0.5">
+                      Based on agent feedback from today's comms — sorted by urgency.
+                    </p>
+                  </div>
+                </div>
+                {secretaryItems.length > 0 ? (
+                  <CardContent className="p-0">
+                    {secretaryItems.map(item => (
+                      <SecretaryRecommendation key={item.id} item={item} />
+                    ))}
+                  </CardContent>
+                ) : (
+                  <CardContent className="px-5 py-6">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                      <p className="text-sm text-muted-foreground">All tools and integrations appear to be in good shape. I'll flag anything that changes.</p>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            </div>
+
+          </div>{/* /main column */}
+
+          {/* ── Support rail — sticky on xl+ ─────────────────────────────── */}
+          <div className="space-y-4 xl:sticky xl:top-5 min-w-0">
+
+            {/* Daily Brief */}
+            <div className="rounded-2xl border border-border/40 bg-card p-4">
+              <BullpenDailyBrief />
+            </div>
+
+            {/* Intelligence Enrichment */}
+            <div className="rounded-2xl border border-border/40 bg-card p-4">
+              <BullpenEnrichmentPanel />
+            </div>
+
+            {/* Prep Readiness */}
+            <div className="rounded-2xl border border-border/40 bg-card p-4">
+              <BullpenPrepReadiness />
+            </div>
+
+          </div>{/* /support rail */}
+
+        </div>{/* /two-column grid */}
+
+        {/* ── Workforce — full width below ─────────────────────────────────── */}
+        <div className="mt-8">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4 flex items-center gap-2">
             <Briefcase className="h-3.5 w-3.5" />
             Workforce — {activeRoles.length} active, {idleRoles.length} idle
@@ -2221,7 +2239,7 @@ export default function BullpenPage() {
                   <p className="text-xs text-muted-foreground">{tierLabel[tier]}</p>
                   <div className="flex-1 border-t ml-1" />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                   {tierRoles.map(role => (
                     <RoleCard
                       key={role.id}
@@ -2243,8 +2261,8 @@ export default function BullpenPage() {
           onClose={() => setIntelRole(null)}
         />
 
-        {/* ── Automation Rules ─────────────────────────────────────────────── */}
-        <div>
+        {/* ── Automation Rules — full width below ──────────────────────────── */}
+        <div className="mt-6 pb-8">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
             <Settings2 className="h-3.5 w-3.5" />
             Automation Rules & Control
@@ -2271,7 +2289,7 @@ export default function BullpenPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
 
             {/* Work hours */}
             <Card className="border">

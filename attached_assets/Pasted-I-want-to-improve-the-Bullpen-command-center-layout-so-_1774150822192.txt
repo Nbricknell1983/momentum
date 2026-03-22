@@ -1,0 +1,68 @@
+I want to improve the Bullpen / command-center layout so it uses large screens much better and feels like an operating dashboard instead of a narrow stacked document.
+
+Problem:
+On large monitors, the current layout leaves too much empty white space and compresses important operational content into a narrow center-right strip. This makes the page feel cramped, vertically stacked, and less scannable than it should be.
+
+Goal:
+Redesign the layout to feel like a true command center:
+- wider
+- more balanced
+- easier to scan
+- better use of horizontal space
+- stronger visual hierarchy
+
+Observed issues:
+1. The content column is too narrow relative to the available screen width
+2. There is excessive dead space on the left
+3. Important sections are stacked too vertically
+4. Specialist cards are too cramped for the amount of information they contain
+5. The page reads like an admin document rather than an operating dashboard
+
+What I want:
+1. Review the current page/container width strategy for these Bullpen pages
+2. Move away from a narrow fixed-width centered layout
+3. Introduce a wider dashboard-style layout for large screens
+4. Improve section hierarchy and horizontal grouping
+
+Recommended layout direction:
+Option A (preferred):
+- Use a wide 2-column dashboard layout on desktop
+- Main column (~65–70%):
+- Work Queue
+- Needs Attention
+- Team Comms
+- primary operational lists
+- Support column (~30–35%):
+- Daily Brief
+- Intelligence Enrichment
+- Prep Readiness
+- compact summaries / settings
+
+Also:
+- allow specialist cards to use a wider 3–5 column grid depending on screen size
+- reduce long vertical stacking where possible
+- make key command surfaces feel larger and more prominent
+
+Implementation guidance:
+1. Identify which Bullpen/management pages are using overly narrow max-width containers
+2. Increase max width substantially for command-center pages (for example 1600–1800px or a near-full-width layout with good padding)
+3. Refactor the layout into stronger desktop grid regions
+4. Rebalance section widths so the most important operational panels get more room
+5. Preserve responsive behaviour on smaller screens/tablets
+
+Important design rule:
+These pages are operational control surfaces, not article/detail pages.
+They should optimise for scanning and active management, not narrow reading width.
+
+Success criteria:
+- large screens feel intentionally used
+- there is much less wasted horizontal space
+- cards and lists become easier to scan
+- the page feels like a real command center
+- section hierarchy is clearer and more useful
+
+Please identify:
+1. where the current max-width/container constraints are coming from
+2. the smallest high-impact layout changes to improve large-screen usage
+3. which sections should become wider or more horizontally grouped first
+4. the safest rollout path without breaking mobile responsiveness
