@@ -101,6 +101,71 @@ const MODE_CONFIG: Record<AutomationMode, { icon: typeof Bot; color: string }> =
   autonomous: { icon: Bot, color: 'text-emerald-500' },
 };
 
+// ─── Smart execution status notes ────────────────────────────────────────────
+
+function deriveExecNote(
+  channel: 'website' | 'seo' | 'gbp' | 'ads',
+  client: Client,
+): { note: string; outOfScope: boolean } {
+  const plan = client.activationPlan;
+  if (!plan) return { note: '', outOfScope: false };
+
+  const scope = plan.selectedScope;
+  const ws = plan.workstreams;
+
+  if (!scope.includes(channel as any)) {
+    return { note: 'Not in active delivery scope', outOfScope: true };
+  }
+
+  const status = ws[channel as keyof typeof ws]?.status;
+  const pageStructureReady = !!plan.websiteWorkstream?.pageStructure?.length;
+
+  if (channel === 'website') {
+    switch (status) {
+      case 'queued':           return { note: 'Brief ready to generate', outOfScope: false };
+      case 'generating':       return { note: 'Generating brief and content…', outOfScope: false };
+      case 'ready_for_review': return { note: 'Brief ready — awaiting review', outOfScope: false };
+      case 'approved':         return { note: 'Approved — in development', outOfScope: false };
+      case 'live':             return { note: 'Site live', outOfScope: false };
+      default:                 return { note: 'Ready to begin', outOfScope: false };
+    }
+  }
+
+  if (channel === 'gbp') {
+    switch (status) {
+      case 'queued':           return { note: 'Tasks ready to generate', outOfScope: false };
+      case 'generating':       return { note: 'Generating task list…', outOfScope: false };
+      case 'ready_for_review': return { note: 'Tasks ready — begin sprint', outOfScope: false };
+      case 'approved':
+      case 'live':             return { note: 'In active optimisation', outOfScope: false };
+      default:                 return { note: 'Can begin immediately', outOfScope: false };
+    }
+  }
+
+  if (channel === 'seo') {
+    if (scope.includes('website') && !pageStructureReady) {
+      return { note: 'Waiting on website page structure', outOfScope: false };
+    }
+    switch (status) {
+      case 'queued':           return { note: 'Architecture ready to map', outOfScope: false };
+      case 'ready_for_review': return { note: 'Strategy ready — review', outOfScope: false };
+      case 'live':             return { note: 'Rankings in progress', outOfScope: false };
+      default:                 return { note: 'Ready to begin', outOfScope: false };
+    }
+  }
+
+  if (channel === 'ads') {
+    switch (status) {
+      case 'queued':           return { note: 'Campaign structure to define', outOfScope: false };
+      case 'ready_for_review': return { note: 'Campaign plan — review', outOfScope: false };
+      case 'live':             return { note: 'Campaign live', outOfScope: false };
+      default:                 return { note: 'Ready to launch', outOfScope: false };
+    }
+  }
+
+  return { note: '', outOfScope: false };
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 interface Props {
@@ -341,8 +406,13 @@ export default function GrowthOperatorPanel({ client }: Props) {
                 const status: ExecutionStatusValue = ch?.status ?? 'not_started';
                 const colorCls = EXECUTION_STATUS_COLORS[status];
                 const isSaving = savingExec === key;
+                const { note, outOfScope } = deriveExecNote(key, client);
                 return (
-                  <div key={key} className={`rounded-lg border p-2.5 space-y-2 ${colorCls} border-current/20`} data-testid={`exec-channel-${key}`}>
+                  <div
+                    key={key}
+                    className={`rounded-lg border p-2.5 space-y-2 ${outOfScope ? 'opacity-50' : colorCls} border-current/20`}
+                    data-testid={`exec-channel-${key}`}
+                  >
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1 text-xs font-semibold">
                         <Icon className="h-3 w-3" /> {label}
@@ -352,7 +422,7 @@ export default function GrowthOperatorPanel({ client }: Props) {
                     <Select
                       value={status}
                       onValueChange={(v) => saveExecStatus(key, v as ExecutionStatusValue)}
-                      disabled={!!savingExec}
+                      disabled={!!savingExec || outOfScope}
                     >
                       <SelectTrigger className="h-6 text-[11px] bg-white/50 dark:bg-black/20 border-0 shadow-none px-2" data-testid={`select-exec-${key}`}>
                         <SelectValue />
@@ -365,6 +435,11 @@ export default function GrowthOperatorPanel({ client }: Props) {
                         ))}
                       </SelectContent>
                     </Select>
+                    {note && (
+                      <p className="text-[10px] leading-snug text-muted-foreground border-t border-current/10 pt-1.5 mt-0.5">
+                        {note}
+                      </p>
+                    )}
                   </div>
                 );
               })}

@@ -1,0 +1,120 @@
+I want to refactor the client workspace so it feels much closer to the lead experience in terms of intelligence, strategic clarity, proactive guidance, and visible live agent activity.
+
+Problem:
+Right now the client workspace feels too much like a CRM shell with engine/status cards and manual actions. It does not carry over the intelligence-driven, proactive, strategy-led feel of the lead experience.
+
+The lead view feels like:
+- live intelligence
+- strategic interpretation
+- clear next moves
+- proactive agent guidance
+- visible specialist activity in the right rail
+
+The client view currently feels more like:
+- system shell
+- statuses
+- “not started” cards
+- tools waiting to be run
+- missing live right-rail agent presence
+
+That is the wrong direction.
+Once someone becomes a client, the system should feel more intelligent and more operational — not less.
+
+Goal:
+Refactor the client workspace so it feels like “Deal Intelligence evolved into Delivery Intelligence”, with:
+1. an intelligence-led center column
+2. a live right-rail delivery-agent experience
+3. more strategic, dependency-aware execution status language
+4. a stronger sense that agents are already actively executing the work
+
+Core product rule:
+The client workspace should feel like Delivery Intelligence, not a generic CRM dashboard.
+
+What I want:
+1. Make the main client workspace feel intelligence-led, not status-led
+2. Replace the abstract “AI Growth Operator” shell-like feel with a stronger execution-intelligence experience
+3. Add a live right-rail agent panel for delivery/execution work
+4. Carry over the narrative, coordinated, proactive feel of the lead section
+5. Make the center column the strategic brain of delivery
+
+Recommended client layout:
+
+Left rail:
+- contact and account context
+- stage/commercial details
+- quick admin/logging actions
+
+Main center:
+- Growth Execution Intelligence (primary top section)
+- execution workstreams
+- generated assets / outputs
+- website / SEO / GBP execution progress
+
+Right rail:
+- Delivery Agents / Execution Agents / Active Delivery Team
+- operator actions
+- account intelligence
+- call/follow-up controls
+- growth plan / expansion tools
+
+What should change in the center top section:
+Replace the current “AI Growth Operator” shell-style presentation with a more strategy/execution-oriented panel that answers:
+- what strategy was sold
+- what the coordinated execution strategy is
+- what phase we are in
+- what agents are actively working on
+- what should happen next
+- what blockers/dependencies exist
+- what visibility/business outcome we are trying to improve
+
+Execution statuses must improve:
+Do not just show:
+- Website: Not started
+- SEO: Not started
+- GBP: Not started
+
+Instead show more intelligent, context-aware states such as:
+- Website brief ready for generation
+- SEO architecture depends on core page structure
+- GBP optimisation can begin immediately
+- Waiting for review
+- Blocked by dependency
+- Ready to start
+- Paid ads not in active scope
+
+Right-rail delivery-agent concept:
+The client workspace should have a live right rail similar to the lead specialist rail, but adapted for delivery rather than pre-sale analysis.
+
+Possible agents/workstreams shown:
+- Website Strategist
+- Content/Copy Agent
+- SEO Architect
+- GBP Optimiser
+- Deployment Agent
+- Growth Operator
+
+Statuses should be dependency-aware and action-aware, for example:
+- Running now
+- Waiting on page structure
+- Waiting for review
+- Ready to start
+- Blocked by dependency
+- Completed
+- Needs approval
+
+Implementation goals:
+1. Audit the current client workspace layout and compare it against the lead experience
+2. Identify the smallest high-impact changes to make the client center column feel more like the lead intelligence flow
+3. Rework the top client panel so it becomes a strategic execution brain rather than a system shell
+4. Add a right-rail delivery-agent panel that mirrors the “alive” quality of the lead specialist rail
+5. Improve execution statuses so they reflect dependencies, readiness, and next actions — not static “not started” labels
+6. Reuse existing client workstream state where possible to drive both the center intelligence and the right-rail agent statuses
+7. Preserve existing functionality, but change the structure/hierarchy so the workspace feels proactive, intelligent, and visibly orchestrated
+
+Success criteria:
+- client workspace feels much closer to the lead experience
+- center column becomes the strategic brain of execution
+- strategy, scope, priorities, and next moves are clearer
+- statuses feel intelligent and action-oriented
+- the right rail visibly shows what delivery agents are doing, what is waiting, and what comes next
+- the client view feels like a natural continuation of lead intelligence rather than a downgrade into a checklist/status screen

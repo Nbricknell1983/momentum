@@ -16,7 +16,7 @@ import {
 } from '@/lib/types';
 import { logClientAction, updateClientInFirestore } from '@/lib/firestoreService';
 import ClientGrowthIntelligencePanel from './ClientGrowthIntelligencePanel';
-import AIClientGrowthEngine from './AIClientGrowthEngine';
+import ClientDeliveryRail from './ClientDeliveryRail';
 import { format, addWeeks, addMonths } from 'date-fns';
 
 const HEALTH_COLORS = {
@@ -443,9 +443,9 @@ export default function ClientFocusView({ client, onClose, onNavigate, hasPrev, 
           <ClientGrowthIntelligencePanel client={client} />
         </div>
 
-        {/* Right — AI Client Growth Engine */}
+        {/* Right — Delivery Team & Growth Tools */}
         <div className="w-[380px] shrink-0 bg-muted/5">
-          <AIClientGrowthEngine client={client} />
+          <ClientDeliveryRail client={client} />
         </div>
       </div>
     </div>
