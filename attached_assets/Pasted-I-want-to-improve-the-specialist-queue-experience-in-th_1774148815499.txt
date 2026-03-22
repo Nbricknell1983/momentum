@@ -1,0 +1,88 @@
+I want to improve the specialist queue experience in the right rail so users can tell whether agents are progressing normally, waiting on dependencies, or actually stuck.
+
+Problem:
+Right now the rail often just says “In queue”, which is too vague. When I open a lead and agents start working, I can’t tell:
+- whether a queued specialist is healthy
+- what it is waiting on
+- how much longer it might take
+- whether it is delayed or stuck
+
+Goal:
+Make the right rail feel trustworthy and self-explanatory by replacing vague queue states with dependency-aware, time-aware progress states.
+
+What I want:
+1. Replace generic “In queue” states with more specific plain-English statuses
+2. Show what each specialist is waiting on when it has not started yet
+3. Distinguish between:
+- healthy queued
+- actively running
+- delayed
+- failed / needs retry
+4. Add lightweight timing context so users know whether to wait or worry
+
+Desired UX:
+For each specialist, show:
+- a clear current state
+- a dependency explanation if not running yet
+- a lightweight timing cue if useful
+
+Examples of better statuses:
+- Waiting on prep analysis
+- Waiting on website review
+- Waiting for search signals
+- Ready to start next
+- Running now
+- Completed just now
+- Taking longer than usual
+- Needs retry
+
+Examples of helper text:
+- Usually starts within a few seconds after the prior stage completes
+- Waiting for website analysis before mapping search visibility
+- Still healthy, just waiting on earlier stages
+- This step is taking longer than expected
+
+Suggested state model:
+type SpecialistProgressState =
+| "queued"
+| "waiting-on-dependency"
+| "running"
+| "complete"
+| "delayed"
+| "failed";
+
+type SpecialistProgressMeta = {
+state: SpecialistProgressState;
+dependsOn?: string;
+startedAt?: string;
+completedAt?: string;
+queuedAt?: string;
+expectedAfter?: string;
+delayThresholdMs?: number;
+};
+
+Implementation goals:
+1. Identify where the current right-rail specialist statuses are derived
+2. Replace generic queue labels with dependency-aware statuses
+3. Add a delayed state when a specialist has remained queued or waiting longer than a reasonable threshold
+4. Add lightweight elapsed/relative timing where it improves clarity
+5. Preserve the premium, minimal feel — do not turn the rail into a noisy debug console
+
+Important UX rules:
+- Do not expose internal system jargon
+- Do not show raw timestamps if relative time is clearer
+- Prefer plain-English phrasing
+- If a stage is healthy but waiting, say so clearly
+- If a stage is delayed, make that visible without sounding alarming unless it has truly failed
+
+Success criteria:
+- users can tell whether a queued agent is healthy or stuck
+- users understand what each stage is waiting on
+- the rail feels more transparent and trustworthy
+- users know whether to wait, refresh, or intervene
+
+Please identify:
+1. where the current “In queue” logic is generated
+2. the smallest safe refactor to introduce dependency-aware and delayed states
+3. which existing runtime signals can be reused to infer healthy waiting vs likely delay
+4. the best UI treatment for timing/status clarity without clutter

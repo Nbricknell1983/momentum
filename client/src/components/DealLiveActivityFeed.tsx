@@ -122,13 +122,35 @@ function SpecAvatar({ id, pulse }: { id: SpecId; pulse?: boolean }) {
   );
 }
 
-function StatusBadge({ status }: { status: StageStatus }) {
+const RUNNING_DELAY_MS = 55_000;   // >55s running → "Taking longer than usual"
+const PENDING_LONG_MS  = 100_000;  // >100s pending since mount → "Still healthy"
+
+function StatusBadge({ status, elapsedMs, pendingMs }: {
+  status: StageStatus;
+  elapsedMs?: number | null;
+  pendingMs?: number | null;
+}) {
   if (status === 'complete')
     return <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 className="h-3 w-3" /> Done</span>;
-  if (status === 'running')
-    return <span className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium"><Loader2 className="h-3 w-3 animate-spin" /> On it…</span>;
+
+  if (status === 'running') {
+    if (elapsedMs != null && elapsedMs > RUNNING_DELAY_MS)
+      return <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><AlertCircle className="h-3 w-3" /> Taking longer than usual</span>;
+    const secs = elapsedMs != null ? Math.floor(elapsedMs / 1000) : null;
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        On it…{secs != null && secs >= 5 ? ` (${secs}s)` : ''}
+      </span>
+    );
+  }
+
   if (status === 'blocked')
     return <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><AlertCircle className="h-3 w-3" /> Needs info</span>;
+
+  if (pendingMs != null && pendingMs > PENDING_LONG_MS)
+    return <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50 font-medium"><Clock className="h-3 w-3" /> Still healthy</span>;
+
   return <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60 font-medium"><Clock className="h-3 w-3" /> In queue</span>;
 }
 
@@ -173,12 +195,20 @@ interface StageCardProps {
   blockedReason?: string;
   expandable?: boolean;
   expandContent?: React.ReactNode;
+  startedAt?: number | null;
+  mountedAt?: number;
 }
 
-function StageCard({ specId, status, task, finding, timestamp, blockedReason, expandable, expandContent }: StageCardProps) {
+function StageCard({ specId, status, task, finding, timestamp, blockedReason, expandable, expandContent, startedAt, mountedAt }: StageCardProps) {
   const [expanded, setExpanded] = useState(false);
   const spec = SPEC[specId];
   const dim = status === 'pending' || status === 'blocked';
+
+  const now = Date.now();
+  const elapsedMs = status === 'running' && startedAt != null ? now - startedAt : null;
+  const pendingMs = status === 'pending' && mountedAt != null ? now - mountedAt : null;
+  const isDelayed = elapsedMs != null && elapsedMs > RUNNING_DELAY_MS;
+  const isPendingLong = pendingMs != null && pendingMs > PENDING_LONG_MS;
 
   return (
     <div className={`flex gap-3 ${dim ? 'opacity-40' : ''} transition-opacity`} data-testid={`feed-stage-${specId}`}>
@@ -188,7 +218,7 @@ function StageCard({ specId, status, task, finding, timestamp, blockedReason, ex
       <div className="flex-1 min-w-0 pb-2">
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <p className={`text-[11px] font-bold ${spec.text}`}>{spec.name}</p>
-          <StatusBadge status={status} />
+          <StatusBadge status={status} elapsedMs={elapsedMs} pendingMs={pendingMs} />
         </div>
         {timestamp && status === 'complete' && (
           <p className="text-[9px] text-muted-foreground mb-1">
@@ -198,8 +228,14 @@ function StageCard({ specId, status, task, finding, timestamp, blockedReason, ex
         {status === 'pending' && (
           <p className="text-[11px] text-muted-foreground">{task}</p>
         )}
+        {status === 'pending' && isPendingLong && (
+          <p className="text-[10px] text-muted-foreground/50 mt-0.5">Still healthy — earlier stages are still finishing up</p>
+        )}
         {status === 'running' && (
           <p className="text-[11px] text-foreground/70">{task}</p>
+        )}
+        {status === 'running' && isDelayed && (
+          <p className="text-[10px] text-amber-600/80 dark:text-amber-500/80 mt-0.5">This step can take up to 90 seconds — still running normally</p>
         )}
         {status === 'blocked' && (
           <p className="text-[11px] text-amber-600 dark:text-amber-400">{blockedReason || task}</p>
@@ -250,6 +286,20 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
   const autoXrayFired = useRef(false);
   const autoSerpFired = useRef(false);
   const autoDiagFired = useRef(false);
+
+  // Timing refs — track when each stage started running for elapsed-time display
+  const mountedAt = useRef(Date.now());
+  const prepStartedAt = useRef<number | null>(null);
+  const xrayStartedAt = useRef<number | null>(null);
+  const serpStartedAt = useRef<number | null>(null);
+  const diagStartedAt = useRef<number | null>(null);
+
+  // Tick every 8s so elapsed-time labels stay fresh without polling the server
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 8_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [dealContext, setDealContext] = useState((lead as any).dealContext || '');
   const [contextSaving, setContextSaving] = useState(false);
@@ -363,6 +413,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     if (!isMissing && !isStale) return;
     autoPrepFired.current = true;
     const timer = setTimeout(async () => {
+      prepStartedAt.current = Date.now();
       setPrepRunning(true);
       try {
         const token = await auth.currentUser?.getIdToken();
@@ -394,6 +445,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     if (!websiteUrl) return;
     autoXrayFired.current = true;
     const timer = setTimeout(async () => {
+      xrayStartedAt.current = Date.now();
       setXrayRunning(true);
       try {
         const token = await auth.currentUser?.getIdToken();
@@ -423,6 +475,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     if (!businessName) return;
     autoSerpFired.current = true;
     const timer = setTimeout(async () => {
+      serpStartedAt.current = Date.now();
       setSerpRunning(true);
       try {
         const token = await auth.currentUser?.getIdToken();
@@ -462,6 +515,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
     if (!xrayDone || !serpDone) return;
     autoDiagFired.current = true;
     const timer = setTimeout(async () => {
+      diagStartedAt.current = Date.now();
       setDiagRunning(true);
       try {
         const token = await auth.currentUser?.getIdToken();
@@ -916,6 +970,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             timestamp={prepAt}
             expandable={hasPrepPack}
             expandContent={prepExpandContent}
+            startedAt={prepStartedAt.current}
+            mountedAt={mountedAt.current}
           />
 
           {/* Handoff 1→2 */}
@@ -941,6 +997,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             blockedReason="No website URL on this lead — add one and we'll dig straight in"
             expandable={hasXray}
             expandContent={websiteExpandContent}
+            startedAt={xrayStartedAt.current}
+            mountedAt={mountedAt.current}
           />
 
           {/* Handoff 2→3 */}
@@ -964,6 +1022,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             finding={serpFinding}
             expandable={hasSerp}
             expandContent={seoExpandContent}
+            startedAt={serpStartedAt.current}
+            mountedAt={mountedAt.current}
           />
 
           {/* Handoff 3→4 */}
@@ -987,6 +1047,8 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             finding={growthFinding}
             expandable={hasDiagnosis}
             expandContent={growthExpandContent}
+            startedAt={diagStartedAt.current}
+            mountedAt={mountedAt.current}
           />
 
           {/* Handoff 4→5 */}
@@ -1011,6 +1073,7 @@ export default function DealLiveActivityFeed({ lead }: DealLiveActivityFeedProps
             timestamp={nbsAt}
             expandable={hasNbs}
             expandContent={commExpandContent}
+            mountedAt={mountedAt.current}
           />
 
           {/* Context event — shown if deal context has been added */}
