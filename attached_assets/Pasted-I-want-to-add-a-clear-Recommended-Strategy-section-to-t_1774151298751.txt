@@ -1,0 +1,86 @@
+I want to add a clear Recommended Strategy section to the Deal Intelligence experience, including the public share URL that can be emailed or texted.
+
+Problem:
+The current Deal Intelligence is good at diagnosing the lead, but it does not yet create a clear commercial handoff that answers:
+- what strategy we recommend
+- why that strategy fits
+- what the rep should send next
+- what public URL should be shared
+
+Goal:
+Add a distinct Recommended Strategy section that turns intelligence into action.
+
+What I want:
+1. Add a “Recommended Strategy” card/section to the Deal Intelligence area
+2. Base it on the existing Agent Intelligence / presence / search / GBP findings
+3. Include a clear public share URL if one exists
+4. Make it easy to copy/open/send that URL via email or SMS workflows
+
+The section should answer:
+- What do we recommend?
+- Why does it fit this lead?
+- What is the best next step?
+- What public asset/link should be shared?
+
+Suggested content structure:
+
+1. Strategy headline
+A short recommendation headline in plain English
+
+2. Strategy summary
+A concise paragraph explaining the recommended direction
+
+3. Why this fits
+3–5 bullets grounded in Deal Intelligence findings
+Examples:
+- good base credibility but low review depth
+- limited local organic visibility
+- service clarity opportunities on the website
+- strong opportunity to improve local authority
+
+4. Best next action
+One explicit recommendation for the rep
+Example:
+- Send the tailored strategy report and frame it as a growth opportunity review
+
+5. Public share link
+If available:
+- show the public URL clearly
+- add Copy link and Open link actions
+- optionally support Draft email / Draft SMS actions later
+
+If not available:
+- show a clean state such as:
+- No public strategy link generated yet
+- Generate public strategy URL
+
+Suggested data shape:
+
+type RecommendedStrategy = {
+headline: string;
+summary: string;
+whyItFits: string[];
+primaryAngle?: string;
+bestNextAction?: string;
+recommendedAssetType?: "public-report" | "strategy-link" | "case-study" | "audit-summary";
+publicUrl?: string;
+publicUrlLabel?: string;
+status?: "ready" | "needs-generation" | "unavailable";
+};
+
+Implementation guidance:
+1. Identify the best place in the current Deal Intelligence layout to add this section
+2. Map existing intelligence outputs into a first-pass Recommended Strategy object
+3. If a public report URL already exists in the system, surface it here
+4. If it does not exist yet, render a clear generation/empty state
+5. Keep the UI commercially useful and action-oriented, not just analytical
+
+Important product rule:
+Deal Intelligence should end in a recommendation, not just a diagnosis.
+
+Success criteria:
+- reps can immediately see the recommended strategic angle for the lead
+- the section clearly explains why that strategy fits
+- a public share URL is surfaced when available
+- the rep can quickly copy/open/use the asset in email or SMS follow-up
+- Deal Intelligence feels like it naturally leads into action

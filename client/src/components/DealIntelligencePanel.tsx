@@ -1147,6 +1147,304 @@ function NextBestStepsCard({ lead, autoRunning, provisionalSteps, provRunning }:
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Recommended Strategy — derives a commercial handoff from existing intelligence
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DerivedStrategy {
+  headline: string;
+  summary?: string;
+  whyItFits: string[];
+  bestNextAction: string;
+  publicUrl?: string;
+  status: 'ready' | 'needs-generation' | 'minimal';
+}
+
+function deriveRecommendedStrategy(lead: Lead): DerivedStrategy {
+  const prep      = (lead as any).prepCallPack;
+  const diagnosis = (lead as any).aiGrowthPlan?.strategyDiagnosis;
+  const eb        = (lead as any).evidenceBundle || {};
+  const reportId  = (lead as any).strategyReportId;
+  const publicUrl = reportId ? `${window.location.origin}/strategy/${reportId}` : undefined;
+
+  // ── Headline ──────────────────────────────────────────────────────────────
+  let headline = '';
+  if (diagnosis?.insightSentence) {
+    headline = diagnosis.insightSentence;
+  } else if (diagnosis?.growthPotential?.opportunities?.[0]) {
+    headline = diagnosis.growthPotential.opportunities[0];
+  } else if (prep?.opportunities?.[0]) {
+    const op = prep.opportunities[0];
+    headline = typeof op === 'string' ? op : (op.title || op.area || op.description || '');
+  } else if (lead.industry && lead.address) {
+    headline = `Strengthen ${lead.industry} visibility and lead capture in ${lead.address}`;
+  } else if (lead.companyName) {
+    headline = `Growth strategy for ${lead.companyName}`;
+  } else {
+    headline = 'Digital growth strategy';
+  }
+
+  // ── Summary ───────────────────────────────────────────────────────────────
+  let summary: string | undefined;
+  if (diagnosis?.currentPosition?.summary && diagnosis?.growthPotential?.summary) {
+    summary = `${diagnosis.currentPosition.summary} ${diagnosis.growthPotential.summary}`;
+  } else if (diagnosis?.currentPosition?.summary) {
+    summary = diagnosis.currentPosition.summary;
+  } else if (prep?.businessSnapshot) {
+    const snap = prep.businessSnapshot as string;
+    summary = snap.length > 240 ? snap.slice(0, 237) + '…' : snap;
+  }
+
+  // ── Why it fits bullets ───────────────────────────────────────────────────
+  const bullets: string[] = [];
+
+  // Strategy diagnosis gaps (high/medium severity first)
+  if (diagnosis?.gaps?.length) {
+    const sorted = [...diagnosis.gaps].sort((a: any, b: any) => {
+      const rank = (s: string) => s === 'high' ? 2 : s === 'medium' ? 1 : 0;
+      return rank(b.severity) - rank(a.severity);
+    });
+    sorted.slice(0, 2).forEach((g: any) => {
+      const ev = g.evidence ? ` — ${String(g.evidence).slice(0, 90)}` : '';
+      bullets.push(`${g.title}${ev}`);
+    });
+  }
+
+  // Growth potential opportunities
+  if (diagnosis?.growthPotential?.opportunities?.length && bullets.length < 4) {
+    diagnosis.growthPotential.opportunities.slice(0, 2).forEach((o: string) => {
+      if (o && !bullets.some(b => b.slice(0, 30) === o.slice(0, 30))) bullets.push(o);
+    });
+  }
+
+  // Prep pack opportunities
+  if (prep?.opportunities?.length && bullets.length < 4) {
+    (prep.opportunities as any[]).slice(0, 2).forEach((op: any) => {
+      const text = typeof op === 'string' ? op : (op.title || op.area || op.description || '');
+      if (text && !bullets.some(b => b.slice(0, 25) === text.slice(0, 25))) bullets.push(text);
+    });
+  }
+
+  // Evidence-based presence signals
+  if (bullets.length < 5) {
+    const hasGbp     = !!eb.gbp?.placeId;
+    const hasSite    = !!eb.website?.url;
+    const crawlFailed = eb.website?.success === false;
+    if (!hasGbp && lead.website) {
+      bullets.push('No confirmed Google Business Profile — major local search visibility gap');
+    } else if (hasGbp && !hasSite) {
+      bullets.push('GBP present but website is missing — conversion pathway is incomplete');
+    }
+    if (crawlFailed && bullets.length < 5) {
+      bullets.push('Website crawl returned errors — technical barriers may be hurting search indexing');
+    }
+  }
+
+  const whyItFits = bullets.slice(0, 5);
+
+  // ── Best next action ──────────────────────────────────────────────────────
+  let bestNextAction = '';
+  if (publicUrl) {
+    bestNextAction = 'Send the Digital Visibility Strategy report — it frames the growth opportunity in plain language the prospect can act on immediately';
+  } else if (diagnosis) {
+    bestNextAction = 'Share the readiness diagnosis and book a strategy call to walk through the top priorities and forecast';
+  } else if (prep?.callPriorities?.[0]) {
+    const p = prep.callPriorities[0] as any;
+    const text = typeof p === 'string' ? p : (p.priority || p.topic || String(p));
+    bestNextAction = `Lead with: ${text}`;
+  } else if (prep?.businessSnapshot) {
+    bestNextAction = 'Generate a strategy page to give the prospect a shareable, visual version of the recommendation';
+  } else {
+    bestNextAction = 'Generate call prep intelligence to unlock a personalised strategy recommendation for this prospect';
+  }
+
+  const status: DerivedStrategy['status'] = publicUrl ? 'ready' : (prep || diagnosis) ? 'needs-generation' : 'minimal';
+
+  return { headline, summary, whyItFits, bestNextAction, publicUrl, status };
+}
+
+function RecommendedStrategyCard({ lead }: { lead: Lead }) {
+  const dispatch = useDispatch();
+  const { orgId, authReady } = useAuth();
+  const { toast } = useToast();
+  const [creating, setCreating] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const strategy = useMemo(() => deriveRecommendedStrategy(lead), [lead]);
+
+  // Show nothing if there's genuinely no intelligence available yet
+  const hasAnyData = !!(
+    (lead as any).prepCallPack?.businessSnapshot ||
+    (lead as any).aiGrowthPlan?.strategyDiagnosis ||
+    (lead as any).strategyReportId
+  );
+
+  const createStrategyPage = async () => {
+    if (!orgId || !authReady) return;
+    setCreating(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const si   = (lead as any).strategyIntelligence || {};
+      const pack = (lead as any).prepCallPack;
+      const res  = await fetch('/api/strategy-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          orgId,
+          businessName:    lead.companyName || (lead as any).businessName || 'Business',
+          industry:        lead.industry,
+          location:        lead.address,
+          website:         lead.website,
+          businessOverview: si.businessOverview || pack?.businessSnapshot || '',
+          idealCustomer:   si.idealCustomer || pack?.customerProfile?.likelyCustomer || '',
+          coreServices:    si.coreServices || '',
+          targetLocations: si.targetLocations || lead.address || '',
+          growthObjective: si.growthObjective || pack?.commercialAngle || '',
+          phone:           lead.phone,
+          email:           lead.email,
+          logoUrl:         '',
+          agencyName:      '',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      const updates: Partial<Lead> = { strategyReportId: data.id };
+      dispatch(patchLead({ id: lead.id, updates }));
+      await updateLeadInFirestore(orgId, lead.id, updates, authReady);
+      toast({ title: 'Strategy page created', description: 'Share the link with your prospect' });
+    } catch {
+      toast({ title: 'Failed to create strategy page', variant: 'destructive' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const copyUrl = () => {
+    if (!strategy.publicUrl) return;
+    navigator.clipboard.writeText(strategy.publicUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!hasAnyData) return null;
+
+  return (
+    <div
+      className="rounded-lg border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/20 dark:bg-emerald-950/10 overflow-hidden"
+      data-testid="card-recommended-strategy"
+    >
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-emerald-200 dark:border-emerald-800/30">
+        <div className="w-6 h-6 rounded bg-emerald-600 flex items-center justify-center shrink-0">
+          <Target className="h-3.5 w-3.5 text-white" />
+        </div>
+        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex-1">Recommended Strategy</span>
+        {strategy.status === 'ready' && (
+          <span className="text-[10px] font-semibold px-2 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            Report ready
+          </span>
+        )}
+        {strategy.status === 'needs-generation' && (
+          <span className="text-[10px] font-semibold px-2 py-px rounded-full bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">
+            No public link yet
+          </span>
+        )}
+      </div>
+
+      <div className="px-3 py-3 space-y-3">
+
+        {/* ── Strategy headline ─────────────────────────────────────────────── */}
+        <p className="text-[13px] font-semibold text-foreground leading-snug" data-testid="text-strategy-headline">
+          {strategy.headline}
+        </p>
+
+        {/* ── Summary ──────────────────────────────────────────────────────── */}
+        {strategy.summary && (
+          <p className="text-[11px] text-muted-foreground leading-relaxed" data-testid="text-strategy-summary">
+            {strategy.summary}
+          </p>
+        )}
+
+        {/* ── Why this fits ─────────────────────────────────────────────────── */}
+        {strategy.whyItFits.length > 0 && (
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-500 mb-1.5">Why this fits</p>
+            <ul className="space-y-1.5" data-testid="list-why-it-fits">
+              {strategy.whyItFits.map((bullet, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-[11px] text-foreground/80 leading-snug">
+                  <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-600" />
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* ── Best next action ─────────────────────────────────────────────── */}
+        <div className="flex items-start gap-2 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 px-2.5 py-2">
+          <ArrowRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-0.5">Best next action</p>
+            <p className="text-[11px] text-foreground/90 leading-snug" data-testid="text-best-next-action">
+              {strategy.bestNextAction}
+            </p>
+          </div>
+        </div>
+
+        {/* ── Public share link ─────────────────────────────────────────────── */}
+        <div className="border-t border-emerald-100 dark:border-emerald-800/30 pt-2.5">
+          {strategy.publicUrl ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5">
+                <Send className="h-3 w-3 text-blue-500 shrink-0" />
+                <span className="text-[10px] font-semibold text-muted-foreground flex-1">Public strategy link</span>
+                <button
+                  onClick={copyUrl}
+                  className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors"
+                  data-testid="button-copy-strategy-url"
+                >
+                  {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                  {copied ? 'Copied!' : 'Copy link'}
+                </button>
+                <a
+                  href={strategy.publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+                  data-testid="link-open-strategy"
+                >
+                  <ExternalLink className="h-3 w-3" /> View
+                </a>
+              </div>
+              <p className="text-[10px] text-blue-500 dark:text-blue-400 truncate pl-5" data-testid="text-strategy-url">
+                {strategy.publicUrl}
+              </p>
+              <p className="text-[9.5px] text-muted-foreground/60 pl-5">
+                Paste into email or SMS to share with your prospect
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Send className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-[10px] text-muted-foreground flex-1">No public strategy link yet</span>
+              <button
+                onClick={createStrategyPage}
+                disabled={creating || !authReady}
+                className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 disabled:opacity-40 transition-colors px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                data-testid="button-create-strategy-page"
+              >
+                {creating
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Creating…</>
+                  : <><Plus className="h-3 w-3" /> Create strategy page</>}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StrategyUrlCard({ lead }: { lead: Lead }) {
   const dispatch = useDispatch();
   const { orgId, authReady } = useAuth();
@@ -1821,7 +2119,7 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
 
       <NextBestStepsCard lead={lead} autoRunning={autoNbsRunning} provisionalSteps={provisionalSteps} provRunning={provNbsRunning} />
 
-      <StrategyUrlCard lead={lead} />
+      <RecommendedStrategyCard lead={lead} />
 
       <StrategyIntelligenceCard lead={lead} />
 
