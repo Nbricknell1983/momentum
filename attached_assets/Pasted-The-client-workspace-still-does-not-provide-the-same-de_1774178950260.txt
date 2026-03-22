@@ -1,0 +1,94 @@
+The client workspace still does not provide the same depth of analysis as the lead section, and I want it to inherit the same intelligence features.
+
+Problem:
+The current Client Intelligence panel is better than before, but it is still too shallow and summary-like compared to the lead-side intelligence experience.
+
+On the lead side, the system provides a rich Presence Snapshot with:
+- Website
+- GBP / Maps
+- Social
+- Search
+- Paid Search
+including:
+- detailed plain-English findings
+- observed/estimated state
+- clickable insight rows
+- evidence-backed drilldowns/modals
+- deeper commercial interpretation
+
+On the client side, I am still getting a lighter summary layer like:
+- site confirmed
+- full audit not yet run
+- GBP URL on record
+- baseline not yet audited
+
+That is not enough.
+I want the same intelligence depth and feature set as the lead section, adapted for client execution.
+
+Goal:
+Make the client workspace inherit the same intelligence system as the lead workspace, not a lighter approximation.
+
+Product rule:
+Client intelligence should be at least as rich as lead intelligence, then extended with preservation and execution layers.
+
+What I want:
+1. Reuse the lead-side Presence Snapshot / insight system directly in the client workspace where possible
+2. Bring across the same channel breakdown:
+- Website
+- GBP / Maps
+- Social
+- Search
+- Paid Search
+3. Bring across the same interaction model:
+- clickable rows
+- drilldown/detail modals
+- evidence-backed insights
+4. Preserve the same plain-English, commercially useful style
+5. Then add client-specific execution layers on top:
+- preservation risks
+- what to protect during rebuild/takeover
+- execution priorities
+- active workstreams
+
+What the client workspace should have:
+A. Presence Snapshot
+- same richness as lead-side snapshot
+- detailed findings, not just “confirmed” states
+- observed/estimated markers
+- clickable evidence drilldowns
+
+B. Client Intelligence
+- what already exists
+- what is working
+- what is weak
+- what must be preserved
+- what should be improved
+
+C. Execution Strategy / Recommended Action
+- what we are doing
+- why
+- what comes next
+
+D. Delivery Agents / Workstreams
+- what is actively running now
+
+Important preservation rule:
+If we are taking over an existing website, the client workspace must explicitly show:
+- what SEO assets/pages/signals already exist
+- what should be preserved
+- what should redirect
+- what can be improved
+- what should not be lost during rebuild
+
+Implementation guidance:
+1. Audit which lead-side intelligence components can be reused directly in the client workspace
+2. Do not create a separate lighter client-only pattern if the lead pattern already solves this better
+3. Bring the same depth of Website / GBP / Social / Search / Paid Search insight rendering into clients
+4. Extend those insights with client-specific preservation/execution framing
+5. Keep the center column intelligence-first and evidence-backed
+
+Success criteria:
+- client workspace shows the same depth of analysis as the lead section
+- presence intelligence is richer than simple “confirmed/not yet audited” summaries
+- users can inspect channel findings in the same way they can on leads
+- client intelligence feels like lead intelligence matured into execution intelligence, not a downgraded summary panel

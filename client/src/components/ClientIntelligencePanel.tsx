@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import {
-  Brain, Globe, MapPin, Search, Layers, AlertTriangle,
+  Brain, AlertTriangle,
   CheckCircle2, ChevronDown, ChevronUp,
   Target, Sparkles, Loader2, Shield, RefreshCw,
-  BarChart3, ShieldCheck, Lightbulb, ExternalLink,
+  ShieldCheck, Lightbulb,
 } from 'lucide-react';
-import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { Client, ClientIntelligenceBrief } from '@/lib/types';
+import { EvidencePresenceSection } from './PrepCallPackCard';
 
 // ─── Channel config ───────────────────────────────────────────────────────────
 
@@ -29,24 +29,6 @@ const SEVERITY_CONFIG = {
   medium: { cls: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-200 dark:border-amber-900/40', dot: 'bg-amber-400' },
   low:    { cls: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/40', border: 'border-slate-200 dark:border-slate-700',    dot: 'bg-slate-400' },
 };
-
-// ─── Derive presence signals directly from client record fields ───────────────
-// This is deterministic and always accurate — never shows "no signals detected"
-// for data we actually have on the record.
-
-interface LocalPresence {
-  website: LocalSignal[];
-  gbp: LocalSignal[];
-  search: LocalSignal[];
-  social: LocalSignal[];
-  paidSearch: LocalSignal[];
-}
-
-interface LocalSignal {
-  text: string;
-  status: 'confirmed' | 'active' | 'incomplete';
-  url?: string;
-}
 
 // ── Resolve presence URLs from ALL known locations on the client record ───────
 // Legacy clients may have data in businessProfile, clientOnboarding, or
@@ -99,103 +81,80 @@ function resolvePresenceUrls(client: Client) {
   return { website, facebook, instagram, linkedin, gbpLinked, gbpUrl, gbpChannelActive };
 }
 
-function deriveLocalPresence(client: Client): LocalPresence {
-  const cs  = client.channelStatus ?? {};
-  const pv  = resolvePresenceUrls(client);
-  const we  = client.websiteEngine;
+// ─── Build evidence bundle for EvidencePresenceSection ───────────────────────
+// Prefer the original scraped evidence bundle from prepCallPack; fall back to
+// a synthetic one constructed from engine data and resolved presence URLs.
 
-  // ── Website ──
-  const webSignals: LocalSignal[] = [];
-  if (pv.website) {
-    const href = pv.website.startsWith('http') ? pv.website : `https://${pv.website}`;
-    webSignals.push({ text: `Site confirmed: ${pv.website}`, status: 'confirmed', url: href });
-    if (we) {
-      webSignals.push({
-        text: `Health: ${we.healthScore}/100 — ${we.healthLabel}`,
-        status: (we.healthLabel === 'critical' || we.healthLabel === 'needs-work') ? 'incomplete' : 'active',
-      });
-      if (we.conversionGrade) webSignals.push({ text: `Conversion grade: ${we.conversionGrade}`, status: 'active' });
-    } else {
-      webSignals.push({ text: 'Full audit not yet run', status: 'incomplete' });
-    }
-  } else {
-    webSignals.push({ text: 'Website not yet on record — check channels', status: 'incomplete' });
-  }
+function buildPresenceEvidence(client: Client, pv: ReturnType<typeof resolvePresenceUrls>) {
+  const si  = client.sourceIntelligence;
+  const pp  = (si?.prepCallPack ?? {}) as Record<string, any>;
+  const bp  = client.businessProfile;
+  const se  = client.seoEngine;
 
-  // ── GBP / Local ──
-  const gbpSignals: LocalSignal[] = [];
-  if (pv.gbpLinked) {
-    gbpSignals.push({ text: 'GBP profile linked', status: 'confirmed' });
-  } else if (pv.gbpUrl) {
-    gbpSignals.push({ text: `GBP URL on record`, status: 'confirmed', url: pv.gbpUrl });
-  }
-  if (pv.gbpChannelActive) {
-    gbpSignals.push({ text: `GBP channel: ${cs.gbp!.replace(/_/g, ' ')}`, status: 'active' });
-  }
-  if (client.gbpEngine) {
-    gbpSignals.push({ text: `Profile score: ${client.gbpEngine.optimizationScore}/100`, status: 'active' });
-    if (client.gbpEngine.reviewGrade) gbpSignals.push({ text: `Reviews grade: ${client.gbpEngine.reviewGrade}`, status: 'active' });
-  }
-  if (gbpSignals.length === 0) {
-    gbpSignals.push({ text: 'GBP not yet linked or verified', status: 'incomplete' });
-  } else if (!client.gbpEngine) {
-    gbpSignals.push({ text: 'Full GBP audit not yet run', status: 'incomplete' });
+  // Prefer the original scraped evidence bundle — same shape as lead workspace
+  const rawEb = pp.evidenceBundle ?? null;
+  if (rawEb) {
+    return {
+      eb: rawEb,
+      serp: pp.serpData ?? null,
+      ebGatheredAt: pp.ebGatheredAt ?? pp.gatheredAt ?? null,
+      serpGeneratedAt: pp.serpGeneratedAt ?? null,
+      aiGeneratedAt: pp.aiGeneratedAt ?? null,
+      sitemapPageCount: pp.sitemapPages?.length ?? pp.sitemapPageCount ?? 0,
+      psAi: pp.presenceSnapshot ?? pp.aiSnapshot ?? null,
+      delta: (client as any).evidenceDelta ?? null,
+      deltaPrevGatheredAt: (client as any).evidenceDeltaPrevGatheredAt ?? null,
+    };
   }
 
-  // ── Search ──
-  const searchSignals: LocalSignal[] = [];
-  if (client.seoEngine) {
-    searchSignals.push({ text: `SEO visibility: ${client.seoEngine.visibilityScore}/100`, status: 'active' });
-    if (client.seoEngine.keywordTargets?.length) {
-      searchSignals.push({ text: `Keywords: ${client.seoEngine.keywordTargets.slice(0, 3).join(', ')}`, status: 'active' });
-    }
-  } else if (cs.seo && cs.seo !== 'not_started') {
-    searchSignals.push({ text: `SEO channel: ${cs.seo.replace(/_/g, ' ')}`, status: 'active' });
-    searchSignals.push({ text: 'Full SEO audit not yet run', status: 'incomplete' });
-  } else if (pv.website) {
-    searchSignals.push({ text: 'Organic search baseline not yet audited', status: 'incomplete' });
-  } else {
-    searchSignals.push({ text: 'No website — search indexing not applicable', status: 'incomplete' });
-  }
+  // No raw bundle — synthesise from resolved presence fields + engine data
+  const website = pv.website ? {
+    url: pv.website,
+    hasHttps: pv.website.startsWith('https'),
+    hasSitemap: undefined,
+    hasSchema: undefined,
+    phoneNumbers: [],
+    ctaSignals: [],
+    servicePageUrls: [],
+    trustSignals: [],
+    serviceKeywords: se?.keywordTargets?.slice(0, 8) ?? [],
+    locationKeywords: bp?.primaryLocations?.slice(0, 5) ?? [],
+    conversionGaps: [],
+  } : null;
 
-  // ── Social ──
-  const socialSignals: LocalSignal[] = [];
-  if (pv.facebook) socialSignals.push({ text: 'Facebook', status: 'confirmed', url: pv.facebook });
-  if (pv.instagram) socialSignals.push({ text: 'Instagram', status: 'confirmed', url: pv.instagram });
-  if (pv.linkedin) socialSignals.push({ text: 'LinkedIn', status: 'confirmed', url: pv.linkedin });
-  if (socialSignals.length === 0) {
-    socialSignals.push({ text: 'Social profiles not yet linked', status: 'incomplete' });
-  }
+  const gbpName = (client as any).gbpLocationName;
+  const gbp = (gbpName || pv.gbpUrl) ? {
+    name: gbpName,
+    mapsUrl: pv.gbpUrl || undefined,
+    placeId: undefined,
+    rating: undefined,
+    totalRatings: undefined,
+    category: bp?.primaryServices?.[0],
+    isOpen: undefined,
+    editorialSummary: undefined,
+    networkSummary: undefined,
+  } : null;
 
-  // ── Paid search ──
-  const paidSearchSignals: LocalSignal[] = [];
-  if (client.adsEngine) {
-    paidSearchSignals.push({ text: `Ads readiness: ${client.adsEngine.readinessScore}/100`, status: 'active' });
-  } else if (cs.ads && cs.ads !== 'not_started') {
-    paidSearchSignals.push({ text: `Paid search channel: ${cs.ads.replace(/_/g, ' ')}`, status: 'active' });
-  } else {
-    paidSearchSignals.push({ text: 'Paid search not yet assessed', status: 'incomplete' });
-  }
+  const hasSocial = !!(pv.facebook || pv.instagram || pv.linkedin);
+  const social = hasSocial ? {
+    facebook: pv.facebook ? { url: pv.facebook, data: { url: pv.facebook } } : null,
+    instagram: pv.instagram ? { url: pv.instagram, data: { url: pv.instagram } } : null,
+    linkedin: pv.linkedin ? { url: pv.linkedin, data: { url: pv.linkedin } } : null,
+    twitter: null,
+  } : null;
 
-  return { website: webSignals, gbp: gbpSignals, search: searchSignals, social: socialSignals, paidSearch: paidSearchSignals };
-}
-
-// ─── Merge AI brief signals with local derived signals ────────────────────────
-// Brief signals from AI augment the deterministic ones; never replace them.
-
-function mergeSignals(local: LocalSignal[], briefSignals: string[] | undefined): LocalSignal[] {
-  const merged = [...local];
-  if (briefSignals?.length) {
-    const localTexts = new Set(local.map(s => s.text.toLowerCase()));
-    for (const bs of briefSignals) {
-      if (!bs) continue;
-      const isAlreadyCovered = [...localTexts].some(t => bs.toLowerCase().includes(t.slice(0, 20)) || t.includes(bs.toLowerCase().slice(0, 20)));
-      if (!isAlreadyCovered) {
-        merged.push({ text: bs, status: 'active' });
-      }
-    }
-  }
-  return merged;
+  const hasAny = !!(website || gbp || social);
+  return {
+    eb: hasAny ? { website, gbp, social, paidSearch: null } : null,
+    serp: null,
+    ebGatheredAt: null,
+    serpGeneratedAt: null,
+    aiGeneratedAt: null,
+    sitemapPageCount: 0,
+    psAi: null,
+    delta: null,
+    deltaPrevGatheredAt: null,
+  };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -220,68 +179,6 @@ function BulletRow({ icon: Icon, iconColor, text }: { icon: typeof CheckCircle2;
     <div className="flex items-start gap-2">
       <Icon className={`h-3 w-3 ${iconColor} shrink-0 mt-0.5`} />
       <span className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{text}</span>
-    </div>
-  );
-}
-
-// ─── Presence channel card ────────────────────────────────────────────────────
-
-function PresenceChannelCard({ icon: Icon, iconColor, label, signals, socialSlots }: {
-  icon: typeof Globe;
-  iconColor: string;
-  label: string;
-  signals: LocalSignal[];
-  socialSlots?: { fb?: string; ig?: string; li?: string };
-}) {
-  const all = signals.filter(Boolean);
-  const hasConfirmed = all.some(s => s.status === 'confirmed' || s.status === 'active');
-
-  return (
-    <div className={`rounded-lg border p-2.5 space-y-1.5 ${hasConfirmed ? 'border-border bg-slate-50/80 dark:bg-slate-800/40' : 'border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/20 opacity-70'}`}>
-      <div className="flex items-center gap-1.5">
-        <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</span>
-        {hasConfirmed && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 ml-auto" title="Presence confirmed" />}
-      </div>
-
-      {/* Social platforms as inline icons */}
-      {socialSlots && (
-        <div className="flex items-center gap-2">
-          {socialSlots.fb ? (
-            <a href={socialSlots.fb} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-400 hover:underline">
-              <SiFacebook className="h-3 w-3" />FB
-            </a>
-          ) : <span className="text-[11px] text-slate-300 dark:text-slate-600 flex items-center gap-1"><SiFacebook className="h-3 w-3" />FB</span>}
-          {socialSlots.ig ? (
-            <a href={socialSlots.ig} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-pink-600 dark:text-pink-400 hover:underline">
-              <SiInstagram className="h-3 w-3" />IG
-            </a>
-          ) : <span className="text-[11px] text-slate-300 dark:text-slate-600 flex items-center gap-1"><SiInstagram className="h-3 w-3" />IG</span>}
-          {socialSlots.li ? (
-            <a href={socialSlots.li} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 hover:underline">
-              <SiLinkedin className="h-3 w-3" />LI
-            </a>
-          ) : <span className="text-[11px] text-slate-300 dark:text-slate-600 flex items-center gap-1"><SiLinkedin className="h-3 w-3" />LI</span>}
-        </div>
-      )}
-
-      {/* Signal rows */}
-      <ul className="space-y-0.5">
-        {all.slice(0, 3).map((s, i) => (
-          <li key={i} className="flex items-start gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full mt-1.5 shrink-0 ${s.status === 'confirmed' ? 'bg-emerald-400' : s.status === 'active' ? 'bg-blue-400' : 'bg-slate-300 dark:bg-slate-600'}`} />
-            {s.url ? (
-              <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline truncate flex items-center gap-0.5">
-                {s.text} <ExternalLink className="h-2 w-2 shrink-0" />
-              </a>
-            ) : (
-              <span className={`text-[11px] leading-relaxed ${s.status === 'incomplete' ? 'text-slate-400 dark:text-slate-500 italic' : 'text-slate-600 dark:text-slate-400'}`}>
-                {s.text}
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -383,19 +280,15 @@ function IntelligenceContent({
   briefRunning: boolean;
   onRefresh?: () => void;
 }) {
-  const local = deriveLocalPresence(client);
-  const pv    = resolvePresenceUrls(client);   // for direct URL links
-  const ps    = brief?.presenceSnapshot;
-
-  // Merge: local deterministic signals take precedence; brief signals augment
-  const websiteSignals  = mergeSignals(local.website,    ps?.websiteSignals);
-  const gbpSignals      = mergeSignals(local.gbp,        ps?.gbpSignals);
-  const searchSignals   = mergeSignals(local.search,     ps?.searchSignals);
-  const socialSignals   = mergeSignals(local.social,     ps?.socialSignals);
+  const pv    = resolvePresenceUrls(client);
+  const pres  = buildPresenceEvidence(client, pv);
 
   const wi = brief?.websiteInterpretation;
   const mc = brief?.marketContext;
   const es = brief?.executionStrategy;
+
+  // Overall readout from the AI brief's presenceSnapshot
+  const ps = brief?.presenceSnapshot;
 
   return (
     <div className="space-y-0">
@@ -413,62 +306,39 @@ function IntelligenceContent({
         </div>
       )}
 
-      {/* Overall readout */}
+      {/* Overall readout from AI */}
       {ps?.overallReadout && (
         <div className="px-4 pt-3 pb-1">
           <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed italic">{ps.overallReadout}</p>
         </div>
       )}
 
-      {/* ── PRESENCE SNAPSHOT — always visible, always accurate ────────────── */}
-      <div className="px-4 pt-3 pb-1">
-        <div className="flex items-center justify-between mb-2">
-          <SectionLabel>Current Digital Presence</SectionLabel>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />confirmed
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 ml-1" />active
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600 ml-1" />unverified
+      {/* ── PRESENCE INTELLIGENCE — evidence-backed, same depth as lead ─────── */}
+      {pres.eb && (
+        <div className="px-4 pt-3 pb-1">
+          <div className="flex items-center justify-between mb-2">
+            <SectionLabel>Current Digital Presence</SectionLabel>
+            {(client.sourceIntelligence?.prepCallPack as any)?.evidenceBundle ? (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                Evidence-backed
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 italic">From known signals</span>
+            )}
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <PresenceChannelCard
-            icon={Globe}
-            iconColor="text-blue-500"
-            label="Website"
-            signals={websiteSignals}
-          />
-          <PresenceChannelCard
-            icon={MapPin}
-            iconColor="text-emerald-500"
-            label="GBP / Local"
-            signals={gbpSignals}
-          />
-          <PresenceChannelCard
-            icon={Search}
-            iconColor="text-violet-500"
-            label="Search"
-            signals={searchSignals}
-          />
-          <PresenceChannelCard
-            icon={Layers}
-            iconColor="text-slate-400"
-            label="Social"
-            signals={socialSignals}
-            socialSlots={{
-              fb: pv.facebook || undefined,
-              ig: pv.instagram || undefined,
-              li: pv.linkedin || undefined,
-            }}
+          <EvidencePresenceSection
+            eb={pres.eb}
+            psAi={pres.psAi}
+            serp={pres.serp}
+            ebGatheredAt={pres.ebGatheredAt}
+            serpGeneratedAt={pres.serpGeneratedAt}
+            aiGeneratedAt={pres.aiGeneratedAt}
+            delta={pres.delta}
+            deltaPrevGatheredAt={pres.deltaPrevGatheredAt}
+            sitemapPageCount={pres.sitemapPageCount}
           />
         </div>
-        {/* Paid search strip */}
-        {local.paidSearch[0]?.status !== 'incomplete' && (
-          <div className="mt-2 rounded-lg border border-border bg-slate-50/80 dark:bg-slate-800/40 px-3 py-2 flex items-center gap-2">
-            <BarChart3 className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-            <span className="text-[11px] text-slate-600 dark:text-slate-400">{local.paidSearch[0]?.text}</span>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ── AI ANALYSIS — loads after brief generates ───────────────────── */}
       {briefRunning && !brief ? (
