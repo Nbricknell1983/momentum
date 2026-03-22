@@ -12,6 +12,7 @@ export interface EvidenceItem {
 export interface PresenceInsightDetail {
   id: string;
   label: string;
+  title?: string;          // Optional: modal heading when it should differ from the row label
   status: InsightStatus;
   summary: string;
   whyItMatters?: string;
@@ -217,6 +218,7 @@ export function buildGbpInsights(gbp: any): PresenceInsightDetail[] {
     insights.push({
       id: 'gbp-network',
       label: `${totalLocs} locations detected across brand`,
+      title: `${(gbp.name || 'Business')} — Google Business Profile network`,
       status: netStatus,
       summary: `${totalLocs} Google Business Profile locations were detected for this brand, with ${totalRevs.toLocaleString()} total reviews across the network${avgRating != null ? ` and an average rating of ${avgRating.toFixed(1)}★` : ''}.`,
       whyItMatters: 'Multi-location brands have uneven reputations across their network. A poorly performing location can drag down perception of the whole brand, while the highest-rated location sets the ceiling. Keeping all GBP listings optimised is essential for maintaining consistent Maps Pack visibility.',

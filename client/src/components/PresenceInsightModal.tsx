@@ -103,7 +103,7 @@ export function PresenceInsightModal({ detail, open, onClose }: PresenceInsightM
           <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-sm font-semibold leading-snug text-foreground pr-6">
-                {detail.label}
+                {detail.title ?? detail.label}
               </DialogTitle>
             </div>
           </div>

@@ -216,6 +216,9 @@ export function EvidencePresenceSection({
   const socialInsights  = buildSocialInsights(soc);
   const searchInsights  = buildSearchInsights(w, serp);
 
+  // Extract the network insight so the banner and the row can share one click handler
+  const networkInsight  = gbpInsights.find(i => i.id === 'gbp-network') ?? null;
+
   return (
     <>
       <div className="grid grid-cols-2 gap-2">
@@ -259,11 +262,28 @@ export function EvidencePresenceSection({
               {/* ── Multi-location network banner ──────────────────────────── */}
               {gbp.networkSummary?.totalLocations > 1 && (() => {
                 const net = gbp.networkSummary;
+                const isClickable = !!networkInsight;
                 return (
-                  <div className="rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/40 px-1.5 py-1 mb-1 space-y-0.5">
-                    <div className="flex items-center gap-1 text-[9px] font-semibold text-violet-700 dark:text-violet-300">
-                      <Users className="h-2.5 w-2.5" />
-                      Multi-location brand · {net.totalLocations} locations
+                  <div
+                    role={isClickable ? 'button' : undefined}
+                    tabIndex={isClickable ? 0 : undefined}
+                    onClick={isClickable ? () => setActiveDetail(networkInsight!) : undefined}
+                    onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDetail(networkInsight!); } } : undefined}
+                    data-testid="gbp-network-banner"
+                    className={cn(
+                      'rounded border px-1.5 py-1 mb-1 space-y-0.5',
+                      'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800/40',
+                      isClickable && 'cursor-pointer select-none transition-colors hover:bg-violet-100 dark:hover:bg-violet-900/40 hover:border-violet-300 dark:hover:border-violet-700 focus:outline-none focus:ring-1 focus:ring-violet-400/60',
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 text-[9px] font-semibold text-violet-700 dark:text-violet-300">
+                        <Users className="h-2.5 w-2.5" />
+                        Multi-location brand · {net.totalLocations} locations
+                      </div>
+                      {isClickable && (
+                        <ChevronRight className="h-2.5 w-2.5 text-violet-400 dark:text-violet-500 shrink-0" />
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-1 text-[9px]">
                       {net.totalReviews > 0 && (

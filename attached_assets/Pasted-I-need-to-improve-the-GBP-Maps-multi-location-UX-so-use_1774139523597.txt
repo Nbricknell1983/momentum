@@ -1,0 +1,55 @@
+I need to improve the GBP / Maps multi-location UX so users can click the multi-location banner itself and immediately see the other detected locations.
+
+Problem:
+The card currently shows a purple banner like “Multi-location brand · 8 locations”, but it does not appear to be the main clickable entry point. Users naturally expect that banner to open the list of other detected locations.
+
+Goal:
+Make the multi-location state directly inspectable from the most obvious UI element.
+
+What to change:
+1. Make the purple “Multi-location brand · N locations” banner clickable
+2. Clicking the banner should open the same GBP multi-location modal used by the “N locations detected across brand” row
+3. The modal should clearly list the primary matched location and all other detected sibling locations
+4. Preserve the existing single-location behaviour
+
+UX requirements:
+- Add hover, cursor-pointer, and focus states to the banner when sibling locations exist
+- Keyboard accessible: Enter/Space opens the modal
+- The banner should feel like the main affordance for viewing the network
+- Keep the “N locations detected across brand” row clickable too, but both should open the same modal
+- Do not require users to infer that only the warning row is interactive
+
+Modal requirements:
+Title:
+- “[Brand Name] — Google Business Profile locations”
+
+Sections:
+1. Primary matched location
+- name
+- address
+- rating
+- review count
+- maps link
+2. Other detected locations
+- list every sibling location
+- name
+- address/suburb
+- rating
+- review count
+- maps link
+3. Network summary
+- total locations
+- total reviews
+- average rating
+
+Implementation notes:
+- Reuse the existing PresenceInsightModal / GBP drilldown modal pattern if possible
+- If the current banner is just static JSX, convert it into a button-like container
+- If siblingLocations.length > 0, banner is interactive
+- If no sibling locations exist, keep the banner/static state non-clickable
+- Avoid duplicate modal state logic; use one shared open handler for both the banner and the insight row
+
+Please identify:
+1. where the multi-location banner is rendered
+2. whether the existing modal can be reused directly
+3. the smallest refactor to make both the banner and the insight row open the same location-list modal
