@@ -435,8 +435,10 @@ export function EvidencePresenceSection({
               headerRight={
                 <span className="text-[9px] text-slate-400 dark:text-slate-500">
                   {(paidSearchInsights.find(i => i.id === 'ps-keywords') != null)
-                    ? `${(paidSearch.entries ?? []).length} keywords`
-                    : 'Insights'}
+                    ? `${(paidSearch.auction?.entries ?? paidSearch.entries ?? []).length} keywords`
+                    : paidSearch.transparency?.adCount != null
+                      ? `${paidSearch.transparency.adCount} ads`
+                      : 'Insights'}
                 </span>
               }
             >

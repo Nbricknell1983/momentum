@@ -1,0 +1,184 @@
+We are implementing real data ingestion for Paid Search Insights in Momentum.
+
+Context:
+- The UI layer for Paid Search Insights already exists
+- `buildPaidSearchInsights(ps)` is already implemented in `presenceInsights.ts`
+- `PrepCallPackCard.tsx` already renders a Paid Search card when `evidenceBundle.paidSearch` exists
+- Right now the card does not appear because no upstream process is populating `evidenceBundle.paidSearch`
+
+Goal:
+Build a custom Google Ads Transparency Center scraper and wire it into the evidence gathering flow so Paid Search Insights can render with real data.
+
+Important product rules:
+- Keep `Paid Search Insights` as the user-facing name
+- Keep the UI plain-English and commercially useful
+- Do not create a new card system
+- Do not leak scraper response shapes into the UI
+- Do not break the existing Presence Insights flow
+- Use `evidenceBundle.paidSearch` as the only UI integration point
+
+What the product should answer:
+1. Are they running paid search?
+- confirmed
+- detected
+- unknown
+- not-detected
+
+2. How strong is their paid search?
+- brand coverage
+- non-brand competitiveness
+- top-of-page presence
+- creative activity
+
+Implementation requirements:
+
+1. Build a dedicated scraper module
+Create:
+- `server/lib/google-ads-transparency-scraper.ts`
+
+Responsibilities:
+- advertiser lookup by domain and/or business name
+- pagination
+- ad creative extraction
+- metadata extraction
+- defensive parsing
+- return structured raw scraper data
+
+2. Build a service layer
+Create:
+- `server/services/paid-search/transparency-service.ts`
+
+Responsibilities:
+- call the scraper
+- apply retries and timeout handling
+- dedupe creatives
+- summarise output
+- normalise into the internal paid search evidence model
+
+3. Extend evidence gathering
+Find the current `gatherEvidenceBundle()` flow and add paid search ingestion there.
+
+Target behaviour:
+- compute paid search evidence during evidence gathering
+- write the result to `evidenceBundle.paidSearch`
+- preserve backwards compatibility with the rest of the evidence bundle
+
+4. Use this internal data model
+
+```ts
+type PaidSearchEvidence = {
+activityState?: "confirmed" | "detected" | "unknown" | "not-detected";
+confirmedActive?: boolean;
+confirmationSource?:
+| "manual"
+| "custom-scraper"
+| "auction-report"
+| "tag-detection"
+| "inferred";
+
+sourceTypes?: Array<
+"auction-report" |
+"ads-transparency" |
+"manual" |
+"csv-import"
+>;
+
+lastEvaluatedAt?: string;
+
+auction?: {
+overallImpressionShare?: number;
+overallTopOfPageRate?: number;
+brandedStrength?: "strong" | "moderate" | "weak";
+nonBrandStrength?: "strong" | "moderate" | "weak";
+entries?: Array<{
+keyword: string;
+impressionShare?: number;
+topOfPageRate?: number;
+competitorImpressionShare?: Array<{ domain: string; value: number }>;
+competitorTopOfPageRate?: Array<{ domain: string; value: number }>;
+}>;
+};
+
+transparency?: {
+advertiserName?: string;
+advertiserId?: string;
+source?: "custom-scraper";
+activeAdsDetected?: boolean;
+recentAdsDetected?: boolean;
+adCount?: number;
+regions?: string[];
+platforms?: string[];
+exampleAds?: Array<{
+headline?: string;
+body?: string;
+format?: string;
+region?: string;
+date?: string;
+url?: string;
+}>;
+fetchedAt?: string;
+};
+
+summary?: string;
+keyWins?: string[];
+keyGaps?: string[];
+};
+Scraper engineering guardrails
+use caching with a TTL of about 24 hours
+do not scrape live on every UI open
+design for partial failures
+add logging for scraper/parser failures
+keep parsing logic isolated from UI
+prefer structured embedded data if available before relying on fragile DOM selectors
+use fallback extraction paths where possible
+UI expectations
+Do not rebuild the Paid Search card.
+Do not change the PresenceInsight component pattern.
+The existing card should light up automatically when evidenceBundle.paidSearch is present.
+
+Expected plain-English output examples:
+
+Paid search activity is confirmed
+Recent ads were detected
+Brand keyword coverage is strong
+Competitors are winning more visibility on non-brand terms
+Top-of-page presence is inconsistent
+Auction-share detail is not yet available
+Important wording rule:
+Avoid hard claims like “they are not running ads” unless evidence is strong.
+Prefer cautious phrasing like:
+
+No visible paid search activity detected
+No current paid search evidence available
+Phased implementation approach
+Phase 1 MVP:
+advertiser lookup
+detect whether ads exist
+fetch ad count if available
+fetch 3–5 example creatives
+write transparency data into evidenceBundle.paidSearch
+make the existing Paid Search card render
+Phase 2:
+
+improve parsing depth
+add regions/platforms
+better creative extraction
+message/theme summarisation
+Phase 3:
+
+support auction/performance inputs from CSV import, analyst uploads, or future integrations
+merge auction and transparency evidence into the same paid search model
+Deliverables:
+
+working google-ads-transparency-scraper.ts
+working transparency-service.ts
+integration into gatherEvidenceBundle()
+evidenceBundle.paidSearch populated from real scraper data
+existing Paid Search card rendering automatically when data exists
+no regression to existing Presence Insights cards
+Please also identify:
+
+the safest integration point in the current evidence gathering pipeline
+whether Google Ads Transparency Center exposes any embedded structured data that is more stable than DOM scraping
+the recommended cache/TTL strategy
+any edge cases or failure modes that should fall back gracefully

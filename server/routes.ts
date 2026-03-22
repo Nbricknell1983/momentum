@@ -21,6 +21,7 @@ import { resolveAgentId, getSupportedTaskTypes } from "./agent-jobs/router";
 import { createAgentJob, getAgentJob, listAgentJobs } from "./agent-jobs/firestore-helpers";
 import { processAgentJob } from "./agent-jobs/processor";
 import { scoreGbpCandidate, buildLeadContext, scoreGbpSibling, type GbpLeadContext } from "./lib/gbp-scorer";
+import { gatherPaidSearchEvidence } from "./services/paid-search/transparency-service";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -7896,11 +7897,27 @@ Return JSON:
       twitter: { url: lead.twitterUrl || null, detected: !!lead.twitterUrl },
     };
 
+    // Step 5: Paid search evidence (Google Ads Transparency Center — non-blocking)
+    // Runs concurrently with Firestore save. Uses 24h in-memory cache per domain.
+    // Any failure returns null and is swallowed — does not block evidence bundle.
+    let paidSearchEvidence: any = null;
+    try {
+      const psDomain = websiteUrl || lead.website || lead.sourceData?.googleWebsite || null;
+      paidSearchEvidence = await gatherPaidSearchEvidence({
+        businessName : businessName,
+        domain       : psDomain ?? undefined,
+        region       : 'AU',
+      });
+    } catch (pse: any) {
+      console.warn(`[gather-evidence] paid search lookup failed for ${businessName}:`, pse?.message ?? pse);
+    }
+
     const bundle: any = {
       gatheredAt: new Date().toISOString(),
       website: websiteEvidence,
       gbp: gbpEvidence,
       social: socialEvidence,
+      ...(paidSearchEvidence ? { paidSearch: paidSearchEvidence } : {}),
       discoverySource: discovered.discoverySource,
     };
 

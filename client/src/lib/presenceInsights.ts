@@ -406,35 +406,119 @@ export function buildPaidSearchInsights(ps: any): PresenceInsightDetail[] {
   if (!ps) return [];
   const insights: PresenceInsightDetail[] = [];
 
-  const overallShare: number | null = ps.overallImpressionShare ?? null;
-  const topOfPage:    number | null = ps.overallTopOfPageRate  ?? null;
-  const branded:      string | null = ps.brandedStrength   ?? null;
-  const nonBrand:     string | null = ps.nonBrandStrength  ?? null;
-  const entries:      any[]         = ps.entries ?? [];
+  // ── Normalise nested (PaidSearchEvidence) vs flat (legacy) shape ─────────
+  const activityState: string | null  = ps.activityState ?? null;
+  const transparency: any             = ps.transparency ?? null;
+  const auction: any                  = ps.auction ?? null;
+
+  // Auction fields — read from nested auction sub-object first, then flat (legacy)
+  const overallShare: number | null = auction?.overallImpressionShare ?? ps.overallImpressionShare ?? null;
+  const topOfPage:    number | null = auction?.overallTopOfPageRate   ?? ps.overallTopOfPageRate   ?? null;
+  const branded:      string | null = auction?.brandedStrength        ?? ps.brandedStrength        ?? null;
+  const nonBrand:     string | null = auction?.nonBrandStrength       ?? ps.nonBrandStrength       ?? null;
+  const entries:      any[]         = auction?.entries ?? ps.entries ?? [];
   const keyWins:      string[]      = ps.keyWins ?? [];
   const keyGaps:      string[]      = ps.keyGaps ?? [];
 
+  // Transparency fields
+  const adsDetected:  boolean = transparency?.activeAdsDetected ?? false;
+  const recentAds:    boolean = transparency?.recentAdsDetected ?? false;
+  const adCount:      number | null = transparency?.adCount ?? null;
+  const exampleAds:   any[]   = transparency?.exampleAds ?? [];
+  const advertiserName: string | null = transparency?.advertiserName ?? null;
+
   // ── 1. Overall activity status ─────────────────────────────────────────────
-  const hasActivity = overallShare != null ? overallShare > 0 : entries.length > 0 || !!ps.summary;
+  // Resolve from activityState (new model), then transparency, then auction data
+  const resolvedState: 'confirmed'|'detected'|'unknown'|'not-detected'|null =
+    activityState as any ??
+    (adsDetected ? (exampleAds.length > 0 ? 'confirmed' : 'detected') : null) ??
+    (overallShare != null ? (overallShare > 0 ? 'confirmed' : 'not-detected') : null) ??
+    (entries.length > 0 ? 'detected' : null);
+
+  const hasActivity = resolvedState === 'confirmed' || resolvedState === 'detected';
+  const isUnknown   = resolvedState === 'unknown' || resolvedState == null;
+
+  const activityLabel = resolvedState === 'confirmed'     ? 'Paid search activity is confirmed'
+    : resolvedState === 'detected'                        ? 'Paid search activity detected'
+    : resolvedState === 'not-detected'                    ? 'No paid search activity detected'
+    : 'Paid search status unknown';
+
+  const activityStatus: InsightStatus = resolvedState === 'confirmed' ? 'positive'
+    : resolvedState === 'detected'  ? 'positive'
+    : resolvedState === 'unknown'   ? 'neutral'
+    : 'neutral';
+
   insights.push({
     id: 'ps-activity',
-    label: hasActivity ? 'Paid search activity confirmed' : 'No paid search activity detected',
-    status: hasActivity ? 'positive' : 'neutral',
+    label: activityLabel,
+    status: activityStatus,
     summary: ps.summary || (hasActivity
-      ? `Paid search activity is confirmed${overallShare != null ? ` — capturing approximately ${_pct(overallShare)} of available impressions across tracked keywords` : ' across tracked keywords'}.`
-      : 'No paid search activity was detected for this business across the tracked keyword set.'),
+      ? `Paid search activity is ${resolvedState === 'confirmed' ? 'confirmed' : 'detected'} for this business${overallShare != null ? ` — capturing approximately ${_pct(overallShare)} of available impressions across tracked keywords` : transparency ? ' via the Google Ads Transparency Center' : ''}.`
+      : isUnknown
+        ? 'Paid search activity could not be determined at this time. Evidence gathering may be incomplete.'
+        : 'No current paid search activity has been detected for this business.'),
     whyItMatters: 'Paid search activity signals investment in keyword-level visibility. For a sales conversation, it confirms budget intent and lets you position your agency around improving efficiency — not just awareness.',
     recommendedImprovement: hasActivity
       ? 'Ensure paid and organic strategies are complementary. High-cost paid keywords that also rank organically should be reviewed — consolidating spend on genuinely competitive terms reduces wasted budget.'
-      : 'Explore whether paid search is commercially viable. A focused pilot on 5–10 high-intent service keywords can quickly validate opportunity before committing to ongoing spend.',
+      : isUnknown
+        ? 'Gather more evidence before drawing conclusions. Trigger an evidence refresh and consider checking the Google Ads Transparency Center manually for this business.'
+        : 'Explore whether paid search is commercially viable. A focused pilot on 5–10 high-intent service keywords can quickly validate opportunity before committing to ongoing spend.',
     evidence: [
+      ...(resolvedState ? [{ label: 'Activity state', value: _cap(resolvedState.replace('-', ' ')) }] : []),
+      ...(advertiserName ? [{ label: 'Advertiser name', value: advertiserName }] : []),
+      ...(adCount != null ? [{ label: 'Ads detected', value: String(adCount), type: 'count' as const }] : []),
       ...(overallShare != null ? [{ label: 'Impression share', value: _pct(overallShare), type: 'count' as const }] : []),
       ...(topOfPage     != null ? [{ label: 'Top-of-page rate', value: _pct(topOfPage),   type: 'count' as const }] : []),
-      { label: 'Keywords tracked', value: String(entries.length), type: 'count' as const },
+      ...(entries.length > 0 ? [{ label: 'Keywords tracked', value: String(entries.length), type: 'count' as const }] : []),
       ...keyWins.map(w => ({ label: 'Win', value: w })),
       ...keyGaps.map(g => ({ label: 'Gap', value: g })),
     ],
   });
+
+  // ── 1b. Transparency Center creative activity ──────────────────────────────
+  // Only rendered when transparency data is present (i.e. the scraper ran).
+  if (transparency) {
+    const hasCreatives = exampleAds.length > 0;
+    const creativeLabel = hasCreatives
+      ? `${exampleAds.length} ad creative${exampleAds.length !== 1 ? 's' : ''} retrieved`
+      : adsDetected
+        ? 'Ads detected — creative detail not yet available'
+        : 'No ad creatives detected in Transparency Center';
+
+    insights.push({
+      id: 'ps-transparency',
+      label: creativeLabel,
+      title: 'Google Ads Transparency Center findings',
+      status: adsDetected ? (hasCreatives ? 'positive' : 'neutral') : 'neutral',
+      summary: adsDetected
+        ? `This business was found in the Google Ads Transparency Center${transparency.advertiserName ? ` as "${transparency.advertiserName}"` : ''}. ${hasCreatives ? `${exampleAds.length} ad creative${exampleAds.length !== 1 ? 's' : ''} ${exampleAds.length !== 1 ? 'were' : 'was'} retrieved.` : 'Ad count was detected but creative content was not retrievable at this time.'}`
+        : 'No active ads were found in the Google Ads Transparency Center for this business during the evidence gathering window.',
+      whyItMatters: 'The Google Ads Transparency Center shows all active paid search and display ads running for a given advertiser. Detecting ad activity here confirms the business is actively spending on Google Ads, which signals both budget intent and a potential competitive threat for your agency\'s other clients.',
+      recommendedImprovement: adsDetected && hasCreatives
+        ? 'Review the example creatives to understand messaging, offers, and positioning. Gaps in their ad creative quality or landing page relevance are opportunities to highlight when positioning your agency\'s capabilities.'
+        : adsDetected
+          ? 'Trigger an evidence refresh to attempt creative retrieval. If creatives consistently fail to load, check the Google Ads Transparency Center manually using the business name or domain.'
+          : 'If you suspect the business is running ads but they weren\'t detected, it\'s possible they are using a different advertiser name or domain. Try searching manually in the Transparency Center.',
+      evidence: [
+        { label: 'Source', value: 'Google Ads Transparency Center' },
+        { label: 'Ads detected', value: adsDetected ? 'Yes' : 'No' },
+        ...(recentAds && adsDetected ? [{ label: 'Recent activity', value: 'Yes' }] : []),
+        ...(adCount != null ? [{ label: 'Ad count', value: String(adCount), type: 'count' as const }] : []),
+        ...(transparency.regions?.length > 0 ? [{ label: 'Regions', value: transparency.regions.join(', ') }] : []),
+        // Show up to 3 example ad headlines
+        ...exampleAds.slice(0, 3).map((ad: any, i: number) => ({
+          label: `Example ad ${i + 1}`,
+          value: [ad.headline, ad.body].filter(Boolean).join(' — ') || 'Creative retrieved',
+        })),
+        ...(exampleAds.length > 3 ? [{ value: `+${exampleAds.length - 3} more creatives` }] : []),
+      ],
+      technicalDetails: [
+        `Extraction strategy: ${transparency.extractionStrategy ?? 'unknown'}`,
+        `Fetched at: ${transparency.fetchedAt}`,
+        ...(transparency.parseWarnings?.length > 0 ? transparency.parseWarnings.map((w: string) => `Warning: ${w}`) : []),
+      ],
+    });
+  }
 
   // ── 2. Overall impression share ───────────────────────────────────────────
   if (overallShare != null) {
