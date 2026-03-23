@@ -5675,6 +5675,9 @@ Rules:
           locationKeywords: crawlData.locationKeywords,
           phoneNumbers: crawlData.phoneNumbers || [],
           internalLinks: crawlData.internalLinks,
+          internalLinkUrls: crawlData.internalLinkUrls || [],
+          bodySnippet: crawlData.bodySnippet || null,
+          headingHierarchy: crawlData.headingHierarchy || [],
           hasHttps: crawlData.hasHttps,
         };
         firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId)

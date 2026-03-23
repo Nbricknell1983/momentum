@@ -51,8 +51,20 @@ export function buildWebsiteInsights(
       ...(w.metaDescription ? [{ label: 'Meta description', value: w.metaDescription }] : []),
       ...(w.canonicalUrl ? [{ label: 'Canonical URL', value: w.canonicalUrl, type: 'link' as const }] : []),
       ...(w.wordCount ? [{ label: 'Word count', value: `${w.wordCount.toLocaleString()} words`, type: 'count' as const }] : []),
-      ...(w.h1s?.length ? w.h1s.map((h: string) => ({ label: 'H1 heading', value: h })) : []),
-      ...(w.h2s?.slice(0, 6).map((h: string) => ({ label: 'H2 heading', value: h })) ?? []),
+      // Full heading hierarchy (H1 → H6)
+      ...(w.headingHierarchy?.length
+        ? w.headingHierarchy.map((h: { tag: string; text: string }) => ({
+            label: h.tag,
+            value: h.text,
+            type: 'code' as const,
+          }))
+        : [
+            ...(w.h1s?.length ? w.h1s.map((h: string) => ({ label: 'H1', value: h, type: 'code' as const })) : []),
+            ...(w.h2s?.slice(0, 6).map((h: string) => ({ label: 'H2', value: h, type: 'code' as const })) ?? []),
+          ]
+      ),
+      // Body text snippet
+      ...(w.bodySnippet ? [{ label: 'Body content', value: w.bodySnippet }] : []),
     ],
     technicalDetails: [
       `hasHttps: ${w.hasHttps}`,
@@ -60,6 +72,32 @@ export function buildWebsiteInsights(
       ...(w.canonicalUrl ? [`canonical: ${w.canonicalUrl}`] : []),
     ],
   });
+
+  // 1b. Internal links
+  const linkUrls: { href: string; text: string }[] = w.internalLinkUrls ?? [];
+  const linkCount = w.internalLinks ?? linkUrls.length;
+  if (linkCount > 0 || linkUrls.length > 0) {
+    insights.push({
+      id: 'internal-links',
+      label: `${linkCount} internal link${linkCount !== 1 ? 's' : ''} found`,
+      status: linkCount >= 5 ? 'positive' : 'neutral',
+      summary: `${linkCount} internal link${linkCount !== 1 ? 's were' : ' was'} found on the homepage — these help Google and visitors navigate the site.`,
+      whyItMatters: 'Internal links distribute page authority and help search engines discover all pages on the site. A well-linked homepage is a strong signal of site structure quality.',
+      recommendedImprovement: linkCount < 5
+        ? 'Add clear navigation links and contextual links from the homepage to key service, location, and about pages.'
+        : 'Ensure all key service and location pages are reachable within 2–3 clicks from the homepage.',
+      evidence: [
+        { label: 'Total internal links', value: String(linkCount), type: 'count' as const },
+        ...linkUrls.slice(0, 30).map(({ href, text }) => ({
+          label: text,
+          value: href,
+          type: 'link' as const,
+        })),
+        ...(linkUrls.length > 30 ? [{ value: `+${linkUrls.length - 30} more links` }] : []),
+      ],
+      technicalDetails: [`internalLinks: ${linkCount}`],
+    });
+  }
 
   // 2. Sitemap
   // Detection probes robots.txt + 4 common paths + body-sniffs the response.

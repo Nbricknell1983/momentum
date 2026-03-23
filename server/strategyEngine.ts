@@ -31,6 +31,8 @@ export interface CrawlResult {
   servicePageUrls: string[];     // internal URLs containing service keywords
   locationPageUrls: string[];    // internal URLs containing location keywords
   phoneNumbers: string[];        // phone numbers found in page text/links
+  internalLinkUrls: { href: string; text: string }[];  // actual internal links (href + anchor text)
+  bodySnippet?: string;          // first ~400 chars of meaningful body paragraph text
 }
 
 export interface WebsiteXRayResult {
@@ -281,7 +283,7 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
       images: { total: 0, withAlt: 0, withoutAlt: 0 },
       hasSchema: false, ogTags: {}, loadEstimate: 'unknown',
       ctaSignals: [], trustSignals: [], conversionGaps: [], servicePageUrls: [],
-      locationPageUrls: [], phoneNumbers: [],
+      locationPageUrls: [], phoneNumbers: [], internalLinkUrls: [],
     };
   }
 
@@ -309,6 +311,7 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     servicePageUrls: [],
     locationPageUrls: [],
     phoneNumbers: [],
+    internalLinkUrls: [],
   };
 
   try {
@@ -361,14 +364,25 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     result.headingHierarchy = result.headingHierarchy.slice(0, 30);
 
     const domain = new URL(normalizedUrl).hostname;
+    const seenLinkHrefs = new Set<string>();
     $('a[href]').each((_, el) => {
       const href = $(el).attr('href') || '';
+      const text = $(el).text().trim().replace(/\s+/g, ' ');
+      let full = href;
+      try { full = new URL(href, normalizedUrl).href.split('?')[0].split('#')[0]; } catch { /* skip */ }
       if (href.startsWith('/') || href.includes(domain)) {
         result.internalLinks++;
+        // Collect unique internal links with meaningful anchor text
+        if (full && !seenLinkHrefs.has(full) && text && text.length > 1 && text.length < 80
+            && !href.startsWith('tel:') && !href.startsWith('mailto:')) {
+          seenLinkHrefs.add(full);
+          result.internalLinkUrls.push({ href: full, text });
+        }
       } else if (href.startsWith('http')) {
         result.externalLinks++;
       }
     });
+    result.internalLinkUrls = result.internalLinkUrls.slice(0, 40);
 
     $('nav a, header a, .nav a, .menu a, [role="navigation"] a').each((_, el) => {
       const text = $(el).text().trim();
@@ -380,6 +394,16 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
 
     const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
     result.wordCount = bodyText.split(/\s+/).length;
+
+    // Extract a meaningful body snippet from paragraph text
+    const paragraphTexts: string[] = [];
+    $('main p, article p, section p, .content p, #content p, p').each((_, el) => {
+      const t = $(el).text().trim().replace(/\s+/g, ' ');
+      if (t.length > 40 && t.length < 500) paragraphTexts.push(t);
+    });
+    if (paragraphTexts.length) {
+      result.bodySnippet = paragraphTexts.slice(0, 5).join(' ').slice(0, 600);
+    }
 
     result.serviceKeywords = extractServiceKeywords(bodyText);
     result.locationKeywords = extractLocationKeywords(bodyText);
