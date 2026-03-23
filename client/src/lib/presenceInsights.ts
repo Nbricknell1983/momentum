@@ -32,7 +32,7 @@ export function buildWebsiteInsights(
   if (!w?.url) return [];
   const insights: PresenceInsightDetail[] = [];
 
-  // 1. HTTPS
+  // 1. HTTPS + page structure overview
   insights.push({
     id: 'https',
     label: w.hasHttps ? 'Secure website' : 'Not using HTTPS',
@@ -45,10 +45,20 @@ export function buildWebsiteInsights(
       ? 'Maintain secure redirects across all pages, subdomains, and assets to keep the padlock in place.'
       : 'Install an SSL/TLS certificate and configure all URLs to redirect from HTTP to HTTPS, including images and scripts.',
     evidence: [
-      { label: 'Website', value: w.url, type: 'link' },
-      { label: 'HTTPS detected', value: w.hasHttps ? 'Yes' : 'No' },
+      { label: 'Website', value: w.url, type: 'link' as const },
+      { label: 'HTTPS', value: w.hasHttps ? '✓ Secure' : '✗ Not secure' },
+      ...(w.title ? [{ label: 'Page title', value: w.title }] : []),
+      ...(w.metaDescription ? [{ label: 'Meta description', value: w.metaDescription }] : []),
+      ...(w.canonicalUrl ? [{ label: 'Canonical URL', value: w.canonicalUrl, type: 'link' as const }] : []),
+      ...(w.wordCount ? [{ label: 'Word count', value: `${w.wordCount.toLocaleString()} words`, type: 'count' as const }] : []),
+      ...(w.h1s?.length ? w.h1s.map((h: string) => ({ label: 'H1 heading', value: h })) : []),
+      ...(w.h2s?.slice(0, 6).map((h: string) => ({ label: 'H2 heading', value: h })) ?? []),
     ],
-    technicalDetails: [`hasHttps: ${w.hasHttps}`, `URL: ${w.url}`],
+    technicalDetails: [
+      `hasHttps: ${w.hasHttps}`,
+      `URL: ${w.url}`,
+      ...(w.canonicalUrl ? [`canonical: ${w.canonicalUrl}`] : []),
+    ],
   });
 
   // 2. Sitemap
@@ -86,19 +96,27 @@ export function buildWebsiteInsights(
         ? 'Ensure all key service and location pages are included in the sitemap and that it\'s submitted to Google Search Console.'
         : 'Create an XML sitemap covering all key pages and submit it to Google Search Console. Most CMS platforms can generate this automatically.',
     evidence: [
-      ...(sitemapPageCount > 0 ? [{ label: 'Pages detected', value: String(sitemapPageCount), type: 'count' as const }] : []),
+      ...(sitemapPageCount > 0 ? [{ label: 'Pages in sitemap', value: String(sitemapPageCount), type: 'count' as const }] : []),
       ...(detectedSitemapUrl
         ? [{ label: 'Sitemap URL', value: detectedSitemapUrl, type: 'link' as const }]
         : w.url
-          ? (() => { try { return [{ label: 'Checked', value: `${new URL(w.url).origin}/sitemap.xml`, type: 'link' as const }]; } catch { return []; } })()
+          ? (() => { try { return [{ label: 'Checked at', value: `${new URL(w.url).origin}/sitemap.xml`, type: 'link' as const }]; } catch { return []; } })()
           : []
       ),
-      { label: 'Detection result', value: w.hasSitemap ? 'Confirmed' : 'Not confirmed' },
+      { label: 'Detection result', value: w.hasSitemap ? '✓ Confirmed' : 'Not confirmed' },
+      ...(w.navLabels?.length
+        ? [
+            { label: 'Navigation structure', value: `${w.navLabels.length} nav items detected` },
+            ...w.navLabels.slice(0, 10).map((label: string) => ({ label: '→ Nav item', value: label })),
+          ]
+        : []
+      ),
     ],
     technicalDetails: [
       `hasSitemap: ${w.hasSitemap}`,
       `sitemapUrl: ${detectedSitemapUrl ?? 'none'}`,
       `scannedPages: ${sitemapPageCount}`,
+      ...(w.navLabels?.length ? [`navLabels: ${w.navLabels.join(', ')}`] : []),
     ],
   });
 
@@ -115,10 +133,18 @@ export function buildWebsiteInsights(
       ? 'Expand structured data coverage to service and location pages. Consider adding Review, Service, and FAQPage schema types for better search visibility.'
       : 'Add LocalBusiness schema markup to the homepage. For a service business, also add Service schema to individual service pages.',
     evidence: [
-      { label: 'Schema detected', value: w.hasSchema ? 'Yes — homepage' : 'Not detected' },
-      { value: 'Full schema audit available in Website X-Ray' },
+      { label: 'Schema detected', value: w.hasSchema ? '✓ Present on homepage' : '✗ Not detected' },
+      ...(w.schemaTypes?.length
+        ? w.schemaTypes.map((t: string) => ({ label: 'Schema type', value: t, type: 'code' as const }))
+        : w.hasSchema
+          ? [{ value: 'Schema found but types could not be parsed' }]
+          : [{ value: 'No JSON-LD structured data found on homepage' }]
+      ),
     ],
-    technicalDetails: [`hasSchema: ${w.hasSchema}`],
+    technicalDetails: [
+      `hasSchema: ${w.hasSchema}`,
+      ...(w.schemaTypes?.length ? [`schemaTypes: ${w.schemaTypes.join(', ')}`] : []),
+    ],
   });
 
   // 4. Phone visibility
@@ -180,9 +206,16 @@ export function buildWebsiteInsights(
         ? 'Ensure each service page has a clear headline, description, trust signals (reviews, credentials), and a prominent CTA.'
         : 'Create a dedicated page for each major service with clear descriptions, local signals, trust elements, and a call to action.',
       evidence: [
-        { label: 'Service pages detected', value: String(servicePageCount), type: 'count' },
-        ...w.servicePageUrls.slice(0, 6).map((u: string) => ({ value: u, type: 'link' as const })),
-        ...(w.servicePageUrls.length > 6 ? [{ value: `+${w.servicePageUrls.length - 6} more pages` }] : []),
+        { label: 'Service pages', value: String(servicePageCount), type: 'count' as const },
+        ...w.servicePageUrls.slice(0, 8).map((u: string) => ({ label: 'Page URL', value: u, type: 'link' as const })),
+        ...(w.servicePageUrls.length > 8 ? [{ value: `+${w.servicePageUrls.length - 8} more service pages` }] : []),
+        ...(w.serviceKeywords?.length
+          ? [
+              { label: 'Service keywords found', value: `${w.serviceKeywords.length} detected`, type: 'count' as const },
+              ...w.serviceKeywords.slice(0, 6).map((k: string) => ({ label: '→ Keyword', value: k })),
+            ]
+          : []
+        ),
       ],
     });
   }
@@ -211,7 +244,18 @@ export function buildWebsiteInsights(
       summary: `${locationPageCount} location-specific page${locationPageCount !== 1 ? 's were' : ' was'} found — these help the site rank in specific geographic searches.`,
       whyItMatters: 'Location pages let a business rank in multiple areas. Without them, a business in one suburb struggles to appear for nearby suburb searches.',
       recommendedImprovement: 'Each location page should mention the specific area naturally, include local trust signals, and have a locally relevant CTA.',
-      evidence: w.locationPageUrls.slice(0, 6).map((u: string) => ({ value: u, type: 'link' as const })),
+      evidence: [
+        { label: 'Location pages', value: String(locationPageCount), type: 'count' as const },
+        ...w.locationPageUrls.slice(0, 8).map((u: string) => ({ label: 'Page URL', value: u, type: 'link' as const })),
+        ...(w.locationPageUrls.length > 8 ? [{ value: `+${w.locationPageUrls.length - 8} more location pages` }] : []),
+        ...(w.locationKeywords?.length
+          ? [
+              { label: 'Location signals', value: `${w.locationKeywords.length} detected`, type: 'count' as const },
+              ...w.locationKeywords.slice(0, 6).map((k: string) => ({ label: '→ Location', value: k })),
+            ]
+          : []
+        ),
+      ],
     });
   }
 

@@ -20,6 +20,7 @@ export interface CrawlResult {
   locationKeywords: string[];
   images: { total: number; withAlt: number; withoutAlt: number };
   hasSchema: boolean;
+  schemaTypes?: string[];
   canonicalUrl?: string;
   ogTags: Record<string, string>;
   loadEstimate: string;
@@ -394,6 +395,23 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     });
 
     result.hasSchema = html.includes('application/ld+json');
+    if (result.hasSchema) {
+      const schemaTypes: string[] = [];
+      const schemaMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+      for (const block of schemaMatches) {
+        try {
+          const inner = block.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '').trim();
+          const parsed = JSON.parse(inner);
+          const entries = Array.isArray(parsed) ? parsed : (parsed['@graph'] ? parsed['@graph'] : [parsed]);
+          for (const entry of entries) {
+            const t = entry['@type'];
+            if (typeof t === 'string') schemaTypes.push(t);
+            else if (Array.isArray(t)) schemaTypes.push(...t.filter((x: any) => typeof x === 'string'));
+          }
+        } catch { /* malformed JSON-LD */ }
+      }
+      result.schemaTypes = [...new Set(schemaTypes)].filter(Boolean).slice(0, 10);
+    }
 
     $('meta[property^="og:"]').each((_, el) => {
       const prop = $(el).attr('property')?.replace('og:', '') || '';

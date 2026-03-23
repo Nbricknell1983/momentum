@@ -5667,6 +5667,7 @@ Rules:
           trustSignals: crawlData.trustSignals || [],
           conversionGaps: crawlData.conversionGaps || [],
           hasSchema: crawlData.hasSchema,
+          schemaTypes: crawlData.schemaTypes || [],
           hasSitemap: crawlData.hasSitemap,
           sitemapUrl: crawlData.sitemapUrl || null,
           wordCount: crawlData.wordCount,
