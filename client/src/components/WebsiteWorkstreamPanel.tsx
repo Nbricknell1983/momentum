@@ -2140,6 +2140,10 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [exporting, setExporting]   = useState(false);
   const [generatingSite, setGeneratingSite] = useState(false);
   const [generatingLocal, setGeneratingLocal] = useState(false);
+  const [activeTab, setActiveTab] = useState('plan');
+  const siteAutoTriggered   = useRef(false);
+  const previewAutoSwitched = useRef(false);
+  const agentReviewSent     = useRef(false);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [previewSlug, setPreviewSlug] = useState<string | null>(null);
   const [localPreviewSlug, setLocalPreviewSlug] = useState<string | null>(null);
@@ -2485,7 +2489,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       const data = await res.json();
       toast({
         title: 'Site generated',
-        description: `${data.pageCount} pages built — switch to the Preview tab to see them live.`,
+        description: `${data.pageCount} pages built — opening preview now.`,
       });
     } catch (e: any) {
       toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
@@ -2493,6 +2497,68 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       setGeneratingSite(false);
     }
   }, [orgId, authReady, blueprint, client, token, toast]);
+
+  // ── Auto-cascade: blueprint ready → build HTML site ──────────────────────────
+  useEffect(() => {
+    if (siteAutoTriggered.current) return;
+    if (!blueprint || !token || !authReady) return;
+    if (siteReady || generatingSite) return;
+    siteAutoTriggered.current = true;
+    handleGenerateSite();
+  }, [blueprint, token, authReady, siteReady, generatingSite, handleGenerateSite]);
+
+  // ── Auto-cascade: site ready → switch to preview tab + set first page ─────────
+  useEffect(() => {
+    if (previewAutoSwitched.current) return;
+    if (!siteReady || sitePageSlugs.length === 0) return;
+    previewAutoSwitched.current = true;
+    setActiveTab('preview');
+    setPreviewSlug(sitePageSlugs[0]);
+  }, [siteReady, sitePageSlugs]);
+
+  // ── Auto-cascade: preview ready → post agent expert review to chat ────────────
+  useEffect(() => {
+    if (agentReviewSent.current) return;
+    if (!siteReady || sitePageSlugs.length === 0) return;
+    agentReviewSent.current = true;
+
+    const si: any = (client as any).sourceIntelligence || {};
+    const webEb: any = si.evidenceBundle?.website || (client as any).evidenceBundle?.website || {};
+    const gbpEb: any = si.evidenceBundle?.gbp || (client as any).evidenceBundle?.gbp || {};
+    const pages = blueprint?.pageStructure || [];
+    const servicePages  = pages.filter((p: any) => p.pageType === 'service');
+    const locationPages = pages.filter((p: any) => p.pageType === 'location');
+    const gbpServices: string[] = gbpEb.services || [];
+    const gbpAreas: string[]    = gbpEb.serviceAreas || [];
+    const missingSchema: string[] = webEb.schemaFieldAudit?.missing || [];
+    const hadNoViewport = webEb.hasViewport === false;
+
+    const lines: string[] = [
+      `**Your site has been built.** Here's my expert review:`,
+      '',
+      `**📄 ${sitePageSlugs.length} pages generated** — ${servicePages.length} service page${servicePages.length !== 1 ? 's' : ''} and ${locationPages.length} location page${locationPages.length !== 1 ? 's' : ''}.`,
+    ];
+
+    if (hadNoViewport) {
+      lines.push(`**📱 Mobile fix applied** — Your existing site wasn't mobile-optimised. The new build includes a proper responsive viewport and mobile-first layout.`);
+    }
+    if (missingSchema.length > 0) {
+      lines.push(`**🔖 Schema upgraded** — Added missing fields: ${missingSchema.slice(0, 4).join(', ')}. This improves how Google reads your business details.`);
+    }
+    if (gbpServices.length > 0 && servicePages.length < gbpServices.length) {
+      const uncovered = gbpServices.filter((s: string) => !pages.some((p: any) => p.pageName?.toLowerCase().includes(s.toLowerCase().slice(0, 8))));
+      if (uncovered.length > 0) {
+        lines.push(`**⚠️ GBP gap** — ${uncovered.slice(0, 3).join(', ')} are listed on your GBP but may not have a dedicated page yet. Ask me to write those pages.`);
+      }
+    }
+    if (gbpAreas.length > locationPages.length) {
+      lines.push(`**📍 Location coverage** — You have ${gbpAreas.length} service areas on GBP but ${locationPages.length} location pages built. Ask me to write the missing suburb pages.`);
+    }
+    lines.push('');
+    lines.push(`Ask me to improve any page, write more content, add FAQ sections, or refine the copy. I have full context of your business, your keywords and your existing site.`);
+
+    setChatMessages([{ role: 'assistant', content: lines.join('\n'), ts: Date.now() }]);
+  }, [siteReady, sitePageSlugs, blueprint, client]);
 
   // ── Generate local SEO pages ──────────────────────────────────────────────────
 
@@ -2661,7 +2727,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
 
           {/* Tabs */}
           {blueprint && (
-            <Tabs defaultValue="plan" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="h-8 text-xs mb-4 flex gap-0.5">
                 <TabsTrigger value="plan"    className="text-xs h-7 gap-1" data-testid="tab-workstream-plan"><FileText className="h-3 w-3" />Plan</TabsTrigger>
                 <TabsTrigger value="pages"   className="text-xs h-7 gap-1" data-testid="tab-workstream-pages"><Globe className="h-3 w-3" />Pages</TabsTrigger>
@@ -3331,14 +3397,15 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
               <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50 dark:bg-gray-900">
                 {chatMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-3 ${loading ? 'bg-blue-600' : 'bg-blue-100 dark:bg-blue-900/40'}`}>
-                      <Globe className={`h-5 w-5 ${loading ? 'text-white animate-pulse' : 'text-blue-600 dark:text-blue-400'}`} />
-                    </div>
-                    {loading ? (
+                    {/* Stage 1: Generating site plan */}
+                    {loading && !generatingSite && (
                       <>
-                        <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Building your site plan…</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-[260px]">
-                          Pulling from your client intelligence — GBP services, service areas, existing site data, and keyword targets.
+                        <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center mb-3">
+                          <Globe className="h-5 w-5 text-white animate-pulse" />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Analysing your business…</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-[240px]">
+                          Pulling from GBP services, service areas, your existing site and keyword data to build the site structure.
                         </p>
                         <div className="flex gap-1 justify-center">
                           <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -3346,11 +3413,33 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                           <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
                         </div>
                       </>
-                    ) : (
+                    )}
+                    {/* Stage 2: Building the actual HTML */}
+                    {generatingSite && (
                       <>
+                        <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center mb-3">
+                          <Globe className="h-5 w-5 text-white animate-spin" style={{ animationDuration: '2s' }} />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Building your website…</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-[240px]">
+                          Writing production HTML for every service and location page. This takes a minute — hold tight.
+                        </p>
+                        <div className="flex gap-1 justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </>
+                    )}
+                    {/* Stage 0: Idle — no blueprint yet */}
+                    {!loading && !generatingSite && (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center mb-3">
+                          <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        </div>
                         <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">SEO Website Machine</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-5 max-w-[260px]">
-                          Your site plan will be built automatically from your GBP services, service areas and keyword data. Upload Ahrefs keywords below to get started.
+                          Your site will be built automatically from GBP services, service areas and keyword data.
                         </p>
                         <div className="flex flex-col gap-1.5 w-full max-w-[280px]">
                           {CHAT_QUICK_ACTIONS.slice(0, 5).map((item) => (
