@@ -2389,7 +2389,9 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
     if (blueprint || loading) return;
     if (!client?.businessName) return;
     autoTriggered.current = true;
-    handleRun(false);
+    // force=true bypasses any previously stuck idempotent job and creates a fresh one
+    // with the updated dependency contracts (website_workstream now has no deps).
+    handleRun(true);
   }, [token, authReady, orgId, blueprint, loading, handleRun, client]);
 
   // ── Accept plan ──────────────────────────────────────────────────────────────

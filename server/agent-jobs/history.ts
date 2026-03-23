@@ -71,16 +71,22 @@ export async function findLatestSuccessfulRun(
 ): Promise<EngineHistoryRecord | null> {
   try {
     const baseRef = entityRef(db, orgId, entityType, entityId);
+    // Query by taskType only (single-field auto-index — no composite index required),
+    // then filter status and sort completedAt in memory to avoid Firestore index errors.
     const snap = await baseRef
       .collection('engineHistory')
       .where('taskType', '==', taskType)
-      .where('status', '==', 'completed')
-      .orderBy('completedAt', 'desc')
-      .limit(1)
+      .limit(50)
       .get();
 
     if (snap.empty) return null;
-    return snap.docs[0].data() as EngineHistoryRecord;
+
+    const completed = snap.docs
+      .map(d => d.data() as EngineHistoryRecord)
+      .filter(r => r.status === 'completed' && !!r.completedAt)
+      .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
+
+    return completed[0] ?? null;
   } catch (err: any) {
     console.warn(`[engineHistory] findLatestSuccessfulRun failed:`, err.message);
     return null;

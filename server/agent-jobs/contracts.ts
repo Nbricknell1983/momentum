@@ -49,7 +49,9 @@ export function retryDelayMs(retryCount: number): number {
 
 export const TASK_DEPENDENCIES: Record<string, string[]> = {
   [TASK_TYPES.STRATEGY]:           [TASK_TYPES.WEBSITE_XRAY, TASK_TYPES.SERP],
-  [TASK_TYPES.WEBSITE_WORKSTREAM]: [TASK_TYPES.STRATEGY, TASK_TYPES.WEBSITE_XRAY, TASK_TYPES.SERP, TASK_TYPES.GROWTH_PRESCRIPTION],
+  // website_workstream reads intelligence directly from client.sourceIntelligence in Firestore —
+  // no dep chain needed; the blueprint generator pulls GBP/crawl/keyword data from the client doc.
+  [TASK_TYPES.WEBSITE_WORKSTREAM]: [],
 };
 
 // ─── Input schemas ─────────────────────────────────────────────────────────────
