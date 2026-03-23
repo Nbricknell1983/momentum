@@ -2484,72 +2484,70 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
 
       {open && (
         <div className="p-4">
-          {/* Toolbar */}
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => handleRun(false)}
-              disabled={loading}
-              data-testid="btn-website-workstream-run"
-            >
-              <Cpu className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-              {blueprint ? 'Refresh' : 'Generate Blueprint'}
-            </Button>
+          {/* Toolbar — only shown once a blueprint exists */}
+          {blueprint && (
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => handleRun(false)}
+                disabled={loading}
+                data-testid="btn-website-workstream-run"
+              >
+                <Cpu className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                Refresh Blueprint
+              </Button>
 
-            {blueprint && (
-              <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setShowNudge(s => !s)}
+                data-testid="btn-website-workstream-nudge"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Regenerate
+              </Button>
+
+              {!isLocked && (
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="h-8 text-xs gap-1.5"
-                  onClick={() => setShowNudge(s => !s)}
-                  data-testid="btn-website-workstream-nudge"
+                  className="h-8 text-xs gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                  onClick={handleAccept}
+                  data-testid="btn-website-workstream-accept"
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Regenerate
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Accept Plan
                 </Button>
+              )}
 
-                {!isLocked && (
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs gap-1.5 bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleAccept}
-                    data-testid="btn-website-workstream-accept"
-                  >
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    Accept Plan
-                  </Button>
-                )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={handleExport}
+                disabled={exporting}
+                data-testid="btn-website-workstream-export"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export ZIP
+              </Button>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs gap-1.5"
-                  onClick={handleExport}
-                  disabled={exporting}
-                  data-testid="btn-website-workstream-export"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Export ZIP
-                </Button>
-
-                <Button
-                  size="sm"
-                  className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={handleGenerateSite}
-                  disabled={generatingSite || !blueprint}
-                  data-testid="btn-generate-site"
-                >
-                  {generatingSite
-                    ? <><Cpu className="h-3.5 w-3.5 animate-spin" /> Building…</>
-                    : <><Zap className="h-3.5 w-3.5" /> {siteReady ? 'Rebuild Site' : 'Build Site'}</>
-                  }
-                </Button>
-              </>
-            )}
-          </div>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={handleGenerateSite}
+                disabled={generatingSite}
+                data-testid="btn-generate-site"
+              >
+                {generatingSite
+                  ? <><Cpu className="h-3.5 w-3.5 animate-spin" /> Building…</>
+                  : <><Zap className="h-3.5 w-3.5" /> {siteReady ? 'Rebuild Site' : 'Build Site'}</>
+                }
+              </Button>
+            </div>
+          )}
 
           {/* Nudge input */}
           {showNudge && (
