@@ -2534,7 +2534,6 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 </TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs h-7 gap-1" data-testid="tab-workstream-preview"><Eye className="h-3 w-3" />Preview</TabsTrigger>
                 <TabsTrigger value="launch"  className="text-xs h-7 gap-1" data-testid="tab-workstream-launch"><Rocket className="h-3 w-3" />Launch</TabsTrigger>
-                <TabsTrigger value="code"    className="text-xs h-7 gap-1" data-testid="tab-workstream-code"><Code2 className="h-3 w-3" />Code</TabsTrigger>
               </TabsList>
 
               {/* ── PLAN ── */}
@@ -3154,37 +3153,37 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 />
               </TabsContent>
 
-              {/* ── CODE (Replit embed) ── */}
-              <TabsContent value="code">
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ height: '80vh' }}>
-                  <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-1.5">
-                      <Code2 className="h-3.5 w-3.5 text-gray-500" />
-                      <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Momentum — Replit Workspace</span>
-                    </div>
-                    <a
-                      href="https://replit.com/@nathandbricknel/Momentum"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline shrink-0"
-                      data-testid="link-replit-open"
-                    >
-                      <ExternalLink className="h-3 w-3" /> Open full screen
-                    </a>
-                  </div>
-                  <iframe
-                    src={REPLIT_EMBED_URL}
-                    className="w-full border-0"
-                    style={{ height: 'calc(80vh - 32px)' }}
-                    allow="clipboard-read; clipboard-write"
-                    data-testid="iframe-replit-embed"
-                    title="Momentum Replit Workspace"
-                  />
-                </div>
-              </TabsContent>
-
             </Tabs>
           )}
+
+          {/* ── CODE / REPLIT — always visible ── */}
+          <div className="mt-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ height: '80vh' }}>
+              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-1.5">
+                  <Code2 className="h-3.5 w-3.5 text-gray-500" />
+                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Momentum — Replit Workspace</span>
+                </div>
+                <a
+                  href="https://replit.com/@nathandbricknel/Momentum"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline shrink-0"
+                  data-testid="link-replit-open"
+                >
+                  <ExternalLink className="h-3 w-3" /> Open full screen
+                </a>
+              </div>
+              <iframe
+                src={REPLIT_EMBED_URL}
+                className="w-full border-0"
+                style={{ height: 'calc(80vh - 32px)' }}
+                allow="clipboard-read; clipboard-write"
+                data-testid="iframe-replit-embed"
+                title="Momentum Replit Workspace"
+              />
+            </div>
+          </div>
         </div>
       )}
 
