@@ -1,0 +1,243 @@
+I need you to treat SEO preservation and Google Business Profile alignment as hard requirements in the Website Production Engine.
+
+Context:
+The Website Production Engine is now built across 5 stages and the Website Workstream has 8 tabs:
+- Plan
+- Pages
+- Copy
+- SEO
+- Local
+- Assets
+- Preview
+- Launch
+
+The current system already supports:
+- blueprint planning
+- page breakdowns
+- multi-variant copy
+- SEO tab with meta audit, schema, sitemap.xml, robots.txt
+- local SEO page planning/generation
+- asset uploads
+- live preview
+- launch readiness, ZIP export, DNS guide, Google Search Console steps, and post-launch checklist
+
+What I need now:
+I want you to harden this system so that when we rebuild or launch a client website, we do not damage existing organic rankings, existing traffic, existing backlinks, existing URL equity, or Google Business Profile relevance. The system must preserve what is already working and only improve from there.
+
+This is especially important for clients that already rank well organically and rely heavily on their Google Business Profile.
+
+Your task:
+Design and implement an SEO Preservation + GBP Alignment layer inside the Website Production Engine.
+
+Core principle:
+This system must not just generate a beautiful site. It must generate a migration-safe, search-safe, GBP-aligned website that protects current wins and improves local search performance.
+
+Build the following capabilities:
+
+1. SEO PRESERVATION ENGINE
+Create a preservation workflow that runs before any build is finalized.
+
+It must:
+- ingest current site URL data
+- ingest sitemap.xml if available
+- ingest Ahrefs exports if provided
+- support future ingestion of Google Search Console exports
+- support future ingestion of Google Analytics landing page data
+- merge and deduplicate all discovered URLs
+- classify pages by importance
+
+For each discovered URL, create a page protection record with fields such as:
+- current URL
+- page type
+- target keyword/theme
+- traffic value
+- backlink value
+- internal link importance
+- local SEO importance
+- conversion importance
+- recommended action: KEEP / REBUILD SAME URL / REDIRECT / CONSOLIDATE / REVIEW
+- risk level: LOW / MEDIUM / HIGH
+
+Output:
+- a “Protected Pages” table
+- a “Redirect Map” table
+- an “SEO Risk Report” panel
+
+2. URL PRESERVATION RULES
+Add strict logic so the build engine does not casually change URLs.
+
+Rules:
+- keep existing URLs wherever possible
+- if a URL changes, a 301 redirect must be created
+- never redirect important pages to the homepage unless there is no relevant equivalent
+- preserve slug intent, not just page existence
+- preserve high-value service pages, location pages, and blog pages if they carry rankings, backlinks, or internal authority
+
+I want this logic enforced in the build flow, not just displayed as advice.
+
+3. PAGE INTENT PROTECTION
+For every important page, preserve and improve its ranking intent.
+
+The system should evaluate:
+- what service the page is about
+- what location intent exists
+- whether it appears to support commercial, transactional, or informational search intent
+- whether it aligns with a GBP service or service area
+
+Do not allow a strong page to be replaced by a generic page that weakens intent.
+
+Example:
+If an existing page ranks for emergency electrician in a target suburb, the rebuild must preserve that intent with an equivalent or better page.
+
+4. GOOGLE BUSINESS PROFILE ALIGNMENT LAYER
+Add a GBP alignment engine to the Website Production Engine.
+
+It must:
+- map website service pages to GBP services
+- map location pages to target service areas
+- support consistent NAP and business identity placement
+- ensure local landing pages reinforce the business’s GBP strategy
+- prevent the site from drifting away from GBP categories, services, and geography
+- flag inconsistencies between planned website structure and GBP strategy
+
+Output:
+- GBP alignment score
+- GBP consistency checklist
+- gaps or conflicts to resolve before launch
+
+5. LOCAL SEO PAGE QUALITY CONTROLS
+The current Local tab generates service/location/combo pages.
+I need stronger controls so these pages are not thin, repetitive, or risky.
+
+Add:
+- duplication detection
+- entity overlap detection
+- minimum content quality thresholds
+- internal linking recommendations
+- uniqueness requirements by location and service
+- warnings for doorway-page risk
+
+Each local page should have:
+- a clear primary purpose
+- unique local context
+- service relevance
+- meaningful internal links
+- conversion elements
+- metadata and schema support
+
+6. INTERNAL LINK PRESERVATION + IMPROVEMENT
+The engine must understand that internal links distribute authority.
+
+Build logic to:
+- preserve critical internal links from the existing site where possible
+- identify orphaned important pages
+- recommend improved link paths between:
+  - homepage
+  - service pages
+  - location pages
+  - combo pages
+  - contact page
+  - supporting content
+
+Output:
+- internal linking map
+- orphan page warnings
+- suggested internal links to add before launch
+
+7. TECHNICAL SEO SAFETY CHECKS
+Expand the SEO and Launch tabs to include technical protection checks.
+
+Must validate:
+- canonical tags
+- indexability rules
+- sitemap integrity
+- robots.txt integrity
+- missing title tags
+- missing meta descriptions
+- heading hierarchy
+- broken internal links
+- redirect chains
+- missing alt text placeholders
+- schema presence where relevant
+
+Add a pre-launch SEO gate:
+The site cannot be marked launch-ready unless all critical SEO checks pass or are explicitly overridden.
+
+8. MIGRATION-SAFE LAUNCH WORKFLOW
+Strengthen the Launch tab so it supports real migration safety.
+
+I need:
+- protected page summary
+- redirect export
+- launch risk score
+- pre-launch verification checklist
+- post-launch monitoring checklist
+- launch notes for DNS, indexing, sitemap submission, and QA
+
+The ZIP export must include:
+- all built HTML pages
+- sitemap.xml
+- robots.txt
+- redirect mapping file
+- launch checklist
+- SEO preservation report
+- asset files
+
+9. ASSET + MEDIA SUPPORT WITHOUT SEO DAMAGE
+Ensure uploaded images and videos are SEO-safe.
+
+Requirements:
+- allow image alt text fields
+- preserve filenames or generate SEO-friendly filenames
+- support image compression recommendations
+- ensure assets do not break layout or page speed
+- make it easy to replace placeholders with real client media
+
+10. SAFE MODE IF DATA IS INCOMPLETE
+In many cases we will not have Google Search Console or Analytics access.
+
+Add fallback logic:
+If GSC/GA data is missing, the engine should enter “defensive rebuild mode” and:
+- preserve more URLs by default
+- avoid unnecessary consolidation
+- raise caution flags
+- rely on sitemap, crawl data, Ahrefs exports, and internal link data
+
+11. UI / PRODUCT CHANGES
+Please add the following product elements:
+- SEO Preservation tab or panel
+- Protected Pages table
+- Redirect Map builder
+- SEO Risk Report
+- GBP Alignment panel
+- Defensive Rebuild Mode indicator
+- Launch blocker warnings when SEO-critical conditions are not met
+
+12. IMPLEMENTATION EXPECTATION
+I do not want a high-level explanation only.
+I want you to:
+- review the current architecture
+- identify where this logic should live in the existing system
+- propose the data model additions
+- propose the backend services/functions required
+- propose UI changes by tab
+- define the scoring logic
+- define the build rules
+- define what is automatic vs manually reviewable
+- then implement this in stages
+
+Output format I want from you:
+1. Current-state assessment
+2. Gaps that could still cause SEO or GBP damage
+3. Recommended architecture changes
+4. Data model changes
+5. New services/functions/modules
+6. UI updates by tab
+7. Scoring and rule logic
+8. Staged implementation plan
+9. Then start building the first stage
+
+Important:
+Do not simplify this into generic SEO advice.
+Treat this as a production system requirement for multi-client website rebuilds.
+This needs to be practical, enforceable, and reusable at scale.

@@ -11046,6 +11046,621 @@ ${allSitemapPages.map(p => `  <url>
     }
   });
 
+  // ── SEO Preservation Engine ──────────────────────────────────────────────────
+
+  // Analyse URLs from multiple sources: manual, sitemap crawl, Ahrefs CSV
+  app.post('/api/clients/:clientId/analyse-urls', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, manualUrls, sitemapUrl, ahrefsCsv } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const businessName = clientData.businessName || 'this business';
+      const si = clientData.sourceIntelligence || {};
+      const blueprint = clientData.websiteWorkstream?.currentDraft;
+      const gbpServices: string[] = si.evidenceBundle?.gbp?.services || si.services || [];
+      const gbpAreas: string[] = si.evidenceBundle?.gbp?.serviceAreas || [];
+
+      // ── Step 1: Collect URLs ─────────────────────────────────────
+      const urlSet = new Set<string>();
+
+      // Manual entry
+      if (manualUrls) {
+        manualUrls.split(/[\n,]/).map((u: string) => u.trim()).filter(Boolean).forEach((u: string) => urlSet.add(u));
+      }
+
+      // Sitemap crawl
+      if (sitemapUrl) {
+        try {
+          const https = await import('https');
+          const http = await import('http');
+          const fetchUrl = (url: string): Promise<string> => new Promise((resolve, reject) => {
+            const mod = url.startsWith('https') ? https : http;
+            let data = '';
+            const reqObj = mod.get(url, (resp: any) => {
+              if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+                fetchUrl(resp.headers.location).then(resolve).catch(reject);
+                return;
+              }
+              resp.on('data', (chunk: any) => { data += chunk; });
+              resp.on('end', () => resolve(data));
+            });
+            reqObj.on('error', reject);
+            reqObj.setTimeout(10000, () => { reqObj.destroy(); reject(new Error('timeout')); });
+          });
+          const xml = await fetchUrl(sitemapUrl);
+          const locs = xml.match(/<loc>(.*?)<\/loc>/gi)?.map(l => l.replace(/<\/?loc>/gi, '').trim()) || [];
+          locs.forEach(u => urlSet.add(u));
+        } catch (sErr: any) {
+          console.warn('[analyse-urls] sitemap fetch failed:', sErr.message);
+        }
+      }
+
+      // Ahrefs CSV — expect: URL in column 1 (0-indexed), Traffic optional
+      if (ahrefsCsv) {
+        const lines = ahrefsCsv.split('\n');
+        const header = lines[0]?.toLowerCase() || '';
+        const urlIdx = header.split(',').findIndex((h: string) => h.includes('url') || h.includes('address'));
+        const trafficIdx = header.split(',').findIndex((h: string) => h.includes('traffic'));
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',');
+          const rawUrl = (cols[urlIdx >= 0 ? urlIdx : 0] || '').replace(/^"|"$/g, '').trim();
+          if (rawUrl && rawUrl.startsWith('http')) urlSet.add(rawUrl);
+        }
+      }
+
+      // Deduplicate and limit to 60 URLs to stay within token limits
+      const allUrls = [...urlSet].filter(u => {
+        try { new URL(u); return true; } catch { return false; }
+      }).filter(u => !u.match(/\.(jpg|jpeg|png|gif|webp|svg|css|js|ico|woff|woff2|ttf|pdf|zip)(\?|$)/i)).slice(0, 60);
+
+      if (allUrls.length === 0) {
+        return res.status(400).json({ error: 'No valid URLs found. Please provide at least one URL.' });
+      }
+
+      const hasGscData = false; // Future: when GSC data is ingested
+      const hasGaData = false;
+      const defensiveMode = !hasGscData && !hasGaData;
+
+      // ── Step 2: AI classification ──────────────────────────────────
+      const urlLines = allUrls.map((u, i) => `${i + 1}. ${u}`).join('\n');
+      const existingBlueprintPages = (blueprint?.pages || []).map((p: any) => `/${p.route || p.key}`).join(', ');
+
+      const classifyPrompt = `You are an expert local SEO strategist performing a pre-rebuild URL audit for a client website.
+
+Business: ${businessName}
+GBP Services: ${gbpServices.slice(0, 15).join(', ') || 'unknown'}
+GBP Service Areas: ${gbpAreas.slice(0, 10).join(', ') || 'unknown'}
+Planned new pages in rebuild: ${existingBlueprintPages || 'none yet'}
+
+Your task: For each URL below, assess what this page does, how important it is to the business's SEO, and what action should be taken during the rebuild.
+
+URLs to classify:
+${urlLines}
+
+Classification rules:
+- KEEP: URL slug should remain identical in the new site (important ranking page)
+- REBUILD_SAME_URL: Page content needs rewriting but URL must stay the same (medium value, retains backlinks or rankings)
+- REDIRECT: Page is changing URLs or being replaced — must 301 redirect to equivalent new page
+- CONSOLIDATE: Page can be merged with another similar page (thin or duplicate content)
+- REVIEW: Uncertain — needs human review before decision
+
+Risk levels:
+- HIGH: Changing or removing this page will almost certainly damage organic rankings, backlink equity, or local search visibility
+- MEDIUM: Changing this page carries moderate risk — some rankings or backlinks may be affected
+- LOW: Page has low SEO value — safe to change, redirect, or remove with minimal risk
+
+For trafficValue, backlinkValue: since we have no analytics data, infer from page type, URL structure, and business context. Use "unknown" if truly unknowable.
+
+Return valid JSON ONLY in this exact format:
+{
+  "defensiveMode": ${defensiveMode},
+  "pages": [
+    {
+      "currentUrl": "full URL as provided",
+      "slug": "path-without-domain-or-leading-slash (e.g. services/plumbing)",
+      "pageType": "homepage|service|location|combo|blog|contact|other",
+      "targetKeyword": "inferred primary keyword this page targets",
+      "trafficValue": "high|medium|low|unknown",
+      "backlinkValue": "high|medium|low|unknown",
+      "internalLinkImportance": "high|medium|low",
+      "localSeoImportance": "high|medium|low",
+      "conversionImportance": "high|medium|low",
+      "recommendedAction": "KEEP|REBUILD_SAME_URL|REDIRECT|CONSOLIDATE|REVIEW",
+      "riskLevel": "LOW|MEDIUM|HIGH",
+      "notes": "one sentence explaining the recommendation"
+    }
+  ]
+}`;
+
+      const classification = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: classifyPrompt }],
+        max_tokens: 3500,
+        response_format: { type: 'json_object' },
+      });
+
+      let classified: { defensiveMode: boolean; pages: any[] } = { defensiveMode, pages: [] };
+      try {
+        classified = JSON.parse(classification.choices[0]?.message?.content || '{"pages":[]}');
+      } catch { classified = { defensiveMode, pages: [] }; }
+
+      // ── Step 3: Build page record map ─────────────────────────────
+      const pageRecords: Record<string, any> = {};
+      for (const page of (classified.pages || [])) {
+        const key = (page.slug || '').replace(/^\//, '') || 'home';
+        pageRecords[key] = { ...page, updatedAt: new Date().toISOString() };
+      }
+
+      // ── Step 4: Auto-build redirect map ────────────────────────────
+      // Pages marked REDIRECT need a destination — default to homepage, user can override
+      const redirectMap: Record<string, string> = clientData.websiteWorkstream?.seoPreservation?.redirectMap || {};
+      for (const [key, page] of Object.entries(pageRecords as Record<string, any>)) {
+        if ((page.recommendedAction === 'REDIRECT' || page.recommendedAction === 'CONSOLIDATE') && !redirectMap[key]) {
+          redirectMap[key] = '/'; // Default — user should override
+        }
+      }
+
+      // ── Step 5: GBP alignment check ───────────────────────────────
+      const blueprintPageRoutes = (blueprint?.pages || []).map((p: any) => ({
+        route: p.route || p.key,
+        title: p.title || '',
+        desc: p.description || '',
+      }));
+      const localPageSlugs = Object.keys(clientData.websiteWorkstream?.generatedSite?.localPages || {});
+
+      let gbpAlignmentScore = 100;
+      const gbpChecks: { label: string; pass: boolean; note: string }[] = [];
+      const gbpGaps: string[] = [];
+
+      for (const service of gbpServices.slice(0, 15)) {
+        const slug = service.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const matched = blueprintPageRoutes.some((p: any) =>
+          p.title.toLowerCase().includes(service.toLowerCase().substring(0, 8)) ||
+          p.route.toLowerCase().includes(slug.substring(0, 8))
+        ) || localPageSlugs.some(s => s.includes(slug.substring(0, 8)));
+        gbpChecks.push({ label: `Page covers GBP service: "${service}"`, pass: matched, note: matched ? '' : `No page targets "${service}"` });
+        if (!matched) gbpGaps.push(service);
+      }
+
+      const hasNapOnHomepage = blueprintPageRoutes.some((p: any) => p.route === '' || p.route === 'home');
+      gbpChecks.push({ label: 'Homepage present in blueprint', pass: hasNapOnHomepage, note: hasNapOnHomepage ? '' : 'Homepage missing from blueprint' });
+
+      const coveredAreas = gbpAreas.filter(area =>
+        localPageSlugs.some(s => s.includes(area.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 6)))
+      );
+      const areaCoverage = gbpAreas.length === 0 ? 100 : Math.round((coveredAreas.length / gbpAreas.length) * 100);
+      gbpChecks.push({ label: `Local pages cover service areas (${coveredAreas.length}/${gbpAreas.length})`, pass: areaCoverage >= 50, note: areaCoverage < 50 ? `${gbpAreas.length - coveredAreas.length} service areas have no local page` : '' });
+
+      const passedChecks = gbpChecks.filter(c => c.pass).length;
+      gbpAlignmentScore = gbpChecks.length === 0 ? 100 : Math.round((passedChecks / gbpChecks.length) * 100);
+
+      // ── Step 6: Save to Firestore ─────────────────────────────────
+      const preservation: Record<string, any> = {
+        pages: pageRecords,
+        redirectMap,
+        defensiveMode: classified.defensiveMode ?? defensiveMode,
+        sources: {
+          manualUrlCount: manualUrls ? manualUrls.split(/[\n,]/).filter((u: string) => u.trim()).length : 0,
+          sitemapUrl: sitemapUrl || null,
+          ahrefsUploaded: !!ahrefsCsv,
+          gscConnected: false,
+          gaConnected: false,
+        },
+        gbpAlignment: {
+          score: gbpAlignmentScore,
+          checks: gbpChecks,
+          gaps: gbpGaps,
+          areasScore: areaCoverage,
+        },
+        totalUrls: allUrls.length,
+        highRiskCount: Object.values(pageRecords).filter((p: any) => p.riskLevel === 'HIGH').length,
+        analysedAt: new Date().toISOString(),
+      };
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.seoPreservation': preservation,
+      });
+
+      res.json({ success: true, totalUrls: allUrls.length, pageCount: classified.pages?.length || 0, preservation });
+    } catch (err: any) {
+      console.error('[analyse-urls]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Update a single protected page record
+  app.patch('/api/clients/:clientId/seo-preservation/page', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, slug, updates } = req.body;
+      if (!orgId || !slug) return res.status(400).json({ error: 'orgId and slug required' });
+
+      const safeSlug = slug.replace(/^\//, '');
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        [`websiteWorkstream.seoPreservation.pages.${safeSlug}`]: { ...updates, updatedAt: new Date().toISOString() },
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Add or update a redirect mapping
+  app.post('/api/clients/:clientId/seo-preservation/redirect', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, fromSlug, toPath } = req.body;
+      if (!orgId || !fromSlug || !toPath) return res.status(400).json({ error: 'orgId, fromSlug, toPath required' });
+
+      const safeFrom = fromSlug.replace(/^\//, '');
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        [`websiteWorkstream.seoPreservation.redirectMap.${safeFrom}`]: toPath,
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Remove a redirect mapping
+  app.delete('/api/clients/:clientId/seo-preservation/redirect/:fromSlug', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId, fromSlug } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const { FieldValue } = await import('firebase-admin/firestore');
+      const safeFrom = fromSlug.replace(/^\//, '');
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        [`websiteWorkstream.seoPreservation.redirectMap.${safeFrom}`]: FieldValue.delete(),
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Technical SEO Audit (Stage 3 SEO Preservation) ──────────────────────────
+
+  app.post('/api/clients/:clientId/tech-seo-audit', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const mainPages: Record<string, any> = clientData.websiteWorkstream?.generatedSite?.pages || {};
+      const localPages: Record<string, any> = clientData.websiteWorkstream?.generatedSite?.localPages || {};
+      const preservation = clientData.websiteWorkstream?.seoPreservation || {};
+
+      const allPages = [
+        ...Object.entries(mainPages).map(([slug, p]) => ({ slug, html: p.html || '', source: 'main' })),
+        ...Object.entries(localPages).map(([slug, p]) => ({ slug, html: p.html || '', source: 'local' })),
+      ];
+
+      if (allPages.length === 0) {
+        return res.json({ checks: [], summary: 'No pages built yet. Generate pages first.', passRate: 0, blockingIssues: [] });
+      }
+
+      // Parse each page HTML for technical signals
+      const pageResults = allPages.map(({ slug, html, source }) => {
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const title = titleMatch ? titleMatch[1].trim() : '';
+        const titleLen = title.length;
+
+        const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)
+          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i);
+        const desc = descMatch ? descMatch[1].trim() : '';
+        const descLen = desc.length;
+
+        const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+        const hasH1 = !!h1Match;
+        const h1Count = (html.match(/<h1[\s>]/gi) || []).length;
+
+        const hasCanonical = /<link[^>]+rel=["']canonical["']/i.test(html);
+        const hasSchema = /<script[^>]+type=["']application\/ld\+json["']/i.test(html);
+        const hasViewport = /<meta[^>]+name=["']viewport["']/i.test(html);
+        const hasOgTitle = /<meta[^>]+property=["']og:title["']/i.test(html) || /<meta[^>]+content=["'][^"']+["'][^>]+property=["']og:title["']/i.test(html);
+
+        const issues: string[] = [];
+        if (!title) issues.push('MISSING_TITLE');
+        else if (titleLen < 30) issues.push('TITLE_TOO_SHORT');
+        else if (titleLen > 60) issues.push('TITLE_TOO_LONG');
+
+        if (!desc) issues.push('MISSING_META_DESC');
+        else if (descLen < 70) issues.push('META_DESC_TOO_SHORT');
+        else if (descLen > 160) issues.push('META_DESC_TOO_LONG');
+
+        if (!hasH1) issues.push('MISSING_H1');
+        if (h1Count > 1) issues.push('MULTIPLE_H1');
+        if (!hasCanonical) issues.push('MISSING_CANONICAL');
+        if (!hasSchema) issues.push('MISSING_SCHEMA');
+        if (!hasViewport) issues.push('MISSING_VIEWPORT');
+        if (!hasOgTitle) issues.push('MISSING_OG_TAGS');
+
+        const score = Math.round(((8 - issues.length) / 8) * 100);
+
+        return { slug, source, title, titleLen, desc, descLen, hasH1, h1Count, hasCanonical, hasSchema, hasViewport, hasOgTitle, issues, score };
+      });
+
+      // High-risk redirect gate check
+      const preservedPages = preservation.pages || {};
+      const redirectMap = preservation.redirectMap || {};
+      const blockingRedirects = Object.entries(preservedPages)
+        .filter(([slug, p]: any) =>
+          p.riskLevel === 'HIGH' && (p.recommendedAction === 'REDIRECT' || p.recommendedAction === 'CONSOLIDATE') &&
+          (!redirectMap[slug] || redirectMap[slug] === '/')
+        )
+        .map(([slug, p]: any) => ({ slug, keyword: p.targetKeyword || '' }));
+
+      const passCount = pageResults.filter(p => p.issues.length === 0).length;
+      const passRate = Math.round((passCount / pageResults.length) * 100);
+
+      const avgScore = Math.round(pageResults.reduce((sum, p) => sum + p.score, 0) / pageResults.length);
+
+      const criticalIssues = pageResults
+        .filter(p => p.issues.some(i => ['MISSING_TITLE', 'MISSING_META_DESC', 'MISSING_H1', 'MISSING_VIEWPORT'].includes(i)))
+        .length;
+
+      const result = {
+        pages: pageResults,
+        summary: `${pageResults.length} pages audited — ${passCount} fully optimised, ${criticalIssues} with critical issues.`,
+        passRate,
+        avgScore,
+        criticalIssues,
+        blockingRedirects,
+        launchBlocked: blockingRedirects.length > 0 || criticalIssues > 0,
+        launchBlockReason: blockingRedirects.length > 0
+          ? `${blockingRedirects.length} HIGH RISK page${blockingRedirects.length !== 1 ? 's' : ''} lack 301 redirect destinations.`
+          : criticalIssues > 0
+            ? `${criticalIssues} page${criticalIssues !== 1 ? 's' : ''} have critical SEO issues (missing title/description/H1).`
+            : null,
+        analysedAt: new Date().toISOString(),
+      };
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.seoPreservation.techAudit': result,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[tech-seo-audit]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Internal Link Map (Stage 4 SEO Preservation) ─────────────────────────────
+
+  app.post('/api/clients/:clientId/build-link-map', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const mainPages: Record<string, any> = clientData.websiteWorkstream?.generatedSite?.pages || {};
+      const localPages: Record<string, any> = clientData.websiteWorkstream?.generatedSite?.localPages || {};
+
+      const allSlugs = [...Object.keys(mainPages), ...Object.keys(localPages)];
+
+      if (allSlugs.length === 0) {
+        return res.json({ nodes: [], orphans: [], summary: 'No pages to analyse.', analysedAt: new Date().toISOString() });
+      }
+
+      // Build internal link graph by scanning href patterns
+      const nodes: Record<string, { slug: string; source: string; inbound: string[]; outbound: string[]; wordCount: number }> = {};
+
+      // Initialize nodes
+      [...Object.entries(mainPages).map(([slug, p]) => ({ slug, html: p.html || '', source: 'main' })),
+       ...Object.entries(localPages).map(([slug, p]) => ({ slug, html: p.html || '', source: 'local' }))
+      ].forEach(({ slug, html, source }) => {
+        const wordCount = Math.round(html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length);
+        // Extract all hrefs
+        const hrefPattern = /href=["']([^"']+)["']/gi;
+        const outbound: string[] = [];
+        let m;
+        while ((m = hrefPattern.exec(html)) !== null) {
+          const href = m[1];
+          // Only internal links: starts with / or matches a slug
+          if (href.startsWith('/') && !href.startsWith('//') && !href.includes('://')) {
+            // strip leading slash and query/hash
+            const cleanSlug = href.replace(/^\//, '').split('?')[0].split('#')[0].replace(/\/$/, '');
+            if (cleanSlug && allSlugs.includes(cleanSlug) && cleanSlug !== slug) {
+              outbound.push(cleanSlug);
+            }
+          }
+        }
+        nodes[slug] = { slug, source, inbound: [], outbound: [...new Set(outbound)], wordCount };
+      });
+
+      // Compute inbound links
+      Object.values(nodes).forEach(node => {
+        node.outbound.forEach(target => {
+          if (nodes[target] && !nodes[target].inbound.includes(node.slug)) {
+            nodes[target].inbound.push(node.slug);
+          }
+        });
+      });
+
+      // Identify orphan pages (0 inbound links) and weak pages (1 inbound link)
+      const orphans = Object.values(nodes).filter(n => n.inbound.length === 0).map(n => n.slug);
+      const weak = Object.values(nodes).filter(n => n.inbound.length === 1).map(n => n.slug);
+
+      // Use GPT-4o-mini to generate link recommendations for orphans
+      const businessName = clientData.businessName || clientData.name || 'this business';
+      let recommendations: Array<{ fromSlug: string; toSlug: string; anchorText: string; reason: string }> = [];
+
+      if (orphans.length > 0 && allSlugs.length > 1) {
+        const nodeList = Object.values(nodes).map(n => ({ slug: n.slug, source: n.source, inbound: n.inbound.length, outbound: n.outbound.length }));
+        const prompt = `You are an internal linking specialist for ${businessName}. 
+Analyse the page graph and recommend specific internal links to fix orphan pages.
+
+All pages: ${JSON.stringify(nodeList, null, 2)}
+
+Orphan pages (0 inbound links): ${JSON.stringify(orphans)}
+Weak pages (1 inbound link): ${JSON.stringify(weak)}
+
+Return JSON with this exact shape:
+{
+  "recommendations": [
+    {
+      "fromSlug": "string — which page should link OUT",
+      "toSlug": "string — which orphan/weak page it should link TO",
+      "anchorText": "string — exact anchor text to use (3-6 words)",
+      "reason": "string — why this link makes semantic sense (max 10 words)"
+    }
+  ]
+}
+
+Rules:
+- Only recommend links between semantically related pages
+- Fix ALL orphan pages with at least one inbound link recommendation
+- Max 2 recommendations per orphan page
+- Use natural anchor text, not keyword-stuffed text`;
+
+        try {
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            max_tokens: 1500,
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' },
+          });
+          const parsed = JSON.parse(completion.choices[0].message.content || '{}');
+          recommendations = parsed.recommendations || [];
+        } catch {
+          recommendations = [];
+        }
+      }
+
+      const result = {
+        nodes: Object.values(nodes),
+        orphans,
+        weak,
+        recommendations,
+        totalLinks: Object.values(nodes).reduce((sum, n) => sum + n.outbound.length, 0),
+        summary: `${allSlugs.length} pages, ${orphans.length} orphan${orphans.length !== 1 ? 's' : ''}, ${weak.length} weakly linked, ${recommendations.length} link recommendation${recommendations.length !== 1 ? 's' : ''} generated.`,
+        analysedAt: new Date().toISOString(),
+      };
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.seoPreservation.linkMap': result,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[build-link-map]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Doorway Page Detection (Stage 2 SEO Preservation) ───────────────────────
+
+  app.post('/api/clients/:clientId/detect-doorway-pages', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const localPages: Record<string, any> = clientData.websiteWorkstream?.generatedSite?.localPages || {};
+      const blueprint = clientData.websiteWorkstream?.currentDraft;
+      const businessName = clientData.businessName || clientData.name || 'this business';
+      const gbpCategory = clientData.gbpCategory || '';
+      const gbpServices = clientData.gbpServices || clientData.sourceIntelligence?.gbp?.categories || [];
+
+      const localPageList = Object.entries(localPages).map(([slug, page]: any) => ({
+        slug,
+        title: page.title || slug,
+        type: page.type || 'unknown',
+        wordCount: page.wordCount || (typeof page.html === 'string' ? Math.round(page.html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length) : 0),
+      }));
+
+      if (localPageList.length === 0) {
+        return res.json({ findings: [], summary: 'No local pages to analyse. Generate local pages first.', riskLevel: 'NONE' });
+      }
+
+      const prompt = `You are an SEO specialist reviewing local landing pages for a service business to detect thin content, duplication, and Google doorway page policy violations.
+
+Business: ${businessName}
+GBP Category: ${gbpCategory}
+GBP Services: ${Array.isArray(gbpServices) ? gbpServices.slice(0, 10).join(', ') : gbpServices}
+
+Local pages to review (${localPageList.length} pages):
+${JSON.stringify(localPageList, null, 2)}
+
+For EACH page, evaluate:
+1. THIN_CONTENT: Page word count < 300 or content is likely generic filler
+2. DOORWAY_RISK: Page exists only to intercept a keyword with no unique value (city+service combos with no local differentiation)  
+3. DUPLICATION_RISK: Title/slug pattern is very similar to another page with near-identical content likely
+4. KEYWORD_STUFFING: Title or slug pattern suggests unnatural keyword repetition
+
+Return a JSON object with this exact shape:
+{
+  "findings": [
+    {
+      "slug": "string",
+      "issues": ["THIN_CONTENT" | "DOORWAY_RISK" | "DUPLICATION_RISK" | "KEYWORD_STUFFING"],
+      "severity": "HIGH" | "MEDIUM" | "LOW",
+      "fix": "short actionable fix recommendation (max 15 words)",
+      "wordCount": number
+    }
+  ],
+  "summary": "one sentence overall assessment",
+  "riskLevel": "HIGH" | "MEDIUM" | "LOW" | "NONE",
+  "recommendations": ["up to 4 strategic recommendations as strings"]
+}
+
+Only include pages that have at least one issue. If all pages are fine, return empty findings array with riskLevel NONE.`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+      });
+
+      let result: any = {};
+      try {
+        result = JSON.parse(completion.choices[0].message.content || '{}');
+      } catch {
+        result = { findings: [], summary: 'Analysis complete', riskLevel: 'NONE', recommendations: [] };
+      }
+
+      result.analysedAt = new Date().toISOString();
+      result.pageCount = localPageList.length;
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.seoPreservation.doorwayDetection': result,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[detect-doorway-pages]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Website ZIP Export ───────────────────────────────────────────────────────
 
   app.get('/api/clients/:clientId/export-site.zip', async (req, res) => {
@@ -11161,6 +11776,81 @@ ${customDomain}
 ## Total Files: ${fileCount}
 `;
       archive.append(readme, { name: 'README.md' });
+
+      // ── SEO Preservation files ────────────────────────────────────
+      const seoPreservation = clientData.websiteWorkstream?.seoPreservation;
+      if (seoPreservation) {
+        const redirectMapData: Record<string, string> = seoPreservation.redirectMap || {};
+
+        // Netlify _redirects format
+        const netlifyRedirects = Object.entries(redirectMapData)
+          .map(([from, to]) => `/${from}  ${to}  301`)
+          .join('\n');
+        if (netlifyRedirects) {
+          archive.append(`# Netlify 301 Redirects — generated by Momentum Agent\n# Upload this file to your site root\n\n${netlifyRedirects}\n`, { name: '_redirects' });
+        }
+
+        // Apache .htaccess redirect stanza
+        if (Object.keys(redirectMapData).length > 0) {
+          const htaccessLines = Object.entries(redirectMapData)
+            .map(([from, to]) => `Redirect 301 /${from} https://${customDomain}${to}`)
+            .join('\n');
+          archive.append(`# Apache 301 Redirects — generated by Momentum Agent\n# Add these lines to your .htaccess file\n\nRewriteEngine On\n${htaccessLines}\n`, { name: 'redirects.htaccess' });
+        }
+
+        // SEO Preservation Report (Markdown)
+        const pages: Record<string, any> = seoPreservation.pages || {};
+        const highRisk = Object.entries(pages).filter(([, p]: any) => p.riskLevel === 'HIGH');
+        const report = `# SEO Preservation Report — ${businessName}
+Generated: ${new Date().toLocaleDateString('en-AU')}
+Mode: ${seoPreservation.defensiveMode ? 'DEFENSIVE (no GSC/GA data)' : 'STANDARD'}
+
+## Summary
+- Total pages analysed: ${Object.keys(pages).length}
+- High risk pages: ${highRisk.length}
+- Pages needing redirects: ${Object.keys(redirectMapData).length}
+- GBP Alignment score: ${seoPreservation.gbpAlignment?.score ?? 'N/A'}%
+
+## High Risk Pages (protect these)
+${highRisk.map(([slug, p]: any) => `- /${slug} — ${p.targetKeyword} (Action: ${p.recommendedAction})\n  ${p.notes || ''}`).join('\n') || 'None identified'}
+
+## 301 Redirect Map
+${Object.entries(redirectMapData).map(([from, to]) => `- /${from}  →  ${to}`).join('\n') || 'No redirects required'}
+
+## GBP Service Coverage Gaps
+${(seoPreservation.gbpAlignment?.gaps || []).join(', ') || 'None — all GBP services have a matching page'}
+
+## Action Required Before Launch
+1. Configure all 301 redirects (see _redirects and redirects.htaccess)
+2. Verify no HIGH RISK pages have changed URL without a redirect
+3. Submit sitemap.xml after DNS cutover
+4. Monitor Search Console for 404 errors in the 48h post-launch window
+`;
+        archive.append(report, { name: 'SEO-PRESERVATION-REPORT.md' });
+
+        // Internal link map report
+        const linkMap = seoPreservation.linkMap;
+        if (linkMap) {
+          const linkReport = `# Internal Link Map — ${businessName}
+Generated: ${new Date().toLocaleDateString('en-AU')}
+
+## Summary
+${linkMap.summary}
+
+## Stats
+- Total internal links: ${linkMap.totalLinks || 0}
+- Orphan pages (no inbound links): ${linkMap.orphans?.length || 0}
+- Weakly linked pages (1 inbound link): ${linkMap.weak?.length || 0}
+
+## Orphan Pages — Add Internal Links To These
+${(linkMap.orphans || []).map((s: string) => `- /${s}`).join('\n') || 'None — all pages are linked'}
+
+## AI Link Recommendations
+${(linkMap.recommendations || []).map((r: any) => `- On /${r.fromSlug}: add link to /${r.toSlug} with anchor text "${r.anchorText}" (${r.reason})`).join('\n') || 'None needed'}
+`;
+          archive.append(linkReport, { name: 'INTERNAL-LINK-MAP.md' });
+        }
+      }
 
       await archive.finalize();
     } catch (err: any) {

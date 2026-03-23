@@ -13,7 +13,8 @@ import {
   RefreshCw, CheckCircle, Download, Globe, FileText, Type,
   Search, Image, Eye, ChevronDown, ChevronRight, AlertCircle,
   Lock, Cpu, ExternalLink, Zap, MonitorPlay, Code2, Map, Rocket,
-  Smartphone, Monitor,
+  Smartphone, Monitor, Shield, AlertTriangle, ArrowRight, Trash2,
+  Upload, X, ListChecks, TrendingUp,
 } from 'lucide-react';
 import { Hero } from '@/components/sections/Hero';
 import { ServicesGrid } from '@/components/sections/ServicesGrid';
@@ -118,6 +119,892 @@ function StaleBadge({ generatedAt }: { generatedAt?: string }) {
     <Badge variant="outline" className={stale ? 'text-amber-600 border-amber-300' : 'text-green-600 border-green-300'}>
       {stale ? 'Stale' : 'Fresh'} · {format(new Date(generatedAt), 'dd/MM/yyyy')}
     </Badge>
+  );
+}
+
+// ─── SEO Preserve Tab ─────────────────────────────────────────────────────────
+
+const ACTION_COLORS: Record<string, string> = {
+  KEEP: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  REBUILD_SAME_URL: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+  REDIRECT: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  CONSOLIDATE: 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+  REVIEW: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+};
+const RISK_COLORS: Record<string, string> = {
+  HIGH: 'text-red-600 dark:text-red-400',
+  MEDIUM: 'text-amber-600 dark:text-amber-400',
+  LOW: 'text-emerald-600 dark:text-emerald-400',
+};
+
+function SeoPreserveTab({
+  client, orgId, token, blueprint, toast,
+}: {
+  client: any; orgId: string | null; token: string | null; blueprint: any; toast: any;
+}) {
+  const [analysing, setAnalysing] = useState(false);
+  const [detectingDoorway, setDetectingDoorway] = useState(false);
+  const [auditingTech, setAuditingTech] = useState(false);
+  const [buildingLinkMap, setBuildingLinkMap] = useState(false);
+  const [sitemapUrl, setSitemapUrl] = useState(client.website || client.sourceIntelligence?.website || '');
+  const [manualUrls, setManualUrls] = useState('');
+  const [ahrefsCsv, setAhrefsCsv] = useState('');
+  const [sourceTab, setSourceTab] = useState<'manual' | 'sitemap' | 'ahrefs'>('sitemap');
+  const [riskFilter, setRiskFilter] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW'>('ALL');
+  const [editingRedirect, setEditingRedirect] = useState<string | null>(null);
+  const [redirectTarget, setRedirectTarget] = useState('');
+  const [savingRedirect, setSavingRedirect] = useState(false);
+  const ahrefsInputRef = useRef<HTMLInputElement | null>(null);
+
+  const preservation = client.websiteWorkstream?.seoPreservation;
+  const pages: Record<string, any> = preservation?.pages || {};
+  const redirectMap: Record<string, string> = preservation?.redirectMap || {};
+  const defensiveMode = preservation?.defensiveMode ?? true;
+  const gbpAlignment = preservation?.gbpAlignment;
+  const analysedAt = preservation?.analysedAt;
+
+  const allPages = Object.entries(pages);
+  const filteredPages = riskFilter === 'ALL' ? allPages : allPages.filter(([, p]) => p.riskLevel === riskFilter);
+  const highRisk = allPages.filter(([, p]) => p.riskLevel === 'HIGH');
+  const needsRedirect = allPages.filter(([, p]) => p.recommendedAction === 'REDIRECT' || p.recommendedAction === 'CONSOLIDATE');
+  const missingRedirects = needsRedirect.filter(([slug]) => !redirectMap[slug] || redirectMap[slug] === '/');
+
+  const handleAnalyse = async () => {
+    if (!orgId || !token) return;
+    if (!manualUrls && !sitemapUrl && !ahrefsCsv) {
+      toast({ title: 'No data provided', description: 'Add URLs, a sitemap URL, or upload an Ahrefs CSV.', variant: 'destructive' });
+      return;
+    }
+    setAnalysing(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/analyse-urls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId, manualUrls, sitemapUrl: sourceTab === 'sitemap' ? sitemapUrl : '', ahrefsCsv: sourceTab === 'ahrefs' ? ahrefsCsv : '' }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Analysis failed'); }
+      const data = await res.json();
+      toast({ title: 'URL analysis complete', description: `${data.pageCount} pages classified — review the table below.` });
+    } catch (e: any) {
+      toast({ title: 'Analysis failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setAnalysing(false);
+    }
+  };
+
+  const handleSaveRedirect = async (slug: string) => {
+    if (!orgId || !token || !redirectTarget.trim()) return;
+    setSavingRedirect(true);
+    try {
+      await fetch(`/api/clients/${client.id}/seo-preservation/redirect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId, fromSlug: slug, toPath: redirectTarget.trim() }),
+      });
+      setEditingRedirect(null);
+      setRedirectTarget('');
+    } catch (e: any) {
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingRedirect(false);
+    }
+  };
+
+  const handleDeleteRedirect = async (slug: string) => {
+    if (!orgId || !token) return;
+    try {
+      await fetch(`/api/clients/${client.id}/seo-preservation/redirect/${encodeURIComponent(slug)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+    } catch (e: any) {
+      toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const handleUpdateAction = async (slug: string, field: string, value: string) => {
+    if (!orgId || !token) return;
+    const existing = pages[slug] || {};
+    try {
+      await fetch(`/api/clients/${client.id}/seo-preservation/page`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId, slug, updates: { ...existing, [field]: value } }),
+      });
+    } catch (e: any) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDetectDoorway = async () => {
+    if (!orgId || !token) return;
+    setDetectingDoorway(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/detect-doorway-pages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Detection failed'); }
+      const data = await res.json();
+      if (data.findings?.length === 0) {
+        toast({ title: 'All clear', description: 'No doorway page or thin content issues detected.' });
+      } else {
+        toast({ title: `${data.findings.length} issue${data.findings.length !== 1 ? 's' : ''} found`, description: data.summary, variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Detection failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setDetectingDoorway(false);
+    }
+  };
+
+  const handleTechAudit = async () => {
+    if (!orgId || !token) return;
+    setAuditingTech(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/tech-seo-audit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Audit failed'); }
+      const data = await res.json();
+      const variant = data.launchBlocked ? 'destructive' : undefined;
+      toast({ title: data.launchBlocked ? 'Launch blocked' : `Audit complete — ${data.passRate}% pass rate`, description: data.launchBlockReason || data.summary, variant });
+    } catch (e: any) {
+      toast({ title: 'Audit failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setAuditingTech(false);
+    }
+  };
+
+  const handleBuildLinkMap = async () => {
+    if (!orgId || !token) return;
+    setBuildingLinkMap(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/build-link-map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Link map failed'); }
+      const data = await res.json();
+      toast({
+        title: data.orphans?.length > 0 ? `${data.orphans.length} orphan page${data.orphans.length !== 1 ? 's' : ''} found` : 'Link map built',
+        description: data.summary,
+        variant: data.orphans?.length > 0 ? 'destructive' : undefined,
+      });
+    } catch (e: any) {
+      toast({ title: 'Link map failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setBuildingLinkMap(false);
+    }
+  };
+
+  const readAhrefsFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = e => setAhrefsCsv(e.target?.result as string || '');
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="space-y-5">
+
+      {/* Defensive Mode Banner */}
+      {defensiveMode && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+          <Shield className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Defensive Rebuild Mode</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">No Google Search Console or Analytics data detected. The AI will take a conservative approach — preserving more URLs and raising caution flags. Connect GSC/GA for more precise recommendations.</p>
+          </div>
+        </div>
+      )}
+
+      {/* URL Ingestion */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">URL Discovery</p>
+            <p className="text-xs text-gray-500 mt-0.5">Import the existing site's URLs before rebuilding so the AI can protect what's working.</p>
+          </div>
+          {analysedAt && (
+            <Badge className="text-[10px] bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 shrink-0">
+              Last run {format(new Date(analysedAt), 'dd/MM/yyyy')}
+            </Badge>
+          )}
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Source selector */}
+          <div className="flex gap-1 border border-gray-200 dark:border-gray-700 rounded-lg p-0.5 bg-gray-50 dark:bg-gray-900 w-fit">
+            {(['sitemap', 'manual', 'ahrefs'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setSourceTab(tab)}
+                className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${sourceTab === tab ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              >
+                {tab === 'sitemap' ? '🗺 Sitemap URL' : tab === 'manual' ? '✏️ Manual URLs' : '📊 Ahrefs Export'}
+              </button>
+            ))}
+          </div>
+
+          {sourceTab === 'sitemap' && (
+            <div className="space-y-2">
+              <label className="text-xs text-gray-500">Sitemap URL (e.g. https://example.com.au/sitemap.xml)</label>
+              <input
+                type="url"
+                value={sitemapUrl}
+                onChange={e => setSitemapUrl(e.target.value)}
+                placeholder="https://yourclientsite.com.au/sitemap.xml"
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="input-sitemap-url"
+              />
+              <p className="text-[11px] text-gray-400">The system will fetch and parse all URLs from the sitemap, then crawl any linked sitemaps.</p>
+            </div>
+          )}
+
+          {sourceTab === 'manual' && (
+            <div className="space-y-2">
+              <label className="text-xs text-gray-500">Paste full URLs (one per line)</label>
+              <textarea
+                value={manualUrls}
+                onChange={e => setManualUrls(e.target.value)}
+                rows={6}
+                placeholder="https://example.com.au/&#10;https://example.com.au/services/plumbing&#10;https://example.com.au/contact"
+                className="w-full text-xs font-mono border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                data-testid="input-manual-urls"
+              />
+            </div>
+          )}
+
+          {sourceTab === 'ahrefs' && (
+            <div className="space-y-2">
+              <label className="text-xs text-gray-500">Upload Ahrefs Top Pages or Site Explorer export (CSV)</label>
+              <div
+                className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 transition-colors"
+                onClick={() => ahrefsInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) readAhrefsFile(f); }}
+                data-testid="drop-ahrefs-csv"
+              >
+                <input ref={ahrefsInputRef} type="file" accept=".csv,.txt" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) readAhrefsFile(f); e.target.value = ''; }} />
+                {ahrefsCsv ? (
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-2">
+                    <CheckCircle className="h-4 w-4" /> CSV loaded — {ahrefsCsv.split('\n').length - 1} rows
+                    <button className="ml-2 text-gray-400 hover:text-red-500" onClick={e => { e.stopPropagation(); setAhrefsCsv(''); }}><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="h-7 w-7 text-gray-300 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Drop Ahrefs CSV here or click to browse</p>
+                    <p className="text-[11px] text-gray-400 mt-1">Export from Ahrefs → Site Explorer → Top Pages → Export</p>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-400">Coming soon: Google Search Console and Google Analytics imports</p>
+            </div>
+          )}
+
+          {/* Also always show manual textarea as supplement */}
+          {sourceTab !== 'manual' && (
+            <details className="text-xs text-gray-500 cursor-pointer">
+              <summary className="hover:text-gray-700 dark:hover:text-gray-300">+ Add manual URLs as well</summary>
+              <textarea
+                value={manualUrls}
+                onChange={e => setManualUrls(e.target.value)}
+                rows={4}
+                placeholder="https://example.com.au/page-1&#10;https://example.com.au/page-2"
+                className="mt-2 w-full text-xs font-mono border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+              />
+            </details>
+          )}
+
+          <Button
+            size="sm"
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={handleAnalyse}
+            disabled={analysing}
+            data-testid="btn-analyse-urls"
+          >
+            {analysing
+              ? <><Cpu className="h-3.5 w-3.5 animate-spin" /> Analysing URLs…</>
+              : <><Shield className="h-3.5 w-3.5" /> {preservation ? 'Re-run Analysis' : 'Analyse & Classify URLs'}</>
+            }
+          </Button>
+          {analysing && <p className="text-[11px] text-amber-600 dark:text-amber-400">Fetching sitemap and classifying pages with AI — this takes 20–60 seconds…</p>}
+        </div>
+      </div>
+
+      {/* Results only shown once analysis has run */}
+      {preservation && (
+        <>
+          {/* High risk alert */}
+          {highRisk.length > 0 && (
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-red-800 dark:text-red-200">{highRisk.length} HIGH RISK page{highRisk.length !== 1 ? 's' : ''} detected</p>
+                <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">These pages carry significant ranking, backlink, or conversion value. Changing their URLs without 301 redirects will damage organic performance.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Summary row */}
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Total pages', value: allPages.length, color: 'text-gray-700 dark:text-gray-300' },
+              { label: 'High risk', value: highRisk.length, color: highRisk.length > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500' },
+              { label: 'Need redirect', value: needsRedirect.length, color: needsRedirect.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500' },
+              { label: 'Missing dest.', value: missingRedirects.length, color: missingRedirects.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400' },
+            ].map(s => (
+              <div key={s.label} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-center">
+                <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
+                <div className="text-[11px] text-gray-500">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Protected Pages Table */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Protected Pages</p>
+              <div className="flex gap-1">
+                {(['ALL', 'HIGH', 'MEDIUM', 'LOW'] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setRiskFilter(r)}
+                    className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${riskFilter === r ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-500 hover:border-blue-400'}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              {/* Header */}
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 dark:border-gray-700">
+                <span>URL / Keyword</span>
+                <span>Type</span>
+                <span>Risk</span>
+                <span>Action</span>
+              </div>
+              {filteredPages.length === 0 ? (
+                <div className="p-6 text-center text-xs text-gray-400">No pages at this risk level.</div>
+              ) : (
+                <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto">
+                  {filteredPages.map(([slug, page]) => (
+                    <div key={slug} className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 px-3 py-2.5 items-start hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors" data-testid={`preserve-row-${slug}`}>
+                      <div className="min-w-0">
+                        <p className="text-xs font-mono text-blue-600 dark:text-blue-400 truncate">/{slug || ''}</p>
+                        <p className="text-[11px] text-gray-500 truncate mt-0.5">{page.targetKeyword}</p>
+                        {page.notes && <p className="text-[11px] text-gray-400 mt-0.5 italic leading-tight">{page.notes}</p>}
+                      </div>
+                      <span className="text-[11px] text-gray-600 dark:text-gray-400 capitalize mt-0.5">{(page.pageType || '').replace(/_/g, ' ')}</span>
+                      <span className={`text-[11px] font-semibold mt-0.5 ${RISK_COLORS[page.riskLevel] || 'text-gray-500'}`}>{page.riskLevel}</span>
+                      <select
+                        value={page.recommendedAction || 'REVIEW'}
+                        onChange={e => handleUpdateAction(slug, 'recommendedAction', e.target.value)}
+                        className={`text-[11px] font-medium rounded px-1.5 py-0.5 border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400 ${ACTION_COLORS[page.recommendedAction] || ACTION_COLORS.REVIEW}`}
+                        data-testid={`action-select-${slug}`}
+                      >
+                        {['KEEP', 'REBUILD_SAME_URL', 'REDIRECT', 'CONSOLIDATE', 'REVIEW'].map(a => (
+                          <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Redirect Map */}
+          {needsRedirect.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">301 Redirect Map</p>
+                {missingRedirects.length > 0 && (
+                  <Badge className="text-[10px] h-4 px-1.5 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    {missingRedirects.length} destination{missingRedirects.length !== 1 ? 's' : ''} need setting
+                  </Badge>
+                )}
+              </div>
+              <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                <div className="grid grid-cols-[2fr_16px_2fr_auto] gap-2 items-center px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  <span>From (old URL)</span><span></span><span>To (new path)</span><span></span>
+                </div>
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {needsRedirect.map(([slug, page]) => {
+                    const dest = redirectMap[slug];
+                    const isEditing = editingRedirect === slug;
+                    return (
+                      <div key={slug} className="grid grid-cols-[2fr_16px_2fr_auto] gap-2 items-center px-3 py-2.5" data-testid={`redirect-row-${slug}`}>
+                        <div>
+                          <p className="text-xs font-mono text-blue-600 dark:text-blue-400">/{slug}</p>
+                          <p className="text-[11px] text-gray-400">{page.targetKeyword}</p>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        {isEditing ? (
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={redirectTarget}
+                              onChange={e => setRedirectTarget(e.target.value)}
+                              placeholder="/new-page-url"
+                              autoFocus
+                              className="flex-1 text-xs border border-blue-400 rounded px-2 py-1 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none"
+                            />
+                            <button onClick={() => handleSaveRedirect(slug)} disabled={savingRedirect} className="text-[11px] bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">
+                              {savingRedirect ? '…' : 'Save'}
+                            </button>
+                            <button onClick={() => { setEditingRedirect(null); setRedirectTarget(''); }} className="text-[11px] text-gray-400 hover:text-gray-700 px-1">✕</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditingRedirect(slug); setRedirectTarget(dest || '/'); }}
+                            className={`text-xs text-left w-full rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${dest && dest !== '/' ? 'text-gray-900 dark:text-white font-mono' : 'text-amber-500 italic'}`}
+                            data-testid={`redirect-dest-${slug}`}
+                          >
+                            {dest && dest !== '/' ? dest : '⚠ Set destination →'}
+                          </button>
+                        )}
+                        <button onClick={() => handleDeleteRedirect(slug)} className="text-gray-300 hover:text-red-500 transition-colors p-1">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400">These 301 redirects must be configured on your web host or CDN before DNS cutover.</p>
+            </div>
+          )}
+
+          {/* GBP Alignment Panel */}
+          {gbpAlignment && (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-blue-500" />
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">GBP Alignment</p>
+                </div>
+                <div className={`text-2xl font-bold ${gbpAlignment.score >= 80 ? 'text-emerald-600' : gbpAlignment.score >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
+                  {gbpAlignment.score}%
+                </div>
+              </div>
+              <div className="p-4 space-y-3">
+                {/* Score bar */}
+                <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${gbpAlignment.score >= 80 ? 'bg-emerald-500' : gbpAlignment.score >= 50 ? 'bg-amber-400' : 'bg-red-500'}`}
+                    style={{ width: `${gbpAlignment.score}%` }}
+                  />
+                </div>
+                {/* Checks */}
+                <div className="space-y-1.5">
+                  {(gbpAlignment.checks || []).map((check: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2 text-xs">
+                      {check.pass
+                        ? <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                        : <X className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+                      }
+                      <span className={check.pass ? 'text-gray-700 dark:text-gray-300' : 'text-red-600 dark:text-red-400'}>{check.label}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Gaps */}
+                {gbpAlignment.gaps?.length > 0 && (
+                  <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                    <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 mb-1">GBP Services without matching pages:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {gbpAlignment.gaps.map((g: string, i: number) => (
+                        <span key={i} className="text-[11px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded">{g}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Doorway Page Detection (Stage 2) ── */}
+      {(() => {
+        const localPageCount = Object.keys(client.websiteWorkstream?.generatedSite?.localPages || {}).length;
+        const doorway = client.websiteWorkstream?.seoPreservation?.doorwayDetection;
+        const ISSUE_COLORS: Record<string, string> = {
+          THIN_CONTENT: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          DOORWAY_RISK: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+          DUPLICATION_RISK: 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300',
+          KEYWORD_STUFFING: 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300',
+        };
+        const SEV_COLOR: Record<string, string> = { HIGH: 'text-red-600 dark:text-red-400', MEDIUM: 'text-amber-600 dark:text-amber-400', LOW: 'text-gray-500' };
+
+        return (
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-purple-500" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Local Page Quality Check</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Detects thin content, doorway pages, and duplication risks across your generated local pages.</p>
+                </div>
+              </div>
+              {doorway && (
+                <Badge className={`text-[10px] shrink-0 ${doorway.riskLevel === 'HIGH' ? 'bg-red-100 text-red-700' : doorway.riskLevel === 'MEDIUM' ? 'bg-amber-100 text-amber-700' : doorway.riskLevel === 'NONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                  {doorway.riskLevel === 'NONE' ? '✓ All clear' : `${doorway.riskLevel} risk`}
+                </Badge>
+              )}
+            </div>
+            <div className="p-4 space-y-3">
+              {localPageCount === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No local pages generated yet. Build local pages in the Local tab first.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500">{localPageCount} local page{localPageCount !== 1 ? 's' : ''} ready to analyse</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2 h-7 text-xs"
+                      onClick={handleDetectDoorway}
+                      disabled={detectingDoorway}
+                      data-testid="btn-detect-doorway"
+                    >
+                      {detectingDoorway
+                        ? <><Cpu className="h-3 w-3 animate-spin" /> Scanning…</>
+                        : <><ListChecks className="h-3 w-3" /> {doorway ? 'Re-run Check' : 'Run Quality Check'}</>
+                      }
+                    </Button>
+                  </div>
+
+                  {doorway && (
+                    <div className="space-y-3">
+                      {/* Summary */}
+                      <p className="text-xs text-gray-600 dark:text-gray-400 italic">{doorway.summary}</p>
+
+                      {/* Findings table */}
+                      {doorway.findings?.length > 0 ? (
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                          <div className="grid grid-cols-[2fr_2fr_1fr] gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 dark:border-gray-700">
+                            <span>Page</span><span>Issues</span><span>Severity</span>
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-64 overflow-y-auto">
+                            {doorway.findings.map((f: any, i: number) => (
+                              <div key={i} className="grid grid-cols-[2fr_2fr_1fr] gap-2 px-3 py-2.5 items-start" data-testid={`doorway-row-${f.slug}`}>
+                                <div>
+                                  <p className="text-xs font-mono text-blue-600 dark:text-blue-400 truncate">/{f.slug}</p>
+                                  {f.wordCount > 0 && <p className="text-[11px] text-gray-400">{f.wordCount} words</p>}
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {(f.issues || []).map((issue: string) => (
+                                    <span key={issue} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${ISSUE_COLORS[issue] || 'bg-gray-100 text-gray-600'}`}>{issue.replace(/_/g, ' ')}</span>
+                                  ))}
+                                  {f.fix && <p className="text-[11px] text-gray-400 mt-1 w-full">{f.fix}</p>}
+                                </div>
+                                <span className={`text-[11px] font-semibold mt-0.5 ${SEV_COLOR[f.severity] || 'text-gray-500'}`}>{f.severity}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle className="h-4 w-4" /> All local pages passed quality checks — no issues found.
+                        </div>
+                      )}
+
+                      {/* Strategic recommendations */}
+                      {doorway.recommendations?.length > 0 && (
+                        <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-3 py-2.5 space-y-1.5">
+                          <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Strategic Recommendations</p>
+                          {doorway.recommendations.map((r: string, i: number) => (
+                            <div key={i} className="flex items-start gap-1.5 text-[11px] text-blue-600 dark:text-blue-400">
+                              <span className="text-blue-400 shrink-0 mt-0.5">→</span>
+                              <span>{r}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {doorway.analysedAt && (
+                        <p className="text-[11px] text-gray-400">Last checked {format(new Date(doorway.analysedAt), 'dd/MM/yyyy HH:mm')}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Technical SEO Audit + Pre-Launch Gate (Stage 3) ── */}
+      {(() => {
+        const mainPageCount = Object.keys(client.websiteWorkstream?.generatedSite?.pages || {}).length;
+        const localPageCount = Object.keys(client.websiteWorkstream?.generatedSite?.localPages || {}).length;
+        const totalPageCount = mainPageCount + localPageCount;
+        const techAudit = client.websiteWorkstream?.seoPreservation?.techAudit;
+        const ISSUE_LABEL: Record<string, string> = {
+          MISSING_TITLE: 'Missing title',
+          TITLE_TOO_SHORT: 'Title < 30 chars',
+          TITLE_TOO_LONG: 'Title > 60 chars',
+          MISSING_META_DESC: 'Missing meta description',
+          META_DESC_TOO_SHORT: 'Description < 70 chars',
+          META_DESC_TOO_LONG: 'Description > 160 chars',
+          MISSING_H1: 'No H1 tag',
+          MULTIPLE_H1: 'Multiple H1 tags',
+          MISSING_CANONICAL: 'No canonical tag',
+          MISSING_SCHEMA: 'No JSON-LD schema',
+          MISSING_VIEWPORT: 'No viewport meta',
+          MISSING_OG_TAGS: 'No Open Graph tags',
+        };
+        const CRITICAL = new Set(['MISSING_TITLE', 'MISSING_META_DESC', 'MISSING_H1', 'MISSING_VIEWPORT']);
+
+        return (
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-blue-500" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Technical SEO Audit</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Scans all generated pages for meta tags, H1, canonical, schema, and Open Graph compliance.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {techAudit && (
+                  <Badge className={`text-[10px] shrink-0 ${techAudit.launchBlocked ? 'bg-red-100 text-red-700' : techAudit.passRate >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {techAudit.launchBlocked ? '🚫 Launch blocked' : `${techAudit.passRate}% pass`}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="p-4 space-y-3">
+              {totalPageCount === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No pages generated yet. Build pages in the Pages or Local tab first.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500">{totalPageCount} page{totalPageCount !== 1 ? 's' : ''} ready to audit ({mainPageCount} main + {localPageCount} local)</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2 h-7 text-xs"
+                      onClick={handleTechAudit}
+                      disabled={auditingTech}
+                      data-testid="btn-tech-audit"
+                    >
+                      {auditingTech
+                        ? <><Cpu className="h-3 w-3 animate-spin" /> Auditing…</>
+                        : <><TrendingUp className="h-3 w-3" /> {techAudit ? 'Re-run Audit' : 'Run Technical Audit'}</>
+                      }
+                    </Button>
+                  </div>
+
+                  {techAudit && (
+                    <div className="space-y-3">
+                      {/* Pre-launch gate */}
+                      {techAudit.launchBlocked && (
+                        <div className="flex items-start gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 px-4 py-3">
+                          <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-semibold text-red-800 dark:text-red-200">Pre-Launch Gate: BLOCKED</p>
+                            <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">{techAudit.launchBlockReason}</p>
+                            {techAudit.blockingRedirects?.length > 0 && (
+                              <div className="mt-2 space-y-0.5">
+                                {techAudit.blockingRedirects.map((r: any, i: number) => (
+                                  <p key={i} className="text-[11px] text-red-600 dark:text-red-400 font-mono">/{r.slug} — {r.keyword}</p>
+                                ))}
+                              </div>
+                            )}
+                            <p className="text-[11px] text-red-500 mt-1.5">Fix these issues in the Preserve tab, then re-run the audit.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {!techAudit.launchBlocked && (
+                        <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle className="h-4 w-4" /> Pre-launch gate: CLEAR — {techAudit.summary}
+                        </div>
+                      )}
+
+                      {/* Metrics row */}
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: 'Avg SEO score', value: `${techAudit.avgScore}%`, color: techAudit.avgScore >= 80 ? 'text-emerald-600' : techAudit.avgScore >= 60 ? 'text-amber-500' : 'text-red-500' },
+                          { label: 'Fully passing', value: `${Math.round((techAudit.passRate / 100) * (techAudit.pages?.length || 0))} / ${techAudit.pages?.length || 0}`, color: 'text-gray-700 dark:text-gray-300' },
+                          { label: 'Critical issues', value: techAudit.criticalIssues, color: techAudit.criticalIssues > 0 ? 'text-red-600' : 'text-emerald-600' },
+                        ].map(m => (
+                          <div key={m.label} className="border border-gray-200 dark:border-gray-700 rounded-lg p-2.5 text-center">
+                            <div className={`text-base font-bold ${m.color}`}>{m.value}</div>
+                            <div className="text-[11px] text-gray-500">{m.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Per-page results */}
+                      {(techAudit.pages || []).filter((p: any) => p.issues?.length > 0).length > 0 && (
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                          <div className="grid grid-cols-[2fr_3fr_1fr] gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 dark:border-gray-700">
+                            <span>Page</span><span>Issues</span><span>Score</span>
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-72 overflow-y-auto">
+                            {(techAudit.pages || []).filter((p: any) => p.issues?.length > 0).map((p: any) => (
+                              <div key={p.slug} className="grid grid-cols-[2fr_3fr_1fr] gap-2 px-3 py-2.5 items-start" data-testid={`tech-audit-row-${p.slug}`}>
+                                <div>
+                                  <p className="text-xs font-mono text-blue-600 dark:text-blue-400 truncate">/{p.slug}</p>
+                                  <Badge className="text-[10px] mt-0.5 bg-gray-100 text-gray-500 dark:bg-gray-800">{p.source}</Badge>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {(p.issues || []).map((issue: string) => (
+                                    <span key={issue} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CRITICAL.has(issue) ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+                                      {ISSUE_LABEL[issue] || issue}
+                                    </span>
+                                  ))}
+                                </div>
+                                <div className={`text-xs font-bold mt-0.5 ${p.score >= 80 ? 'text-emerald-600' : p.score >= 60 ? 'text-amber-500' : 'text-red-500'}`}>{p.score}%</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {techAudit.analysedAt && (
+                        <p className="text-[11px] text-gray-400">Audited {format(new Date(techAudit.analysedAt), 'dd/MM/yyyy HH:mm')}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Internal Link Map (Stage 4) ── */}
+      {(() => {
+        const totalPageCount = Object.keys(client.websiteWorkstream?.generatedSite?.pages || {}).length + Object.keys(client.websiteWorkstream?.generatedSite?.localPages || {}).length;
+        const linkMap = client.websiteWorkstream?.seoPreservation?.linkMap;
+
+        return (
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ArrowRight className="h-4 w-4 text-emerald-500" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Internal Link Map</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Detects orphan pages, weak linking, and generates AI recommendations to strengthen link equity.</p>
+                </div>
+              </div>
+              {linkMap && (
+                <Badge className={`text-[10px] shrink-0 ${linkMap.orphans?.length > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                  {linkMap.orphans?.length > 0 ? `${linkMap.orphans.length} orphan${linkMap.orphans.length !== 1 ? 's' : ''}` : '✓ No orphans'}
+                </Badge>
+              )}
+            </div>
+            <div className="p-4 space-y-3">
+              {totalPageCount === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No pages generated yet.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500">{totalPageCount} page{totalPageCount !== 1 ? 's' : ''} to map</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2 h-7 text-xs"
+                      onClick={handleBuildLinkMap}
+                      disabled={buildingLinkMap}
+                      data-testid="btn-build-link-map"
+                    >
+                      {buildingLinkMap
+                        ? <><Cpu className="h-3 w-3 animate-spin" /> Mapping…</>
+                        : <><ArrowRight className="h-3 w-3" /> {linkMap ? 'Re-build Map' : 'Build Link Map'}</>
+                      }
+                    </Button>
+                  </div>
+
+                  {linkMap && (
+                    <div className="space-y-3">
+                      <p className="text-xs text-gray-600 dark:text-gray-400 italic">{linkMap.summary}</p>
+
+                      {/* Stats row */}
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: 'Total links', value: linkMap.totalLinks || 0, color: 'text-gray-700 dark:text-gray-300' },
+                          { label: 'Orphan pages', value: linkMap.orphans?.length || 0, color: linkMap.orphans?.length > 0 ? 'text-amber-600' : 'text-emerald-600' },
+                          { label: 'Weakly linked', value: linkMap.weak?.length || 0, color: linkMap.weak?.length > 0 ? 'text-amber-500' : 'text-emerald-600' },
+                        ].map(m => (
+                          <div key={m.label} className="border border-gray-200 dark:border-gray-700 rounded-lg p-2.5 text-center">
+                            <div className={`text-base font-bold ${m.color}`}>{m.value}</div>
+                            <div className="text-[11px] text-gray-500">{m.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Orphan page list */}
+                      {linkMap.orphans?.length > 0 && (
+                        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-3 py-2.5 space-y-1.5">
+                          <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">Orphan Pages (no inbound links)</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {linkMap.orphans.map((slug: string) => (
+                              <span key={slug} className="text-[11px] font-mono bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded">/{slug}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AI Link Recommendations */}
+                      {linkMap.recommendations?.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">AI Link Recommendations</p>
+                          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <div className="grid grid-cols-[2fr_2fr_2fr] gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200 dark:border-gray-700">
+                              <span>From page</span><span>Link to</span><span>Anchor text / reason</span>
+                            </div>
+                            <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-48 overflow-y-auto">
+                              {linkMap.recommendations.map((r: any, i: number) => (
+                                <div key={i} className="grid grid-cols-[2fr_2fr_2fr] gap-2 px-3 py-2 items-start text-xs">
+                                  <span className="font-mono text-blue-600 dark:text-blue-400 truncate">/{r.fromSlug}</span>
+                                  <span className="font-mono text-emerald-600 dark:text-emerald-400 truncate">/{r.toSlug}</span>
+                                  <div>
+                                    <p className="text-gray-700 dark:text-gray-300 font-medium">"{r.anchorText}"</p>
+                                    <p className="text-[11px] text-gray-400">{r.reason}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-gray-400">Add these links manually in the Pages tab by editing page content, or request an AI content revision.</p>
+                        </div>
+                      )}
+
+                      {linkMap.analysedAt && (
+                        <p className="text-[11px] text-gray-400">Mapped {format(new Date(linkMap.analysedAt), 'dd/MM/yyyy HH:mm')}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {!preservation && !analysing && (
+        <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-10 text-center space-y-3">
+          <Shield className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto" />
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">No preservation analysis yet</p>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto">Import the existing site's URLs above so the AI can identify high-value pages, assess risk, and create a redirect map before any rebuild begins.</p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -482,10 +1369,22 @@ function LaunchTab({
     }
   };
 
+  const seoPreservation = client.websiteWorkstream?.seoPreservation;
+  const highRiskUnresolved = seoPreservation
+    ? Object.entries(seoPreservation.pages || {}).filter(([slug, p]: any) =>
+        p.riskLevel === 'HIGH' && (p.recommendedAction === 'REDIRECT' || p.recommendedAction === 'CONSOLIDATE') &&
+        (!seoPreservation.redirectMap?.[slug] || seoPreservation.redirectMap?.[slug] === '/')
+      ).length
+    : 0;
+  const gbpScore = seoPreservation?.gbpAlignment?.score ?? null;
+
   // Readiness checks
   const checks = [
     { id: 'blueprint', label: 'Website Blueprint generated', done: !!blueprint, required: true },
     { id: 'pages', label: `Main pages built (${sitePages.length} page${sitePages.length !== 1 ? 's' : ''})`, done: sitePages.length > 0, required: true },
+    { id: 'preservation', label: `SEO preservation analysis run${seoPreservation ? ` (${Object.keys(seoPreservation.pages || {}).length} pages)` : ''}`, done: !!seoPreservation, required: false },
+    { id: 'redirects', label: `High-risk redirects mapped${highRiskUnresolved > 0 ? ` (${highRiskUnresolved} still need a destination)` : ''}`, done: highRiskUnresolved === 0, required: false },
+    { id: 'gbp', label: `GBP alignment${gbpScore !== null ? ` (${gbpScore}%)` : ' — run Preserve analysis'}`, done: gbpScore !== null && gbpScore >= 70, required: false },
     { id: 'sitemap', label: 'Sitemap.xml generated', done: hasSitemap, required: false },
     { id: 'robots', label: 'Robots.txt generated', done: hasRobots, required: false },
     { id: 'local', label: `Local SEO pages built (${localPages.length} page${localPages.length !== 1 ? 's' : ''})`, done: localPages.length > 0, required: false },
@@ -496,8 +1395,30 @@ function LaunchTab({
   const totalDone = checks.filter(c => c.done).length;
   const score = Math.round((totalDone / checks.length) * 100);
 
+  const techAudit = seoPreservation?.techAudit;
+  const launchBlocked = techAudit?.launchBlocked && (techAudit.blockingRedirects?.length > 0 || techAudit.criticalIssues > 0);
+
   return (
     <div className="space-y-6">
+
+      {/* Pre-launch gate banner */}
+      {launchBlocked && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 px-4 py-3.5">
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-red-800 dark:text-red-200">Pre-Launch Gate: BLOCKED</p>
+            <p className="text-xs text-red-700 dark:text-red-300">{techAudit.launchBlockReason}</p>
+            {techAudit.blockingRedirects?.length > 0 && (
+              <div className="mt-2 space-y-0.5">
+                {techAudit.blockingRedirects.map((r: any, i: number) => (
+                  <p key={i} className="text-[11px] text-red-600 dark:text-red-400 font-mono">/{r.slug} — {r.keyword}</p>
+                ))}
+              </div>
+            )}
+            <p className="text-[11px] text-red-500 mt-1">Fix these in the Preserve tab → re-run the Technical Audit → return here to launch.</p>
+          </div>
+        </div>
+      )}
 
       {/* Readiness score */}
       <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
@@ -1067,6 +1988,12 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 <TabsTrigger value="pages"   className="text-xs h-7 gap-1" data-testid="tab-workstream-pages"><Globe className="h-3 w-3" />Pages</TabsTrigger>
                 <TabsTrigger value="copy"    className="text-xs h-7 gap-1" data-testid="tab-workstream-copy"><Type className="h-3 w-3" />Copy</TabsTrigger>
                 <TabsTrigger value="seo"     className="text-xs h-7 gap-1" data-testid="tab-workstream-seo"><Search className="h-3 w-3" />SEO</TabsTrigger>
+                <TabsTrigger value="preserve" className="text-xs h-7 gap-1" data-testid="tab-workstream-preserve">
+                  <Shield className="h-3 w-3" />Preserve
+                  {client.websiteWorkstream?.seoPreservation?.highRiskCount > 0 && (
+                    <Badge className="h-4 px-1 py-0 text-[10px] bg-red-100 text-red-700 ml-0.5">{client.websiteWorkstream.seoPreservation.highRiskCount}</Badge>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="local"   className="text-xs h-7 gap-1" data-testid="tab-workstream-local">
                   <Map className="h-3 w-3" />Local
                   {localPagesReady && <Badge className="h-4 px-1 py-0 text-[10px] bg-emerald-100 text-emerald-700 ml-0.5">{localPageSlugs.length}</Badge>}
@@ -1393,6 +2320,17 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                   </div>
                 )}
 
+              </TabsContent>
+
+              {/* ── SEO PRESERVE ── */}
+              <TabsContent value="preserve" className="space-y-4">
+                <SeoPreserveTab
+                  client={client}
+                  orgId={orgId}
+                  token={token}
+                  blueprint={blueprint}
+                  toast={toast}
+                />
               </TabsContent>
 
               {/* ── LOCAL SEO PAGES ── */}
