@@ -17,8 +17,8 @@ import {
   type OpenclawConfigReadResult,
 } from "../shared/controlPlaneSchemas";
 import { writeSettingsAudit } from "./lib/settingsAudit";
-import { resolveAgentId, getSupportedTaskTypes } from "./agent-jobs/router";
-import { createAgentJob, getAgentJob, listAgentJobs } from "./agent-jobs/firestore-helpers";
+import { resolveAgentId, getSupportedTaskTypes, makeIdempotencyKey, getDependencies, DEFAULT_MAX_RETRIES } from "./agent-jobs/router";
+import { createAgentJob, getAgentJob, listAgentJobs, findJobByIdempotencyKey } from "./agent-jobs/firestore-helpers";
 import { processAgentJob } from "./agent-jobs/processor";
 import { scoreGbpCandidate, buildLeadContext, scoreGbpSibling, type GbpLeadContext } from "./lib/gbp-scorer";
 import { gatherPaidSearchEvidence } from "./services/paid-search/transparency-service";
@@ -11974,26 +11974,80 @@ Rules:
     try {
       if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
       const orgId: string = req.orgId;
-      const { taskType, input } = req.body as { taskType?: string; input?: Record<string, any> };
+      const {
+        taskType,
+        input,
+        entityType = 'lead',
+        entityId   = '',
+        force      = false,
+        dependsOn,           // optional: [{ taskType: 'website_xray' }, ...]
+        maxRetries = DEFAULT_MAX_RETRIES,
+      } = req.body as {
+        taskType?:   string;
+        input?:      Record<string, any>;
+        entityType?: 'lead' | 'client' | 'org';
+        entityId?:   string;
+        force?:      boolean;
+        dependsOn?:  { taskType: string }[];
+        maxRetries?: number;
+      };
+
       if (!taskType || typeof taskType !== 'string') {
         return res.status(400).json({ error: 'taskType is required', supported: getSupportedTaskTypes() });
       }
+
+      const normalizedInput = input || {};
       const agentId = resolveAgentId(taskType);
+
+      // Resolve dependsOn — use explicit list or fall back to contract defaults
+      const resolvedDeps = (dependsOn ?? getDependencies(taskType).map(t => ({ taskType: t })));
+
+      // Compute idempotency key — prevents duplicate jobs for same work unit within TTL window
+      const idempotencyKey = makeIdempotencyKey({ taskType, entityType, entityId, input: normalizedInput });
+
+      // Idempotency pre-check — return existing job if active
+      const existingJob = await findJobByIdempotencyKey(firestore, orgId, idempotencyKey);
+      if (existingJob && !force) {
+        return res.status(200).json({
+          jobId:          existingJob.id,
+          orgId,
+          taskType,
+          agentId,
+          status:         existingJob.status,
+          idempotent:     true,
+          firestorePath:  `orgs/${orgId}/agentJobs/${existingJob.id}`,
+          message:        `Existing job returned (idempotent). Use force=true to create a new run.`,
+        });
+      }
+
       const jobId = await createAgentJob(firestore, {
         orgId,
         taskType,
         agentId,
-        input: input || {},
-        createdAt: new Date().toISOString(),
+        entityType,
+        entityId,
+        version:        '1.0',
+        idempotencyKey,
+        input:          normalizedInput,
+        force,
+        dependsOn:      resolvedDeps,
+        retryCount:     0,
+        maxRetries,
+        nextAttemptAt:  null,
+        createdAt:      new Date().toISOString(),
       });
+
       res.status(201).json({
         jobId,
         orgId,
         taskType,
         agentId,
-        status: 'queued',
+        entityType,
+        entityId,
+        idempotencyKey,
+        status:        'queued',
         firestorePath: `orgs/${orgId}/agentJobs/${jobId}`,
-        message: `Job queued. POST /api/agent-jobs/${jobId}/process to execute it.`,
+        message:       `Job queued. POST /api/agent-jobs/${jobId}/process to execute it.`,
       });
     } catch (err: any) {
       console.error('[agent-jobs] Create error:', err);

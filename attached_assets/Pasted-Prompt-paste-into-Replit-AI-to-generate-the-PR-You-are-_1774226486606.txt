@@ -1,0 +1,45 @@
+Prompt (paste into Replit AI to generate the PR)
+You are implementing missing orchestration features for Momentum Agent. Deliver TypeScript code that:
+
+Adds engineHistory dual-write for agent runs:
+Path: orgs/{orgId}/leads/{leadId}/engineHistory/{runId} or orgs/{orgId}/clients/{clientId}/engineHistory/{runId}
+Record run meta (agentId, taskType, createdAt, startedAt, completedAt, durationMs, status, version, idempotencyKey), input, output, and optional sourceRefs
+Also update the entity snapshot field (e.g., client.websiteEngine.snapshot + generatedAt; lead.prepCallPack.snapshot + generatedAt)
+Provide a writeEngineHistory(entityRef, payload) util and findLatestSuccessfulRun(entityRef, taskType)
+Enforces TTL run-guards:
+Per-task TTL (default): PREP=24h, WEBSITE_XRAY=24h, SERP=24h, STRATEGY=24h, GROWTH_PRESCRIPTION=24h, ENRICHMENT=7d
+If latest successful run within TTL and !force → skip with job.status=completed and output.skipped=true, reason="ttl"
+Adds retries with exponential backoff:
+Job fields: retryCount (default 0), maxRetries (default 3), nextAttemptAt (timestamp)
+Backoff: delay = min(2^retryCount * 15s, 10m); on failure, requeue until maxRetries; then mark failed
+processAgentJob must respect nextAttemptAt
+Adds idempotency keys:
+Compute idempotencyKey = sha256(sorted JSON of { taskType, entityType, entityId, normalizedInput, ttlBucket })
+On create: if existing queued/running/completed(success within TTL) with same key, return it (skip dup)
+Store idempotencyKey on job and engineHistory record
+Introduces typed I/O contracts with Zod:
+contracts.ts: StrategyInput/Output, WebsiteXrayInput/Output, SerpInput/Output, GrowthPrescriptionInput/Output, EnrichmentInput/Output
+Validate job.input at start; validate model output before write; on validation error, mark failed_validation, persist raw
+Optional lightweight dependencies:
+dependsOn: [{ taskType: "website_xray"|"serp"|... }]
+ensureDepsSatisfied(): if missing deps, set job pending_deps and enqueue deps with idempotency
+Files to add/modify:
+
+src/agents/contracts.ts (Zod schemas)
+src/agents/utils/history.ts (writeEngineHistory, findLatestSuccessfulRun, ensureDepsSatisfied)
+src/queue/router.ts (idempotency pre-check/generation)
+src/queue/processAgentJob.ts (TTL guards, retries/backoff, nextAttemptAt, dual-write)
+src/api/agentJobs.ts (accept idempotencyKey, force, dependsOn)
+src/lib/hash.ts (stable hash helpers)
+firestore.indexes.json (engineHistory indexes)
+firestore.rules (engineHistory read rules)
+scripts/backfill-engine-history.ts (migrate existing snapshots into engineHistory)
+Acceptance tests:
+
+First run writes snapshot + engineHistory
+Re-run within TTL without force skips
+Force=true reruns immediately
+Failures retry with backoff then fail
+Duplicate submissions use same idempotency job
+Strategy with dependsOn [website_xray, serp] queues/runs deps, then Strategy
+Output validation fails safely with raw preserved

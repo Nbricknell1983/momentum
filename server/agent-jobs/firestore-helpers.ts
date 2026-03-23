@@ -1,11 +1,9 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import type { AgentJob, AgentJobStatus } from './types';
+import { DEFAULT_MAX_RETRIES } from './contracts';
 
 const COLLECTION = 'agentJobs';
 
-/**
- * Firestore path: orgs/{orgId}/agentJobs/{jobId}
- */
 function jobsCollection(db: Firestore, orgId: string) {
   return db.collection('orgs').doc(orgId).collection(COLLECTION);
 }
@@ -18,15 +16,24 @@ export async function createAgentJob(
   const ref = jobsCollection(db, job.orgId).doc();
   const doc: AgentJob = {
     ...job,
-    status: 'queued',
-    output: null,
-    raw: null,
-    error: null,
-    startedAt: null,
+    status:      'queued',
+    output:      null,
+    raw:         null,
+    error:       null,
+    retryCount:  job.retryCount  ?? 0,
+    maxRetries:  job.maxRetries  ?? DEFAULT_MAX_RETRIES,
+    nextAttemptAt: job.nextAttemptAt ?? null,
+    force:       job.force       ?? false,
+    dependsOn:   job.dependsOn   ?? [],
+    entityType:  job.entityType  ?? 'lead',
+    entityId:    job.entityId    ?? '',
+    version:     job.version     ?? '1.0',
+    idempotencyKey: job.idempotencyKey ?? '',
+    startedAt:   null,
     completedAt: null,
   };
   await ref.set(doc);
-  console.log(`[agent-jobs] Created job ${ref.id} | org=${job.orgId} task=${job.taskType} agent=${job.agentId}`);
+  console.log(`[agent-jobs] Created job ${ref.id} | org=${job.orgId} task=${job.taskType} agent=${job.agentId} idem=${job.idempotencyKey?.slice(0, 8)}…`);
   return ref.id;
 }
 
@@ -72,6 +79,74 @@ export async function markJobFailed(
   });
 }
 
+/** Mark a job as failed due to output validation error. Preserves raw. */
+export async function markJobFailedValidation(
+  db: Firestore,
+  orgId: string,
+  jobId: string,
+  error: string,
+  raw: string
+): Promise<void> {
+  await jobsCollection(db, orgId).doc(jobId).update({
+    status: 'failed_validation' as AgentJobStatus,
+    error,
+    raw,
+    completedAt: new Date().toISOString(),
+  });
+}
+
+/** Mark a job as skipped (TTL guard or idempotency). */
+export async function markJobSkipped(
+  db: Firestore,
+  orgId: string,
+  jobId: string,
+  reason: string
+): Promise<void> {
+  await jobsCollection(db, orgId).doc(jobId).update({
+    status: 'skipped' as AgentJobStatus,
+    output: { skipped: true, reason },
+    completedAt: new Date().toISOString(),
+  });
+}
+
+/** Mark a job as pending_deps — waiting for prerequisite task types. */
+export async function markJobPendingDeps(
+  db: Firestore,
+  orgId: string,
+  jobId: string,
+  missingTaskTypes: string[]
+): Promise<void> {
+  await jobsCollection(db, orgId).doc(jobId).update({
+    status: 'pending_deps' as AgentJobStatus,
+    error: `Waiting for deps: ${missingTaskTypes.join(', ')}`,
+  });
+}
+
+/**
+ * Schedule a retry: increment retryCount, set nextAttemptAt with exponential backoff.
+ * Returns false if maxRetries has been reached (caller should mark_failed instead).
+ */
+export async function scheduleRetry(
+  db: Firestore,
+  orgId: string,
+  jobId: string,
+  currentRetryCount: number,
+  maxRetries: number,
+  delayMs: number
+): Promise<boolean> {
+  if (currentRetryCount >= maxRetries) return false;
+  const nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+  await jobsCollection(db, orgId).doc(jobId).update({
+    status:         'queued' as AgentJobStatus,
+    retryCount:     currentRetryCount + 1,
+    nextAttemptAt,
+    startedAt:      null,
+    error:          null,
+  });
+  console.log(`[agent-jobs] Job ${jobId} scheduled for retry #${currentRetryCount + 1} at ${nextAttemptAt}`);
+  return true;
+}
+
 /** Fetch a single job by ID. */
 export async function getAgentJob(
   db: Firestore,
@@ -96,16 +171,43 @@ export async function listAgentJobs(
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as AgentJob));
 }
 
-/** Fetch queued jobs (oldest first, for fair processing order). */
+/** Fetch queued jobs whose nextAttemptAt is in the past (oldest first). */
 export async function getQueuedJobs(
   db: Firestore,
   orgId: string,
   limitCount = 10
 ): Promise<AgentJob[]> {
+  const now = new Date().toISOString();
+  // Jobs with no nextAttemptAt, or nextAttemptAt <= now
   const snap = await jobsCollection(db, orgId)
-    .where('status', '==', 'queued')
+    .where('status', 'in', ['queued', 'pending_deps'])
     .orderBy('createdAt', 'asc')
-    .limit(limitCount)
+    .limit(limitCount * 3) // over-fetch to allow client-side nextAttemptAt filter
     .get();
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as AgentJob));
+
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as AgentJob))
+    .filter(j => !j.nextAttemptAt || j.nextAttemptAt <= now)
+    .slice(0, limitCount);
+}
+
+/**
+ * Find an existing job by idempotency key.
+ * Returns the first matching job in queued/running/completed/skipped status.
+ * Ignores failed and failed_validation jobs (those should be retriable).
+ */
+export async function findJobByIdempotencyKey(
+  db: Firestore,
+  orgId: string,
+  idempotencyKey: string
+): Promise<AgentJob | null> {
+  const snap = await jobsCollection(db, orgId)
+    .where('idempotencyKey', '==', idempotencyKey)
+    .where('status', 'in', ['queued', 'running', 'completed', 'skipped', 'pending_deps'])
+    .orderBy('createdAt', 'desc')
+    .limit(1)
+    .get();
+
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, ...snap.docs[0].data() } as AgentJob;
 }
