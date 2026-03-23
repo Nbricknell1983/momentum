@@ -12059,6 +12059,379 @@ Return ONLY valid JSON, no markdown.`;
     }
   });
 
+  // ── SEO Comparison Engine ─────────────────────────────────────────────────────
+
+  // Crawl the client's existing live website and capture per-page SEO snapshot
+  app.post('/api/clients/:clientId/crawl-existing-site', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const websiteUrl = clientData.website || clientData.sourceIntelligence?.websiteUrl || '';
+      if (!websiteUrl) return res.status(400).json({ error: 'No website URL on client record' });
+
+      const domain = websiteUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      const baseUrl = websiteUrl.startsWith('http') ? websiteUrl.replace(/\/$/, '') : `https://${websiteUrl}`;
+
+      // Helper: fetch with timeout
+      async function fetchWithTimeout(url: string, ms = 10000): Promise<string | null> {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), ms);
+          const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' } });
+          clearTimeout(t);
+          if (!r.ok) return null;
+          return await r.text();
+        } catch { return null; }
+      }
+
+      // Helper: extract SEO data from HTML
+      const cheerio = await import('cheerio');
+      function extractSeo(html: string, url: string) {
+        const $ = cheerio.load(html);
+        const schemaTypes: string[] = [];
+        $('script[type="application/ld+json"]').each((_, el) => {
+          try {
+            const obj = JSON.parse($(el).html() || '');
+            if (obj['@type']) schemaTypes.push(Array.isArray(obj['@type']) ? obj['@type'].join(',') : obj['@type']);
+          } catch {}
+        });
+        const h2s: string[] = [];
+        $('h2').each((_, el) => { const t = $(el).text().trim(); if (t) h2s.push(t.slice(0, 80)); });
+        const internalLinks: string[] = [];
+        $('a[href]').each((_, el) => {
+          const href = $(el).attr('href') || '';
+          if (href.startsWith('/') || href.includes(domain)) internalLinks.push(href.split('?')[0].split('#')[0]);
+        });
+        const words = $('body').text().replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length;
+        return {
+          url,
+          title: $('title').text().trim().slice(0, 120) || null,
+          metaDescription: $('meta[name="description"]').attr('content')?.trim().slice(0, 200) || null,
+          h1: $('h1').first().text().trim().slice(0, 120) || null,
+          h2s: h2s.slice(0, 6),
+          canonical: $('link[rel="canonical"]').attr('href') || null,
+          schemaTypes,
+          hasSchema: schemaTypes.length > 0,
+          wordCount: words,
+          internalLinkCount: [...new Set(internalLinks)].length,
+          hasViewport: !!$('meta[name="viewport"]').length,
+          hasOgTitle: !!$('meta[property="og:title"]').attr('content'),
+        };
+      }
+
+      // 1. Crawl homepage
+      const homepageHtml = await fetchWithTimeout(baseUrl);
+      const pages: any[] = [];
+      const visitedUrls = new Set<string>([baseUrl, baseUrl + '/']);
+
+      if (homepageHtml) {
+        pages.push(extractSeo(homepageHtml, baseUrl));
+      }
+
+      // 2. Try sitemap.xml
+      let sitemapXml: string | null = null;
+      const sitemapUrls = [`${baseUrl}/sitemap.xml`, `${baseUrl}/sitemap_index.xml`, `${baseUrl}/wp-sitemap.xml`];
+      for (const su of sitemapUrls) {
+        sitemapXml = await fetchWithTimeout(su, 8000);
+        if (sitemapXml && sitemapXml.includes('<loc>')) break;
+        sitemapXml = null;
+      }
+
+      // 3. Parse sitemap URLs
+      const urlsToVisit: string[] = [];
+      if (sitemapXml) {
+        const locMatches = [...sitemapXml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1].trim());
+        for (const u of locMatches) {
+          if (u.includes(domain) && !visitedUrls.has(u) && !u.endsWith('.xml') && urlsToVisit.length < 18) {
+            urlsToVisit.push(u);
+          }
+        }
+      }
+
+      // 4. Also check homepage internal links if no sitemap
+      if (urlsToVisit.length < 5 && homepageHtml) {
+        const cheerioH = cheerio.load(homepageHtml);
+        cheerioH('a[href]').each((_, el) => {
+          const href = cheerioH(el).attr('href') || '';
+          let absolute = href;
+          if (href.startsWith('/') && !href.startsWith('//')) absolute = `${baseUrl}${href}`;
+          absolute = absolute.split('?')[0].split('#')[0].replace(/\/$/, '');
+          if (absolute.includes(domain) && !visitedUrls.has(absolute) && !absolute.includes('#') && !absolute.includes('.pdf') && urlsToVisit.length < 18) {
+            urlsToVisit.push(absolute);
+            visitedUrls.add(absolute);
+          }
+        });
+      }
+
+      // 5. Crawl collected URLs (up to 18 pages, parallel batches of 4)
+      const remaining = urlsToVisit.filter(u => !visitedUrls.has(u)).slice(0, 18);
+      for (let i = 0; i < remaining.length; i += 4) {
+        const batch = remaining.slice(i, i + 4);
+        const results = await Promise.allSettled(batch.map(async (u) => {
+          const html = await fetchWithTimeout(u);
+          if (html) return extractSeo(html, u);
+          return null;
+        }));
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value) pages.push(r.value);
+        }
+      }
+
+      // 6. Fetch robots.txt
+      const robotsTxt = await fetchWithTimeout(`${baseUrl}/robots.txt`, 6000);
+
+      const snapshot = {
+        domain,
+        baseUrl,
+        pages,
+        totalPages: pages.length,
+        sitemapXml: sitemapXml?.slice(0, 8000) || null,
+        hasSitemap: !!sitemapXml,
+        robotsTxt: robotsTxt?.slice(0, 2000) || null,
+        hasRobots: !!robotsTxt,
+        crawledAt: new Date().toISOString(),
+        schemaCount: pages.filter(p => p.hasSchema).length,
+        avgWordCount: pages.length > 0 ? Math.round(pages.reduce((s, p) => s + p.wordCount, 0) / pages.length) : 0,
+        pagesWithTitle: pages.filter(p => p.title).length,
+        pagesWithMeta: pages.filter(p => p.metaDescription).length,
+        pagesWithH1: pages.filter(p => p.h1).length,
+      };
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.currentSiteCrawl': snapshot,
+      });
+
+      res.json(snapshot);
+    } catch (err: any) {
+      console.error('[crawl-existing-site]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Generate SEO comparison (before vs after) with confidence/risk scoring
+  app.post('/api/clients/:clientId/generate-seo-comparison', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const ww = clientData.websiteWorkstream || {};
+      const currentCrawl = ww.currentSiteCrawl;
+      const preservation = ww.seoPreservation || {};
+      const generatedSite = ww.generatedSite || {};
+      const techAudit = preservation.techAudit;
+      const gbpAlignment = preservation.gbpAlignment;
+      const redirectMap: Record<string, string> = preservation.redirectMap || {};
+      const preservationPages: Record<string, any> = preservation.pages || {};
+      const newPages: Record<string, any> = generatedSite.pages || {};
+      const localPages: Record<string, any> = generatedSite.localPages || {};
+
+      const allNewSlugs = [...Object.keys(newPages), ...Object.keys(localPages)];
+
+      // Build current URL set (from crawl and/or preservation pages)
+      const currentUrls: string[] = currentCrawl?.pages?.map((p: any) => {
+        try { return new URL(p.url).pathname.replace(/\/$/, '') || '/'; } catch { return p.url; }
+      }) || [];
+      const preservationSlugs = Object.keys(preservationPages);
+
+      // --- Per-page comparison ---
+      const pageComparisons: any[] = [];
+
+      // Map old pages → status
+      const allOldSlugs = [...new Set([...currentUrls, ...preservationSlugs])];
+      for (const slug of allOldSlugs) {
+        const normalizedSlug = slug.replace(/^\//, '');
+        const preservPage = preservationPages[normalizedSlug] || preservationPages[slug];
+        const crawlPage = currentCrawl?.pages?.find((p: any) => {
+          try { const u = new URL(p.url); return u.pathname.replace(/\/$/, '') === (slug.startsWith('/') ? slug : `/${slug}`); } catch { return false; }
+        });
+
+        // Is there a new page for this slug?
+        const exactNewPage = newPages[normalizedSlug] || localPages[normalizedSlug];
+        const redirectTarget = redirectMap[normalizedSlug] || redirectMap[slug];
+        const techPage = techAudit?.pages?.find((p: any) => p.slug === normalizedSlug || p.slug === slug);
+
+        let status: string;
+        let changeNotes: string[] = [];
+
+        if (redirectTarget) {
+          status = 'REDIRECTED';
+          changeNotes.push(`Mapped → ${redirectTarget}`);
+        } else if (exactNewPage || allNewSlugs.some(s => s === normalizedSlug)) {
+          // Page exists in new site — check if improved
+          const oldTitle = crawlPage?.title || preservPage?.targetKeyword || '';
+          const newTitle = techPage?.title || '';
+          const hadSchema = crawlPage?.hasSchema || false;
+          const hasSchema = !!techPage && !techPage.issues?.includes('no-schema');
+          const hadMeta = !!crawlPage?.metaDescription;
+          const hasMeta = !!techPage && !techPage.issues?.includes('no-meta');
+
+          let improvements = 0;
+          if (!hadSchema && hasSchema) { improvements++; changeNotes.push('Schema added'); }
+          if (!hadMeta && hasMeta) { improvements++; changeNotes.push('Meta description added'); }
+          if (oldTitle && newTitle && newTitle.length >= 30 && newTitle.length <= 60) { improvements++; changeNotes.push('Title optimised'); }
+
+          if (improvements > 0) {
+            status = 'IMPROVED';
+          } else {
+            status = 'PRESERVED';
+            changeNotes.push('URL and content preserved');
+          }
+        } else if (preservPage?.riskLevel === 'HIGH') {
+          status = 'AT_RISK';
+          changeNotes.push('High-value page with no mapped redirect or new page');
+        } else {
+          status = preservPage?.recommendedAction === 'CONSOLIDATE' ? 'REDIRECTED' : 'AT_RISK';
+          changeNotes.push(preservPage?.recommendedAction ? `Recommended: ${preservPage.recommendedAction}` : 'Not mapped to new site');
+        }
+
+        pageComparisons.push({
+          slug: normalizedSlug || slug,
+          oldUrl: crawlPage?.url || `/${normalizedSlug}`,
+          oldTitle: crawlPage?.title || null,
+          oldMeta: crawlPage?.metaDescription || null,
+          oldH1: crawlPage?.h1 || null,
+          oldHasSchema: crawlPage?.hasSchema || false,
+          oldWordCount: crawlPage?.wordCount || 0,
+          riskLevel: preservPage?.riskLevel || 'MEDIUM',
+          recommendedAction: preservPage?.recommendedAction || null,
+          targetKeyword: preservPage?.targetKeyword || null,
+          status,
+          changeNotes,
+          newSlug: redirectTarget || (exactNewPage ? normalizedSlug : null),
+          newTitle: techPage?.title || null,
+          newMeta: techPage?.metaDescription || null,
+          newScore: techPage?.score || null,
+        });
+      }
+
+      // New pages that don't exist in old site
+      for (const slug of allNewSlugs) {
+        const normalizedSlug = slug.replace(/^\//, '');
+        if (!allOldSlugs.includes(normalizedSlug) && !allOldSlugs.includes(`/${normalizedSlug}`) && !allOldSlugs.includes(slug)) {
+          const techPage = techAudit?.pages?.find((p: any) => p.slug === normalizedSlug);
+          pageComparisons.push({
+            slug: normalizedSlug,
+            oldUrl: null,
+            oldTitle: null,
+            riskLevel: 'NONE',
+            status: 'NEW',
+            changeNotes: ['New page not present on old site'],
+            newSlug: normalizedSlug,
+            newTitle: techPage?.title || null,
+            newScore: techPage?.score || null,
+          });
+        }
+      }
+
+      // --- Site-level stats ---
+      const oldStats = {
+        pageCount: currentCrawl?.totalPages || preservationSlugs.length || 0,
+        pagesWithSchema: currentCrawl?.schemaCount || 0,
+        pagesWithTitle: currentCrawl?.pagesWithTitle || 0,
+        pagesWithMeta: currentCrawl?.pagesWithMeta || 0,
+        avgWordCount: currentCrawl?.avgWordCount || 0,
+        hasSitemap: currentCrawl?.hasSitemap || false,
+        hasRobots: currentCrawl?.hasRobots || false,
+        servicePageCount: preservationSlugs.filter(s => preservationPages[s]?.pageType === 'service').length,
+        locationPageCount: preservationSlugs.filter(s => preservationPages[s]?.pageType === 'location').length,
+      };
+
+      const newStats = {
+        pageCount: allNewSlugs.length,
+        pagesWithSchema: techAudit?.pages?.filter((p: any) => !p.issues?.includes('no-schema')).length || 0,
+        pagesWithTitle: techAudit?.pages?.filter((p: any) => p.title).length || 0,
+        pagesWithMeta: techAudit?.pages?.filter((p: any) => p.metaDescription).length || 0,
+        avgScore: techAudit?.avgScore || 0,
+        passRate: techAudit?.passRate || 0,
+        hasSitemap: !!newPages, // if pages exist, sitemap was generated
+        hasRobots: !!newPages,
+        servicePageCount: Object.keys(newPages).length,
+        locationPageCount: Object.keys(localPages).length,
+      };
+
+      // --- SEO Confidence Score ---
+      let confidence = 100;
+      const atRiskPages = pageComparisons.filter(p => p.status === 'AT_RISK');
+      const highRiskAtRisk = atRiskPages.filter(p => p.riskLevel === 'HIGH');
+      const medRiskAtRisk = atRiskPages.filter(p => p.riskLevel === 'MEDIUM');
+      confidence -= highRiskAtRisk.length * 12;
+      confidence -= medRiskAtRisk.length * 5;
+      if (techAudit && techAudit.passRate < 70) confidence -= 15;
+      if (techAudit && techAudit.criticalIssues > 0) confidence -= Math.min(techAudit.criticalIssues * 8, 20);
+      if (gbpAlignment && gbpAlignment.score < 60) confidence -= 10;
+      if (!currentCrawl?.hasSitemap) confidence -= 3;
+      confidence = Math.max(0, Math.min(100, Math.round(confidence)));
+
+      // --- SEO Risk Score ---
+      let risk = 0;
+      risk += Math.min(highRiskAtRisk.length * 15, 45);
+      risk += Math.min(medRiskAtRisk.length * 5, 20);
+      if (techAudit && techAudit.criticalIssues > 0) risk += Math.min(techAudit.criticalIssues * 10, 20);
+      const orphanCount = preservation.linkMap?.orphanPages?.length || 0;
+      risk += Math.min(orphanCount * 3, 15);
+      risk = Math.max(0, Math.min(100, Math.round(risk)));
+
+      // --- Risk warnings ---
+      const riskWarnings: string[] = [];
+      if (highRiskAtRisk.length > 0) riskWarnings.push(`${highRiskAtRisk.length} high-value page${highRiskAtRisk.length > 1 ? 's' : ''} not mapped — risk of ranking loss`);
+      if (techAudit?.launchBlocked) riskWarnings.push(`Pre-launch gate BLOCKED: ${techAudit.launchBlockReason}`);
+      if (gbpAlignment && gbpAlignment.score < 60) riskWarnings.push(`GBP alignment low (${gbpAlignment.score}%) — service/category gaps remain`);
+      if (orphanCount > 0) riskWarnings.push(`${orphanCount} orphan page${orphanCount > 1 ? 's' : ''} detected — no internal links pointing to these pages`);
+
+      // --- Confidence label ---
+      const confidenceLabel = confidence >= 80 ? 'HIGH' : confidence >= 60 ? 'MEDIUM' : 'LOW';
+      const riskLabel = risk <= 20 ? 'LOW' : risk <= 45 ? 'MEDIUM' : 'HIGH';
+
+      // --- Summary counts ---
+      const statusCounts = {
+        PRESERVED: pageComparisons.filter(p => p.status === 'PRESERVED').length,
+        IMPROVED: pageComparisons.filter(p => p.status === 'IMPROVED').length,
+        NEW: pageComparisons.filter(p => p.status === 'NEW').length,
+        REDIRECTED: pageComparisons.filter(p => p.status === 'REDIRECTED').length,
+        AT_RISK: pageComparisons.filter(p => p.status === 'AT_RISK').length,
+      };
+
+      const comparison = {
+        generatedAt: new Date().toISOString(),
+        confidenceScore: confidence,
+        confidenceLabel,
+        riskScore: risk,
+        riskLabel,
+        riskWarnings,
+        statusCounts,
+        pageComparisons,
+        oldStats,
+        newStats,
+        gbpBefore: gbpAlignment ? { score: gbpAlignment.score, gaps: gbpAlignment.gaps || [] } : null,
+        gbpAfter: gbpAlignment ? { score: Math.min(100, (gbpAlignment.score || 0) + 15), note: 'Estimated improvement after new site goes live' } : null,
+        launchReady: confidence >= 60 && risk <= 45 && !techAudit?.launchBlocked,
+        launchBlockReason: techAudit?.launchBlocked ? techAudit.launchBlockReason : null,
+      };
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.seoComparison': comparison,
+      });
+
+      res.json(comparison);
+    } catch (err: any) {
+      console.error('[generate-seo-comparison]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Website Asset Upload ────────────────────────────────────────────────────
 
   // Upload or replace a named asset slot (blueprint key) or add to gallery

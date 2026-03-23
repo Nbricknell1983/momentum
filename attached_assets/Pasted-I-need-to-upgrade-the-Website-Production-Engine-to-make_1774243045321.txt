@@ -1,0 +1,209 @@
+I need to upgrade the Website Production Engine to make SEO fully transparent, traceable, and comparable before and after a rebuild.
+
+Right now, the system generates a new website well, but it does not clearly show:
+- what currently exists on the client’s site
+- what SEO elements are already in place
+- how the new build compares
+- why the new version is better
+
+This creates risk, because we cannot confidently prove that we are preserving or improving SEO.
+
+I want to introduce an “SEO Transparency + Comparison Layer” into the system.
+
+Core objective:
+The system must clearly show:
+1. what exists today (current website + GBP alignment)
+2. what we are building
+3. what is being preserved
+4. what is being improved
+5. why the new version is better
+
+This must be visible inside the product, not just implied.
+
+---
+
+BUILD THE FOLLOWING:
+
+1. CURRENT STATE SEO SNAPSHOT
+
+Create a system that captures and displays all existing SEO elements from the current website.
+
+This includes:
+- all indexed URLs (from sitemap, crawl, or imports)
+- page titles and meta descriptions
+- heading structures (H1, H2, etc.)
+- internal linking structure
+- sitemap.xml
+- robots.txt
+- structured data (schema)
+- page types (service, location, blog, etc.)
+- URL structure and hierarchy
+
+If available, also support:
+- Google Search Console data (clicks, impressions, pages)
+- Ahrefs data (keywords, backlinks)
+- Google Business Profile alignment (services, locations)
+
+Output:
+A “Current SEO Snapshot” panel that shows:
+- full URL list
+- page-by-page SEO data
+- schema in readable format
+- sitemap + robots.txt viewers
+- internal linking overview
+
+---
+
+2. NEW BUILD SEO SNAPSHOT
+
+For the generated website, show the exact same data structure:
+
+- URLs being created
+- titles, meta descriptions
+- headings
+- internal links
+- schema
+- sitemap.xml
+- robots.txt
+- local pages (service/location)
+
+Output:
+A “New SEO Snapshot” panel that mirrors the current state view.
+
+---
+
+3. BEFORE VS AFTER COMPARISON
+
+Create a comparison system that clearly shows:
+
+For each page:
+- old URL → new URL
+- kept / improved / redirected / removed
+- keyword intent preserved or changed
+- content depth improved or reduced
+- internal links improved or changed
+- schema added or improved
+
+For site-level:
+- total pages (before vs after)
+- service pages
+- location pages
+- internal links
+- schema coverage
+- technical SEO completeness
+
+Output:
+- side-by-side comparison table
+- change indicators (preserved, improved, at risk)
+- visual diff where possible
+
+---
+
+4. SEO PRESERVATION + IMPROVEMENT LOGIC
+
+The system must explicitly show:
+
+- what SEO elements are being preserved
+- what is being improved
+- what is new
+- what is removed (with justification)
+
+Add labels such as:
+- PRESERVED
+- IMPROVED
+- NEW
+- REDIRECTED
+- AT RISK
+
+---
+
+5. GOOGLE BUSINESS PROFILE ALIGNMENT VISIBILITY
+
+Add a panel that shows:
+
+- current GBP services vs website services
+- current service areas vs location pages
+- alignment gaps
+
+Then show:
+- how the new site improves GBP alignment
+
+Output:
+- GBP alignment score
+- before vs after alignment comparison
+
+---
+
+6. SEO CONFIDENCE / RISK SCORING
+
+Add a scoring system that evaluates:
+
+- how much SEO is preserved
+- how much is improved
+- how much is at risk
+
+Output:
+- SEO Confidence Score
+- SEO Risk Score
+- clear explanation of any risks before launch
+
+---
+
+7. LAUNCH GATE (CRITICAL)
+
+The system should not allow “Launch Ready” unless:
+
+- all important pages are mapped (keep or redirect)
+- no high-value pages are lost
+- sitemap is valid
+- robots.txt is valid
+- schema is present where required
+- GBP alignment is acceptable
+
+---
+
+8. UI / PRODUCT REQUIREMENTS
+
+Add a new tab or panel:
+
+“SEO Comparison”
+
+Inside it:
+- Current SEO Snapshot
+- New SEO Snapshot
+- Before vs After comparison
+- Preservation/Improvement indicators
+- Risk warnings
+- GBP alignment comparison
+
+---
+
+9. IMPLEMENTATION
+
+I want you to:
+
+1. Review current system architecture
+2. Identify where to plug this in
+3. Define required data models
+4. Define how to ingest current site data
+5. Define comparison logic
+6. Define scoring logic
+7. Define UI changes
+8. Provide a staged implementation plan
+9. Then begin implementing
+
+---
+
+IMPORTANT PRINCIPLE:
+
+This system must not just build websites.
+
+It must:
+- show exactly what exists
+- show exactly what is changing
+- prove that the new version is better
+- prevent accidental SEO damage
+
+Think of this as:
+“SEO transparency, audit, and proof engine”
+built directly into the Website Production Engine.

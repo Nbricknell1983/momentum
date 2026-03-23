@@ -14,7 +14,8 @@ import {
   Search, Image, Eye, ChevronDown, ChevronRight, AlertCircle,
   Lock, Cpu, ExternalLink, Zap, MonitorPlay, Code2, Map, Rocket,
   Smartphone, Monitor, Shield, AlertTriangle, ArrowRight, Trash2,
-  Upload, X, ListChecks, TrendingUp,
+  Upload, X, ListChecks, TrendingUp, TrendingDown, BarChart2,
+  GitCompare, Minus,
 } from 'lucide-react';
 import { Hero } from '@/components/sections/Hero';
 import { ServicesGrid } from '@/components/sections/ServicesGrid';
@@ -1303,6 +1304,429 @@ function AssetUploadTab({
   );
 }
 
+// ─── SEO Compare Tab ───────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: any }> = {
+  PRESERVED: { label: 'Preserved', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300', icon: CheckCircle },
+  IMPROVED:  { label: 'Improved',  cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300', icon: TrendingUp },
+  NEW:       { label: 'New',       cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300', icon: Zap },
+  REDIRECTED:{ label: 'Redirected',cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300', icon: ArrowRight },
+  AT_RISK:   { label: 'At Risk',   cls: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300', icon: AlertTriangle },
+};
+
+function SeoCompareTab({
+  client, orgId, token, toast,
+}: {
+  client: any; orgId: string | null; token: string | null; toast: any;
+}) {
+  const [crawling, setCrawling] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [showCurrentSnapshot, setShowCurrentSnapshot] = useState(false);
+  const [showNewSnapshot, setShowNewSnapshot] = useState(false);
+
+  const ww = client.websiteWorkstream || {};
+  const crawl = ww.currentSiteCrawl;
+  const comparison = ww.seoComparison;
+  const techAudit = ww.seoPreservation?.techAudit;
+  const generatedSite = ww.generatedSite;
+  const hasGeneratedSite = !!(generatedSite?.pages && Object.keys(generatedSite.pages).length > 0);
+
+  const handleCrawl = async () => {
+    if (!orgId || !token) return;
+    setCrawling(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/crawl-existing-site`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Crawl failed'); }
+      const data = await res.json();
+      toast({ title: `Existing site crawled`, description: `${data.totalPages} pages captured from ${data.domain}` });
+    } catch (e: any) {
+      toast({ title: 'Crawl failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setCrawling(false);
+    }
+  };
+
+  const handleGenerateComparison = async () => {
+    if (!orgId || !token) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/generate-seo-comparison`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Comparison failed'); }
+      const data = await res.json();
+      toast({ title: 'SEO Comparison complete', description: `Confidence: ${data.confidenceScore}% · Risk: ${data.riskScore}%` });
+    } catch (e: any) {
+      toast({ title: 'Comparison failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const filteredPages = (comparison?.pageComparisons || []).filter((p: any) =>
+    statusFilter === 'ALL' || p.status === statusFilter
+  );
+
+  const confidenceColor = !comparison ? 'text-gray-400' :
+    comparison.confidenceScore >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+    comparison.confidenceScore >= 60 ? 'text-amber-500' : 'text-red-500';
+
+  const riskColor = !comparison ? 'text-gray-400' :
+    comparison.riskScore <= 20 ? 'text-emerald-600 dark:text-emerald-400' :
+    comparison.riskScore <= 45 ? 'text-amber-500' : 'text-red-500';
+
+  return (
+    <div className="space-y-5">
+
+      {/* Step 1: Crawl existing site */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50">
+          <div className="flex items-center gap-2">
+            <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-bold ${crawl ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'}`}>1</div>
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Capture Current Site SEO</p>
+            {crawl && <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-0.5 rounded">{crawl.totalPages} pages crawled</span>}
+          </div>
+          <Button
+            size="sm"
+            variant={crawl ? 'outline' : 'default'}
+            className={`h-7 text-xs gap-1.5 ${!crawl ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
+            onClick={handleCrawl}
+            disabled={crawling}
+            data-testid="btn-crawl-existing-site"
+          >
+            {crawling ? <><Cpu className="h-3 w-3 animate-spin" /> Crawling…</> : <><RefreshCw className="h-3 w-3" />{crawl ? 'Re-crawl' : 'Crawl Existing Site'}</>}
+          </Button>
+        </div>
+        {crawl && (
+          <div className="px-4 py-3 space-y-3">
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Pages found', value: crawl.totalPages, color: 'text-gray-700 dark:text-gray-300' },
+                { label: 'With title', value: `${crawl.pagesWithTitle}/${crawl.totalPages}`, color: crawl.pagesWithTitle === crawl.totalPages ? 'text-emerald-600' : 'text-amber-500' },
+                { label: 'With meta', value: `${crawl.pagesWithMeta}/${crawl.totalPages}`, color: crawl.pagesWithMeta === crawl.totalPages ? 'text-emerald-600' : 'text-amber-500' },
+                { label: 'Schema', value: `${crawl.schemaCount}/${crawl.totalPages}`, color: crawl.schemaCount > 0 ? 'text-blue-600' : 'text-red-500' },
+              ].map(s => (
+                <div key={s.label} className="border border-gray-100 dark:border-gray-800 rounded-lg p-2 text-center">
+                  <div className={`text-sm font-bold ${s.color}`}>{s.value}</div>
+                  <div className="text-[10px] text-gray-500">{s.label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              {crawl.hasSitemap ? <span className="text-[11px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">✓ Sitemap found</span> : <span className="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded">✗ No sitemap detected</span>}
+              {crawl.hasRobots ? <span className="text-[11px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">✓ robots.txt found</span> : <span className="text-[11px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded">⚠ No robots.txt</span>}
+              <span className="text-[11px] text-gray-400">Last crawled {format(new Date(crawl.crawledAt), 'dd/MM/yyyy HH:mm')}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 2: Generate comparison */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50">
+          <div className="flex items-center gap-2">
+            <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-bold ${comparison ? 'bg-emerald-500 text-white' : crawl && hasGeneratedSite ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'}`}>2</div>
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Generate SEO Comparison</p>
+            {comparison && (
+              <span className="text-[10px] text-gray-400">Last run {format(new Date(comparison.generatedAt), 'dd/MM/yyyy HH:mm')}</span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            className={`h-7 text-xs gap-1.5 ${comparison ? '' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+            variant={comparison ? 'outline' : 'default'}
+            onClick={handleGenerateComparison}
+            disabled={generating || (!crawl && !ww.seoPreservation) || !hasGeneratedSite}
+            data-testid="btn-generate-seo-comparison"
+          >
+            {generating ? <><Cpu className="h-3 w-3 animate-spin" /> Comparing…</> : <><GitCompare className="h-3 w-3" />{comparison ? 'Re-compare' : 'Run Comparison'}</>}
+          </Button>
+        </div>
+        {!hasGeneratedSite && (
+          <div className="px-4 py-2">
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">Build the site first (Pages tab → Build Site) before running a comparison.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Comparison results */}
+      {comparison && (
+        <div className="space-y-4">
+
+          {/* Score strip */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`border rounded-xl p-4 text-center space-y-1 ${comparison.confidenceScore >= 80 ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20' : comparison.confidenceScore >= 60 ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20'}`}>
+              <div className="flex items-center justify-center gap-1.5">
+                <TrendingUp className={`h-4 w-4 ${confidenceColor}`} />
+                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">SEO Confidence</span>
+              </div>
+              <div className={`text-3xl font-black ${confidenceColor}`}>{comparison.confidenceScore}%</div>
+              <Badge className={`text-[10px] ${comparison.confidenceScore >= 80 ? 'bg-emerald-100 text-emerald-700' : comparison.confidenceScore >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{comparison.confidenceLabel}</Badge>
+              <p className="text-[11px] text-gray-500">How safe it is to launch</p>
+            </div>
+            <div className={`border rounded-xl p-4 text-center space-y-1 ${comparison.riskScore <= 20 ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20' : comparison.riskScore <= 45 ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20'}`}>
+              <div className="flex items-center justify-center gap-1.5">
+                <AlertTriangle className={`h-4 w-4 ${riskColor}`} />
+                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">SEO Risk</span>
+              </div>
+              <div className={`text-3xl font-black ${riskColor}`}>{comparison.riskScore}%</div>
+              <Badge className={`text-[10px] ${comparison.riskScore <= 20 ? 'bg-emerald-100 text-emerald-700' : comparison.riskScore <= 45 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{comparison.riskLabel}</Badge>
+              <p className="text-[11px] text-gray-500">Probability of ranking loss</p>
+            </div>
+          </div>
+
+          {/* Launch gate */}
+          {comparison.launchReady ? (
+            <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-2.5">
+              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">SEO launch gate CLEAR — safe to proceed</p>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 px-4 py-2.5">
+              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-red-800 dark:text-red-200">SEO launch gate: NOT READY</p>
+                {comparison.riskWarnings?.map((w: string, i: number) => (
+                  <p key={i} className="text-[11px] text-red-700 dark:text-red-300 mt-0.5">• {w}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Status distribution */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Page Status Distribution</p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
+                const count = comparison.statusCounts?.[key] || 0;
+                const Icon = cfg.icon;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setStatusFilter(statusFilter === key ? 'ALL' : key)}
+                    className={`rounded-lg p-2.5 text-center border transition-all ${statusFilter === key ? `${cfg.cls} border-current` : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}
+                    data-testid={`filter-status-${key}`}
+                  >
+                    <Icon className="h-3.5 w-3.5 mx-auto mb-1" />
+                    <div className="text-base font-bold">{count}</div>
+                    <div className="text-[10px] leading-tight">{cfg.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Before vs After site-level stats */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Site-Level Comparison</p>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {[
+                { label: 'Total pages', old: comparison.oldStats?.pageCount, nw: comparison.newStats?.pageCount },
+                { label: 'Service pages', old: comparison.oldStats?.servicePageCount, nw: comparison.newStats?.servicePageCount },
+                { label: 'Local/Location pages', old: comparison.oldStats?.locationPageCount, nw: comparison.newStats?.locationPageCount },
+                { label: 'Pages with schema', old: comparison.oldStats?.pagesWithSchema, nw: comparison.newStats?.pagesWithSchema },
+                { label: 'Pages with title tag', old: comparison.oldStats?.pagesWithTitle, nw: comparison.newStats?.pagesWithTitle },
+                { label: 'Pages with meta desc', old: comparison.oldStats?.pagesWithMeta, nw: comparison.newStats?.pagesWithMeta },
+              ].map(row => {
+                const improved = row.nw > row.old;
+                const same = row.nw === row.old;
+                return (
+                  <div key={row.label} className="grid grid-cols-[2fr_1fr_1fr_1fr] px-4 py-2 items-center">
+                    <span className="text-xs text-gray-700 dark:text-gray-300">{row.label}</span>
+                    <span className="text-xs text-center text-gray-500">{row.old ?? '–'}</span>
+                    <span className="text-xs text-center font-semibold text-gray-900 dark:text-white">{row.nw ?? '–'}</span>
+                    <span className="text-center">
+                      {!row.old && !row.nw ? <Minus className="h-3 w-3 text-gray-400 mx-auto" /> :
+                        improved ? <TrendingUp className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> :
+                        same ? <Minus className="h-3 w-3 text-gray-400 mx-auto" /> :
+                        <TrendingDown className="h-3.5 w-3.5 text-red-500 mx-auto" />
+                      }
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-[2fr_1fr_1fr_1fr] px-4 py-1 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+              <span>Metric</span><span className="text-center">Before</span><span className="text-center">After</span><span className="text-center">Trend</span>
+            </div>
+          </div>
+
+          {/* GBP alignment before/after */}
+          {comparison.gbpBefore && (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">GBP Alignment Score</p>
+              </div>
+              <div className="px-4 py-3 grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-black text-gray-500">{comparison.gbpBefore.score}%</div>
+                  <div className="text-[11px] text-gray-500">Current site alignment</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-black text-emerald-600">{comparison.gbpAfter?.score}%</div>
+                  <div className="text-[11px] text-gray-500">Estimated after new site</div>
+                  {comparison.gbpAfter?.note && <div className="text-[10px] text-gray-400 mt-0.5">{comparison.gbpAfter.note}</div>}
+                </div>
+              </div>
+              {comparison.gbpBefore.gaps?.length > 0 && (
+                <div className="px-4 pb-3 space-y-1 border-t border-gray-100 dark:border-gray-800 pt-2">
+                  <p className="text-[11px] font-semibold text-gray-500 mb-1">Alignment gaps (before):</p>
+                  {comparison.gbpBefore.gaps.slice(0, 5).map((g: string, i: number) => (
+                    <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />{g}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Page comparison table */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                Page-by-Page Comparison ({filteredPages.length}{statusFilter !== 'ALL' ? ` ${statusFilter}` : ''})
+              </p>
+              <button
+                onClick={() => setStatusFilter('ALL')}
+                className={`text-[11px] text-gray-400 hover:text-gray-600 transition-colors ${statusFilter === 'ALL' ? 'hidden' : ''}`}
+              >
+                Clear filter
+              </button>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="grid grid-cols-[1.5fr_1fr_3fr_3fr] gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 text-[10px] font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100 dark:border-gray-800">
+                <span>Status</span><span>Risk</span><span>Old page</span><span>New page</span>
+              </div>
+              <div className="divide-y divide-gray-50 dark:divide-gray-800/50 max-h-80 overflow-y-auto">
+                {filteredPages.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-gray-400">No pages match the selected filter</div>
+                ) : filteredPages.map((p: any, i: number) => {
+                  const cfg = STATUS_CONFIG[p.status] || STATUS_CONFIG.AT_RISK;
+                  const Icon = cfg.icon;
+                  const riskCls = p.riskLevel === 'HIGH' ? 'text-red-600' : p.riskLevel === 'MEDIUM' ? 'text-amber-500' : 'text-gray-400';
+                  return (
+                    <div key={i} className="grid grid-cols-[1.5fr_1fr_3fr_3fr] gap-2 px-3 py-2.5 items-start hover:bg-gray-50 dark:hover:bg-gray-800/20 transition-colors" data-testid={`compare-row-${i}`}>
+                      <div>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${cfg.cls}`}>
+                          <Icon className="h-2.5 w-2.5" />{cfg.label}
+                        </span>
+                      </div>
+                      <span className={`text-[11px] font-semibold ${riskCls}`}>{p.riskLevel || '–'}</span>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-mono text-blue-600 dark:text-blue-400 truncate">/{p.slug || ''}</p>
+                        {p.oldTitle && <p className="text-[10px] text-gray-500 truncate">{p.oldTitle}</p>}
+                      </div>
+                      <div className="min-w-0">
+                        {p.newSlug ? (
+                          <>
+                            <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 truncate">/{p.newSlug}</p>
+                            {p.newTitle && <p className="text-[10px] text-gray-500 truncate">{p.newTitle}</p>}
+                          </>
+                        ) : (
+                          <p className="text-[10px] text-red-500 italic">Not mapped</p>
+                        )}
+                        {p.changeNotes?.length > 0 && (
+                          <p className="text-[10px] text-gray-400 truncate">{p.changeNotes.join(' · ')}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Current site snapshot (collapsible) */}
+          {crawl && (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/20 bg-gray-50 dark:bg-gray-800/40 transition-colors"
+                onClick={() => setShowCurrentSnapshot(p => !p)}
+                data-testid="btn-toggle-current-snapshot"
+              >
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Current Site Snapshot ({crawl.totalPages} pages)</p>
+                {showCurrentSnapshot ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+              </button>
+              {showCurrentSnapshot && (
+                <div className="border-t">
+                  <div className="grid grid-cols-[3fr_2fr_2fr_1fr] gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/30 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                    <span>URL</span><span>Title</span><span>H1</span><span>Schema</span>
+                  </div>
+                  <div className="divide-y divide-gray-50 dark:divide-gray-800/50 max-h-64 overflow-y-auto">
+                    {(crawl.pages || []).map((p: any, i: number) => (
+                      <div key={i} className="grid grid-cols-[3fr_2fr_2fr_1fr] gap-2 px-3 py-2 items-start hover:bg-gray-50 dark:hover:bg-gray-800/20" data-testid={`current-page-${i}`}>
+                        <p className="text-[11px] font-mono text-blue-600 dark:text-blue-400 truncate" title={p.url}>{p.url.replace(/^https?:\/\/[^/]+/, '') || '/'}</p>
+                        <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate" title={p.title || ''}>{p.title || <span className="text-red-400 italic">Missing</span>}</p>
+                        <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate" title={p.h1 || ''}>{p.h1 || <span className="text-amber-500 italic">None</span>}</p>
+                        <span>{p.hasSchema ? <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded">✓</span> : <span className="text-[10px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded">–</span>}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* New site snapshot (collapsible) */}
+          {techAudit?.pages?.length > 0 && (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/20 bg-emerald-50 dark:bg-emerald-950/10 transition-colors"
+                onClick={() => setShowNewSnapshot(p => !p)}
+                data-testid="btn-toggle-new-snapshot"
+              >
+                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">New Site SEO Snapshot ({techAudit.pages.length} pages)</p>
+                {showNewSnapshot ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+              </button>
+              {showNewSnapshot && (
+                <div className="border-t">
+                  <div className="grid grid-cols-[2fr_2fr_2fr_1fr_1fr] gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/10 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                    <span>Slug</span><span>Title</span><span>H1</span><span>Score</span><span>Schema</span>
+                  </div>
+                  <div className="divide-y divide-gray-50 dark:divide-gray-800/50 max-h-64 overflow-y-auto">
+                    {(techAudit.pages || []).map((p: any, i: number) => (
+                      <div key={i} className="grid grid-cols-[2fr_2fr_2fr_1fr_1fr] gap-2 px-3 py-2 items-start hover:bg-gray-50 dark:hover:bg-gray-800/20" data-testid={`new-page-${i}`}>
+                        <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 truncate">/{p.slug}</p>
+                        <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate" title={p.title || ''}>{p.title || <span className="text-red-400 italic">Missing</span>}</p>
+                        <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate" title={p.h1 || ''}>{p.h1 || <span className="text-amber-500 italic">None</span>}</p>
+                        <span className={`text-xs font-bold ${p.score >= 80 ? 'text-emerald-600' : p.score >= 60 ? 'text-amber-500' : 'text-red-500'}`}>{p.score}%</span>
+                        <span>{!p.issues?.includes('no-schema') && p.score > 0 ? <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded">✓</span> : <span className="text-[10px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded">–</span>}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No comparison yet */}
+      {!comparison && crawl && hasGeneratedSite && (
+        <div className="py-6 text-center space-y-2">
+          <BarChart2 className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto" />
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Ready to compare</p>
+          <p className="text-xs text-gray-400 max-w-xs mx-auto">Current site crawled and new site built. Run the comparison to see before/after analysis, confidence scoring, and risk warnings.</p>
+          <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleGenerateComparison} disabled={generating}>
+            {generating ? <Cpu className="h-4 w-4 animate-spin" /> : <GitCompare className="h-4 w-4" />}
+            Run SEO Comparison
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Launch Tab ────────────────────────────────────────────────────────────────
 
 function LaunchTab({
@@ -1999,6 +2423,12 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                   {localPagesReady && <Badge className="h-4 px-1 py-0 text-[10px] bg-emerald-100 text-emerald-700 ml-0.5">{localPageSlugs.length}</Badge>}
                 </TabsTrigger>
                 <TabsTrigger value="assets"  className="text-xs h-7 gap-1" data-testid="tab-workstream-assets"><Image className="h-3 w-3" />Assets</TabsTrigger>
+                <TabsTrigger value="compare" className="text-xs h-7 gap-1" data-testid="tab-workstream-compare">
+                  <GitCompare className="h-3 w-3" />Compare
+                  {client.websiteWorkstream?.seoComparison?.riskScore > 45 && (
+                    <Badge className="h-4 px-1 py-0 text-[10px] bg-red-100 text-red-700 ml-0.5">!</Badge>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs h-7 gap-1" data-testid="tab-workstream-preview"><Eye className="h-3 w-3" />Preview</TabsTrigger>
                 <TabsTrigger value="launch"  className="text-xs h-7 gap-1" data-testid="tab-workstream-launch"><Rocket className="h-3 w-3" />Launch</TabsTrigger>
               </TabsList>
@@ -2479,6 +2909,16 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                   orgId={orgId}
                   token={token}
                   blueprint={blueprint}
+                  toast={toast}
+                />
+              </TabsContent>
+
+              {/* ── COMPARE ── */}
+              <TabsContent value="compare" className="space-y-4">
+                <SeoCompareTab
+                  client={client}
+                  orgId={orgId}
+                  token={token}
                   toast={toast}
                 />
               </TabsContent>
