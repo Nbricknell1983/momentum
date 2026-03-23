@@ -151,6 +151,7 @@ export async function requireOrgAccess(
   if (firebaseUser.uid === 'scheduler-system') {
     req.orgRole = 'admin';
     req.trustedOrgId = orgId;
+    (req as any).orgId = orgId;
     return next();
   }
 
@@ -172,6 +173,7 @@ export async function requireOrgAccess(
 
     req.orgRole = memberDoc.data()?.role as string;
     req.trustedOrgId = orgId;
+    (req as any).orgId = orgId;
     next();
   } catch (err: any) {
     console.error('[auth] requireOrgAccess error:', err);
