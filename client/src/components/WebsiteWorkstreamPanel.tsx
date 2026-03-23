@@ -2377,21 +2377,13 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
 
   // ── Enqueue / regenerate ─────────────────────────────────────────────────────
 
-  // Auto-trigger site plan generation on first open — handleRun is declared above parseAhrefsBuffer
+  // Auto-trigger site plan generation on first open — fires for any real client with no existing blueprint
   useEffect(() => {
     if (autoTriggered.current) return;
     if (!token || !authReady) return;
     if (blueprint || loading) return;
-    const si: any = (client as any).sourceIntelligence || {};
-    const eb = si.evidenceBundle || (client as any).evidenceBundle;
-    const hasIntel = !!(
-      eb ||
-      si.prepCallPack ||
-      si.strategyIntelligence ||
-      (client as any).website ||
-      (client as any).keywordStrategy
-    );
-    if (!hasIntel) return;
+    // Any client with a name is enough — the server reads GBP + crawl + keyword intelligence
+    if (!client.businessName) return;
     autoTriggered.current = true;
     handleRun(false);
   }, [token, authReady, blueprint, loading, handleRun, client]);
@@ -3574,24 +3566,27 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                    <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-3">
-                      <Monitor className="h-6 w-6 text-gray-400" />
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${loading ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                      {loading
+                        ? <Cpu className="h-6 w-6 text-blue-500 animate-spin" />
+                        : <Monitor className="h-6 w-6 text-gray-400" />
+                      }
                     </div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">No site built yet</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 max-w-[200px] mb-4">
-                      Use the chat to design pages, then generate a blueprint to build the site
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs gap-1.5"
-                      onClick={() => handleRun(false)}
-                      disabled={loading}
-                      data-testid="btn-generate-blueprint-preview-pane"
-                    >
-                      <Cpu className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                      {loading ? 'Generating…' : 'Generate Blueprint'}
-                    </Button>
+                    {loading ? (
+                      <>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Building site plan…</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 max-w-[220px]">
+                          Reading your GBP services, service areas and site intelligence. This takes 1–2 minutes.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Site plan will appear here</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 max-w-[220px]">
+                          Your plan is built automatically from GBP services and service areas. Upload Ahrefs keywords to enrich it.
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
