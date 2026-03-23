@@ -2201,7 +2201,21 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
         throw new Error(err.error || 'Failed to queue job');
       }
 
-      toast({ title: force ? 'Blueprint regeneration queued' : 'Blueprint generation queued', description: 'This may take a minute or two.' });
+      const { jobId } = await res.json();
+
+      // Immediately trigger processing — autopilot is disabled so we kick it manually
+      if (jobId) {
+        fetch(`/api/agent-jobs/${jobId}/process`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ orgId }),
+        }).catch(() => {/* fire-and-forget */});
+      }
+
+      toast({ title: force ? 'Regenerating blueprint…' : 'Generating blueprint…', description: 'This usually takes 1–2 minutes. The panel will update automatically.' });
       setNudge('');
       setShowNudge(false);
     } catch (e: any) {
