@@ -121,6 +121,301 @@ function StaleBadge({ generatedAt }: { generatedAt?: string }) {
   );
 }
 
+// ─── Asset Upload Tab ──────────────────────────────────────────────────────────
+
+function AssetUploadTab({
+  client, orgId, token, blueprint, toast,
+}: {
+  client: any; orgId: string | null; token: string | null; blueprint: WebsiteBlueprint | null; toast: any;
+}) {
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+
+  const uploadedAssets: Record<string, any> = client.websiteWorkstream?.assets || {};
+  const gallery: any[] = uploadedAssets._gallery || [];
+  const uploadedCount = Object.keys(uploadedAssets).filter(k => k !== '_gallery').length;
+  const totalSlots = blueprint?.assets?.length || 0;
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handleUpload = async (file: File, assetKey: string, isGallery = false) => {
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Images only', description: 'Please upload an image file (JPG, PNG, WebP, GIF).', variant: 'destructive' });
+      return;
+    }
+    const key = isGallery ? '_gallery' : assetKey;
+    setUploading(prev => ({ ...prev, [key]: true }));
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const res = await fetch(`/api/clients/${client.id}/upload-asset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId, assetKey, dataUrl, fileName: file.name, mimeType: file.type, isGallery }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed');
+      }
+      toast({ title: isGallery ? 'Added to gallery' : 'Asset uploaded', description: file.name });
+    } catch (e: any) {
+      toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUploading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleRemove = async (assetKey: string) => {
+    setUploading(prev => ({ ...prev, [assetKey]: true }));
+    try {
+      await fetch(`/api/clients/${client.id}/upload-asset/${encodeURIComponent(assetKey)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      toast({ title: 'Asset removed' });
+    } catch (e: any) {
+      toast({ title: 'Remove failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUploading(prev => ({ ...prev, [assetKey]: false }));
+    }
+  };
+
+  const handleRemoveGallery = async (index: number) => {
+    setUploading(prev => ({ ...prev, [`_gallery_${index}`]: true }));
+    try {
+      await fetch(`/api/clients/${client.id}/upload-gallery/${index}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId }),
+      });
+      toast({ title: 'Removed from gallery' });
+    } catch (e: any) {
+      toast({ title: 'Remove failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUploading(prev => ({ ...prev, [`_gallery_${index}`]: false }));
+    }
+  };
+
+  const onDrop = (e: React.DragEvent, assetKey: string, isGallery = false) => {
+    e.preventDefault();
+    setDragOver(null);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleUpload(file, assetKey, isGallery);
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Header summary */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">Media Assets</p>
+          <p className="text-xs text-gray-500 mt-0.5">Upload images for each asset slot defined in the Blueprint, plus any additional photos for the gallery.</p>
+        </div>
+        <Badge className={`text-[11px] ${uploadedCount === totalSlots && totalSlots > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+          {uploadedCount}/{totalSlots} uploaded
+        </Badge>
+      </div>
+
+      {/* Blueprint asset slots */}
+      {(!blueprint?.assets || blueprint.assets.length === 0) ? (
+        <div className="text-sm text-gray-400 italic">No asset slots defined in blueprint yet.</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Blueprint Slots</div>
+          {blueprint.assets.map((asset, i) => {
+            const uploaded = uploadedAssets[asset.key];
+            const isUploading = uploading[asset.key];
+            const isDragTarget = dragOver === asset.key;
+            return (
+              <div
+                key={asset.key}
+                className={`border rounded-xl overflow-hidden transition-all ${isDragTarget ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-700'}`}
+                data-testid={`asset-slot-${asset.key}`}
+                onDragOver={e => { e.preventDefault(); setDragOver(asset.key); }}
+                onDragLeave={() => setDragOver(null)}
+                onDrop={e => onDrop(e, asset.key)}
+              >
+                <div className="flex items-start gap-3 p-3">
+                  {/* Thumbnail or placeholder */}
+                  <div className="shrink-0 w-16 h-16 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
+                    {uploaded?.dataUrl ? (
+                      <img src={uploaded.dataUrl} alt={asset.alt} className="w-full h-full object-cover" />
+                    ) : (
+                      <Image className="h-6 w-6 text-gray-300" />
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{asset.key}</span>
+                      {uploaded ? (
+                        <Badge className="text-[10px] h-4 px-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 shrink-0">
+                          <CheckCircle className="h-2.5 w-2.5 mr-0.5" /> Uploaded
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-amber-600 border-amber-300 shrink-0">To source</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 leading-tight">{asset.alt}</p>
+                    {asset.suggestedSource && (
+                      <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">💡 {asset.suggestedSource}</p>
+                    )}
+                    {asset.placement && (
+                      <p className="text-[11px] text-gray-400 mt-0.5">{asset.placement.pageKey} → {asset.placement.sectionKind}</p>
+                    )}
+                    {uploaded?.fileName && (
+                      <p className="text-[11px] text-gray-400 mt-0.5 truncate">📎 {uploaded.fileName} · {uploaded.uploadedAt ? format(new Date(uploaded.uploadedAt), 'dd/MM/yyyy') : ''}</p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      ref={el => { fileInputRefs.current[asset.key] = el; }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUpload(file, asset.key);
+                        e.target.value = '';
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => fileInputRefs.current[asset.key]?.click()}
+                      disabled={isUploading}
+                      data-testid={`btn-upload-asset-${asset.key}`}
+                    >
+                      {isUploading ? <Cpu className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                      {uploaded ? 'Replace' : 'Upload'}
+                    </Button>
+                    {uploaded && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleRemove(asset.key)}
+                        disabled={isUploading}
+                        data-testid={`btn-remove-asset-${asset.key}`}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Drag hint */}
+                {isDragTarget && (
+                  <div className="py-2 text-center text-xs text-blue-600 font-medium border-t border-blue-200 bg-blue-50 dark:bg-blue-950/30">
+                    Drop image here
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Performance spec */}
+      {blueprint?.performance && (
+        <Section title="Performance Spec">
+          <div className="space-y-1 text-xs text-gray-700 dark:text-gray-300">
+            <div><span className="font-medium">Format:</span> {blueprint.performance.images.format}</div>
+            <div><span className="font-medium">Sizes:</span> {blueprint.performance.images.sizes.join(', ')}</div>
+            {blueprint.performance.fonts?.preloads?.length > 0 && (
+              <div><span className="font-medium">Font preloads:</span> {blueprint.performance.fonts.preloads.join(', ')}</div>
+            )}
+          </div>
+        </Section>
+      )}
+
+      {/* Gallery — freeform uploads */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Additional Media Gallery</div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={() => galleryInputRef.current?.click()}
+            disabled={uploading['_gallery']}
+            data-testid="btn-add-gallery-image"
+          >
+            {uploading['_gallery'] ? <Cpu className="h-3 w-3 animate-spin" /> : <Image className="h-3 w-3" />}
+            Add Image
+          </Button>
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          ref={galleryInputRef}
+          onChange={async e => {
+            const files = Array.from(e.target.files || []);
+            for (const file of files) await handleUpload(file, '_gallery', true);
+            e.target.value = '';
+          }}
+        />
+
+        {gallery.length === 0 ? (
+          <div
+            className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${dragOver === '_gallery' ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-700'}`}
+            onDragOver={e => { e.preventDefault(); setDragOver('_gallery'); }}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={e => onDrop(e, '_gallery', true)}
+          >
+            <Image className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+            <p className="text-xs text-gray-500">Drag photos here or click <strong>Add Image</strong></p>
+            <p className="text-[11px] text-gray-400 mt-1">Hero photos, team shots, work examples — max 5 MB each</p>
+          </div>
+        ) : (
+          <div
+            className={`grid grid-cols-3 gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${dragOver === '_gallery' ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-700'}`}
+            onDragOver={e => { e.preventDefault(); setDragOver('_gallery'); }}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={e => onDrop(e, '_gallery', true)}
+          >
+            {gallery.map((img, idx) => (
+              <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 aspect-square bg-gray-50" data-testid={`gallery-img-${idx}`}>
+                <img src={img.dataUrl} alt={img.fileName} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <button
+                    onClick={() => handleRemoveGallery(idx)}
+                    disabled={uploading[`_gallery_${idx}`]}
+                    className="text-white text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded"
+                    data-testid={`btn-remove-gallery-${idx}`}
+                  >
+                    {uploading[`_gallery_${idx}`] ? '…' : 'Remove'}
+                  </button>
+                </div>
+                <p className="absolute bottom-0 left-0 right-0 text-[10px] text-white bg-black/60 px-1.5 py-0.5 truncate">{img.fileName}</p>
+              </div>
+            ))}
+            {/* Drop target at end */}
+            <div className="aspect-square border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-400 transition-colors"
+              onClick={() => galleryInputRef.current?.click()}>
+              <Image className="h-5 w-5 text-gray-300" />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main panel ────────────────────────────────────────────────────────────────
 
 export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPanelProps) {
@@ -971,42 +1266,14 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
               </TabsContent>
 
               {/* ── ASSETS ── */}
-              <TabsContent value="assets" className="space-y-2">
-                <div className="text-xs text-gray-500 mb-2">{blueprint.assets.length} asset{blueprint.assets.length !== 1 ? 's' : ''} required</div>
-                {blueprint.assets.length === 0 ? (
-                  <div className="text-sm text-gray-500 italic">No assets specified</div>
-                ) : (
-                  blueprint.assets.map((asset, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg" data-testid={`asset-row-${i}`}>
-                      <Image className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">{asset.key}</div>
-                        <div className="text-xs text-gray-500">{asset.alt}</div>
-                        {asset.suggestedSource && (
-                          <div className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">{asset.suggestedSource}</div>
-                        )}
-                        {asset.placement && (
-                          <div className="text-xs text-gray-400 mt-0.5">
-                            {asset.placement.pageKey} → {asset.placement.sectionKind}
-                          </div>
-                        )}
-                      </div>
-                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 shrink-0">
-                        To source
-                      </Badge>
-                    </div>
-                  ))
-                )}
-
-                <Section title="Performance">
-                  <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                    <div><span className="font-medium">Image format:</span> {blueprint.performance.images.format}</div>
-                    <div><span className="font-medium">Sizes:</span> {blueprint.performance.images.sizes.join(', ')}</div>
-                    {blueprint.performance.fonts?.preloads?.length > 0 && (
-                      <div><span className="font-medium">Font preloads:</span> {blueprint.performance.fonts.preloads.join(', ')}</div>
-                    )}
-                  </div>
-                </Section>
+              <TabsContent value="assets" className="space-y-4">
+                <AssetUploadTab
+                  client={client}
+                  orgId={orgId}
+                  token={token}
+                  blueprint={blueprint}
+                  toast={toast}
+                />
               </TabsContent>
 
               {/* ── PREVIEW ── */}

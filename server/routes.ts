@@ -11046,6 +11046,86 @@ ${allSitemapPages.map(p => `  <url>
     }
   });
 
+  // ── Website Asset Upload ────────────────────────────────────────────────────
+
+  // Upload or replace a named asset slot (blueprint key) or add to gallery
+  app.post('/api/clients/:clientId/upload-asset', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, assetKey, dataUrl, fileName, mimeType, isGallery } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      if (!dataUrl) return res.status(400).json({ error: 'dataUrl required' });
+
+      // Rough size guard (~5 MB base64 ~ 6.8M chars)
+      if (dataUrl.length > 7_000_000) {
+        return res.status(413).json({ error: 'File too large — max 5 MB per image.' });
+      }
+
+      const clientRef = firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId);
+
+      if (isGallery) {
+        // Append to gallery array
+        const clientDoc = await clientRef.get();
+        const existing: any[] = clientDoc.data()?.websiteWorkstream?.assets?._gallery || [];
+        const updated = [...existing, { dataUrl, fileName, mimeType, uploadedAt: new Date().toISOString() }];
+        await clientRef.update({ 'websiteWorkstream.assets._gallery': updated });
+        res.json({ success: true, galleryIndex: updated.length - 1 });
+      } else {
+        if (!assetKey) return res.status(400).json({ error: 'assetKey required for named asset upload' });
+        await clientRef.update({
+          [`websiteWorkstream.assets.${assetKey}`]: {
+            dataUrl, fileName, mimeType, uploadedAt: new Date().toISOString(),
+          },
+        });
+        res.json({ success: true, assetKey });
+      }
+    } catch (err: any) {
+      console.error('[upload-asset]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Remove a named asset slot
+  app.delete('/api/clients/:clientId/upload-asset/:assetKey', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId, assetKey } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const { FieldValue } = await import('firebase-admin/firestore');
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        [`websiteWorkstream.assets.${assetKey}`]: FieldValue.delete(),
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[delete-asset]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Remove a gallery image by index
+  app.delete('/api/clients/:clientId/upload-gallery/:index', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const idx = parseInt(req.params.index, 10);
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientRef = firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId);
+      const clientDoc = await clientRef.get();
+      const gallery: any[] = clientDoc.data()?.websiteWorkstream?.assets?._gallery || [];
+      const updated = gallery.filter((_: any, i: number) => i !== idx);
+      await clientRef.update({ 'websiteWorkstream.assets._gallery': updated });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[delete-gallery]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GBP / Local Visibility Workstream ───────────────────────────────────────
 
   app.post('/api/clients/:clientId/gbp-workstream', async (req, res) => {
