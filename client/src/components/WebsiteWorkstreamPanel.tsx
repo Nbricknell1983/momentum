@@ -145,7 +145,18 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [previewSlug, setPreviewSlug] = useState<string | null>(null);
   const [localPreviewSlug, setLocalPreviewSlug] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [sitemapOpen, setSitemapOpen] = useState(false);
+  const [robotsOpen, setRobotsOpen] = useState(false);
+  const [schemaOpen, setSchemaOpen] = useState<Record<string, boolean>>({});
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const copyToClipboard = useCallback((text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    });
+  }, []);
 
   const generatedSite = client.websiteWorkstream?.generatedSite;
   const siteReady = generatedSite?.status === 'ready' && generatedSite?.pages;
@@ -660,23 +671,164 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
 
               {/* ── SEO ── */}
               <TabsContent value="seo" className="space-y-4">
+
+                {/* ── Page meta audit ── */}
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Page Meta Audit</div>
                 {blueprint.pages.map(page => (
                   <Section key={page.key} title={page.title}>
                     <div className="space-y-2 text-sm">
                       <SeoRow label="Title"       value={page.seoMeta.title} />
                       <SeoRow label="Description" value={page.seoMeta.description} />
                       {page.seoMeta.canonical && <SeoRow label="Canonical" value={page.seoMeta.canonical} />}
-                      {page.jsonLd && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 mb-1">JSON-LD</div>
-                          <pre className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded-lg overflow-x-auto text-gray-700 dark:text-gray-300 max-h-40">
-                            {JSON.stringify(page.jsonLd, null, 2)}
-                          </pre>
-                        </div>
-                      )}
+                      {/* title length indicator */}
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <span className="text-gray-400">Title length:</span>
+                        <span className={page.seoMeta.title.length > 60 ? 'text-amber-600 font-medium' : page.seoMeta.title.length < 30 ? 'text-amber-600 font-medium' : 'text-emerald-600 font-medium'}>
+                          {page.seoMeta.title.length} chars {page.seoMeta.title.length > 60 ? '⚠ too long' : page.seoMeta.title.length < 30 ? '⚠ too short' : '✓ good'}
+                        </span>
+                        <span className="text-gray-400 ml-2">Desc length:</span>
+                        <span className={page.seoMeta.description.length > 160 ? 'text-amber-600 font-medium' : page.seoMeta.description.length < 70 ? 'text-amber-600 font-medium' : 'text-emerald-600 font-medium'}>
+                          {page.seoMeta.description.length} chars {page.seoMeta.description.length > 160 ? '⚠ too long' : page.seoMeta.description.length < 70 ? '⚠ too short' : '✓ good'}
+                        </span>
+                      </div>
                     </div>
                   </Section>
                 ))}
+
+                {/* ── Schema Markup ── */}
+                {blueprint.pages.some(p => p.jsonLd) && (
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      onClick={() => setSchemaOpen(prev => ({ ...prev, _main: !prev['_main'] }))}
+                      data-testid="btn-schema-expand"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Code2 className="h-4 w-4 text-violet-500" />
+                        Schema Markup (JSON-LD)
+                        <Badge className="text-[10px] h-4 px-1.5 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">{blueprint.pages.filter(p => p.jsonLd).length} pages</Badge>
+                      </span>
+                      {schemaOpen['_main'] ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                    </button>
+                    {schemaOpen['_main'] && (
+                      <div className="border-t border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+                        {blueprint.pages.filter(p => p.jsonLd).map(page => {
+                          const schemaJson = JSON.stringify(page.jsonLd, null, 2);
+                          const schemaKey = `schema-${page.key}`;
+                          return (
+                            <div key={page.key} className="p-4 space-y-2">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{page.title}</span>
+                                <button
+                                  onClick={() => copyToClipboard(schemaJson, schemaKey)}
+                                  className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-gray-700 transition-colors"
+                                  data-testid={`btn-copy-schema-${page.key}`}
+                                >
+                                  {copiedKey === schemaKey ? <><CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> Copied</> : <><Download className="h-3.5 w-3.5" /> Copy</>}
+                                </button>
+                              </div>
+                              {/* @type badge */}
+                              {(page.jsonLd as any)?.['@type'] && (
+                                <Badge className="text-[10px] h-4 px-1.5 bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300 mb-1">@type: {(page.jsonLd as any)['@type']}</Badge>
+                              )}
+                              <pre className="text-xs bg-gray-50 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-gray-700 dark:text-gray-300 max-h-48 leading-relaxed">
+                                {schemaJson}
+                              </pre>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Sitemap.xml ── */}
+                {generatedSite?.sitemap && (
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      onClick={() => setSitemapOpen(v => !v)}
+                      data-testid="btn-sitemap-expand"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-blue-500" />
+                        sitemap.xml
+                        <Badge className="text-[10px] h-4 px-1.5 bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300">
+                          {(generatedSite.sitemap.match(/<url>/g) || []).length} URLs
+                        </Badge>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/api/clients/${client.id}/sitemap.xml?orgId=${orgId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-[11px] text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Open
+                        </a>
+                        {sitemapOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                      </div>
+                    </button>
+                    {sitemapOpen && (
+                      <div className="border-t border-gray-200 dark:border-gray-700 p-4 space-y-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] text-gray-500">Generated {generatedSite.generatedAt ? format(new Date(generatedSite.generatedAt), 'dd/MM/yyyy') : ''}</span>
+                          <button
+                            onClick={() => copyToClipboard(generatedSite.sitemap, 'sitemap')}
+                            className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-gray-700 transition-colors"
+                            data-testid="btn-copy-sitemap"
+                          >
+                            {copiedKey === 'sitemap' ? <><CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> Copied</> : <><Download className="h-3.5 w-3.5" /> Copy XML</>}
+                          </button>
+                        </div>
+                        <pre className="text-xs bg-gray-50 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-gray-700 dark:text-gray-300 max-h-64 leading-relaxed whitespace-pre-wrap">
+                          {generatedSite.sitemap}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Robots.txt ── */}
+                {generatedSite?.robotsTxt && (
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      onClick={() => setRobotsOpen(v => !v)}
+                      data-testid="btn-robots-expand"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Lock className="h-4 w-4 text-gray-500" />
+                        robots.txt
+                      </span>
+                      {robotsOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                    </button>
+                    {robotsOpen && (
+                      <div className="border-t border-gray-200 dark:border-gray-700 p-4 space-y-2">
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => copyToClipboard(generatedSite.robotsTxt, 'robots')}
+                            className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-gray-700 transition-colors"
+                            data-testid="btn-copy-robots"
+                          >
+                            {copiedKey === 'robots' ? <><CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> Copied</> : <><Download className="h-3.5 w-3.5" /> Copy</>}
+                          </button>
+                        </div>
+                        <pre className="text-xs bg-gray-50 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-gray-700 dark:text-gray-300 max-h-48 leading-relaxed">
+                          {generatedSite.robotsTxt}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!generatedSite?.sitemap && !generatedSite?.robotsTxt && (
+                  <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 p-4 text-center">
+                    <p className="text-xs text-gray-400">Sitemap and robots.txt are generated when you build the site in the Preview tab.</p>
+                  </div>
+                )}
+
               </TabsContent>
 
               {/* ── LOCAL SEO PAGES ── */}
