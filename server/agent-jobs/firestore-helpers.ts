@@ -193,8 +193,10 @@ export async function getQueuedJobs(
 
 /**
  * Find an existing job by idempotency key.
- * Returns the first matching job in queued/running/completed/skipped status.
+ * Returns the most recent matching job in queued/running/completed/skipped status.
  * Ignores failed and failed_validation jobs (those should be retriable).
+ * Uses only a single-field index on idempotencyKey (auto-created) to avoid
+ * requiring a composite index that must be manually provisioned.
  */
 export async function findJobByIdempotencyKey(
   db: Firestore,
@@ -203,11 +205,15 @@ export async function findJobByIdempotencyKey(
 ): Promise<AgentJob | null> {
   const snap = await jobsCollection(db, orgId)
     .where('idempotencyKey', '==', idempotencyKey)
-    .where('status', 'in', ['queued', 'running', 'completed', 'skipped', 'pending_deps'])
-    .orderBy('createdAt', 'desc')
-    .limit(1)
     .get();
 
   if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as AgentJob;
+
+  const activeStatuses = new Set(['queued', 'running', 'completed', 'skipped', 'pending_deps']);
+  const jobs = snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as AgentJob))
+    .filter(j => activeStatuses.has(j.status))
+    .sort((a, b) => ((b as any).createdAt ?? '').localeCompare((a as any).createdAt ?? ''));
+
+  return jobs[0] ?? null;
 }
