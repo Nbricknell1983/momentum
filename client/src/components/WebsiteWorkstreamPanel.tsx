@@ -416,6 +416,274 @@ function AssetUploadTab({
   );
 }
 
+// ─── Launch Tab ────────────────────────────────────────────────────────────────
+
+function LaunchTab({
+  client, orgId, token, generatedSite, blueprint, toast,
+}: {
+  client: any; orgId: string | null; token: string | null; generatedSite: any; blueprint: any; toast: any;
+}) {
+  const [domain, setDomain] = useState<string>(client.websiteWorkstream?.customDomain || '');
+  const [savingDomain, setSavingDomain] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [copiedStep, setCopiedStep] = useState<string | null>(null);
+
+  const sitePages = generatedSite?.pages ? Object.keys(generatedSite.pages) : [];
+  const localPages = generatedSite?.localPages ? Object.keys(generatedSite.localPages) : [];
+  const uploadedAssets = client.websiteWorkstream?.assets || {};
+  const assetSlots = blueprint?.assets || [];
+  const uploadedSlotCount = assetSlots.filter((a: any) => uploadedAssets[a.key]?.dataUrl).length;
+  const hasSitemap = !!generatedSite?.sitemap;
+  const hasRobots = !!generatedSite?.robotsTxt;
+  const savedDomain = client.websiteWorkstream?.customDomain || '';
+
+  const copyVal = (val: string, key: string) => {
+    navigator.clipboard.writeText(val).then(() => {
+      setCopiedStep(key);
+      setTimeout(() => setCopiedStep(null), 2000);
+    });
+  };
+
+  const saveDomain = async () => {
+    if (!orgId || !token) return;
+    setSavingDomain(true);
+    try {
+      await fetch(`/api/clients/${client.id}/set-custom-domain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId, customDomain: domain }),
+      });
+      toast({ title: 'Domain saved', description: domain });
+    } catch (e: any) {
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingDomain(false);
+    }
+  };
+
+  const downloadZip = async () => {
+    if (!orgId) return;
+    setDownloading(true);
+    try {
+      const url = `/api/clients/${client.id}/export-site.zip?orgId=${orgId}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(client.businessName || 'website').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-website.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: 'ZIP downloaded', description: `${sitePages.length + localPages.length} pages included` });
+    } catch (e: any) {
+      toast({ title: 'Download failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Readiness checks
+  const checks = [
+    { id: 'blueprint', label: 'Website Blueprint generated', done: !!blueprint, required: true },
+    { id: 'pages', label: `Main pages built (${sitePages.length} page${sitePages.length !== 1 ? 's' : ''})`, done: sitePages.length > 0, required: true },
+    { id: 'sitemap', label: 'Sitemap.xml generated', done: hasSitemap, required: false },
+    { id: 'robots', label: 'Robots.txt generated', done: hasRobots, required: false },
+    { id: 'local', label: `Local SEO pages built (${localPages.length} page${localPages.length !== 1 ? 's' : ''})`, done: localPages.length > 0, required: false },
+    { id: 'assets', label: `Assets uploaded (${uploadedSlotCount}/${assetSlots.length} slots)`, done: assetSlots.length === 0 || uploadedSlotCount === assetSlots.length, required: false },
+    { id: 'domain', label: 'Custom domain set', done: !!savedDomain, required: false },
+  ];
+  const requiredDone = checks.filter(c => c.required).every(c => c.done);
+  const totalDone = checks.filter(c => c.done).length;
+  const score = Math.round((totalDone / checks.length) * 100);
+
+  return (
+    <div className="space-y-6">
+
+      {/* Readiness score */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Launch Readiness</p>
+            <p className="text-xs text-gray-500">{totalDone} of {checks.length} checks passing</p>
+          </div>
+          <div className={`text-2xl font-bold ${score >= 80 ? 'text-emerald-600' : score >= 50 ? 'text-amber-500' : 'text-gray-400'}`}>
+            {score}%
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-400' : 'bg-gray-300'}`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+        {/* Checklist */}
+        <div className="space-y-1.5 pt-1">
+          {checks.map(check => (
+            <div key={check.id} className="flex items-center gap-2 text-xs" data-testid={`launch-check-${check.id}`}>
+              {check.done
+                ? <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                : <div className={`h-3.5 w-3.5 rounded-full border-2 shrink-0 ${check.required ? 'border-red-400' : 'border-gray-300'}`} />
+              }
+              <span className={check.done ? 'text-gray-700 dark:text-gray-300' : check.required ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-400'}>
+                {check.label}
+                {check.required && !check.done && ' *'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Custom domain */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Domain</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={domain}
+            onChange={e => setDomain(e.target.value)}
+            placeholder="yourdomain.com.au"
+            className="flex-1 text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            data-testid="input-custom-domain"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={saveDomain}
+            disabled={savingDomain || domain === savedDomain}
+            className="shrink-0"
+            data-testid="btn-save-domain"
+          >
+            {savingDomain ? <Cpu className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+          </Button>
+        </div>
+        {savedDomain && (
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400">✓ Saved: {savedDomain}</p>
+        )}
+      </div>
+
+      {/* Download ZIP */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Download Package</p>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-white">Site ZIP Archive</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Includes {sitePages.length} main page{sitePages.length !== 1 ? 's' : ''}
+              {localPages.length > 0 ? `, ${localPages.length} local page${localPages.length !== 1 ? 's' : ''}` : ''}
+              {hasSitemap ? ', sitemap.xml' : ''}
+              {hasRobots ? ', robots.txt' : ''}
+              {uploadedSlotCount > 0 ? `, ${uploadedSlotCount} asset${uploadedSlotCount !== 1 ? 's' : ''}` : ''}
+              {' + README'}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+            onClick={downloadZip}
+            disabled={downloading || !requiredDone}
+            data-testid="btn-download-zip"
+          >
+            {downloading
+              ? <><Cpu className="h-3.5 w-3.5 animate-spin" /> Packaging…</>
+              : <><Download className="h-3.5 w-3.5" /> Download ZIP</>
+            }
+          </Button>
+        </div>
+        {!requiredDone && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">Complete the required checks above to enable download.</p>
+        )}
+      </div>
+
+      {/* DNS setup steps */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">DNS Setup</p>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+          {[
+            { step: '1', title: 'Log in to your domain registrar', detail: 'GoDaddy, Namecheap, Crazy Domains, VentraIP, etc.', copy: null },
+            { step: '2', title: 'Go to DNS / Zone management', detail: 'Look for "Manage DNS", "DNS Zone", or "Advanced DNS"', copy: null },
+            { step: '3', title: 'Add an A Record', detail: `Type: A | Name: @ | Value: <your host IP> | TTL: 3600`, copy: savedDomain || 'yourdomain.com.au' },
+            { step: '4', title: 'Add a www CNAME', detail: `Type: CNAME | Name: www | Value: ${savedDomain || 'yourdomain.com.au'} | TTL: 3600`, copy: `www.${savedDomain || 'yourdomain.com.au'}` },
+            { step: '5', title: 'Wait for propagation', detail: 'DNS changes take 24–48 hours to propagate globally.', copy: null },
+            { step: '6', title: 'Install SSL certificate', detail: 'Most hosts provide free Let\'s Encrypt SSL. Enable HTTPS.', copy: null },
+          ].map(item => (
+            <div key={item.step} className="flex items-start gap-3 px-4 py-3">
+              <span className="h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{item.detail}</p>
+              </div>
+              {item.copy && (
+                <button
+                  onClick={() => copyVal(item.copy!, `dns-${item.step}`)}
+                  className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-blue-600 shrink-0"
+                  data-testid={`btn-copy-dns-${item.step}`}
+                >
+                  {copiedStep === `dns-${item.step}` ? <><CheckCircle className="h-3 w-3 text-emerald-500" /> Copied</> : <><Download className="h-3 w-3" /> Copy</>}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Google Search Console */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Google Search Console</p>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+          {[
+            { step: '1', title: 'Go to Google Search Console', detail: 'search.google.com/search-console', copy: 'https://search.google.com/search-console' },
+            { step: '2', title: 'Add property', detail: `Enter: https://${savedDomain || 'yourdomain.com.au'}`, copy: `https://${savedDomain || 'yourdomain.com.au'}` },
+            { step: '3', title: 'Verify ownership', detail: 'Use DNS TXT record verification (recommended) or HTML file upload.', copy: null },
+            { step: '4', title: 'Submit sitemap', detail: `Add: https://${savedDomain || 'yourdomain.com.au'}/sitemap.xml`, copy: `https://${savedDomain || 'yourdomain.com.au'}/sitemap.xml` },
+          ].map(item => (
+            <div key={item.step} className="flex items-start gap-3 px-4 py-3">
+              <span className="h-5 w-5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5 break-all">{item.detail}</p>
+              </div>
+              {item.copy && (
+                <button
+                  onClick={() => copyVal(item.copy!, `gsc-${item.step}`)}
+                  className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-emerald-600 shrink-0"
+                  data-testid={`btn-copy-gsc-${item.step}`}
+                >
+                  {copiedStep === `gsc-${item.step}` ? <><CheckCircle className="h-3 w-3 text-emerald-500" /> Copied</> : <><Download className="h-3 w-3" /> Copy</>}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Post-launch checklist */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Post-Launch Checklist</p>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-2">
+          {[
+            'Confirm site loads at https:// (SSL active)',
+            'Test site on mobile — all pages look correct',
+            'Check all contact forms submit and deliver',
+            'Verify all phone number links are clickable (tel:)',
+            'Submit sitemap in Google Search Console',
+            'Set up Google Analytics 4 on all pages',
+            'Create / update Google Business Profile with new website URL',
+            'Ping Google: fetch & index the homepage in Search Console',
+            'Schedule first GBP post linking back to a key service page',
+            'Set a 90-day reminder to review rankings and refresh content',
+          ].map((item, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+              <div className="h-3.5 w-3.5 rounded border border-gray-300 shrink-0 mt-0.5" />
+              {item}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main panel ────────────────────────────────────────────────────────────────
 
 export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPanelProps) {
@@ -805,6 +1073,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 </TabsTrigger>
                 <TabsTrigger value="assets"  className="text-xs h-7 gap-1" data-testid="tab-workstream-assets"><Image className="h-3 w-3" />Assets</TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs h-7 gap-1" data-testid="tab-workstream-preview"><Eye className="h-3 w-3" />Preview</TabsTrigger>
+                <TabsTrigger value="launch"  className="text-xs h-7 gap-1" data-testid="tab-workstream-launch"><Rocket className="h-3 w-3" />Launch</TabsTrigger>
               </TabsList>
 
               {/* ── PLAN ── */}
@@ -1390,6 +1659,19 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                   </>
                 )}
               </TabsContent>
+
+              {/* ── LAUNCH ── */}
+              <TabsContent value="launch" className="space-y-4">
+                <LaunchTab
+                  client={client}
+                  orgId={orgId}
+                  token={token}
+                  generatedSite={generatedSite}
+                  blueprint={blueprint}
+                  toast={toast}
+                />
+              </TabsContent>
+
             </Tabs>
           )}
         </div>
