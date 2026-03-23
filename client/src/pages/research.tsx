@@ -17,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth } from '@/lib/firebase';
 import { addLead } from '@/store';
 import { createLead, fetchRejectedBusinesses, checkIfBusinessRejected } from '@/lib/firestoreService';
 import { v4 as uuidv4 } from 'uuid';
@@ -181,6 +182,11 @@ const BUSINESS_TYPES = [
   { value: 'storage', label: 'Self Storage' },
 ];
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const token = await auth.currentUser?.getIdToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export default function ResearchPage() {
   const dispatch = useDispatch();
   const { orgId, user, authReady } = useAuth();
@@ -259,7 +265,7 @@ export default function ResearchPage() {
         ? `/api/abr/search-name?name=${encodeURIComponent(abrQuery)}&maxResults=50`
         : `/api/abr/search-postcode?postcode=${encodeURIComponent(abrQuery)}&maxResults=100`;
       
-      const response = await fetch(endpoint);
+      const response = await fetch(endpoint, { headers: await getAuthHeaders() });
       const data: ABRSearchResponse = await response.json();
       
       if (!response.ok) {
@@ -349,7 +355,7 @@ export default function ResearchPage() {
         params.append('type', googleBusinessType);
       }
       
-      const response = await fetch(`/api/google-places/search?${params}`);
+      const response = await fetch(`/api/google-places/search?${params}`, { headers: await getAuthHeaders() });
       const data = await response.json();
       
       if (!response.ok) {
@@ -375,7 +381,7 @@ export default function ResearchPage() {
     setIsLoadingDetails(true);
     
     try {
-      const response = await fetch(`/api/abr/abn/${abn}`);
+      const response = await fetch(`/api/abr/abn/${abn}`, { headers: await getAuthHeaders() });
       const data: ABNDetails = await response.json();
       
       if (!response.ok) {
@@ -493,9 +499,10 @@ export default function ResearchPage() {
       if (addLeadData.website) businessSignals.push('Has website presence');
       if (addLeadData.abn) businessSignals.push('Active ABN - registered business');
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch('/api/leads/generate-outreach-scripts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           businessName: addLeadData.businessName,
           businessType: addLeadData.businessType,
@@ -654,7 +661,7 @@ export default function ResearchPage() {
     setDomainAges(prev => ({ ...prev, [placeId]: { loading: true } }));
     
     try {
-      const response = await fetch(`/api/domain-age?domain=${encodeURIComponent(website)}`);
+      const response = await fetch(`/api/domain-age?domain=${encodeURIComponent(website)}`, { headers: await getAuthHeaders() });
       const data = await response.json();
       
       if (!response.ok) {
