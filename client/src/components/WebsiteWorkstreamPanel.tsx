@@ -2179,6 +2179,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
           taskType:   'website_workstream',
           entityType: 'client',
           entityId:   client.id,
+          orgId,
           force,
           input: {
             orgId,
