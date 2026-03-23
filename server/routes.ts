@@ -10556,6 +10556,218 @@ Rules:
     }
   });
 
+  // ── Site HTML Generation + Preview ──────────────────────────────────────────
+
+  // Generate real HTML for each page from the existing Blueprint
+  app.post('/api/clients/:clientId/generate-site', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      // Blueprint lives in websiteWorkstream.currentDraft
+      const blueprint = clientData.websiteWorkstream?.currentDraft;
+      if (!blueprint) return res.status(400).json({ error: 'No blueprint found. Generate the Website Blueprint first.' });
+
+      const { siteMeta, nav, footer, pages, assets } = blueprint;
+      const navLinks = (nav?.items || []).map((n: any) => `<a href="${n.href}" class="text-gray-700 hover:text-blue-600 font-medium transition-colors">${n.label}</a>`).join(' ');
+      const footerLinks = (footer?.links || []).map((l: any) => `<a href="${l.href}" class="hover:underline">${l.label}</a>`).join(' &middot; ');
+      const allPageSlugs = (pages || []).map((p: any) => p.route || p.key);
+
+      // Mark as generating
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.generatedSite.status': 'generating',
+        'websiteWorkstream.generatedSite.startedAt': new Date().toISOString(),
+      });
+
+      const generatedPages: Record<string, any> = {};
+
+      for (const page of (pages || [])) {
+        const slug = (page.route || page.key || 'home').replace(/^\//, '') || 'home';
+        const sectionsText = (page.sections || []).map((s: any, i: number) => {
+          return `Section ${i + 1} — ${s.kind}:\n${JSON.stringify(s.props, null, 2)}`;
+        }).join('\n\n');
+
+        const schemaJson = page.jsonLd ? JSON.stringify(page.jsonLd) : JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': siteMeta?.schemaType || 'LocalBusiness',
+          name: siteMeta?.brand,
+          address: { '@type': 'PostalAddress', streetAddress: siteMeta?.nap?.address },
+          telephone: siteMeta?.nap?.phone,
+        });
+
+        const prompt = `You are a senior web developer. Generate a complete, production-quality HTML page.
+
+SITE CONTEXT:
+- Business: ${siteMeta?.brand}
+- UVP: ${siteMeta?.uvp}
+- Tone: ${siteMeta?.tone}
+- Primary CTA: "${siteMeta?.primaryCta}"
+- Phone: ${siteMeta?.nap?.phone}
+- Address: ${siteMeta?.nap?.address}
+- Email: ${siteMeta?.nap?.email || ''}
+
+ALL SITE PAGES (for navigation): ${allPageSlugs.join(', ')}
+Navigation items: ${(nav?.items || []).map((n: any) => `${n.label} → ${n.href}`).join(', ')}
+
+THIS PAGE:
+- Name: ${page.title}
+- Route: ${page.route}
+- Meta title: ${page.seoMeta?.title}
+- Meta description: ${page.seoMeta?.description}
+- Canonical: ${page.seoMeta?.canonical || ''}
+
+PAGE SECTIONS (render these in order as real HTML):
+${sectionsText}
+
+SCHEMA JSON-LD (embed in <head>):
+${schemaJson}
+
+REQUIREMENTS:
+1. Output a complete self-contained HTML document (DOCTYPE through </html>)
+2. Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+3. Include Google Fonts Inter: <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+4. Apply font-family: 'Inter', sans-serif to body
+5. Full SEO <head>: title, meta description, og:title, og:description, og:type, canonical if provided
+6. Embed the schema JSON-LD script in <head>
+7. Sticky navigation bar with the brand name + nav links + a CTA button (phone number)
+8. Render ALL sections from the props above as real semantic HTML — do NOT skip any
+9. For Hero sections: full-width hero with headline, subheadline, CTA button (tel: link), supporting points as checkmarks
+10. For ServicesGrid: responsive grid of service cards with title, description, CTA link
+11. For Trust sections: review snippets + credentials in a clean grid
+12. For Areas sections: list of suburbs/service areas
+13. For FAQ sections: accordion-style or simple Q&A list
+14. For ContactForm: a styled form (name, phone, email, message, submit) — no backend required, use mailto: action with the email
+15. For CTABar: full-width coloured banner with CTA text and button
+16. Footer with NAP, nav links, copyright
+17. Phone numbers must be clickable: <a href="tel:${siteMeta?.nap?.phone}">
+18. All internal links must use the correct page routes
+19. Mobile-first responsive design using Tailwind responsive prefixes
+20. Professional, high-contrast appearance appropriate for a local service business
+21. Australian English spelling
+22. No lorem ipsum — use ONLY the content provided in the sections props above
+
+Output ONLY the complete HTML document. No markdown, no explanation.`;
+
+        try {
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 3500,
+          });
+
+          let html = completion.choices[0]?.message?.content || '';
+          // Strip any accidental markdown fences
+          html = html.replace(/^```html\n?/i, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+          generatedPages[slug] = {
+            slug,
+            title: page.title,
+            route: page.route,
+            html,
+            metaTitle: page.seoMeta?.title || page.title,
+            metaDescription: page.seoMeta?.description || '',
+            generatedAt: new Date().toISOString(),
+          };
+        } catch (pageErr: any) {
+          console.error(`[generate-site] page ${slug} failed:`, pageErr.message);
+          generatedPages[slug] = { slug, title: page.title, html: `<html><body><h1>${page.title}</h1><p>Generation failed: ${pageErr.message}</p></body></html>`, generatedAt: new Date().toISOString() };
+        }
+      }
+
+      // Generate sitemap.xml
+      const domain = clientData.website || 'https://yourdomain.com.au';
+      const baseDomain = domain.replace(/\/+$/, '');
+      const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${(pages || []).map((p: any) => `  <url>
+    <loc>${baseDomain}${p.route || '/'}</loc>
+    <changefreq>monthly</changefreq>
+    <priority>${p.route === '/' ? '1.0' : '0.8'}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+
+      // Generate robots.txt
+      const robotsTxt = `User-agent: *\nAllow: /\nSitemap: ${baseDomain}/sitemap.xml`;
+
+      // Save to Firestore
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.generatedSite': {
+          status: 'ready',
+          pages: generatedPages,
+          sitemap: sitemapXml,
+          robotsTxt,
+          generatedAt: new Date().toISOString(),
+          pageCount: Object.keys(generatedPages).length,
+          orgId,
+        },
+      });
+
+      res.json({
+        success: true,
+        pageCount: Object.keys(generatedPages).length,
+        pages: Object.keys(generatedPages),
+      });
+    } catch (err: any) {
+      console.error('[generate-site]', err);
+      try {
+        const { clientId } = req.params;
+        const { orgId } = req.body;
+        if (firestore && orgId && clientId) {
+          await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+            'websiteWorkstream.generatedSite.status': 'failed',
+          });
+        }
+      } catch {}
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Serve a generated page as raw HTML (for iframe preview)
+  app.get('/api/clients/:clientId/site-preview/:slug', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).send('<html><body>Firestore unavailable</body></html>');
+      const { clientId, slug } = req.params;
+      const { orgId } = req.query as { orgId: string };
+      if (!orgId) return res.status(400).send('<html><body>orgId required</body></html>');
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).send('<html><body>Client not found</body></html>');
+
+      const clientData = clientDoc.data() as any;
+      const page = clientData.websiteWorkstream?.generatedSite?.pages?.[slug];
+      if (!page?.html) return res.status(404).send('<html><body>Page not generated yet</body></html>');
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.send(page.html);
+    } catch (err: any) {
+      res.status(500).send(`<html><body>Error: ${err.message}</body></html>`);
+    }
+  });
+
+  // Serve sitemap.xml
+  app.get('/api/clients/:clientId/sitemap.xml', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).send('');
+      const { clientId } = req.params;
+      const { orgId } = req.query as { orgId: string };
+      if (!orgId) return res.status(400).send('');
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      const sitemap = clientDoc.data()?.websiteWorkstream?.generatedSite?.sitemap || '';
+      res.setHeader('Content-Type', 'application/xml');
+      res.send(sitemap);
+    } catch (err: any) {
+      res.status(500).send('');
+    }
+  });
+
   // ── GBP / Local Visibility Workstream ───────────────────────────────────────
 
   app.post('/api/clients/:clientId/gbp-workstream', async (req, res) => {

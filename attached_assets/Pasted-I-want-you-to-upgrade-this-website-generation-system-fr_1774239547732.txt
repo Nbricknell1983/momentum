@@ -1,0 +1,98 @@
+I want you to upgrade this website generation system from a planning tool into a true website production engine.
+
+Right now the Website Build workstream creates a strong blueprint, but I need the system to go much further.
+
+Core outcome:
+The system must generate a real, production-ready website that can be previewed, reviewed, and prepared for launch without destroying existing search visibility or traffic.
+
+What the upgraded system must do:
+
+1. Generate the actual website
+- Produce real website code, not just a plan
+- Build the site in a production-ready format using a modern stack suitable for deployment
+- Create all core pages required for the business to perform properly online, including:
+  - homepage
+  - service pages
+  - location pages
+  - about page
+  - contact page
+  - supporting SEO pages where relevant
+- Ensure each page is structured properly for indexability, relevance, internal linking, and conversion
+
+2. Preserve and strengthen SEO performance
+- The website must be designed so it can be found by Google
+- It must protect existing traffic and rankings as much as possible during migration
+- Include SEO-critical elements such as:
+  - title tags
+  - meta descriptions
+  - heading structure
+  - schema where relevant
+  - crawlable internal links
+  - canonical handling
+  - image alt text fields
+  - XML sitemap generation
+  - robots.txt generation
+- For rebuilds or migrations, include a takeover/migration layer that:
+  - identifies existing URLs
+  - recommends which URLs to preserve
+  - creates redirect mapping from old URLs to new URLs
+  - flags high-risk SEO pages
+  - highlights anything that could cause ranking or traffic loss
+
+3. Generate pages that actually support local search
+- The system must intelligently create service pages and location pages where appropriate
+- These pages must not be thin, duplicated, or generic
+- They should be structured to support local SEO properly and align with the client’s Google Business Profile strategy
+- The system should understand business type, service area, and location targeting, then build the right page architecture automatically
+
+4. Provide a visual preview
+- Once the site is generated, I need a working preview of the website inside the system
+- I want to see how the homepage and internal pages actually look before launch
+- The preview should reflect real layout, content, imagery, calls to action, and navigation
+
+5. Support media uploads
+- The system must allow me to upload and manage:
+  - photos
+  - logos
+  - videos
+  - other website assets
+- Uploaded media should be assignable to relevant pages and sections
+- The generator should also use placeholders where assets are missing, but make it easy to replace them
+
+6. Prepare for launch
+- Once the website is approved, the system should provide the technical go-live requirements
+- I need it to output:
+  - DNS records/settings required to point the domain live
+  - any hosting/deployment steps
+  - SSL requirements
+  - final pre-launch checklist
+- If possible, create a guided launch workflow so the site can move from preview to live in a controlled way
+
+7. Make this agent-driven
+- The agents should not stop at strategy and planning
+- They need to carry the work through into build-ready execution
+- I want the system to coordinate the full workflow:
+  - strategy
+  - content structure
+  - SEO architecture
+  - code generation
+  - preview
+  - migration protection
+  - launch readiness
+
+Important principle:
+This cannot just generate a pretty website. It must generate a website that is commercially useful, technically deployable, search-friendly, and migration-safe.
+
+What I need from you:
+1. Recommend the best architecture for implementing this in Replit
+2. Break the system into components/modules
+3. Define the data model required
+4. Recommend the best framework for code generation and preview
+5. Explain how media uploads should work
+6. Explain how SEO migration protection should work
+7. Explain how DNS/go-live instructions should be generated
+8. Then produce a staged implementation plan in priority order
+
+Please design this as a practical build plan, not a high-level concept.
+Assume this system will be used repeatedly for many client websites.
+Focus on scalability, reliability, and strong SEO outcomes.

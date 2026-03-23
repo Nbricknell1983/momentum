@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,8 @@ import { format } from 'date-fns';
 import {
   RefreshCw, CheckCircle, Download, Globe, FileText, Type,
   Search, Image, Eye, ChevronDown, ChevronRight, AlertCircle,
-  Lock, Cpu, ExternalLink,
+  Lock, Cpu, ExternalLink, Zap, MonitorPlay, Code2, Map, Rocket,
+  Smartphone, Monitor,
 } from 'lucide-react';
 import { Hero } from '@/components/sections/Hero';
 import { ServicesGrid } from '@/components/sections/ServicesGrid';
@@ -139,6 +140,15 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [nudge, setNudge]           = useState('');
   const [showNudge, setShowNudge]   = useState(false);
   const [exporting, setExporting]   = useState(false);
+  const [generatingSite, setGeneratingSite] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [previewSlug, setPreviewSlug] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const generatedSite = client.websiteWorkstream?.generatedSite;
+  const siteReady = generatedSite?.status === 'ready' && generatedSite?.pages;
+  const sitePageSlugs: string[] = siteReady ? Object.keys(generatedSite.pages) : [];
+  const activePreviewSlug = previewSlug || sitePageSlugs[0] || null;
 
   // ── Enqueue / regenerate ─────────────────────────────────────────────────────
 
@@ -263,6 +273,36 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
     }
   }, [blueprint, client, toast]);
 
+  // ── Generate real HTML site ──────────────────────────────────────────────────
+
+  const handleGenerateSite = useCallback(async () => {
+    if (!orgId || !authReady || !blueprint) return;
+    setGeneratingSite(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/generate-site`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Generation failed');
+      }
+      const data = await res.json();
+      toast({
+        title: 'Site generated',
+        description: `${data.pageCount} pages built — switch to the Preview tab to see them live.`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setGeneratingSite(false);
+    }
+  }, [orgId, authReady, blueprint, client, token, toast]);
+
   // ─────────────────────────────────────────────────────────────────────────────
 
   const currentPage = blueprint?.pages.find(p => p.key === activePage) ?? blueprint?.pages[0] ?? null;
@@ -356,13 +396,15 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
 
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-8 text-xs gap-1.5 text-gray-500"
-                  disabled
-                  data-testid="btn-website-workstream-deploy"
+                  className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={handleGenerateSite}
+                  disabled={generatingSite || !blueprint}
+                  data-testid="btn-generate-site"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Deploy (soon)
+                  {generatingSite
+                    ? <><Cpu className="h-3.5 w-3.5 animate-spin" /> Building…</>
+                    : <><Zap className="h-3.5 w-3.5" /> {siteReady ? 'Rebuild Site' : 'Build Site'}</>
+                  }
                 </Button>
               </>
             )}
@@ -636,39 +678,117 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
               </TabsContent>
 
               {/* ── PREVIEW ── */}
-              <TabsContent value="preview" className="space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="text-xs text-gray-500">Page:</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {blueprint.pages.map(page => (
-                      <button
-                        key={page.key}
-                        onClick={() => setActivePage(page.key)}
-                        className={`text-xs px-2 py-1 rounded-md border transition-colors ${
-                          (activePage ?? blueprint.pages[0]?.key) === page.key
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600'
-                        }`}
-                        data-testid={`preview-page-tab-${page.key}`}
-                      >
-                        {page.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {currentPage ? (
-                  <div className="space-y-4 border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50 dark:bg-gray-800/50">
-                    <div className="text-xs font-medium text-gray-500">{currentPage.route}</div>
-                    {currentPage.sections.map((section, si) => (
-                      <div key={si}>
-                        <div className="text-xs text-gray-400 mb-1">{section.kind}</div>
-                        <SectionPreview section={section} />
-                      </div>
-                    ))}
+              <TabsContent value="preview" className="space-y-3">
+                {!siteReady ? (
+                  <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center space-y-4">
+                    <MonitorPlay className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Site not yet built</p>
+                      <p className="text-xs text-gray-500">Click <strong>Build Site</strong> above to generate real HTML pages and preview them live here.</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={handleGenerateSite}
+                      disabled={generatingSite || !blueprint}
+                      data-testid="btn-generate-site-preview"
+                    >
+                      {generatingSite
+                        ? <><Cpu className="h-3.5 w-3.5 animate-spin" /> Building pages…</>
+                        : <><Zap className="h-3.5 w-3.5" /> Build Site Now</>
+                      }
+                    </Button>
+                    {generatingSite && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                        Generating HTML for each page — this takes 1–3 minutes…
+                      </p>
+                    )}
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-500 italic text-center py-8">Select a page to preview</div>
+                  <>
+                    {/* Controls */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-xs text-gray-500 mr-1">Page:</span>
+                        {sitePageSlugs.map(slug => {
+                          const pageData = generatedSite.pages[slug];
+                          return (
+                            <button
+                              key={slug}
+                              onClick={() => setPreviewSlug(slug)}
+                              className={`text-xs px-2 py-1 rounded-md border transition-colors ${
+                                activePreviewSlug === slug
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:border-blue-400'
+                              }`}
+                              data-testid={`preview-slug-${slug}`}
+                            >
+                              {pageData?.title || slug}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setPreviewMode('desktop')}
+                          className={`p-1.5 rounded border transition-colors ${previewMode === 'desktop' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-200 text-gray-400 hover:text-gray-600'}`}
+                          title="Desktop"
+                        >
+                          <Monitor className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setPreviewMode('mobile')}
+                          className={`p-1.5 rounded border transition-colors ${previewMode === 'mobile' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-200 text-gray-400 hover:text-gray-600'}`}
+                          title="Mobile"
+                        >
+                          <Smartphone className="h-3.5 w-3.5" />
+                        </button>
+                        {activePreviewSlug && (
+                          <a
+                            href={`/api/clients/${client.id}/site-preview/${activePreviewSlug}?orgId=${orgId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded border border-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                            title="Open in new tab"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* iframe */}
+                    <div className={`rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-100 dark:bg-gray-800 flex justify-center ${previewMode === 'mobile' ? 'p-4' : ''}`}>
+                      {activePreviewSlug && (
+                        <iframe
+                          ref={iframeRef}
+                          key={`${activePreviewSlug}-${previewMode}`}
+                          src={`/api/clients/${client.id}/site-preview/${activePreviewSlug}?orgId=${orgId}`}
+                          className={`rounded-lg shadow-lg transition-all ${
+                            previewMode === 'mobile'
+                              ? 'w-[390px] h-[844px] border border-gray-200'
+                              : 'w-full h-[700px] border-0'
+                          }`}
+                          title={`Preview: ${activePreviewSlug}`}
+                          data-testid="site-preview-iframe"
+                          sandbox="allow-same-origin allow-scripts allow-forms"
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-gray-400">
+                      <span>Generated {generatedSite.generatedAt ? format(new Date(generatedSite.generatedAt), 'dd/MM/yyyy HH:mm') : '—'} · {sitePageSlugs.length} pages</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 text-[11px] gap-1 text-gray-400 hover:text-blue-600 px-2"
+                        onClick={handleGenerateSite}
+                        disabled={generatingSite}
+                      >
+                        <RefreshCw className="h-3 w-3" /> Rebuild
+                      </Button>
+                    </div>
+                  </>
                 )}
               </TabsContent>
             </Tabs>
