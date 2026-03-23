@@ -1268,6 +1268,7 @@ function RecommendedStrategyCard({ lead }: { lead: Lead }) {
   const { orgId, authReady } = useAuth();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
+  const [createPhase, setCreatePhase] = useState('');
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenPhase, setRegenPhase] = useState('');
@@ -1350,38 +1351,67 @@ function RecommendedStrategyCard({ lead }: { lead: Lead }) {
     setCreating(true);
     try {
       const token = await auth.currentUser?.getIdToken();
-      const si   = (lead as any).strategyIntelligence || {};
-      const pack = (lead as any).prepCallPack;
-      const res  = await fetch('/api/strategy-reports', {
+      const businessName = lead.companyName || (lead as any).businessName || 'Business';
+      const strategyDiagnosis = (lead as any).aiGrowthPlan?.strategyDiagnosis || null;
+
+      // Step 1: Generate the full 12-month AI strategy
+      setCreatePhase('Generating strategy content…');
+      const stratRes = await fetch('/api/ai/growth-plan/twelve-month-strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          businessName,
+          websiteUrl: lead.website || '',
+          industry: lead.industry || '',
+          location: lead.address || '',
+          strategyDiagnosis: strategyDiagnosis || undefined,
+          sitemapPages: (lead as any).sitemapPages || [],
+          crawledPages: (lead as any).crawledPages || [],
+          reviewCount: (lead as any).sourceData?.reviewCount ?? null,
+          rating: (lead as any).sourceData?.rating ?? null,
+          gbpLink: (lead as any).sourceData?.googleMapsUrl || null,
+          facebookUrl: (lead as any).facebookUrl || null,
+          instagramUrl: (lead as any).instagramUrl || null,
+          linkedinUrl: (lead as any).linkedinUrl || null,
+          conversationNotes: lead.notes || null,
+          dealStage: lead.stage || null,
+          mrr: (lead as any).mrr || null,
+          strategyIntelligence: (lead as any).strategyIntelligence || null,
+        }),
+      });
+      if (!stratRes.ok) throw new Error('Strategy generation failed');
+      const strategy = await stratRes.json();
+
+      // Step 2: Save the report with full AI-generated content
+      setCreatePhase('Saving strategy page…');
+      const res = await fetch('/api/strategy-reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           orgId,
-          businessName:    lead.companyName || (lead as any).businessName || 'Business',
-          industry:        lead.industry,
-          location:        lead.address,
-          website:         lead.website,
-          businessOverview: si.businessOverview || pack?.businessSnapshot || '',
-          idealCustomer:   si.idealCustomer || pack?.customerProfile?.likelyCustomer || '',
-          coreServices:    si.coreServices || '',
-          targetLocations: si.targetLocations || lead.address || '',
-          growthObjective: si.growthObjective || pack?.commercialAngle || '',
-          phone:           lead.phone,
-          email:           lead.email,
-          logoUrl:         '',
-          agencyName:      '',
+          businessName,
+          industry: lead.industry || '',
+          location: lead.address || '',
+          websiteUrl: lead.website || '',
+          phone: lead.phone || '',
+          email: lead.email || '',
+          preparedBy: auth.currentUser?.displayName || 'Momentum Agent',
+          preparedByEmail: auth.currentUser?.email || '',
+          strategy,
+          strategyDiagnosis: strategyDiagnosis || null,
         }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) throw new Error('Failed to save strategy page');
       const data = await res.json();
       const updates: Partial<Lead> = { strategyReportId: data.id };
       dispatch(patchLead({ id: lead.id, updates }));
       await updateLeadInFirestore(orgId, lead.id, updates, authReady);
       toast({ title: 'Strategy page created', description: 'Share the link with your prospect' });
-    } catch {
-      toast({ title: 'Failed to create strategy page', variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Failed to create strategy page', description: err.message || 'Something went wrong', variant: 'destructive' });
     } finally {
       setCreating(false);
+      setCreatePhase('');
     }
   };
 
@@ -1513,7 +1543,7 @@ function RecommendedStrategyCard({ lead }: { lead: Lead }) {
                 data-testid="button-create-strategy-page"
               >
                 {creating
-                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Creating…</>
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> {createPhase || 'Creating…'}</>
                   : <><Plus className="h-3 w-3" /> Create strategy page</>}
               </button>
             </div>
