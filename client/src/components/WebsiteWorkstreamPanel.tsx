@@ -2146,11 +2146,14 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [schemaOpen, setSchemaOpen] = useState<Record<string, boolean>>({});
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // ── Website Chat state ──────────────────────────────────────────────────────
-  interface ChatMessage { role: 'user' | 'assistant'; content: string; ts: number; }
+  interface ChatMessage { role: 'user' | 'assistant'; content: string; ts: number; images?: string[]; }
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatImages, setChatImages] = useState<{ dataUrl: string; name: string }[]>([]);
+  const [chatPreviewSlug, setChatPreviewSlug] = useState<string>('');
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
 
   const copyToClipboard = useCallback((text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -2159,12 +2162,26 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
     });
   }, []);
 
+  const handleChatFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setChatImages(prev => [...prev, { dataUrl: reader.result as string, name: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  }, []);
+
   const sendChat = useCallback(async (userMsg?: string) => {
     const msg = (userMsg ?? chatInput).trim();
-    if (!msg || chatLoading) return;
-    const userEntry: ChatMessage = { role: 'user', content: msg, ts: Date.now() };
+    if ((!msg && chatImages.length === 0) || chatLoading) return;
+    const images = chatImages.map(i => i.dataUrl);
+    const userEntry: ChatMessage = { role: 'user', content: msg || '(image)', ts: Date.now(), images: images.length ? images : undefined };
     setChatMessages(prev => [...prev, userEntry]);
     setChatInput('');
+    setChatImages([]);
     setChatLoading(true);
     try {
       const user = auth.currentUser;
@@ -2173,7 +2190,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       const res = await fetch(`/api/clients/${client.id}/website-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ orgId, message: msg, history: chatMessages.slice(-20) }),
+        body: JSON.stringify({ orgId, message: msg || 'Analyse this image and help me incorporate it into the website.', images, history: chatMessages.slice(-20) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error');
@@ -2184,7 +2201,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       setChatLoading(false);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }
-  }, [chatInput, chatLoading, chatMessages, client.id, orgId]);
+  }, [chatInput, chatImages, chatLoading, chatMessages, client.id, orgId]);
 
   const CHAT_QUICK_ACTIONS = [
     'Write homepage copy with headline, hero text and CTA',
@@ -3221,45 +3238,43 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
             </Tabs>
           )}
 
-          {/* ── SEO WEBSITE MACHINE — AI Chat ── */}
-          <div className="mt-4">
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col" style={{ height: '75vh' }}>
-              {/* Header */}
+          {/* ── SEO WEBSITE MACHINE — Split Pane ── */}
+          <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex" style={{ height: 'calc(100vh - 200px)', minHeight: '500px' }}>
+
+            {/* ── LEFT: Chat panel ── */}
+            <div className="flex flex-col bg-white dark:bg-gray-950" style={{ width: '52%', borderRight: '1px solid #e5e7eb' }}>
+              {/* Chat header */}
               <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 shrink-0">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                   <span className="text-xs font-semibold text-white">SEO Website Machine</span>
-                  <span className="text-[10px] text-blue-200">· Powered by GPT-4o · Context: {client.businessName}</span>
+                  <span className="text-[10px] text-blue-200 hidden sm:inline">· GPT-4o · {client.businessName}</span>
                 </div>
                 {chatMessages.length > 0 && (
-                  <button
-                    onClick={() => setChatMessages([])}
-                    className="text-[10px] text-blue-200 hover:text-white transition-colors"
-                    data-testid="button-chat-clear"
-                  >
-                    Clear chat
+                  <button onClick={() => setChatMessages([])} className="text-[10px] text-blue-200 hover:text-white" data-testid="button-chat-clear">
+                    Clear
                   </button>
                 )}
               </div>
 
-              {/* Messages area */}
+              {/* Messages */}
               <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50 dark:bg-gray-900">
                 {chatMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-4">
                     <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center mb-3">
                       <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Your SEO Website Machine is ready</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs mb-4">
-                      Tell me what you need — page copy, meta tags, schema markup, local SEO content, FAQs. I know {client.businessName}'s business inside out.
+                    <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">SEO Website Machine</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-5 max-w-[260px]">
+                      Type anything — page copy, meta tags, FAQs, schema, local pages. Upload photos and I'll work them in. Preview updates on the right.
                     </p>
-                    <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
+                    <div className="flex flex-col gap-1.5 w-full max-w-[280px]">
                       {CHAT_QUICK_ACTIONS.slice(0, 4).map((action) => (
                         <button
                           key={action}
                           onClick={() => sendChat(action)}
-                          className="text-[10px] px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                          data-testid={`button-quick-action-${action.slice(0, 20)}`}
+                          className="text-left text-[11px] px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          data-testid={`button-quick-${action.slice(0, 20)}`}
                         >
                           {action}
                         </button>
@@ -3275,25 +3290,22 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                             <Globe className="h-3 w-3 text-white" />
                           </div>
                         )}
-                        <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                          msg.role === 'user'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm'
-                        }`}>
+                        <div className={`max-w-[85%] rounded-xl px-3 py-2 ${msg.role === 'user' ? 'bg-blue-600' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm'}`}>
+                          {msg.images?.map((img, j) => (
+                            <img key={j} src={img} alt="upload" className="max-h-32 rounded mb-1 object-cover" />
+                          ))}
                           {msg.role === 'user' ? (
-                            <p className="text-xs text-white">{msg.content}</p>
+                            <p className="text-xs text-white leading-relaxed">{msg.content}</p>
                           ) : (
-                            <div className="space-y-0.5">
-                              {renderChatContent(msg.content)}
-                            </div>
+                            <div className="space-y-0.5">{renderChatContent(msg.content)}</div>
                           )}
                           {msg.role === 'assistant' && (
                             <button
                               onClick={() => navigator.clipboard.writeText(msg.content)}
-                              className="mt-2 text-[9px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1"
-                              data-testid={`button-copy-message-${i}`}
+                              className="mt-1.5 text-[9px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1"
+                              data-testid={`button-copy-${i}`}
                             >
-                              <Copy className="h-2.5 w-2.5" /> Copy all
+                              <Copy className="h-2.5 w-2.5" /> Copy
                             </button>
                           )}
                         </div>
@@ -3304,8 +3316,8 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                         <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center shrink-0 mr-2 mt-0.5">
                           <Globe className="h-3 w-3 text-white" />
                         </div>
-                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 shadow-sm">
-                          <div className="flex gap-1 items-center">
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 shadow-sm">
+                          <div className="flex gap-1">
                             <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
                             <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '150ms' }} />
                             <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -3318,16 +3330,34 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 )}
               </div>
 
-              {/* Quick actions row (when chat has messages) */}
+              {/* Attached image previews */}
+              {chatImages.length > 0 && (
+                <div className="px-3 py-2 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2 flex-wrap shrink-0">
+                  {chatImages.map((img, i) => (
+                    <div key={i} className="relative">
+                      <img src={img.dataUrl} alt={img.name} className="h-12 w-12 object-cover rounded-md border border-gray-200 dark:border-gray-600" />
+                      <button
+                        onClick={() => setChatImages(prev => prev.filter((_, idx) => idx !== i))}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center"
+                        data-testid={`button-remove-image-${i}`}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Quick actions bar */}
               {chatMessages.length > 0 && (
-                <div className="px-3 py-1.5 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 flex gap-1.5 overflow-x-auto shrink-0">
-                  {CHAT_QUICK_ACTIONS.slice(0, 4).map((action) => (
+                <div className="px-3 py-1.5 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-1.5 overflow-x-auto shrink-0">
+                  {CHAT_QUICK_ACTIONS.slice(0, 5).map((action) => (
                     <button
                       key={action}
                       onClick={() => sendChat(action)}
                       disabled={chatLoading}
-                      className="text-[9px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:hover:text-blue-400 whitespace-nowrap transition-colors disabled:opacity-50"
-                      data-testid={`button-quick-${action.slice(0, 15)}`}
+                      className="text-[9px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap transition-colors disabled:opacity-40 shrink-0"
+                      data-testid={`button-qa-${action.slice(0, 12)}`}
                     >
                       {action}
                     </button>
@@ -3335,37 +3365,102 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 </div>
               )}
 
-              {/* Input area */}
-              <div className="px-3 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shrink-0">
+              {/* Input */}
+              <div className="px-3 py-2.5 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shrink-0">
                 <div className="flex gap-2 items-end">
+                  <input
+                    ref={chatFileInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleChatFileSelect}
+                    data-testid="input-chat-file"
+                  />
+                  <button
+                    onClick={() => chatFileInputRef.current?.click()}
+                    className="p-2 rounded-md border border-gray-200 dark:border-gray-600 text-gray-400 hover:text-blue-500 hover:border-blue-400 transition-colors shrink-0"
+                    title="Attach photo or video"
+                    data-testid="button-chat-attach"
+                  >
+                    <Image className="h-4 w-4" />
+                  </button>
                   <textarea
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        sendChat();
-                      }
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
                     }}
-                    placeholder={`Ask the SEO Machine anything about ${client.businessName}'s website…`}
+                    placeholder={`Type anything about ${client.businessName}'s website…`}
                     rows={2}
-                    className="flex-1 text-xs resize-none rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400"
+                    className="flex-1 text-xs resize-none rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400"
                     data-testid="input-chat-message"
                     disabled={chatLoading}
                   />
                   <button
                     onClick={() => sendChat()}
-                    disabled={chatLoading || !chatInput.trim()}
+                    disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)}
                     className="p-2.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
                     data-testid="button-chat-send"
                   >
-                    {chatLoading
-                      ? <Loader2 className="h-4 w-4 text-white animate-spin" />
-                      : <Send className="h-4 w-4 text-white" />
-                    }
+                    {chatLoading ? <Loader2 className="h-4 w-4 text-white animate-spin" /> : <Send className="h-4 w-4 text-white" />}
                   </button>
                 </div>
-                <p className="text-[9px] text-gray-400 mt-1">Enter to send · Shift+Enter for new line</p>
+                <p className="text-[9px] text-gray-400 mt-1">Enter to send · Shift+Enter for new line · 📎 attach photos</p>
+              </div>
+            </div>
+
+            {/* ── RIGHT: Live Preview pane ── */}
+            <div className="flex flex-col bg-gray-100 dark:bg-gray-900" style={{ width: '48%' }}>
+              {/* Preview header */}
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-800 dark:bg-gray-950 border-b border-gray-700 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Monitor className="h-3.5 w-3.5 text-gray-400" />
+                  <span className="text-[11px] font-medium text-gray-300">Live Preview</span>
+                </div>
+                {siteReady && sitePageSlugs.length > 0 && (
+                  <select
+                    value={chatPreviewSlug || sitePageSlugs[0]}
+                    onChange={(e) => setChatPreviewSlug(e.target.value)}
+                    className="text-[10px] bg-gray-700 text-gray-200 rounded px-1.5 py-0.5 border border-gray-600 outline-none"
+                    data-testid="select-preview-page"
+                  >
+                    {sitePageSlugs.map(slug => (
+                      <option key={slug} value={slug}>{slug === 'home' ? 'Homepage' : slug}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Preview content */}
+              <div className="flex-1 overflow-hidden">
+                {siteReady ? (
+                  <iframe
+                    src={`/api/clients/${client.id}/site-preview/${chatPreviewSlug || sitePageSlugs[0]}?orgId=${orgId}`}
+                    className="w-full h-full border-0"
+                    title="Website preview"
+                    data-testid="iframe-site-preview"
+                  />
+                ) : blueprint ? (
+                  <div className="h-full overflow-y-auto bg-white dark:bg-gray-800">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-900/20">
+                      <p className="text-[11px] text-yellow-700 dark:text-yellow-300 font-medium">Blueprint preview — generate the site to see the live version</p>
+                    </div>
+                    {blueprint.pages?.[0]?.sections?.map((section: any, i: number) => (
+                      <SectionPreview key={i} section={section} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                    <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-3">
+                      <Monitor className="h-6 w-6 text-gray-400" />
+                    </div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">No preview yet</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 max-w-[200px]">
+                      Generate a blueprint and build the site to see a live preview here
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

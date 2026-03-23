@@ -11882,9 +11882,9 @@ ${(linkMap.recommendations || []).map((r: any) => `- On /${r.fromSlug}: add link
     try {
       if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
       const { clientId } = req.params;
-      const { orgId, message, history = [] } = req.body;
+      const { orgId, message, history = [], images = [] } = req.body;
       if (!orgId) return res.status(400).json({ error: 'orgId required' });
-      if (!message?.trim()) return res.status(400).json({ error: 'message required' });
+      if (!message?.trim() && images.length === 0) return res.status(400).json({ error: 'message or image required' });
 
       const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
       if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
@@ -11933,10 +11933,21 @@ YOUR ROLE
 - Format responses clearly with headings and sections so content is easy to copy-paste
 - Be direct and practical — produce real content, not just advice`;
 
+      const buildContent = (text: string, imgs: string[]) => {
+        if (!imgs?.length) return text;
+        return [
+          { type: 'text', text: text || 'Analyse this image and help me incorporate it into the website.' },
+          ...imgs.map((img: string) => ({ type: 'image_url', image_url: { url: img, detail: 'high' } })),
+        ];
+      };
+
       const messages: any[] = [
         { role: 'system', content: systemPrompt },
-        ...history.slice(-20).map((m: any) => ({ role: m.role, content: m.content })),
-        { role: 'user', content: message },
+        ...history.slice(-20).map((m: any) => ({
+          role: m.role,
+          content: m.images?.length ? buildContent(m.content, m.images) : m.content,
+        })),
+        { role: 'user', content: buildContent(message, images) },
       ];
 
       const completion = await openai.chat.completions.create({
