@@ -1704,7 +1704,7 @@ export default function ClientsPage() {
 
   const filteredClients = clients.filter(client => {
     if (client.archived) return false;
-    if (searchQuery && !client.businessName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !(client.businessName ?? '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (healthFilter !== 'all' && client.healthStatus !== healthFilter) return false;
     if (regionFilter !== 'all') {
       if (client.regionId !== regionFilter) return false;
@@ -1886,7 +1886,7 @@ export default function ClientsPage() {
 
       // Duplicate check — case-insensitive match on business name
       const normalised = newBusinessName.trim().toLowerCase();
-      const duplicate = clients.find(c => c.businessName.trim().toLowerCase() === normalised);
+      const duplicate = clients.find(c => (c.businessName ?? '').trim().toLowerCase() === normalised);
       if (duplicate) {
         toast({
           title: "Duplicate client",

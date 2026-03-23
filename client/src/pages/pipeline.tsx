@@ -84,7 +84,7 @@ export default function PipelinePage() {
   // Filter leads using hierarchical territory fields
   const filteredLeads = leads.filter(lead => {
     if (lead.archived) return false;
-    if (searchQuery && !lead.companyName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !(lead.companyName ?? '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (stageFilter !== 'all' && lead.stage !== stageFilter) return false;
     
     // Territory filtering using persisted fields
@@ -278,7 +278,7 @@ export default function PipelinePage() {
     if (!newCompanyName.trim()) return;
     
     const archivedMatch = leads.find(
-      l => l.archived && l.companyName.toLowerCase() === newCompanyName.toLowerCase().trim()
+      l => l.archived && (l.companyName ?? '').toLowerCase() === newCompanyName.toLowerCase().trim()
     );
     
     if (archivedMatch && !showArchivedWarning) {
