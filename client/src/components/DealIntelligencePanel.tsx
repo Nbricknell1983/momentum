@@ -1996,17 +1996,42 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         throw new Error(err.error || 'Failed to fetch GBP data');
       }
       const data = await res.json();
+      const resolvedPlaceId = data.placeId || placeId.trim();
+      const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${resolvedPlaceId}`;
       const sourceData: any = {
         ...(lead.sourceData || { source: 'manual' }),
-        googlePlaceId: data.placeId || placeId.trim(),
+        googlePlaceId: resolvedPlaceId,
         googleRating: data.rating ?? lead.sourceData?.googleRating,
         googleReviewCount: data.reviewCount ?? lead.sourceData?.googleReviewCount,
         googleTypes: data.types || lead.sourceData?.googleTypes,
-        googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${data.placeId || placeId.trim()}`,
+        googleMapsUrl: mapsUrl,
         googleAddress: data.address || lead.sourceData?.googleAddress,
         googlePhone: data.phone || lead.sourceData?.googlePhone,
         googleWebsite: data.website || lead.sourceData?.googleWebsite,
         category: data.primaryType || lead.sourceData?.category,
+      };
+      // Build an evidenceBundle.gbp record so the Prep Pack card shows confirmed
+      // data rather than falling back to AI inference text
+      const existingEb = (lead as any).evidenceBundle || {};
+      const gbpEvidence = {
+        placeId: resolvedPlaceId,
+        name: data.name || null,
+        rating: data.rating ?? null,
+        reviewCount: data.reviewCount ?? null,
+        address: data.address || null,
+        phone: data.phone || null,
+        mapsUrl,
+        category: data.primaryType || null,
+        editorialSummary: null,
+        isOpen: null,
+        healthNotes: [] as string[],
+        candidates: [] as any[],
+        linkedManually: true,
+      };
+      const evidenceBundle = {
+        ...existingEb,
+        gbp: gbpEvidence,
+        gatheredAt: new Date().toISOString(),
       };
       const leadUpdates: Partial<Lead> = {
         sourceData,
@@ -2014,8 +2039,9 @@ export default function DealIntelligencePanel({ lead }: DealIntelligencePanelPro
         phone: lead.phone || data.phone || undefined,
         website: lead.website || data.website || undefined,
         industry: data.primaryType || lead.industry || undefined,
+        evidenceBundle,
         updatedAt: new Date(),
-      };
+      } as any;
       dispatch(patchLead({ id: lead.id, updates: leadUpdates }));
       await updateLeadInFirestore(orgId, lead.id, leadUpdates, authReady);
       toast({
