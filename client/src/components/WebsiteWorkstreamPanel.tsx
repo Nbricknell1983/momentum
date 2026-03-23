@@ -2145,6 +2145,8 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [robotsOpen, setRobotsOpen] = useState(false);
   const [schemaOpen, setSchemaOpen] = useState<Record<string, boolean>>({});
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [replitUrl, setReplitUrl] = useState<string>(client.websiteWorkstream?.replitUrl || '');
+  const [savingReplitUrl, setSavingReplitUrl] = useState(false);
 
   const copyToClipboard = useCallback((text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -2533,6 +2535,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 </TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs h-7 gap-1" data-testid="tab-workstream-preview"><Eye className="h-3 w-3" />Preview</TabsTrigger>
                 <TabsTrigger value="launch"  className="text-xs h-7 gap-1" data-testid="tab-workstream-launch"><Rocket className="h-3 w-3" />Launch</TabsTrigger>
+                <TabsTrigger value="code"    className="text-xs h-7 gap-1" data-testid="tab-workstream-code"><Code2 className="h-3 w-3" />Code</TabsTrigger>
               </TabsList>
 
               {/* ── PLAN ── */}
@@ -3150,6 +3153,118 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                   blueprint={blueprint}
                   toast={toast}
                 />
+              </TabsContent>
+
+              {/* ── CODE (Replit embed) ── */}
+              <TabsContent value="code" className="space-y-4">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Replit Embed</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                      Paste a Replit project URL to embed the full editor here. Open your Replit project, copy the URL from the browser, and paste it below.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={replitUrl}
+                      onChange={e => setReplitUrl(e.target.value)}
+                      placeholder="https://replit.com/@username/project-name"
+                      className="flex-1 h-8 px-3 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      data-testid="input-replit-url"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs px-3 shrink-0"
+                      disabled={savingReplitUrl || !replitUrl.trim()}
+                      data-testid="btn-save-replit-url"
+                      onClick={async () => {
+                        if (!orgId || !authReady) return;
+                        setSavingReplitUrl(true);
+                        try {
+                          const updates: any = {
+                            websiteWorkstream: {
+                              ...(client.websiteWorkstream || {}),
+                              replitUrl: replitUrl.trim() || null,
+                            },
+                          };
+                          dispatch(updateClient({ id: client.id, updates }));
+                          await updateClientInFirestore(orgId, client.id, updates, authReady);
+                          toast({ title: 'Replit URL saved' });
+                        } catch (e: any) {
+                          toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+                        } finally {
+                          setSavingReplitUrl(false);
+                        }
+                      }}
+                    >
+                      {savingReplitUrl ? 'Saving…' : 'Save'}
+                    </Button>
+                    {replitUrl && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs px-2 text-gray-400 hover:text-red-500 shrink-0"
+                        data-testid="btn-clear-replit-url"
+                        onClick={async () => {
+                          setReplitUrl('');
+                          if (!orgId || !authReady) return;
+                          const updates: any = {
+                            websiteWorkstream: {
+                              ...(client.websiteWorkstream || {}),
+                              replitUrl: null,
+                            },
+                          };
+                          dispatch(updateClient({ id: client.id, updates }));
+                          await updateClientInFirestore(orgId, client.id, updates, authReady).catch(() => {});
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {client.websiteWorkstream?.replitUrl ? (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ height: '75vh' }}>
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono truncate max-w-xs">{client.websiteWorkstream.replitUrl}</span>
+                      <a
+                        href={client.websiteWorkstream.replitUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline shrink-0 ml-2"
+                        data-testid="link-replit-open"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Open in Replit
+                      </a>
+                    </div>
+                    <iframe
+                      src={(() => {
+                        try {
+                          const url = new URL(client.websiteWorkstream.replitUrl);
+                          url.searchParams.set('embed', '1');
+                          return url.toString();
+                        } catch {
+                          return client.websiteWorkstream.replitUrl;
+                        }
+                      })()}
+                      className="w-full h-full border-0"
+                      allow="clipboard-read; clipboard-write"
+                      data-testid="iframe-replit-embed"
+                      title="Replit Editor"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 text-center space-y-2 text-gray-400">
+                    <Code2 className="h-8 w-8 opacity-30" />
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No Replit project linked</p>
+                    <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
+                      Paste your Replit project URL above and hit Save to embed the full editor here.
+                    </p>
+                  </div>
+                )}
               </TabsContent>
 
             </Tabs>
