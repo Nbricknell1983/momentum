@@ -1,0 +1,75 @@
+Next best step: add an Autopilot Orchestrator that scans Firestore on a schedule and enqueues any needed agent jobs (respecting TTL/idempotency) without you clicking anything.
+
+What to build (in order)
+
+Autopilot scanner (server-side)
+Endpoint: POST /api/agent/autopilot-scan
+For each org: paginate through active leads/clients
+For each entity: evaluate which taskTypes are due (TTL expired or never run, deps satisfied) and enqueue jobs with idempotencyKey
+Respect per-org caps (e.g., max 50 new jobs per scan) and backoff if queue depth is high
+Support ?orgId= and ?taskTypes[]= filters for targeted scans
+Scheduler to run it
+Option A: OpenClaw cron every 5 minutes → call /api/agent/autopilot-scan
+Option B: Cloud Scheduler/CRON hitting the endpoint with a shared secret
+Option C: A lightweight worker process loop (setInterval) in your server (less precise; relies on uptime)
+Guardrails and fairness
+Per-org quotas and burst limits
+Global concurrency cap (e.g., only N running per taskType)
+Quiet hours window per org (optional)
+Back-pressure: if queued > threshold, skip new enqueues this scan
+Health + alerting
+/api/health/agent-queue endpoint: queueDepth, running, avgLatency, failureRate, ttlSkips
+Alert on:
+failed jobs hitting maxRetries
+nextAttemptAt drift > 30m for queued jobs
+no successful runs in last 24h for any critical taskType
+Dashboard with: success rate, retries/job, TTL skips, per-task latency and throughput
+Dead-letter and reprocessing
+On repeated failure: move to agentJobs_deadletter with lastError and snapshot of input
+Simple /api/agent-jobs/:id/retry to manually revive
+Copy blocks to get moving
+
+COPY: Replit prompt to implement Autopilot Orchestrator
+Implement server-side “Autopilot Orchestrator”:
+
+New endpoint POST /api/agent/autopilot-scan (auth-required), optional ?orgId=&taskTypes[]=&limit=&force=true
+Logic:
+For each (org → entities): determine due taskTypes via findLatestSuccessfulRun + TTLs
+Ensure dependencies (dependsOn) satisfied or enqueue them first
+Enqueue jobs with idempotencyKey; honor per-org and global caps; skip if queue too deep
+Config:
+AUTOPILOT_SCAN_LIMIT_PER_ORG (default 50)
+AUTOPILOT_GLOBAL_QUEUE_MAX (default 1000)
+AUTOPILOT_ENABLE=true/false
+Health:
+GET /api/health/agent-queue: { queued, running, failed24h, ttlSkips24h, byTaskType: {...} }
+Add unit tests for: TTL skip, idempotency de-dupe, dependency-driven enqueue, cap/backpressure logic
+COPY: OpenClaw cron to run every 5 min (adjust URL/secret)
+openclaw cron add --job '{
+"name": "autopilot-scan-5min",
+"schedule": { "kind": "every", "everyMs": 300000 },
+"payload": {
+"kind": "agentTurn",
+"message": "Hit Momentum /api/agent/autopilot-scan with shared secret",
+"model": "openai/gpt-5-mini",
+"timeoutSeconds": 15
+},
+"sessionTarget": "isolated",
+"enabled": true,
+"delivery": { "mode": "none" }
+}'
+
+Note: The cron “agentTurn” should call your API. If you want, I’ll wire this to a tiny fetcher sub-agent that POSTs to your endpoint with the secret.
+
+COPY: Minimal fetcher (Node) for cron/sub-agent
+import fetch from "node-fetch";
+await fetch(process.env.MOMENTUM_AUTOPILOT_URL, {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+"x-autopilot-secret": process.env.MOMENTUM_AUTOPILOT_SECRET
+},
+body: JSON.stringify({ reason: "scheduled-scan" })
+});
+
+If you say “generate the scanner,” I’ll produce the endpoint, the scanning loop (with caps/backpressure), and the health endpoint scaffold so you can paste it straight in.

@@ -171,6 +171,31 @@ service cloud.firestore {
       allow write: if false;
     }
     
+    // Agent jobs — only backend writes (via Admin SDK); managers can read
+    match /orgs/{orgId}/agentJobs/{jobId} {
+      allow read: if isOrgMember(orgId) && isManager(orgId);
+      allow write: if false; // backend-only via Admin SDK
+    }
+
+    // Dead-letter queue — managers can read; no client writes
+    match /orgs/{orgId}/agentJobs_deadletter/{jobId} {
+      allow read: if isOrgMember(orgId) && isManager(orgId);
+      allow write: if false;
+    }
+
+    // Engine history subcollection — immutable; managers can read
+    match /orgs/{orgId}/leads/{leadId}/engineHistory/{runId} {
+      allow read: if isOrgMember(orgId) && isManager(orgId);
+      allow create: if false; // backend-only
+      allow update, delete: if false;
+    }
+
+    match /orgs/{orgId}/clients/{clientId}/engineHistory/{runId} {
+      allow read: if isOrgMember(orgId) && isManager(orgId);
+      allow create: if false;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

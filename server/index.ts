@@ -104,6 +104,7 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
       startBullpenScheduler(port);
       startPrepReadinessScheduler(port);
+      startAutopilotScheduler(port);
     },
   );
 })();
@@ -238,4 +239,45 @@ function startPrepReadinessScheduler(port: number) {
   // Check every 30 minutes (same interval as bullpen scheduler)
   setInterval(checkAndRun, 30 * 60 * 1000);
   log('Prep readiness scheduler started (fires at 6am and 2pm AEST)', 'prep-scheduler');
+}
+
+// ── Autopilot Orchestrator Scheduler ──────────────────────────────────────────
+// Runs every 5 minutes. Hits POST /api/agent/autopilot-scan internally.
+// Respects AUTOPILOT_ENABLE env flag — off by default in dev.
+function startAutopilotScheduler(port: number) {
+  if (process.env.AUTOPILOT_ENABLE === 'false' || !process.env.AUTOPILOT_ENABLE) {
+    log('Autopilot scheduler disabled (set AUTOPILOT_ENABLE=true to enable)', 'autopilot');
+    return;
+  }
+
+  const INTERVAL_MS = 5 * 60 * 1000; // 5 min
+
+  async function runScan() {
+    try {
+      const url = `http://localhost:${port}/api/agent/autopilot-scan`;
+      const res = await fetch(url, {
+        method:  'POST',
+        headers: {
+          'Content-Type':    'application/json',
+          'x-scheduler-key': process.env.INTERNAL_SCHEDULER_KEY || '',
+        },
+        body: JSON.stringify({ reason: 'scheduled-scan' }),
+      });
+      const body = await res.text();
+      if (!res.ok) {
+        log(`[AutopilotScheduler] scan failed (${res.status}): ${body}`, 'autopilot');
+      } else {
+        const data = JSON.parse(body);
+        const s = data.scan;
+        log(`[AutopilotScheduler] scan complete — enqueued=${s?.enqueuedJobs ?? 0} ttlSkipped=${s?.skippedTtl ?? 0} entities=${s?.scannedEntities ?? 0} ms=${s?.durationMs ?? 0}`, 'autopilot');
+      }
+    } catch (err: any) {
+      log(`[AutopilotScheduler] error: ${err.message}`, 'autopilot');
+    }
+  }
+
+  // Run once at startup (after a short delay for routes to settle)
+  setTimeout(runScan, 30_000);
+  setInterval(runScan, INTERVAL_MS);
+  log(`Autopilot orchestrator started (every ${INTERVAL_MS / 60000} min)`, 'autopilot');
 }

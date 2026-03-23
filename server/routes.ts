@@ -20,6 +20,13 @@ import { writeSettingsAudit } from "./lib/settingsAudit";
 import { resolveAgentId, getSupportedTaskTypes, makeIdempotencyKey, getDependencies, DEFAULT_MAX_RETRIES } from "./agent-jobs/router";
 import { createAgentJob, getAgentJob, listAgentJobs, findJobByIdempotencyKey } from "./agent-jobs/firestore-helpers";
 import { processAgentJob } from "./agent-jobs/processor";
+import {
+  runAutopilotScan,
+  getQueueHealthStats,
+  moveToDeadLetter,
+  reviveFromDeadLetter,
+  AUTOPILOT_DEFAULTS,
+} from "./agent-jobs/autopilot";
 import { scoreGbpCandidate, buildLeadContext, scoreGbpSibling, type GbpLeadContext } from "./lib/gbp-scorer";
 import { gatherPaidSearchEvidence } from "./services/paid-search/transparency-service";
 import { gatherPaidSearchViaSerpApi, isSerpApiConfigured } from "./services/paid-search/serpapi-service";
@@ -12107,6 +12114,131 @@ Rules:
     } catch (err: any) {
       console.error('[agent-jobs] Process error:', err);
       res.status(500).json({ error: err.message || 'Failed to process agent job' });
+    }
+  });
+
+  // POST /api/agent-jobs/:jobId/retry — revive a job from the dead-letter queue
+  app.post('/api/agent-jobs/:jobId/retry', requireOrgAccess, requireManager, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const orgId: string = req.orgId;
+      const { jobId } = req.params as { jobId: string };
+
+      const newJobId = await reviveFromDeadLetter(firestore, orgId, jobId);
+      if (!newJobId) {
+        return res.status(404).json({ error: `Job ${jobId} not found in dead-letter queue` });
+      }
+      res.json({
+        revivedJobId: newJobId,
+        originalJobId: jobId,
+        message: `Job revived from dead-letter queue. POST /api/agent-jobs/${newJobId}/process to execute.`,
+      });
+    } catch (err: any) {
+      console.error('[agent-jobs] Retry error:', err);
+      res.status(500).json({ error: err.message || 'Failed to retry job' });
+    }
+  });
+
+  // ─── Autopilot Orchestrator ────────────────────────────────────────────────
+  // Shared-secret auth (x-autopilot-secret) OR manager session token
+
+  function autopilotAuth(req: any, res: any, next: any) {
+    // Allow via scheduler key (server-to-server internal call — no org context needed)
+    const schedulerKey = req.headers['x-scheduler-key'];
+    if (schedulerKey && schedulerKey === process.env.INTERNAL_SCHEDULER_KEY) return next();
+
+    // Allow via autopilot secret (OpenClaw cron or external caller)
+    const autopilotSecret = req.headers['x-autopilot-secret'];
+    if (autopilotSecret && autopilotSecret === process.env.AUTOPILOT_SECRET) return next();
+
+    // User-facing: require org membership + manager role
+    return requireOrgAccess(req, res, () => requireManager(req, res, next));
+  }
+
+  // POST /api/agent/autopilot-scan — trigger a proactive scan
+  // Auth: x-scheduler-key (internal) | x-autopilot-secret (OpenClaw cron) | manager token
+  // No requireOrgAccess — scheduler calls scan ALL orgs; user calls scope to their own.
+  app.post('/api/agent/autopilot-scan', autopilotAuth, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+
+      const {
+        taskTypes,
+        limit,
+        force = false,
+        entityType,
+        reason,
+      } = req.body as {
+        taskTypes?:   string[];
+        limit?:       number;
+        force?:       boolean;
+        entityType?:  'lead' | 'client';
+        reason?:      string;
+      };
+
+      if (!AUTOPILOT_DEFAULTS.ENABLE) {
+        return res.status(200).json({ skipped: true, reason: 'AUTOPILOT_ENABLE=false' });
+      }
+
+      // Determine scope: scheduler = all orgs; user request = their org only
+      const isScheduler = req.headers['x-scheduler-key'] === process.env.INTERNAL_SCHEDULER_KEY
+                       || req.headers['x-autopilot-secret'] === process.env.AUTOPILOT_SECRET;
+
+      // orgId from query or body for targeted scans; undefined for all-org scanner
+      const targetOrgId: string | undefined =
+        (req.query.orgId as string | undefined)
+        || (!isScheduler ? req.orgId as string | undefined : undefined);
+
+      const caller = req.uid || (isScheduler ? 'scheduler' : 'unknown');
+      console.log(`[autopilot] Scan triggered by ${caller}${reason ? ` (${reason})` : ''} org=${targetOrgId || 'all'}`);
+
+      const result = await runAutopilotScan(firestore, {
+        orgId:      targetOrgId,
+        taskTypes,
+        limit,
+        force,
+        entityType,
+      });
+
+      res.json({
+        ok:     true,
+        scan:   result,
+        config: {
+          scanLimitPerOrg: AUTOPILOT_DEFAULTS.SCAN_LIMIT_PER_ORG,
+          globalQueueMax:  AUTOPILOT_DEFAULTS.GLOBAL_QUEUE_MAX,
+          enabled:         AUTOPILOT_DEFAULTS.ENABLE,
+        },
+      });
+    } catch (err: any) {
+      console.error('[autopilot] Scan error:', err);
+      res.status(500).json({ error: err.message || 'Autopilot scan failed' });
+    }
+  });
+
+  // GET /api/health/agent-queue — queue depth and health stats
+  app.get('/api/health/agent-queue', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const orgId: string = req.orgId;
+
+      const stats = await getQueueHealthStats(firestore, orgId);
+      const isHealthy = stats.alertFlags.length === 0;
+
+      res.status(isHealthy ? 200 : 207).json({
+        healthy:    isHealthy,
+        orgId,
+        ...stats,
+        checkedAt:  new Date().toISOString(),
+        config: {
+          autopilotEnabled:   AUTOPILOT_DEFAULTS.ENABLE,
+          scanLimitPerOrg:    AUTOPILOT_DEFAULTS.SCAN_LIMIT_PER_ORG,
+          globalQueueMax:     AUTOPILOT_DEFAULTS.GLOBAL_QUEUE_MAX,
+          maxRetries:         DEFAULT_MAX_RETRIES,
+        },
+      });
+    } catch (err: any) {
+      console.error('[health] Agent queue health error:', err);
+      res.status(500).json({ error: err.message || 'Failed to get queue health' });
     }
   });
 
