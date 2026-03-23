@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, selectLead } from '@/store';
-import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText, Check, AlertCircle, Cloud, Shield, Users, Zap } from 'lucide-react';
+import { ChevronDown, ChevronUp, Phone, Mail, Copy, ExternalLink, Mic, MicOff, Archive, Trash2, Heart, HeartOff, Loader2, Globe, MessageSquare, Send, CalendarIcon, Sparkles, RotateCcw, ThumbsDown, FileText, Check, AlertCircle, Cloud, Shield, Users, Zap, ArrowRight } from 'lucide-react';
 import { SiFacebook, SiInstagram, SiLinkedin } from 'react-icons/si';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Card } from '@/components/ui/card';
@@ -56,6 +56,7 @@ interface LeadCardExpandedProps {
   onToggle: () => void;
   focusMode?: boolean;
   onAiSectionChange?: (section: 'pre_call' | 'objection' | 'follow_up' | 'prospect') => void;
+  onConvertToClient?: (lead: Lead) => void;
 }
 
 function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
@@ -206,7 +207,7 @@ function NurtureEnrollmentSection({ lead }: { lead: Lead }) {
   );
 }
 
-export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode, onAiSectionChange }: LeadCardExpandedProps) {
+export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode, onAiSectionChange, onConvertToClient }: LeadCardExpandedProps) {
   const dispatch = useDispatch();
   const { orgId, authReady, user } = useAuth();
   const { toast } = useToast();
@@ -364,6 +365,13 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
 
   const handleStageChange = async (stage: Stage) => {
     console.log('[LeadCard] handleStageChange called:', { leadId: lead.id, stage, currentNurtureMode: lead.nurtureMode });
+
+    // Intercept "won" — open the conversion modal instead of saving directly
+    if (stage === 'won' && onConvertToClient) {
+      onConvertToClient(lead);
+      return;
+    }
+
     dispatch(updateLeadStage({ leadId: lead.id, stage }));
     
     // Persist to Firestore with nurture enrollment if moving to nurture stage
@@ -817,6 +825,15 @@ export default function LeadCardExpanded({ lead, isExpanded, onToggle, focusMode
                 ))}
               </SelectContent>
             </Select>
+            {lead.stage === 'won' && onConvertToClient && (
+              <button
+                onClick={() => onConvertToClient(lead)}
+                className="w-full mt-1 flex items-center justify-center gap-1.5 h-8 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                data-testid="button-convert-to-client"
+              >
+                <ArrowRight className="h-3.5 w-3.5" /> Convert to Client
+              </button>
+            )}
           </div>
 
           {/* Next Contact Date Editor */}

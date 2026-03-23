@@ -13,6 +13,7 @@ interface KanbanColumnExpandableProps {
   expandedLeadId: string | null;
   onLeadToggle: (leadId: string | null) => void;
   onAddLead?: () => void;
+  onConvertToClient?: (lead: Lead) => void;
 }
 
 export default function KanbanColumnExpandable({ 
@@ -20,7 +21,8 @@ export default function KanbanColumnExpandable({
   leads, 
   expandedLeadId, 
   onLeadToggle, 
-  onAddLead 
+  onAddLead,
+  onConvertToClient,
 }: KanbanColumnExpandableProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
 
@@ -56,6 +58,7 @@ export default function KanbanColumnExpandable({
               lead={lead}
               isExpanded={expandedLeadId === lead.id}
               onToggle={() => onLeadToggle(expandedLeadId === lead.id ? null : lead.id)}
+              onConvertToClient={onConvertToClient}
             />
           ))}
           {leads.length === 0 && (

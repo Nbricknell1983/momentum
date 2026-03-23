@@ -22,9 +22,10 @@ interface LeadFocusViewProps {
   onNavigate?: (direction: 'prev' | 'next') => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  onConvertToClient?: (lead: Lead) => void;
 }
 
-export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasNext }: LeadFocusViewProps) {
+export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasNext, onConvertToClient }: LeadFocusViewProps) {
   const activities = useSelector((state: RootState) => state.app.activities);
   const momentumResult = calculateDealMomentumScore(lead, activities);
   const trafficStatus = getTrafficLightStatus(lead);
@@ -123,6 +124,7 @@ export default function LeadFocusView({ lead, onClose, onNavigate, hasPrev, hasN
               isExpanded={true}
               onToggle={onClose}
               focusMode={true}
+              onConvertToClient={onConvertToClient}
             />
           </div>
         </ScrollArea>

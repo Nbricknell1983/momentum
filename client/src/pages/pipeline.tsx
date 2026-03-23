@@ -496,6 +496,10 @@ export default function PipelinePage() {
           onNavigate={handleFocusNavigate}
           hasPrev={focusedLeadIndex > 0}
           hasNext={focusedLeadIndex < totalVisibleLeads - 1}
+          onConvertToClient={(lead) => {
+            setFocusedLeadId(null);
+            setPendingConversionLead(lead);
+          }}
         />
       )}
 
@@ -729,6 +733,7 @@ export default function PipelinePage() {
                     setNewStage(stage);
                     setIsAddDialogOpen(true);
                   }}
+                  onConvertToClient={setPendingConversionLead}
                 />
               ))}
             </div>
