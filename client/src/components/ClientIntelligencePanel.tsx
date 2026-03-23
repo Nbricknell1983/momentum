@@ -91,18 +91,27 @@ function buildPresenceEvidence(client: Client, pv: ReturnType<typeof resolvePres
   const bp  = client.businessProfile;
   const se  = client.seoEngine;
 
-  // Prefer the original scraped evidence bundle — same shape as lead workspace
-  const rawEb = pp.evidenceBundle ?? null;
+  // Prefer the original scraped evidence bundle — same shape as lead workspace.
+  // Check in priority order:
+  //   1. si.evidenceBundle           → set during conversion from lead.evidenceBundle (new path)
+  //   2. pp.evidenceBundle           → legacy path (evidenceBundle embedded in prepCallPack object)
+  //   3. (client as any).evidenceBundle → top-level client field (backfill from server)
+  const rawEb =
+    si?.evidenceBundle ??
+    pp.evidenceBundle ??
+    (client as any).evidenceBundle ??
+    null;
+
   if (rawEb) {
     return {
       eb: rawEb,
-      serp: pp.serpData ?? null,
-      ebGatheredAt: pp.ebGatheredAt ?? pp.gatheredAt ?? null,
+      serp: si?.serpData ?? pp.serpData ?? null,
+      ebGatheredAt: rawEb.gatheredAt ?? pp.ebGatheredAt ?? pp.gatheredAt ?? null,
       serpGeneratedAt: pp.serpGeneratedAt ?? null,
       aiGeneratedAt: pp.aiGeneratedAt ?? null,
-      sitemapPageCount: pp.sitemapPages?.length ?? pp.sitemapPageCount ?? 0,
+      sitemapPageCount: pp.sitemapPages?.length ?? pp.sitemapPageCount ?? rawEb.sitemapPageCount ?? 0,
       psAi: pp.presenceSnapshot ?? pp.aiSnapshot ?? null,
-      delta: (client as any).evidenceDelta ?? null,
+      delta: si?.evidenceDelta ?? (client as any).evidenceDelta ?? null,
       deltaPrevGatheredAt: (client as any).evidenceDeltaPrevGatheredAt ?? null,
     };
   }
@@ -318,7 +327,9 @@ function IntelligenceContent({
         <div className="px-4 pt-3 pb-1">
           <div className="flex items-center justify-between mb-2">
             <SectionLabel>Current Digital Presence</SectionLabel>
-            {(client.sourceIntelligence?.prepCallPack as any)?.evidenceBundle ? (
+            {(client.sourceIntelligence?.evidenceBundle ||
+              (client.sourceIntelligence?.prepCallPack as any)?.evidenceBundle ||
+              (client as any).evidenceBundle) ? (
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                 Evidence-backed
               </span>

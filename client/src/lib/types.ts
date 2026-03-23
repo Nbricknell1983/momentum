@@ -2023,6 +2023,9 @@ export interface ClientIntelligenceBrief {
 
 export interface SourceIntelligence {
   prepCallPack?: any;
+  evidenceBundle?: any;       // scraped evidence bundle (from lead.evidenceBundle at conversion time)
+  evidenceDelta?: any;        // delta from previous bundle
+  serpData?: any;             // SERP competitor data
   strategyIntelligence?: StrategyIntelligence;
   growthPrescription?: GrowthPrescription;
   aiGrowthPlan?: AiGrowthPlanOutput;

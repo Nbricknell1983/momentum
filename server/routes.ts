@@ -10915,7 +10915,8 @@ Output valid JSON only, no markdown.`;
       let mutableInstagram = confirmedInstagram;
       let mutableLinkedIn = confirmedLinkedIn;
 
-      const needsBackfill = !mutableWebsite || (!mutableFacebook && !mutableInstagram);
+      const needsEvidenceBackfill = !(si.evidenceBundle ?? (si.prepCallPack as any)?.evidenceBundle);
+      const needsBackfill = !mutableWebsite || (!mutableFacebook && !mutableInstagram) || needsEvidenceBackfill;
       if (needsBackfill && client.sourceDealId) {
         try {
           const leadSnap = await adminDb
@@ -10934,11 +10935,23 @@ Output valid JSON only, no markdown.`;
             if (!mutableFacebook && ld.sourceData?.evidenceBundle?.discovered?.facebookUrl) mutableFacebook = ld.sourceData.evidenceBundle.discovered.facebookUrl;
             if (!mutableInstagram && ld.sourceData?.evidenceBundle?.discovered?.instagramUrl) mutableInstagram = ld.sourceData.evidenceBundle.discovered.instagramUrl;
             // Backfill the client record so future opens are fast
-            const clientPatch: Record<string, string> = {};
+            const clientPatch: Record<string, any> = {};
             if (mutableWebsite   && !client.website)     clientPatch.website     = mutableWebsite;
             if (mutableFacebook  && !client.facebookUrl) clientPatch.facebookUrl = mutableFacebook;
             if (mutableInstagram && !client.instagramUrl) clientPatch.instagramUrl = mutableInstagram;
             if (mutableLinkedIn  && !client.linkedinUrl) clientPatch.linkedinUrl = mutableLinkedIn;
+
+            // Also backfill evidence bundle into sourceIntelligence for existing clients
+            // that were converted before this field was added to the conversion flow.
+            const existingEb = si.evidenceBundle ?? (si.prepCallPack as any)?.evidenceBundle;
+            if (!existingEb && ld.evidenceBundle) {
+              clientPatch['sourceIntelligence.evidenceBundle'] = ld.evidenceBundle;
+              // Also embed in prepCallPack for legacy read paths
+              clientPatch['sourceIntelligence.serpData'] = ld.serpData ?? null;
+              // Update the local si reference so the brief prompt can use it
+              (si as any).evidenceBundle = ld.evidenceBundle;
+            }
+
             if (Object.keys(clientPatch).length > 0) {
               await clientRef.update(clientPatch).catch(() => {}); // fire-and-forget
             }

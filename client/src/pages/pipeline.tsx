@@ -165,9 +165,17 @@ export default function PipelinePage() {
       const now = new Date();
       const nowStr = now.toISOString();
 
-      // Build source intelligence from lead data
+      // Build source intelligence from lead data.
+      // Critically: carry the scraped evidence bundle so the client workspace
+      // can surface "Evidence-backed" presence data (same as lead workspace).
       const sourceIntelligence: SourceIntelligence = {
-        prepCallPack: lead.prepCallPack,
+        // Embed the evidence bundle inside prepCallPack too so legacy read paths work
+        prepCallPack: (lead as any).evidenceBundle
+          ? { ...(lead.prepCallPack || {}), evidenceBundle: (lead as any).evidenceBundle, serpData: (lead as any).serpData }
+          : lead.prepCallPack,
+        evidenceBundle: (lead as any).evidenceBundle ?? null,
+        evidenceDelta: (lead as any).evidenceDelta ?? null,
+        serpData: (lead as any).serpData ?? null,
         strategyIntelligence: lead.strategyIntelligence,
         growthPrescription: lead.growthPrescription,
         aiGrowthPlan: lead.aiGrowthPlan,
