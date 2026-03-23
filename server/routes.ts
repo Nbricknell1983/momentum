@@ -10401,6 +10401,10 @@ Rules:
       const address = client.address || '';
       const isTakeover = !!website;
 
+      // Pull the deep crawl evidence (set during X-ray; carried into sourceIntelligence on conversion)
+      const eb: any = si.evidenceBundle?.website || client.evidenceBundle?.website || {};
+      const hasCrawlData = !!eb?.url;
+
       const strategyContext = si.strategyIntelligence
         ? `Strategy positioning: ${JSON.stringify(si.strategyIntelligence).slice(0, 800)}`
         : '';
@@ -10422,14 +10426,83 @@ Rules:
         ? `Scope audit: ${client.scopeAudit.auditSummary}. Website readiness: ${client.scopeAudit.channelReadiness?.website?.note || ''}`
         : '';
 
+      // ── Deep crawl evidence → SEO preservation scaffold ─────────────────────
+      // Build a structured evidence block from the X-ray crawl so the AI can
+      // generate a blueprint that is already seeded with real data instead of guesses.
+      let crawlEvidenceBlock = '';
+      if (hasCrawlData) {
+        const headings = (eb.headingHierarchy as { tag: string; text: string }[] | undefined) || [];
+        const h1List = headings.filter(h => h.tag === 'H1').map(h => h.text);
+        const h2List = headings.filter(h => h.tag === 'H2').map(h => h.text).slice(0, 10);
+        const h3List = headings.filter(h => h.tag === 'H3').map(h => h.text).slice(0, 8);
+
+        const serviceUrls: string[] = eb.servicePageUrls || [];
+        const locationUrls: string[] = eb.locationPageUrls || [];
+        const urlPaths: string[] = eb.urlStructureSample || [];
+        const serviceKws: string[] = eb.serviceKeywords || [];
+        const locationKws: string[] = eb.locationKeywords || [];
+
+        const schemaAudit: any = eb.schemaFieldAudit || null;
+        const robotsDisallows: string[] = eb.robotsDisallows || [];
+        const internalLinks: { href: string; text: string }[] = (eb.internalLinkUrls || []).slice(0, 20);
+
+        // All discovered pages (deduped, stripped to paths)
+        const allDiscoveredUrls = [...new Set([
+          ...serviceUrls,
+          ...locationUrls,
+          ...urlPaths.map((p: string) => `${eb.url ? new URL(eb.url).origin : ''}${p}`),
+        ])].slice(0, 25);
+
+        crawlEvidenceBlock = `
+═══ EXISTING SITE CRAWL EVIDENCE (use as blueprint foundation) ═══
+Live site: ${eb.url}
+Page title: ${eb.title || 'not captured'}
+Meta description: ${eb.metaDescription || 'not captured'}
+URL structure: ${eb.urlStructure || 'unknown'} ${eb.urlStructure === 'clean' ? '(preserve as-is)' : eb.urlStructure === 'messy' ? '(rewrite to clean slugs with 301 redirects)' : ''}
+Word count: ${eb.wordCount || 'unknown'}
+Schema types present: ${eb.schemaTypes?.join(', ') || 'none'}
+${schemaAudit ? `Schema field completeness: ${schemaAudit.score}%
+  Present fields: ${schemaAudit.present?.join(', ')}
+  Missing fields (add to new build): ${schemaAudit.missing?.join(', ')}` : ''}
+Mobile viewport: ${eb.hasViewport ? '✓ set' : '✗ missing — add to new build'}
+Load time: ${eb.loadTimeMs ? `${eb.loadTimeMs}ms` : 'unknown'}
+Robots.txt disallowed paths: ${robotsDisallows.length ? robotsDisallows.join(', ') : 'none'}
+
+EXISTING HEADING STRUCTURE (use as content scaffold):
+${h1List.length ? `H1: ${h1List.join(' | ')}` : ''}
+${h2List.length ? `H2s: ${h2List.join(' | ')}` : ''}
+${h3List.length ? `H3s: ${h3List.join(' | ')}` : ''}
+
+EXISTING SERVICE KEYWORDS (carry these forward as target keywords):
+${serviceKws.length ? serviceKws.join(', ') : 'none detected'}
+
+EXISTING LOCATION SIGNALS (carry these forward as geo-targets):
+${locationKws.length ? locationKws.join(', ') : 'none detected'}
+
+EXISTING PAGES DISCOVERED (these must all be accounted for in pageStructure):
+${allDiscoveredUrls.map(u => `  - ${u}`).join('\n') || '  (no pages discovered beyond homepage)'}
+
+INTERNAL LINK STRUCTURE (shows what pages exist and how they connect):
+${internalLinks.map(l => `  "${l.text}" → ${l.href}`).join('\n') || '  (none captured)'}
+═══════════════════════════════════════════════════════════════════`;
+      }
+
       const preservationNote = isTakeover
-        ? `IMPORTANT — This is a WEBSITE TAKEOVER/REBUILD project. The client has an existing live site at ${website}.
-You must factor in SEO preservation. The brief must include guidance to:
-- Preserve existing URL structure where possible (to protect backlink equity)
-- Migrate/replicate any existing page metadata and schema
-- Ensure all existing service and location pages are accounted for in the new page structure
-- Flag any pages that will need 301 redirects if URLs change
-- Carry forward any keyword signals the existing site currently targets
+        ? `CRITICAL REQUIREMENT — SEO PRESERVATION TAKEOVER BUILD
+The client has an existing live site at ${website} that is actively ranking.
+They are doing SEO work with another agency and CANNOT afford to lose any rankings.
+
+${crawlEvidenceBlock}
+
+Your blueprint MUST:
+1. Include every existing discovered page in pageStructure (with its existing URL slug as the suggested slug — do not invent new ones)
+2. Use the existing H1s and H2s as the starting point for each page's content scaffold — improve them, don't replace them blindly
+3. Carry all existing service keywords and location signals into the SEO strategy
+4. Populate ALL missing schema fields identified in the field audit above
+5. Add the viewport meta tag if it was missing
+6. Flag any URLs that will need 301 redirects (especially if URL structure is messy and being cleaned up)
+7. Preserve the existing meta title and meta description as a baseline — improve them in the new build but keep the core keyword signals
+
 ${websiteEngineCtx}
 ${seoEngineCtx}`
         : '';
@@ -10463,20 +10536,30 @@ Generate a high-converting website delivery workstream in this exact JSON format
     {
       "pageName": "Home",
       "pageType": "homepage",
+      "slug": "/",
+      "existingUrl": "full URL if this page already exists on the live site, or null",
+      "preserveSlug": true,
       "primaryKeyword": "main keyword",
+      "existingH1": "the current H1 on this page if known, or null",
       "goalStatement": "what this page must achieve",
       "keySections": ["Hero + CTA", "Services overview", "Trust/reviews", "Service areas", "FAQ", "Contact"],
-      "metaTitle": "SEO title tag (55 chars max)",
-      "metaDescription": "SEO meta description (155 chars max)"
+      "metaTitle": "improved SEO title tag (55 chars max) — based on existing if available",
+      "metaDescription": "improved SEO meta description (155 chars max) — based on existing if available",
+      "redirectFrom": null
     },
     {
       "pageName": "Service page name",
       "pageType": "service",
+      "slug": "/services/service-name/",
+      "existingUrl": "existing URL if this page was found on the live site, or null",
+      "preserveSlug": true,
       "primaryKeyword": "service keyword",
+      "existingH1": "current H1 on this page if known, or null",
       "goalStatement": "convert visitors researching this service",
       "keySections": ["Service hero", "What's included", "Benefits", "Process", "Reviews", "CTA"],
       "metaTitle": "Service page title",
-      "metaDescription": "Service meta description"
+      "metaDescription": "Service meta description",
+      "redirectFrom": "old URL if slug is changing, e.g. /old-url/ → list old URL here, or null"
     }
   ],
   "homepageContent": {
@@ -10518,18 +10601,23 @@ Generate a high-converting website delivery workstream in this exact JSON format
 }
 
 Rules:
-- pageStructure must include 1 homepage + 2-4 service/location pages specific to this business
-- homepageContent must be real, specific copy — not placeholders
+- pageStructure must include ALL discovered existing pages from the crawl evidence (listed above) PLUS any important pages that are missing — minimum 1 homepage + all found service/location pages
+- For pages found in the crawl evidence: use the actual existing URL as existingUrl, preserve the slug unless the URL structure is messy
+- For pages with messy URLs (query strings, IDs, .php): create clean slugs AND set redirectFrom to the old URL
+- existingH1 must be filled in with the real H1 from the crawl evidence where known
+- metaTitle and metaDescription should IMPROVE on the existing ones (if found), not invent entirely new ones — carry the core keyword signals
+- homepageContent must be real, specific copy — not placeholders — seeded from the existing H1s and heading structure
 - All content must be conversion-focused, mobile-first, and locally relevant
 - trustSignals must be specific and believable (not generic)${isTakeover ? `
-- preservationPlan is REQUIRED for this takeover project — it must contain real, specific items not generic placeholders
-- redirectsRequired should list specific pages or URL patterns that will need redirects` : ''}
+- preservationPlan is REQUIRED and must use the ACTUAL URLs and data from the crawl evidence above — no generic placeholders
+- redirectsRequired must list specific old-url → new-url pairs discovered from the crawl evidence
+- schemaEnhancements in seoFoundations must list the ACTUAL missing schema fields from the field audit above` : ''}
 - Output valid JSON only, no markdown`;
 
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 3500,
+        max_tokens: 5000,
         response_format: { type: 'json_object' },
       });
 
