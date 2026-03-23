@@ -40,7 +40,8 @@ function shouldAutoFireScopeAudit(client: Client): boolean {
 function shouldAutoFireIntelligenceBrief(client: Client): boolean {
   const brief = client.intelligenceBrief;
   if (brief?.generatedAt) {
-    const age = Date.now() - new Date(brief.generatedAt).getTime();
+    const briefTime = new Date(brief.generatedAt).getTime();
+    const age = Date.now() - briefTime;
     if (age >= 48 * 60 * 60 * 1000) return true; // stale — regenerate
 
     // Detect a "bad" cached brief: presence signals are empty but client clearly
@@ -59,6 +60,23 @@ function shouldAutoFireIntelligenceBrief(client: Client): boolean {
     );
     const briefHasEmptyPresence = !ps?.websiteSignals?.length && !ps?.socialSignals?.length && !ps?.gbpSignals?.length;
     if (hasKnownPresence && briefHasEmptyPresence) return true; // stale bad data — regenerate
+
+    // Detect brief generated before agent job outputs arrived — if any engine output
+    // or strategy/prescription was written AFTER the brief, regenerate to pick it up.
+    const engineTimestamps: (Date | string | undefined)[] = [
+      client.websiteEngine?.generatedAt,
+      client.seoEngine?.generatedAt,
+      client.gbpEngine?.generatedAt,
+      client.adsEngine?.generatedAt,
+      client.strategyDiagnosis?.generatedAt,
+      client.growthPrescription?.generatedAt,
+      client.enrichmentData?.generatedAt,
+    ];
+    const newerEngineExists = engineTimestamps.some(ts => {
+      if (!ts) return false;
+      return new Date(ts).getTime() > briefTime;
+    });
+    if (newerEngineExists) return true; // engine data arrived after brief — regenerate
 
     return false; // fresh + valid
   }
@@ -262,6 +280,51 @@ export function useClientAutoFire(
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, authReady, client.id]);
+
+  // ── Re-fire brief when new engine data arrives after the current brief ────
+  // Tracks the last engine-data timestamp we regenerated the brief for, so we
+  // don't loop on every render.
+  const lastEngineFireRef = useRef<number>(0);
+  useEffect(() => {
+    if (!orgId || !authReady) return;
+    const brief = client.intelligenceBrief;
+    if (!brief?.generatedAt) return; // initial brief not yet generated — initial effect handles it
+    const briefTime = new Date(brief.generatedAt).getTime();
+
+    const engineTimestamps: (Date | string | undefined)[] = [
+      client.websiteEngine?.generatedAt,
+      client.seoEngine?.generatedAt,
+      client.gbpEngine?.generatedAt,
+      client.adsEngine?.generatedAt,
+      client.strategyDiagnosis?.generatedAt,
+      client.growthPrescription?.generatedAt,
+      client.enrichmentData?.generatedAt,
+    ];
+    const latestEngineTime = engineTimestamps.reduce((max, ts) => {
+      if (!ts) return max;
+      const t = new Date(ts).getTime();
+      return t > max ? t : max;
+    }, 0);
+
+    // Only regenerate if engine data is newer than the brief AND we haven't
+    // already fired for this engine timestamp.
+    if (latestEngineTime > briefTime && latestEngineTime > lastEngineFireRef.current) {
+      lastEngineFireRef.current = latestEngineTime;
+      const timer = setTimeout(() => fireIntelligenceBrief(), 2000);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    orgId, authReady,
+    client.intelligenceBrief?.generatedAt,
+    client.websiteEngine?.generatedAt,
+    client.seoEngine?.generatedAt,
+    client.gbpEngine?.generatedAt,
+    client.adsEngine?.generatedAt,
+    client.strategyDiagnosis?.generatedAt,
+    client.growthPrescription?.generatedAt,
+    client.enrichmentData?.generatedAt,
+  ]);
 
   return { websiteRunning, gbpRunning, auditRunning, briefRunning, refetchBrief: fireIntelligenceBrief };
 }

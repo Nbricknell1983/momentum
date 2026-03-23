@@ -1960,6 +1960,10 @@ export interface Client {
   scopeAudit?: ScopeAudit;
   // Client Intelligence Brief — AI-synthesized execution intelligence
   intelligenceBrief?: ClientIntelligenceBrief;
+  // Agent job outputs — written by autopilot/bullpen OpenClaw jobs
+  strategyDiagnosis?: StrategyDiagnosis;
+  growthPrescription?: GrowthPrescription;
+  enrichmentData?: Record<string, any> & { generatedAt?: string };
 }
 
 // ── Client Intelligence Brief ────────────────────────────────────────────────

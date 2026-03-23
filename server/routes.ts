@@ -10992,14 +10992,18 @@ Output valid JSON only, no markdown.`;
         ? `Ads analysis: readiness=${client.adsEngine.readinessScore}/100. ${client.adsEngine.summary}. Budget: $${client.adsEngine.recommendedMonthlyBudget}/mo.`
         : adsChannelStatus ? `Paid search channel: ${adsChannelStatus}.` : '';
 
-      const siCtx = si.strategyIntelligence
-        ? `Business strategy: ${JSON.stringify(si.strategyIntelligence).slice(0, 600)}`
+      // Strategy: prefer live agent job output (client.strategyDiagnosis) over legacy sourceIntelligence field
+      const strategyData = client.strategyDiagnosis || si.strategyIntelligence;
+      const siCtx = strategyData
+        ? `Business strategy: ${JSON.stringify(strategyData).slice(0, 600)}`
         : '';
       const prepCtx = si.prepCallPack
         ? `Pre-sale intelligence (from lead): businessSnapshot="${si.prepCallPack.businessSnapshot || ''}". customerProfile=${JSON.stringify(si.prepCallPack.customerProfile || '').slice(0, 300)}. searchIntentAnalysis=${JSON.stringify(si.prepCallPack.searchIntentAnalysis || '').slice(0, 300)}.`
         : '';
-      const prescriptionCtx = si.growthPrescription
-        ? `Growth prescription: ${si.growthPrescription.businessDiagnosis || ''}. Recommended stack: ${(si.growthPrescription.recommendedStack || []).map((r: any) => r.product).join(', ')}.`
+      // Growth prescription: prefer live agent job output (client.growthPrescription) over legacy sourceIntelligence field
+      const prescriptionData = client.growthPrescription || si.growthPrescription;
+      const prescriptionCtx = prescriptionData
+        ? `Growth prescription: ${prescriptionData.businessDiagnosis || ''}. Recommended stack: ${(prescriptionData.recommendedStack || []).map((r: any) => r.product).join(', ')}.`
         : '';
       const auditCtx = client.scopeAudit
         ? `Scope audit: ${client.scopeAudit.auditSummary}. Recommended scope: ${(client.scopeAudit.recommendedScope || []).join(', ')}.`

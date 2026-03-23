@@ -164,7 +164,7 @@ export default function AdsEnginePanel({ client }: Props) {
         await updateClientInFirestore(orgId, client.id, updates).catch(console.error);
         await persistEngineHistory(orgId, 'clients', client.id, runId, { ...newReport, clientId: client.id, orgId });
       }
-      dispatch(updateClient({ id: client.id, updates }));
+      dispatch(updateClient({ ...client, ...updates }));
     } catch (err: any) {
       setError(err.message);
       toast({ title: 'Ads plan failed', description: err.message, variant: 'destructive' });
