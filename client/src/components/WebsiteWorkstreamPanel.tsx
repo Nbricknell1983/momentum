@@ -2203,15 +2203,16 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
     }
   }, [chatInput, chatImages, chatLoading, chatMessages, client.id, orgId]);
 
-  const CHAT_QUICK_ACTIONS = [
-    'Write homepage copy with headline, hero text and CTA',
-    'Generate meta titles and descriptions for all pages',
-    'Write a services page with SEO-optimised descriptions',
-    'Create an About Us page for a local trade business',
-    'Write FAQ content targeting local search queries',
-    'Generate LocalBusiness schema markup',
-    'Write a Google review response strategy',
-    'Create location-specific landing page copy',
+  const CHAT_QUICK_ACTIONS: { label: string; action?: string; run?: boolean }[] = [
+    { label: 'Generate Blueprint', run: true },
+    { label: 'Write homepage copy with headline, hero text and CTA', action: 'Write homepage copy with headline, hero text and CTA' },
+    { label: 'Generate meta titles and descriptions for all pages', action: 'Generate meta titles and descriptions for all pages' },
+    { label: 'Write a services page with SEO-optimised descriptions', action: 'Write a services page with SEO-optimised descriptions' },
+    { label: 'Create an About Us page for a local trade business', action: 'Create an About Us page for a local trade business' },
+    { label: 'Write FAQ content targeting local search queries', action: 'Write FAQ content targeting local search queries' },
+    { label: 'Generate LocalBusiness schema markup', action: 'Generate LocalBusiness schema markup' },
+    { label: 'Write a Google review response strategy', action: 'Write a Google review response strategy' },
+    { label: 'Create location-specific landing page copy', action: 'Create location-specific landing page copy' },
   ];
 
   function renderChatContent(text: string) {
@@ -2571,19 +2572,11 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
             </div>
           )}
 
-          {/* Empty state */}
-          {!blueprint && !loading && (
-            <div className="text-center py-10 text-gray-500">
-              <Globe className="h-8 w-8 mx-auto mb-3 text-gray-300" />
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">No blueprint yet</div>
-              <div className="text-xs text-gray-400">Generate a Website Blueprint to build out page structure, copy, SEO, and assets.</div>
-            </div>
-          )}
-
+          {/* Loading indicator (blueprint generating) */}
           {loading && !blueprint && (
-            <div className="text-center py-10 text-gray-400">
-              <Cpu className="h-7 w-7 mx-auto mb-3 animate-spin text-blue-400" />
-              <div className="text-sm">Generating blueprint…</div>
+            <div className="flex items-center gap-2 mb-2 text-xs text-blue-600 dark:text-blue-400">
+              <Cpu className="h-3.5 w-3.5 animate-spin" />
+              Generating blueprint…
             </div>
           )}
 
@@ -3267,14 +3260,20 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                       Type anything — page copy, meta tags, FAQs, schema, local pages. Upload photos and I'll work them in. Preview updates on the right.
                     </p>
                     <div className="flex flex-col gap-1.5 w-full max-w-[280px]">
-                      {CHAT_QUICK_ACTIONS.slice(0, 4).map((action) => (
+                      {CHAT_QUICK_ACTIONS.slice(0, 5).map((item) => (
                         <button
-                          key={action}
-                          onClick={() => sendChat(action)}
-                          className="text-left text-[11px] px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                          data-testid={`button-quick-${action.slice(0, 20)}`}
+                          key={item.label}
+                          onClick={() => item.run ? handleRun(false) : sendChat(item.action!)}
+                          disabled={item.run ? loading : chatLoading}
+                          className={`text-left text-[11px] px-3 py-1.5 rounded-lg border transition-colors ${
+                            item.run
+                              ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 font-medium'
+                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
+                          }`}
+                          data-testid={`button-quick-${item.label.slice(0, 20)}`}
                         >
-                          {action}
+                          {item.run && <Cpu className={`inline h-3 w-3 mr-1.5 ${loading ? 'animate-spin' : ''}`} />}
+                          {item.label}
                         </button>
                       ))}
                     </div>
@@ -3450,13 +3449,24 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                    <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-3">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-3">
                       <Monitor className="h-6 w-6 text-gray-400" />
                     </div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">No preview yet</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 max-w-[200px]">
-                      Generate a blueprint and build the site to see a live preview here
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">No site built yet</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 max-w-[200px] mb-4">
+                      Use the chat to design pages, then generate a blueprint to build the site
                     </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => handleRun(false)}
+                      disabled={loading}
+                      data-testid="btn-generate-blueprint-preview-pane"
+                    >
+                      <Cpu className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                      {loading ? 'Generating…' : 'Generate Blueprint'}
+                    </Button>
                   </div>
                 )}
               </div>
