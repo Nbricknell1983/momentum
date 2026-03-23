@@ -6,6 +6,7 @@ import {
   Zap, BarChart3, Target,
 } from 'lucide-react';
 import { Client } from '@/lib/types';
+import { EvidencePresenceSection } from './PrepCallPackCard';
 
 // ─── Resolve presence URLs ─────────────────────────────────────────────────────
 
@@ -108,12 +109,28 @@ export default function ClientVisibilityBaseline({ client }: { client: Client })
   const hasEngineData  = !!(websiteEngine || seoEngine || gbpEngine || adsEngine);
   const isRebuildScope = scope.includes('website') && hasWebsite;
 
-  // Only render when engine data or takeover context exists
-  const hasAnyContent = hasEngineData || !!(si?.strategyIntelligence?.businessOverview);
+  // Evidence bundle (from lead conversion — same data as lead Presence Snapshot)
+  const pp = (si?.prepCallPack ?? {}) as Record<string, any>;
+  const rawEb =
+    (si as any)?.evidenceBundle ??
+    pp.evidenceBundle ??
+    (client as any).evidenceBundle ??
+    null;
+  const serpData =
+    (si as any)?.serpData ??
+    pp.serpData ??
+    null;
+  const ebGatheredAt = rawEb?.gatheredAt ?? pp.ebGatheredAt ?? pp.gatheredAt ?? null;
+  const sitemapPageCount = pp.sitemapPages?.length ?? pp.sitemapPageCount ?? rawEb?.sitemapPageCount ?? 0;
+  const delta = (si as any)?.evidenceDelta ?? (client as any).evidenceDelta ?? null;
+  const hasEvidenceBundle = !!rawEb;
+
+  // Only render when engine data, evidence bundle, or takeover context exists
+  const hasAnyContent = hasEngineData || hasEvidenceBundle || !!(si?.strategyIntelligence?.businessOverview);
   if (!hasAnyContent && !isRebuildScope) return null;
 
-  // Default: expanded when engines exist
-  const [collapsed, setCollapsed] = useState(!hasEngineData);
+  // Default: expanded when engines or evidence bundle exists
+  const [collapsed, setCollapsed] = useState(!hasEngineData && !hasEvidenceBundle);
 
   // ── Engine-derived preservation items ─────────────────────────────────────
   const seoTasks     = websiteEngine?.tasks?.filter(t => t.category === 'seo') ?? [];
@@ -189,6 +206,8 @@ export default function ClientVisibilityBaseline({ client }: { client: Client })
   // Subtitle
   const subtitle = hasEngineData
     ? `${[websiteEngine && 'Website', gbpEngine && 'GBP', seoEngine && 'SEO', adsEngine && 'Ads'].filter(Boolean).join(' · ')} engine analysis`
+    : hasEvidenceBundle
+    ? 'Presence snapshot from lead intelligence'
     : isRebuildScope
     ? 'SEO preservation required'
     : 'Business context';
@@ -224,6 +243,30 @@ export default function ClientVisibilityBaseline({ client }: { client: Client })
       {/* ── Body ───────────────────────────────────────────────────────────── */}
       {!collapsed && (
         <div className="p-4 space-y-4 bg-white dark:bg-slate-900/30">
+
+          {/* ── PRESENCE SNAPSHOT (evidence bundle from lead) ─────────────── */}
+          {hasEvidenceBundle && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <SectionHeader icon={Eye} title="Presence Snapshot" color="text-violet-500" />
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                  Evidence-backed
+                </span>
+              </div>
+              <EvidencePresenceSection
+                eb={rawEb}
+                psAi={pp.presenceSnapshot ?? pp.aiSnapshot ?? null}
+                serp={serpData}
+                ebGatheredAt={ebGatheredAt}
+                serpGeneratedAt={pp.serpGeneratedAt ?? null}
+                aiGeneratedAt={pp.aiGeneratedAt ?? null}
+                delta={delta}
+                deltaPrevGatheredAt={(client as any).evidenceDeltaPrevGatheredAt ?? null}
+                sitemapPageCount={sitemapPageCount}
+              />
+              {hasEngineData && <div className="w-full h-px bg-slate-100 dark:bg-slate-700/60" />}
+            </div>
+          )}
 
           {/* ── SEO TAKEOVER ALERT ─────────────────────────────────────────── */}
           {isRebuildScope && (
