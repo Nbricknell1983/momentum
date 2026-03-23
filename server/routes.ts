@@ -10768,6 +10768,284 @@ ${(pages || []).map((p: any) => `  <url>
     }
   });
 
+  // ── Local SEO Page Generator ─────────────────────────────────────────────────
+
+  app.post('/api/clients/:clientId/generate-local-pages', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const blueprint = clientData.websiteWorkstream?.currentDraft;
+      const si = clientData.sourceIntelligence || {};
+      const businessName = clientData.businessName || 'this business';
+      const address = clientData.address || clientData.city || '';
+      const phone = clientData.phone || si.evidenceBundle?.gbp?.phone || '';
+      const email = clientData.email || si.evidenceBundle?.gbp?.email || '';
+
+      // Extract context for planning
+      const gbpData = si.evidenceBundle?.gbp || {};
+      const services = gbpData.services || si.services || clientData.services || [];
+      const seoKeywords = clientData.seoEngine?.keywordTargets || [];
+      const briefServices = blueprint?.activationPlan?.websiteWorkstream?.homepageContent?.services || [];
+      const pageStructure = blueprint?.pages || clientData.activationPlan?.websiteWorkstream?.pageStructure || [];
+      const primaryKeyword = blueprint?.pages?.[0]?.seoMeta?.title || seoKeywords[0] || '';
+      const schemaType = clientData.seoEngine?.schemaType || si.schemaType || 'LocalBusiness';
+      const siteMeta = blueprint?.siteMeta || {
+        brand: businessName,
+        nap: { phone, address, email },
+        primaryCta: 'Call Us Today',
+        uvp: '',
+        tone: 'professional',
+      };
+      const navItems = blueprint?.nav?.items || [];
+
+      // Step 1: Use AI to plan what local pages to generate
+      const planPrompt = `You are a local SEO specialist planning a website page architecture for a local service business.
+
+Business: ${businessName}
+Location/Address: ${address}
+Industry/Schema type: ${schemaType}
+Primary keyword target: ${primaryKeyword}
+Services from GBP: ${Array.isArray(services) ? services.slice(0, 15).join(', ') : JSON.stringify(services).slice(0, 400)}
+Existing SEO keyword targets: ${seoKeywords.slice(0, 10).join(', ')}
+Existing page structure: ${pageStructure.map((p: any) => p.pageName || p.title).join(', ')}
+
+Your task: Generate a list of LOCAL SEO pages this website should have. These must be:
+1. Substantive individual service pages (not thin or duplicate)
+2. Location/suburb pages for areas the business serves
+3. High-value service+location combination pages (e.g. "Emergency Electrician Parramatta")
+4. Each page must target a distinct keyword and serve a distinct user intent
+
+Rules:
+- Maximum 12 pages total (mix of service, location, and combo types)
+- No duplicate content — each page must be genuinely different
+- Only generate pages that make commercial sense for this specific business
+- Suburb/location pages must reference REAL local areas near ${address}
+- Service pages must reflect ACTUAL services this business offers
+- Combination pages should target high-commercial-intent local searches
+
+Respond in this exact JSON format:
+{
+  "pages": [
+    {
+      "slug": "url-slug-no-leading-slash",
+      "title": "Page Title",
+      "pageType": "service|location|combo",
+      "service": "primary service this page targets (if applicable)",
+      "location": "suburb or area this page targets (if applicable)",
+      "targetKeyword": "exact keyword phrase this page targets",
+      "metaTitle": "SEO title tag (55 chars max)",
+      "metaDescription": "SEO meta description (155 chars max)",
+      "h1": "Page main heading",
+      "rationale": "one sentence explaining why this page adds SEO value"
+    }
+  ]
+}`;
+
+      const planCompletion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: planPrompt }],
+        max_tokens: 1800,
+        response_format: { type: 'json_object' },
+      });
+
+      let pagePlan: { pages: any[] } = { pages: [] };
+      try {
+        pagePlan = JSON.parse(planCompletion.choices[0]?.message?.content || '{"pages":[]}');
+      } catch { pagePlan = { pages: [] }; }
+
+      if (!pagePlan.pages?.length) {
+        return res.status(400).json({ error: 'Could not generate page plan — try adding more business information.' });
+      }
+
+      // Mark as generating
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.generatedSite.localPagesStatus': 'generating',
+        'websiteWorkstream.generatedSite.localPagesStartedAt': new Date().toISOString(),
+      });
+
+      const allNavItems = [
+        ...navItems.map((n: any) => `${n.label} → ${n.href}`),
+        ...pagePlan.pages.map(p => `${p.title} → /${p.slug}`),
+      ].join(', ');
+
+      const generatedLocalPages: Record<string, any> = {};
+
+      for (const page of pagePlan.pages) {
+        const prompt = `You are a senior web developer. Generate a complete, production-quality HTML page optimised for LOCAL SEO.
+
+SITE CONTEXT:
+- Business: ${siteMeta.brand || businessName}
+- Phone: ${siteMeta.nap?.phone || phone}
+- Address: ${siteMeta.nap?.address || address}
+- Email: ${siteMeta.nap?.email || email}
+- Tone: ${siteMeta.tone || 'professional'}
+- Primary CTA: "${siteMeta.primaryCta || 'Call Us Today'}"
+- Navigation: ${allNavItems}
+
+THIS PAGE:
+- Type: ${page.pageType} page
+- Title: ${page.title}
+- Route: /${page.slug}
+- Target keyword: "${page.targetKeyword}"
+- Service focus: ${page.service || 'N/A'}
+- Location focus: ${page.location || 'N/A'}
+- H1: ${page.h1}
+- Meta title: ${page.metaTitle}
+- Meta description: ${page.metaDescription}
+- Purpose: ${page.rationale}
+
+CONTENT REQUIREMENTS FOR THIS PAGE TYPE:
+${page.pageType === 'service' ? `
+- Detailed description of the ${page.service} service (what's included, process, outcomes)
+- Why choose this business for ${page.service}
+- 3-5 specific benefits or differentiators
+- How it works (3-step process)
+- FAQ section with 4-6 questions specific to ${page.service}
+- Strong CTA with phone number
+- Trust signals (years experience, licenses, guarantees)
+` : page.pageType === 'location' ? `
+- Introduction establishing the business as the local expert in ${page.location}
+- Services available in ${page.location} area
+- Local area references (real landmarks, suburbs, council areas near ${page.location})
+- Why local customers choose this business
+- Service coverage map description (mention surrounding suburbs)
+- Local testimonial placeholder
+- Contact section specific to ${page.location} customers
+- Google Business Profile mention
+` : `
+- Service+location hero: "${page.service} in ${page.location}" with strong CTA
+- What the ${page.service} service includes in ${page.location}
+- Local expertise and coverage details for ${page.location}
+- Why residents/businesses in ${page.location} choose this provider
+- FAQ specific to getting ${page.service} in ${page.location}
+- Surrounding suburbs also covered
+- Schema data showing service area
+- Prominent phone CTA
+`}
+
+TECHNICAL REQUIREMENTS:
+1. Complete self-contained HTML document (DOCTYPE through </html>)
+2. Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+3. Google Fonts Inter: <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+4. Body: font-family: Inter, sans-serif
+5. Full SEO head: title="${page.metaTitle}", meta description="${page.metaDescription}", canonical (/${page.slug}), og:title, og:description
+6. Schema JSON-LD in head:
+   ${page.pageType === 'service' ? `{"@context":"https://schema.org","@type":"Service","name":"${page.service}","provider":{"@type":"${schemaType}","name":"${businessName}","telephone":"${phone}","address":"${address}"}}` : `{"@context":"https://schema.org","@type":"${schemaType}","name":"${businessName}","areaServed":"${page.location}","telephone":"${phone}","address":"${address}"}`}
+7. Sticky nav bar with brand + nav links + phone CTA button
+8. H1 must be exactly: "${page.h1}"
+9. Use the keyword "${page.targetKeyword}" naturally in: H1, first paragraph, one H2, meta title
+10. Phone: <a href="tel:${phone}"> (clickable throughout)
+11. Mobile-first responsive design
+12. Australian English
+13. Footer with NAP, links, © ${businessName}
+14. NO lorem ipsum — all content must be specific and commercial
+
+Output ONLY the complete HTML document. No markdown, no code blocks, no explanation.`;
+
+        try {
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 3000,
+          });
+
+          let html = completion.choices[0]?.message?.content || '';
+          html = html.replace(/^```html\n?/i, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+          generatedLocalPages[page.slug] = {
+            slug: page.slug,
+            title: page.title,
+            pageType: page.pageType,
+            service: page.service || null,
+            location: page.location || null,
+            targetKeyword: page.targetKeyword,
+            metaTitle: page.metaTitle,
+            metaDescription: page.metaDescription,
+            rationale: page.rationale,
+            html,
+            generatedAt: new Date().toISOString(),
+          };
+        } catch (pageErr: any) {
+          console.error(`[generate-local-pages] ${page.slug} failed:`, pageErr.message);
+          generatedLocalPages[page.slug] = {
+            slug: page.slug, title: page.title, pageType: page.pageType,
+            html: `<html><body><h1>${page.title}</h1><p>Generation failed: ${pageErr.message}</p></body></html>`,
+            generatedAt: new Date().toISOString(),
+          };
+        }
+      }
+
+      // Update sitemap to include local pages
+      const domain = clientData.website || 'https://yourdomain.com.au';
+      const baseDomain = domain.replace(/\/+$/, '');
+      const existingPages = clientData.websiteWorkstream?.generatedSite?.pages || {};
+      const allSitemapPages = [
+        ...Object.values(existingPages).map((p: any) => ({ route: `/${p.slug}`, priority: p.slug === '' || p.slug === 'home' ? '1.0' : '0.8' })),
+        ...Object.values(generatedLocalPages).map((p: any) => ({ route: `/${p.slug}`, priority: '0.7' })),
+      ];
+      const updatedSitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${allSitemapPages.map(p => `  <url>
+    <loc>${baseDomain}${p.route}</loc>
+    <changefreq>monthly</changefreq>
+    <priority>${p.priority}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.generatedSite.localPages': generatedLocalPages,
+        'websiteWorkstream.generatedSite.localPagesStatus': 'ready',
+        'websiteWorkstream.generatedSite.localPagesGeneratedAt': new Date().toISOString(),
+        'websiteWorkstream.generatedSite.sitemap': updatedSitemap,
+      });
+
+      res.json({
+        success: true,
+        pageCount: Object.keys(generatedLocalPages).length,
+        pages: pagePlan.pages.map(p => ({ slug: p.slug, title: p.title, pageType: p.pageType })),
+      });
+    } catch (err: any) {
+      console.error('[generate-local-pages]', err);
+      try {
+        const { clientId } = req.params;
+        const { orgId } = req.body;
+        if (firestore && orgId && clientId) {
+          await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+            'websiteWorkstream.generatedSite.localPagesStatus': 'failed',
+          });
+        }
+      } catch {}
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Serve local SEO page preview
+  app.get('/api/clients/:clientId/local-preview/:slug', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).send('<html><body>Unavailable</body></html>');
+      const { clientId, slug } = req.params;
+      const { orgId } = req.query as { orgId: string };
+      if (!orgId) return res.status(400).send('<html><body>orgId required</body></html>');
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      const page = clientDoc.data()?.websiteWorkstream?.generatedSite?.localPages?.[slug];
+      if (!page?.html) return res.status(404).send('<html><body>Page not found</body></html>');
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.send(page.html);
+    } catch (err: any) {
+      res.status(500).send(`<html><body>Error: ${err.message}</body></html>`);
+    }
+  });
+
   // ── GBP / Local Visibility Workstream ───────────────────────────────────────
 
   app.post('/api/clients/:clientId/gbp-workstream', async (req, res) => {

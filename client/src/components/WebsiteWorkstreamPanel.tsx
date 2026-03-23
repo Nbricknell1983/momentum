@@ -141,14 +141,21 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [showNudge, setShowNudge]   = useState(false);
   const [exporting, setExporting]   = useState(false);
   const [generatingSite, setGeneratingSite] = useState(false);
+  const [generatingLocal, setGeneratingLocal] = useState(false);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [previewSlug, setPreviewSlug] = useState<string | null>(null);
+  const [localPreviewSlug, setLocalPreviewSlug] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const generatedSite = client.websiteWorkstream?.generatedSite;
   const siteReady = generatedSite?.status === 'ready' && generatedSite?.pages;
   const sitePageSlugs: string[] = siteReady ? Object.keys(generatedSite.pages) : [];
   const activePreviewSlug = previewSlug || sitePageSlugs[0] || null;
+  const localPages = generatedSite?.localPages || {};
+  const localPageSlugs: string[] = Object.keys(localPages);
+  const localPagesReady = generatedSite?.localPagesStatus === 'ready' && localPageSlugs.length > 0;
+  const localGenerating = generatedSite?.localPagesStatus === 'generating' || generatingLocal;
+  const activeLocalSlug = localPreviewSlug || localPageSlugs[0] || null;
 
   // ── Enqueue / regenerate ─────────────────────────────────────────────────────
 
@@ -300,6 +307,36 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
     } finally {
       setGeneratingSite(false);
+    }
+  }, [orgId, authReady, blueprint, client, token, toast]);
+
+  // ── Generate local SEO pages ──────────────────────────────────────────────────
+
+  const handleGenerateLocalPages = useCallback(async () => {
+    if (!orgId || !authReady || !blueprint) return;
+    setGeneratingLocal(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/generate-local-pages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orgId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed');
+      }
+      const data = await res.json();
+      toast({
+        title: 'Local pages generated',
+        description: `${data.pageCount} local SEO pages built — switch to the Local Pages tab to review them.`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Generation failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setGeneratingLocal(false);
     }
   }, [orgId, authReady, blueprint, client, token, toast]);
 
@@ -456,6 +493,10 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                 <TabsTrigger value="pages"   className="text-xs h-7 gap-1" data-testid="tab-workstream-pages"><Globe className="h-3 w-3" />Pages</TabsTrigger>
                 <TabsTrigger value="copy"    className="text-xs h-7 gap-1" data-testid="tab-workstream-copy"><Type className="h-3 w-3" />Copy</TabsTrigger>
                 <TabsTrigger value="seo"     className="text-xs h-7 gap-1" data-testid="tab-workstream-seo"><Search className="h-3 w-3" />SEO</TabsTrigger>
+                <TabsTrigger value="local"   className="text-xs h-7 gap-1" data-testid="tab-workstream-local">
+                  <Map className="h-3 w-3" />Local
+                  {localPagesReady && <Badge className="h-4 px-1 py-0 text-[10px] bg-emerald-100 text-emerald-700 ml-0.5">{localPageSlugs.length}</Badge>}
+                </TabsTrigger>
                 <TabsTrigger value="assets"  className="text-xs h-7 gap-1" data-testid="tab-workstream-assets"><Image className="h-3 w-3" />Assets</TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs h-7 gap-1" data-testid="tab-workstream-preview"><Eye className="h-3 w-3" />Preview</TabsTrigger>
               </TabsList>
@@ -636,6 +677,145 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                     </div>
                   </Section>
                 ))}
+              </TabsContent>
+
+              {/* ── LOCAL SEO PAGES ── */}
+              <TabsContent value="local" className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Local SEO Pages</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Service pages, location pages, and high-value service+location combinations for local search.</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                    onClick={handleGenerateLocalPages}
+                    disabled={localGenerating || !blueprint}
+                    data-testid="btn-generate-local-pages"
+                  >
+                    {localGenerating
+                      ? <><Cpu className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                      : <><Map className="h-3.5 w-3.5" /> {localPagesReady ? 'Regenerate' : 'Generate Local Pages'}</>
+                    }
+                  </Button>
+                </div>
+
+                {localGenerating && (
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4 text-center space-y-2">
+                    <Cpu className="h-6 w-6 text-amber-500 mx-auto animate-spin" />
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Building local SEO pages…</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400">AI is planning service + location pages and generating HTML for each. This takes 3–5 minutes.</p>
+                  </div>
+                )}
+
+                {!localPagesReady && !localGenerating && (
+                  <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center space-y-3">
+                    <Map className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">No local pages yet</p>
+                      <p className="text-xs text-gray-500 max-w-sm mx-auto">The AI will analyse this business, identify the right service + location combinations, and generate a full set of unique, substantive local SEO pages.</p>
+                    </div>
+                    {!blueprint && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">Generate the Website Blueprint first to enable local page generation.</p>
+                    )}
+                  </div>
+                )}
+
+                {localPagesReady && (
+                  <>
+                    {/* Page type legend */}
+                    <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                      <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500 inline-block" /> Service page</span>
+                      <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Location page</span>
+                      <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-violet-500 inline-block" /> Service+Location</span>
+                    </div>
+
+                    {/* Page list */}
+                    <div className="grid gap-2">
+                      {localPageSlugs.map(slug => {
+                        const page = localPages[slug];
+                        const typeColor = page.pageType === 'service'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                          : page.pageType === 'location'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300';
+                        const isActive = activeLocalSlug === slug;
+                        return (
+                          <div
+                            key={slug}
+                            onClick={() => setLocalPreviewSlug(slug)}
+                            className={`border rounded-lg p-3 cursor-pointer transition-all ${isActive ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'}`}
+                            data-testid={`local-page-card-${slug}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded capitalize ${typeColor}`}>{page.pageType}</span>
+                                  <span className="text-xs font-medium text-gray-900 dark:text-white truncate">{page.title}</span>
+                                </div>
+                                <p className="text-[11px] text-blue-600 dark:text-blue-400 font-mono">/{slug}</p>
+                                {page.targetKeyword && (
+                                  <p className="text-[11px] text-gray-500 mt-0.5">🎯 {page.targetKeyword}</p>
+                                )}
+                                {page.rationale && (
+                                  <p className="text-[11px] text-gray-400 mt-0.5 italic">{page.rationale}</p>
+                                )}
+                              </div>
+                              <a
+                                href={`/api/clients/${client.id}/local-preview/${slug}?orgId=${orgId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="shrink-0 p-1.5 rounded border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 transition-colors"
+                                title="Open in new tab"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Preview pane */}
+                    {activeLocalSlug && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                            Preview: {localPages[activeLocalSlug]?.title}
+                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setPreviewMode('desktop')}
+                              className={`p-1.5 rounded border transition-colors ${previewMode === 'desktop' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-200 text-gray-400'}`}
+                            >
+                              <Monitor className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setPreviewMode('mobile')}
+                              className={`p-1.5 rounded border transition-colors ${previewMode === 'mobile' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-200 text-gray-400'}`}
+                            >
+                              <Smartphone className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className={`rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-100 dark:bg-gray-800 flex justify-center ${previewMode === 'mobile' ? 'p-4' : ''}`}>
+                          <iframe
+                            key={`local-${activeLocalSlug}-${previewMode}`}
+                            src={`/api/clients/${client.id}/local-preview/${activeLocalSlug}?orgId=${orgId}`}
+                            className={`rounded-lg shadow transition-all ${previewMode === 'mobile' ? 'w-[390px] h-[844px] border border-gray-200' : 'w-full h-[600px] border-0'}`}
+                            title={`Local preview: ${activeLocalSlug}`}
+                            sandbox="allow-same-origin allow-scripts allow-forms"
+                            data-testid="local-preview-iframe"
+                          />
+                        </div>
+                        <p className="text-[11px] text-gray-400">
+                          Generated {generatedSite.localPagesGeneratedAt ? format(new Date(generatedSite.localPagesGeneratedAt), 'dd/MM/yyyy HH:mm') : '—'} · {localPageSlugs.length} pages · Sitemap updated
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </TabsContent>
 
               {/* ── ASSETS ── */}
