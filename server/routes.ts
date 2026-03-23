@@ -10718,19 +10718,32 @@ Rules:
         }
       }
 
+      // ── Term overrides — swap user-defined words in all context strings ──────
+      const termOverrides: Array<{ from: string; to: string }> = client.termOverrides || [];
+      const applyOverrides = (text: string): string => {
+        if (!termOverrides.length || !text) return text;
+        let out = text;
+        for (const ov of termOverrides) {
+          if (!ov.from || !ov.to) continue;
+          const escaped = ov.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          out = out.replace(new RegExp(escaped, 'gi'), ov.to);
+        }
+        return out;
+      };
+
       const si: any = client.sourceIntelligence || {};
       const businessName: string = client.businessName || 'this business';
       const website: string = si.website || client.website || '';
       const city: string = client.city || client.location || '';
-      const industry: string = si.industry || client.businessProfile?.industry || 'local service business';
+      const industry: string = applyOverrides(si.industry || client.businessProfile?.industry || 'local service business');
       const phone: string = si.phone || client.phone || '';
       const address: string = client.address || '';
 
       const eb: any = si.evidenceBundle?.website || client.evidenceBundle?.website || {};
       const gbpEb: any = si.evidenceBundle?.gbp || client.evidenceBundle?.gbp || {};
-      const gbpServices: string[] = gbpEb.services || si.services || client.services || [];
-      const gbpAreas: string[] = gbpEb.serviceAreas || gbpEb.serviceArea || si.serviceAreas || [];
-      const gbpCategory: string = gbpEb.primaryCategory || gbpEb.categories?.[0] || '';
+      const gbpServices: string[] = (gbpEb.services || si.services || client.services || []).map(applyOverrides);
+      const gbpAreas: string[] = (gbpEb.serviceAreas || gbpEb.serviceArea || si.serviceAreas || []).map(applyOverrides);
+      const gbpCategory: string = applyOverrides(gbpEb.primaryCategory || gbpEb.categories?.[0] || '');
       const gbpRating: number | null = gbpEb.rating || gbpEb.avgRating || null;
       const gbpReviews: number | null = gbpEb.totalReviews || gbpEb.reviewCount || null;
 
@@ -10764,7 +10777,7 @@ KEYWORD DATA (Ahrefs):
 Top by volume: ${topKws.slice(0, 15).join(', ')}
 Quick wins (low difficulty): ${quickWins.join(', ') || 'none'}` : '';
 
-      const stratCtx = si.strategyIntelligence ? `Strategy: ${JSON.stringify(si.strategyIntelligence).slice(0, 500)}` : '';
+      const stratCtx = si.strategyIntelligence ? applyOverrides(`Strategy: ${JSON.stringify(si.strategyIntelligence).slice(0, 500)}`) : '';
 
       const prompt = `You are a senior SEO website architect. Generate a complete WebsiteBlueprint JSON for ${businessName}, a ${industry} business${city ? ` based in ${city}` : ''}.
 ${website ? `Existing website: ${website}` : ''}

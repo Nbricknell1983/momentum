@@ -1903,6 +1903,7 @@ export interface Client {
   healthReasons: string[];
   healthContributors?: HealthContributor[];
   taskStats?: ClientTaskStats;
+  termOverrides?: Array<{ from: string; to: string }>;
   channelStatus: ChannelStatuses;
   cadenceTier: CadenceTier;
   preferredContactCadenceDays: number;

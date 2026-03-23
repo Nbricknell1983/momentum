@@ -5,7 +5,7 @@ import {
   Globe, Search, BarChart3, Star, Zap, ChevronRight, MapPin, RefreshCw,
   Loader2, Link2, X, ExternalLink, Play, MessageSquare, ChevronDown,
   ThumbsUp, Building2, Unlink, Target, Radio, Image as ImageIcon,
-  Monitor, LayoutDashboard, Megaphone, BookOpen,
+  Monitor, LayoutDashboard, Megaphone, BookOpen, Plus, ArrowRight,
 } from 'lucide-react';
 import GrowthOperatorPanel from './GrowthOperatorPanel';
 import ClientActivationPanel from './ClientActivationPanel';
@@ -1022,6 +1022,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
   const [expandedSection, setExpandedSection] = useState<string | null>('health');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [newOverrideFrom, setNewOverrideFrom] = useState('');
+  const [newOverrideTo, setNewOverrideTo] = useState('');
+  const [savingOverrides, setSavingOverrides] = useState(false);
   const healthScore = healthScoreFromClient(client);
   const activeProducts = client.products?.filter(p => p.status === 'active') || [];
   const totalMRR = activeProducts.reduce((sum, p) => sum + (p.monthlyValue || 0), 0);
@@ -1140,6 +1143,108 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
             <PlaybookPanel client={client} />
             <LearningInsightsPanel client={client} />
             <GrowthOperatorPanel client={client} />
+
+            {/* ── Term Overrides ── */}
+            <div className="border rounded-lg overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
+                onClick={() => toggle('termOverrides')}
+                data-testid="btn-toggle-term-overrides"
+              >
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">AI Terminology Overrides</p>
+                  {(client.termOverrides?.length ?? 0) > 0 && (
+                    <Badge variant="secondary" className="text-xs">{client.termOverrides!.length}</Badge>
+                  )}
+                </div>
+                <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${expandedSection === 'termOverrides' ? 'rotate-90' : ''}`} />
+              </button>
+              {expandedSection === 'termOverrides' && (
+                <div className="border-t p-4 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Words or phrases listed here are swapped out in all AI prompts before generation. Use this to fix GBP category mismatches, preferred job titles, or any terminology the business uses internally.
+                  </p>
+
+                  {/* Existing overrides */}
+                  {(client.termOverrides ?? []).length > 0 && (
+                    <div className="space-y-2">
+                      {(client.termOverrides ?? []).map((ov, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-muted/30 rounded-md px-3 py-2">
+                          <span className="text-xs text-muted-foreground flex-1 truncate">{ov.from}</span>
+                          <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                          <span className="text-xs font-medium flex-1 truncate">{ov.to}</span>
+                          <button
+                            data-testid={`btn-remove-override-${idx}`}
+                            className="text-muted-foreground hover:text-destructive transition-colors ml-1"
+                            onClick={async () => {
+                              const updated = (client.termOverrides ?? []).filter((_, i) => i !== idx);
+                              await updateClientInFirestore(orgId, client.id, { termOverrides: updated }, authReady);
+                              dispatch(updateClient({ ...client, termOverrides: updated }));
+                            }}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add new override */}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Replace this…"
+                      value={newOverrideFrom}
+                      onChange={e => setNewOverrideFrom(e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      data-testid="input-override-from"
+                    />
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <Input
+                      placeholder="…with this"
+                      value={newOverrideTo}
+                      onChange={e => setNewOverrideTo(e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      data-testid="input-override-to"
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter' && newOverrideFrom.trim() && newOverrideTo.trim()) {
+                          const updated = [...(client.termOverrides ?? []), { from: newOverrideFrom.trim(), to: newOverrideTo.trim() }];
+                          setSavingOverrides(true);
+                          await updateClientInFirestore(orgId, client.id, { termOverrides: updated }, authReady);
+                          dispatch(updateClient({ ...client, termOverrides: updated }));
+                          setNewOverrideFrom('');
+                          setNewOverrideTo('');
+                          setSavingOverrides(false);
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2 shrink-0"
+                      disabled={!newOverrideFrom.trim() || !newOverrideTo.trim() || savingOverrides}
+                      data-testid="btn-add-override"
+                      onClick={async () => {
+                        if (!newOverrideFrom.trim() || !newOverrideTo.trim()) return;
+                        const updated = [...(client.termOverrides ?? []), { from: newOverrideFrom.trim(), to: newOverrideTo.trim() }];
+                        setSavingOverrides(true);
+                        await updateClientInFirestore(orgId, client.id, { termOverrides: updated }, authReady);
+                        dispatch(updateClient({ ...client, termOverrides: updated }));
+                        setNewOverrideFrom('');
+                        setNewOverrideTo('');
+                        setSavingOverrides(false);
+                        toast({ title: 'Override saved', description: `"${newOverrideFrom.trim()}" will be replaced with "${newOverrideTo.trim()}" in all AI prompts.` });
+                      }}
+                    >
+                      {savingOverrides ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+
+                  {(client.termOverrides ?? []).length === 0 && !newOverrideFrom && (
+                    <p className="text-xs text-muted-foreground italic">No overrides set. Example: "general contractor" → "custom home builder"</p>
+                  )}
+                </div>
+              )}
+            </div>
 
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Account Intelligence</p>
 
