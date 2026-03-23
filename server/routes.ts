@@ -5676,9 +5676,18 @@ Rules:
           phoneNumbers: crawlData.phoneNumbers || [],
           internalLinks: crawlData.internalLinks,
           internalLinkUrls: crawlData.internalLinkUrls || [],
+          outboundLinkUrls: crawlData.outboundLinkUrls || [],
           bodySnippet: crawlData.bodySnippet || null,
           headingHierarchy: crawlData.headingHierarchy || [],
           hasHttps: crawlData.hasHttps,
+          hasViewport: crawlData.hasViewport,
+          viewportContent: crawlData.viewportContent || null,
+          robotsTxt: crawlData.robotsTxt || null,
+          robotsDisallows: crawlData.robotsDisallows || [],
+          loadTimeMs: crawlData.loadTimeMs || null,
+          urlStructure: crawlData.urlStructure || 'unknown',
+          urlStructureSample: crawlData.urlStructureSample || [],
+          schemaFieldAudit: crawlData.schemaFieldAudit || null,
         };
         firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId)
           .set({ evidenceBundle: { website: websiteEvidence, gatheredAt: new Date().toISOString() } }, { merge: true })

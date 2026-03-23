@@ -159,31 +159,147 @@ export function buildWebsiteInsights(
   });
 
   // 3. Structured data (schema markup)
+  const schemaAudit = w.schemaFieldAudit as { present: string[]; missing: string[]; score: number } | null | undefined;
+  const schemaScore = schemaAudit?.score ?? null;
+  const schemaLabel = w.hasSchema
+    ? (schemaAudit ? `Structured data — ${schemaScore}% complete` : 'Structured data found')
+    : 'No structured data';
+  const schemaStatus: InsightStatus = w.hasSchema
+    ? (schemaScore !== null && schemaScore < 50 ? 'warning' : 'positive')
+    : 'warning';
   insights.push({
     id: 'schema',
-    label: w.hasSchema ? 'Structured data found' : 'No structured data',
-    status: w.hasSchema ? 'positive' : 'warning',
+    label: schemaLabel,
+    status: schemaStatus,
     summary: w.hasSchema
-      ? 'Structured data (schema markup) is present on the site, helping search engines understand the business type and content.'
+      ? schemaAudit
+        ? `Structured data found — ${schemaAudit.present.length} of ${schemaAudit.present.length + schemaAudit.missing.length} recommended fields populated (${schemaScore}% completeness). Missing fields limit rich result eligibility.`
+        : 'Structured data (schema markup) is present on the site, helping search engines understand the business type and content.'
       : 'No structured data was detected on the homepage. Search engines are relying on plain text alone to understand the business.',
     whyItMatters: 'Structured data enables rich results in search (star ratings, business hours, services) and helps Google understand what kind of business this is — especially useful for local search.',
     recommendedImprovement: w.hasSchema
-      ? 'Expand structured data coverage to service and location pages. Consider adding Review, Service, and FAQPage schema types for better search visibility.'
+      ? schemaAudit?.missing?.length
+        ? `Add the missing fields to your LocalBusiness schema: ${schemaAudit.missing.slice(0, 6).join(', ')}. These unlock richer search features.`
+        : 'Expand structured data coverage to service and location pages. Consider adding Review, Service, and FAQPage schema types.'
       : 'Add LocalBusiness schema markup to the homepage. For a service business, also add Service schema to individual service pages.',
     evidence: [
       { label: 'Schema detected', value: w.hasSchema ? '✓ Present on homepage' : '✗ Not detected' },
       ...(w.schemaTypes?.length
         ? w.schemaTypes.map((t: string) => ({ label: 'Schema type', value: t, type: 'code' as const }))
-        : w.hasSchema
-          ? [{ value: 'Schema found but types could not be parsed' }]
-          : [{ value: 'No JSON-LD structured data found on homepage' }]
+        : w.hasSchema ? [{ value: 'Schema found but types could not be parsed' }]
+                      : [{ value: 'No JSON-LD structured data found on homepage' }]
       ),
+      ...(schemaAudit ? [
+        { label: 'Completeness score', value: `${schemaScore}%`, type: 'count' as const },
+        { label: 'Fields populated', value: `${schemaAudit.present.length} of ${schemaAudit.present.length + schemaAudit.missing.length}`, type: 'count' as const },
+        ...schemaAudit.present.map((f: string) => ({ label: '✓ Present', value: f, type: 'code' as const })),
+        ...schemaAudit.missing.map((f: string) => ({ label: '✗ Missing', value: f, type: 'code' as const })),
+      ] : []),
     ],
     technicalDetails: [
       `hasSchema: ${w.hasSchema}`,
       ...(w.schemaTypes?.length ? [`schemaTypes: ${w.schemaTypes.join(', ')}`] : []),
+      ...(schemaAudit ? [`schemaFieldScore: ${schemaScore}%`] : []),
     ],
   });
+
+  // 3b. Mobile / viewport
+  insights.push({
+    id: 'viewport',
+    label: w.hasViewport ? 'Mobile-ready (viewport set)' : 'Not mobile-optimised',
+    status: w.hasViewport ? 'positive' : 'negative',
+    summary: w.hasViewport
+      ? `The site has a viewport meta tag set${w.viewportContent ? ` (${w.viewportContent})` : ''}, meaning it\'s configured for mobile-first indexing.`
+      : 'No viewport meta tag was detected. Google uses mobile-first indexing — this site may be ranked based on its mobile experience, which appears to be unconfigured.',
+    whyItMatters: 'Since 2019, Google has used mobile-first indexing for all sites. Without a viewport tag, the mobile version of a page is likely broken or illegible — directly hurting rankings.',
+    recommendedImprovement: w.hasViewport
+      ? 'Test the site on real mobile devices. Ensure tap targets are large enough, text is readable without zooming, and no horizontal scrolling occurs.'
+      : 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> to every page. Then audit the layout for mobile usability.',
+    evidence: [
+      { label: 'Viewport tag', value: w.hasViewport ? '✓ Present' : '✗ Missing' },
+      ...(w.viewportContent ? [{ label: 'Value', value: w.viewportContent, type: 'code' as const }] : []),
+      { label: 'Indexing method', value: 'Google uses mobile-first indexing for all sites' },
+    ],
+    technicalDetails: [`hasViewport: ${w.hasViewport}`, ...(w.viewportContent ? [`viewport: ${w.viewportContent}`] : [])],
+  });
+
+  // 3c. Page load speed
+  if (w.loadTimeMs != null) {
+    const ms = w.loadTimeMs as number;
+    const speedStatus: InsightStatus = ms < 800 ? 'positive' : ms < 2000 ? 'neutral' : 'warning';
+    const speedLabel = ms < 800 ? 'Fast server response' : ms < 2000 ? `Moderate load time — ${ms}ms` : `Slow server response — ${ms}ms`;
+    insights.push({
+      id: 'load-speed',
+      label: speedLabel,
+      status: speedStatus,
+      summary: `The server responded in ${ms}ms. ${ms < 800 ? 'This is fast — good baseline for Core Web Vitals.' : ms < 2000 ? 'Moderate response time. Full page load will be higher once images and scripts are included.' : 'Slow server response time. This directly impacts user experience and Google rankings.'}`,
+      whyItMatters: 'Server response time (TTFB) is the foundation of page speed. Even with optimised images, a slow server means a slow site. Google\'s Core Web Vitals measure real-world speed and directly influence rankings.',
+      recommendedImprovement: ms < 800
+        ? 'Maintain this with caching, CDN delivery, and image optimisation on the new build.'
+        : ms < 2000
+          ? 'Target sub-800ms TTFB on the new build using a CDN, caching headers, and server-side performance tuning.'
+          : 'The new build should use a fast host with CDN delivery, aggressive caching, and optimised images (WebP). Target <800ms TTFB.',
+      evidence: [
+        { label: 'Server response time', value: `${ms}ms`, type: 'count' as const },
+        { label: 'Benchmark', value: ms < 800 ? '✓ Under 800ms (fast)' : ms < 2000 ? '⚠ 800–2000ms (acceptable)' : '✗ Over 2000ms (slow)' },
+        { label: 'Note', value: 'This measures HTTP response only — full page load with images/scripts will be higher' },
+      ],
+      technicalDetails: [`loadTimeMs: ${ms}`],
+    });
+  }
+
+  // 3d. robots.txt
+  if (w.robotsTxt != null) {
+    const hasDisallows = (w.robotsDisallows?.length ?? 0) > 0;
+    insights.push({
+      id: 'robots-txt',
+      label: hasDisallows ? `robots.txt — ${w.robotsDisallows.length} disallow rule${w.robotsDisallows.length !== 1 ? 's' : ''}` : 'robots.txt — no pages blocked',
+      status: hasDisallows ? 'warning' : 'positive',
+      summary: hasDisallows
+        ? `robots.txt is present with ${w.robotsDisallows.length} disallow rule${w.robotsDisallows.length !== 1 ? 's' : ''}. Some pages may be blocked from search engine crawling.`
+        : 'robots.txt is present and does not block search engines from crawling the site.',
+      whyItMatters: 'robots.txt tells search engines what they\'re allowed to crawl. Incorrect disallow rules can accidentally block key pages, service areas, or even the entire site from being indexed.',
+      recommendedImprovement: hasDisallows
+        ? 'Review each disallow rule before migrating. Make sure no service pages, location pages, or the homepage are blocked. Any legacy CMS admin paths (e.g. /wp-admin/) are fine to keep.'
+        : 'Carry forward a clean robots.txt to the new build. Ensure the sitemap URL is declared here for faster indexing.',
+      evidence: [
+        { label: 'robots.txt', value: '✓ Found' },
+        { label: 'Sitemap declared', value: (w.robotsTxt as string).toLowerCase().includes('sitemap:') ? '✓ Yes' : '✗ No' },
+        ...(hasDisallows
+          ? (w.robotsDisallows as string[]).map((d: string) => ({ label: 'Disallow', value: d, type: 'code' as const }))
+          : [{ value: 'No paths blocked — all pages are crawlable' }]
+        ),
+        { label: 'Full content', value: (w.robotsTxt as string).slice(0, 800) },
+      ],
+      technicalDetails: [`robotsDisallows: ${w.robotsDisallows?.join(', ') || 'none'}`],
+    });
+  }
+
+  // 3e. URL structure
+  if (w.urlStructure && w.urlStructure !== 'unknown') {
+    const urlStatus: InsightStatus = w.urlStructure === 'clean' ? 'positive' : w.urlStructure === 'mixed' ? 'neutral' : 'warning';
+    const urlSample = (w.urlStructureSample as string[]) ?? [];
+    insights.push({
+      id: 'url-structure',
+      label: w.urlStructure === 'clean' ? 'Clean URL structure' : w.urlStructure === 'messy' ? 'Messy URL structure' : 'Mixed URL structure',
+      status: urlStatus,
+      summary: w.urlStructure === 'clean'
+        ? 'URLs are clean, readable, and SEO-friendly (e.g. /services/electrical-repairs/). These can likely be preserved on the new build.'
+        : w.urlStructure === 'messy'
+          ? 'URLs contain query strings, IDs, or file extensions (e.g. /page?id=123 or /service.php). These need to be rewritten as clean URLs on the new build with proper 301 redirects.'
+          : 'URL structure is mixed — some pages are clean, others are messy. Clean URLs should be preserved; messy ones should be rewritten with redirects.',
+      whyItMatters: 'URL structure affects how search engines and users perceive page relevance. Clean, keyword-rich URLs are a minor ranking signal and significantly improve click-through rates from search.',
+      recommendedImprovement: w.urlStructure === 'clean'
+        ? 'Maintain the same URL paths on the new build wherever possible. Any changed URLs must have 301 redirects set up.'
+        : 'Create clean, descriptive URL slugs on the new build (e.g. /services/emergency-electrical/). Set up 301 redirects from every old URL to its new equivalent.',
+      evidence: [
+        { label: 'URL structure', value: w.urlStructure === 'clean' ? '✓ Clean' : w.urlStructure === 'messy' ? '✗ Messy' : '⚠ Mixed' },
+        { label: 'Sample size', value: `${urlSample.length} internal URLs analysed`, type: 'count' as const },
+        ...urlSample.map((path: string) => ({ label: 'URL path', value: path, type: 'code' as const })),
+      ],
+      technicalDetails: [`urlStructure: ${w.urlStructure}`, ...(urlSample.length ? [`sample: ${urlSample.slice(0, 5).join(', ')}`] : [])],
+    });
+  }
 
   // 4. Phone visibility
   const hasPhone = (w.phoneNumbers?.length ?? 0) > 0;
@@ -294,6 +410,39 @@ export function buildWebsiteInsights(
           : []
         ),
       ],
+    });
+  }
+
+  // 9. Outbound links (external citations)
+  const outboundLinks: { href: string; text: string }[] = w.outboundLinkUrls ?? [];
+  if (outboundLinks.length > 0) {
+    // Flag high-value citation domains (GMB, social, directories)
+    const citationDomains = ['google.com', 'facebook.com', 'instagram.com', 'linkedin.com',
+      'youtube.com', 'yellowpages', 'truelocal', 'hipages', 'yelp', 'trustpilot', 'productreview'];
+    const citationLinks = outboundLinks.filter(l =>
+      citationDomains.some(d => l.href.toLowerCase().includes(d))
+    );
+    insights.push({
+      id: 'outbound-links',
+      label: `${outboundLinks.length} outbound link${outboundLinks.length !== 1 ? 's' : ''} — ${citationLinks.length} citation${citationLinks.length !== 1 ? 's' : ''}`,
+      status: citationLinks.length >= 2 ? 'positive' : 'neutral',
+      summary: `${outboundLinks.length} external links found on the homepage, including ${citationLinks.length} citation link${citationLinks.length !== 1 ? 's' : ''} to business directories or social profiles.`,
+      whyItMatters: 'Outbound links to authoritative sources (Google Business Profile, Facebook, industry directories) help establish local entity connections. They also reveal what third-party profiles exist and need to be updated when rebuilding.',
+      recommendedImprovement: 'Ensure all citation links on the new build point to fully optimised profiles (GMB, Facebook, Instagram). Consistent NAP data across all linked profiles strengthens local SEO.',
+      evidence: [
+        { label: 'Total outbound links', value: String(outboundLinks.length), type: 'count' as const },
+        { label: 'Citation links', value: String(citationLinks.length), type: 'count' as const },
+        ...citationLinks.map(({ href, text }) => ({ label: text || 'Citation', value: href, type: 'link' as const })),
+        ...(outboundLinks.length > citationLinks.length
+          ? [{ label: 'Other external links', value: `${outboundLinks.length - citationLinks.length} non-citation links`, type: 'count' as const }]
+          : []
+        ),
+        ...outboundLinks
+          .filter(l => !citationDomains.some(d => l.href.toLowerCase().includes(d)))
+          .slice(0, 10)
+          .map(({ href, text }) => ({ label: text || 'External link', value: href, type: 'link' as const })),
+      ],
+      technicalDetails: [`outboundLinks: ${outboundLinks.length}`, `citations: ${citationLinks.length}`],
     });
   }
 

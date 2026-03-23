@@ -32,7 +32,20 @@ export interface CrawlResult {
   locationPageUrls: string[];    // internal URLs containing location keywords
   phoneNumbers: string[];        // phone numbers found in page text/links
   internalLinkUrls: { href: string; text: string }[];  // actual internal links (href + anchor text)
+  outboundLinkUrls: { href: string; text: string }[];  // external links (href + anchor text)
   bodySnippet?: string;          // first ~400 chars of meaningful body paragraph text
+  hasViewport: boolean;          // <meta name="viewport"> present (mobile-first indexing)
+  viewportContent?: string;      // actual viewport content value
+  robotsTxt?: string;            // raw robots.txt content (first 2000 chars)
+  robotsDisallows?: string[];    // disallow rules from robots.txt
+  loadTimeMs?: number;           // actual HTTP response time in ms
+  urlStructure: 'clean' | 'messy' | 'mixed' | 'unknown';  // URL pattern quality
+  urlStructureSample: string[];  // sample of internal URLs showing structure
+  schemaFieldAudit?: {           // LocalBusiness schema field completeness
+    present: string[];
+    missing: string[];
+    score: number;               // 0–100
+  };
 }
 
 export interface WebsiteXRayResult {
@@ -283,7 +296,8 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
       images: { total: 0, withAlt: 0, withoutAlt: 0 },
       hasSchema: false, ogTags: {}, loadEstimate: 'unknown',
       ctaSignals: [], trustSignals: [], conversionGaps: [], servicePageUrls: [],
-      locationPageUrls: [], phoneNumbers: [], internalLinkUrls: [],
+      locationPageUrls: [], phoneNumbers: [], internalLinkUrls: [], outboundLinkUrls: [],
+      hasViewport: false, urlStructure: 'unknown', urlStructureSample: [],
     };
   }
 
@@ -312,12 +326,17 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     locationPageUrls: [],
     phoneNumbers: [],
     internalLinkUrls: [],
+    outboundLinkUrls: [],
+    hasViewport: false,
+    urlStructure: 'unknown',
+    urlStructureSample: [],
   };
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
+    const fetchStart = Date.now();
     const response = await fetch(normalizedUrl, {
       signal: controller.signal,
       headers: {
@@ -325,6 +344,7 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
         'Accept': 'text/html,application/xhtml+xml',
       },
     });
+    result.loadTimeMs = Date.now() - fetchStart;
 
     clearTimeout(timeout);
 
@@ -340,6 +360,11 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
     result.title = $('title').text().trim() || undefined;
     result.metaDescription = $('meta[name="description"]').attr('content')?.trim() || undefined;
     result.canonicalUrl = $('link[rel="canonical"]').attr('href') || undefined;
+
+    // Mobile viewport
+    const viewportMeta = $('meta[name="viewport"]').attr('content')?.trim();
+    result.hasViewport = !!viewportMeta;
+    if (viewportMeta) result.viewportContent = viewportMeta;
 
     $('h1').each((_, el) => {
       const text = $(el).text().trim();
@@ -365,24 +390,52 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
 
     const domain = new URL(normalizedUrl).hostname;
     const seenLinkHrefs = new Set<string>();
+    const seenOutboundHrefs = new Set<string>();
     $('a[href]').each((_, el) => {
       const href = $(el).attr('href') || '';
       const text = $(el).text().trim().replace(/\s+/g, ' ');
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
       let full = href;
       try { full = new URL(href, normalizedUrl).href.split('?')[0].split('#')[0]; } catch { /* skip */ }
-      if (href.startsWith('/') || href.includes(domain)) {
+
+      if (href.startsWith('tel:') || href.startsWith('mailto:')) return; // skip phone/email
+
+      const isInternal = href.startsWith('/') || (href.startsWith('http') && href.includes(domain));
+      if (isInternal) {
         result.internalLinks++;
-        // Collect unique internal links with meaningful anchor text
-        if (full && !seenLinkHrefs.has(full) && text && text.length > 1 && text.length < 80
-            && !href.startsWith('tel:') && !href.startsWith('mailto:')) {
+        if (full && !seenLinkHrefs.has(full) && text && text.length > 1 && text.length < 100) {
           seenLinkHrefs.add(full);
           result.internalLinkUrls.push({ href: full, text });
         }
       } else if (href.startsWith('http')) {
         result.externalLinks++;
+        if (full && !seenOutboundHrefs.has(full) && text && text.length > 1 && text.length < 100) {
+          seenOutboundHrefs.add(full);
+          result.outboundLinkUrls.push({ href: full, text });
+        }
       }
     });
-    result.internalLinkUrls = result.internalLinkUrls.slice(0, 40);
+    result.internalLinkUrls = result.internalLinkUrls.slice(0, 60);
+    result.outboundLinkUrls = result.outboundLinkUrls.slice(0, 30);
+
+    // URL structure analysis
+    const internalPaths = result.internalLinkUrls.map(l => {
+      try { return new URL(l.href).pathname; } catch { return ''; }
+    }).filter(Boolean);
+    const cleanUrlRe = /^\/[a-z0-9-/]*\/?$/i;
+    const messyRe = /[?&=]|\d{4,}|\.php|\.asp|\.html$/i;
+    const cleanCount = internalPaths.filter(p => cleanUrlRe.test(p) && !messyRe.test(p)).length;
+    const messyCount = internalPaths.filter(p => messyRe.test(p)).length;
+    if (internalPaths.length === 0) {
+      result.urlStructure = 'unknown';
+    } else if (cleanCount / internalPaths.length >= 0.8) {
+      result.urlStructure = 'clean';
+    } else if (messyCount / internalPaths.length >= 0.5) {
+      result.urlStructure = 'messy';
+    } else {
+      result.urlStructure = 'mixed';
+    }
+    result.urlStructureSample = [...new Set(internalPaths)].slice(0, 15);
 
     $('nav a, header a, .nav a, .menu a, [role="navigation"] a').each((_, el) => {
       const text = $(el).text().trim();
@@ -435,6 +488,33 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
         } catch { /* malformed JSON-LD */ }
       }
       result.schemaTypes = [...new Set(schemaTypes)].filter(Boolean).slice(0, 10);
+
+      // LocalBusiness schema field audit
+      const localBizFields = ['name','url','telephone','address','geo','openingHours','openingHoursSpecification',
+        'priceRange','description','image','sameAs','areaServed','serviceArea','hasMap','aggregateRating'];
+      const localBizEntry = schemaMatches.reduce((found: any, block: string) => {
+        if (found) return found;
+        try {
+          const inner = block.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '').trim();
+          const parsed = JSON.parse(inner);
+          const entries = Array.isArray(parsed) ? parsed : (parsed['@graph'] ? parsed['@graph'] : [parsed]);
+          return entries.find((e: any) => {
+            const t = e['@type'];
+            return typeof t === 'string'
+              ? t.includes('LocalBusiness') || t.includes('Service') || t.includes('Organization')
+              : Array.isArray(t) && t.some((x: string) => x.includes('LocalBusiness') || x.includes('Service'));
+          });
+        } catch { return null; }
+      }, null);
+      if (localBizEntry) {
+        const present = localBizFields.filter(f => localBizEntry[f] !== undefined && localBizEntry[f] !== null && localBizEntry[f] !== '');
+        const missing = localBizFields.filter(f => !present.includes(f));
+        result.schemaFieldAudit = {
+          present,
+          missing,
+          score: Math.round((present.length / localBizFields.length) * 100),
+        };
+      }
     }
 
     $('meta[property^="og:"]').each((_, el) => {
@@ -467,10 +547,18 @@ export async function crawlWebsite(url: string): Promise<CrawlResult> {
         });
         if (robotsRes.ok) {
           const robotsText = await robotsRes.text();
+          // Store full content (capped) and extract disallow rules
+          result.robotsTxt = robotsText.slice(0, 2000);
+          const disallows: string[] = [];
           for (const line of robotsText.split('\n')) {
-            const m = line.match(/^Sitemap:\s*(.+)/i);
-            if (m) robotsDeclaredUrls.push(m[1].trim());
+            const sitemapMatch = line.match(/^Sitemap:\s*(.+)/i);
+            if (sitemapMatch) robotsDeclaredUrls.push(sitemapMatch[1].trim());
+            const disallowMatch = line.match(/^Disallow:\s*(.+)/i);
+            if (disallowMatch && disallowMatch[1].trim() && disallowMatch[1].trim() !== '/') {
+              disallows.push(disallowMatch[1].trim());
+            }
           }
+          if (disallows.length) result.robotsDisallows = [...new Set(disallows)].slice(0, 20);
         }
       } catch { /* robots.txt unreachable — continue without it */ }
 
