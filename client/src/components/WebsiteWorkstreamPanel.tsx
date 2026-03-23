@@ -2130,25 +2130,8 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [open, setOpen]             = useState(true);
   const [loading, setLoading]       = useState(false);
 
-  // Auto-trigger site plan generation on first open when no blueprint exists yet
+  // autoTriggered ref — guards the auto-generate effect below (placed after handleRun)
   const autoTriggered = useRef(false);
-  useEffect(() => {
-    if (autoTriggered.current) return;
-    if (!token || !authReady) return;
-    if (blueprint || loading) return;
-    const si: any = (client as any).sourceIntelligence || {};
-    const eb = si.evidenceBundle || (client as any).evidenceBundle;
-    const hasIntel = !!(
-      eb ||
-      si.prepCallPack ||
-      si.strategyIntelligence ||
-      (client as any).website ||
-      (client as any).keywordStrategy
-    );
-    if (!hasIntel) return;
-    autoTriggered.current = true;
-    handleRun(false);
-  }, [token, authReady, blueprint, loading, handleRun, client]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
   const [activePage, setActivePage]       = useState<string | null>(null);
@@ -2393,6 +2376,25 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       setLoading(false);
     }
   }, [orgId, authReady, token, client, nudge, toast]);
+
+  // Auto-trigger site plan generation on first open — placed AFTER handleRun to avoid TDZ
+  useEffect(() => {
+    if (autoTriggered.current) return;
+    if (!token || !authReady) return;
+    if (blueprint || loading) return;
+    const si: any = (client as any).sourceIntelligence || {};
+    const eb = si.evidenceBundle || (client as any).evidenceBundle;
+    const hasIntel = !!(
+      eb ||
+      si.prepCallPack ||
+      si.strategyIntelligence ||
+      (client as any).website ||
+      (client as any).keywordStrategy
+    );
+    if (!hasIntel) return;
+    autoTriggered.current = true;
+    handleRun(false);
+  }, [token, authReady, blueprint, loading, handleRun, client]);
 
   // ── Accept plan ──────────────────────────────────────────────────────────────
 
