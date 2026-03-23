@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { auth } from '@/lib/firebase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -2105,9 +2106,22 @@ function LaunchTab({
 // ─── Main panel ────────────────────────────────────────────────────────────────
 
 export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPanelProps) {
-  const { orgId, authReady, token } = useAuth() as any;
+  const { orgId, authReady } = useAuth() as any;
   const dispatch = useDispatch();
   const { toast } = useToast();
+
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    const unsub = auth.onIdTokenChanged(async (user) => {
+      if (user) {
+        const t = await user.getIdToken();
+        setToken(t);
+      } else {
+        setToken(null);
+      }
+    });
+    return unsub;
+  }, []);
 
   const blueprint: WebsiteBlueprint | null = client.websiteWorkstream?.currentDraft ?? null;
   const isLocked  = !!client.websiteWorkstream?.acceptedVersion;
@@ -2152,7 +2166,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   // ── Enqueue / regenerate ─────────────────────────────────────────────────────
 
   const handleRun = useCallback(async (force = false) => {
-    if (!orgId || !authReady) return;
+    if (!orgId || !authReady || !token) return;
     setLoading(true);
     try {
       const res = await fetch('/api/agent-jobs', {
@@ -2275,7 +2289,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   // ── Generate real HTML site ──────────────────────────────────────────────────
 
   const handleGenerateSite = useCallback(async () => {
-    if (!orgId || !authReady || !blueprint) return;
+    if (!orgId || !authReady || !blueprint || !token) return;
     setGeneratingSite(true);
     try {
       const res = await fetch(`/api/clients/${client.id}/generate-site`, {
@@ -2305,7 +2319,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   // ── Generate local SEO pages ──────────────────────────────────────────────────
 
   const handleGenerateLocalPages = useCallback(async () => {
-    if (!orgId || !authReady || !blueprint) return;
+    if (!orgId || !authReady || !blueprint || !token) return;
     setGeneratingLocal(true);
     try {
       const res = await fetch(`/api/clients/${client.id}/generate-local-pages`, {
