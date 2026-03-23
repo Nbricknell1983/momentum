@@ -27,6 +27,8 @@ import BullpenPage from '@/pages/bullpen';
 import OpenClawSetupPage from '@/pages/openclaw-setup';
 import MyWorkPage from '@/pages/my-work';
 import RoutesOverviewPage from '@/pages/routes-overview';
+import QueueHealthPage from '@/pages/admin/QueueHealthPage';
+import AutopilotSettingsPage from '@/pages/admin/AutopilotSettingsPage';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -67,6 +69,8 @@ function ProtectedRoutes() {
       <Route path="/bullpen">{() => <ManagerGate component={BullpenPage} />}</Route>
       <Route path="/openclaw-setup">{() => <ManagerGate component={OpenClawSetupPage} />}</Route>
       <Route path="/routes">{() => <ManagerGate component={RoutesOverviewPage} />}</Route>
+      <Route path="/admin/queue-health">{() => <ManagerGate component={QueueHealthPage} />}</Route>
+      <Route path="/admin/autopilot-settings">{() => <ManagerGate component={AutopilotSettingsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

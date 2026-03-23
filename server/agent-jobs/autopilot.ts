@@ -18,6 +18,7 @@ import {
 } from './history';
 import { resolveAgentId, makeIdempotencyKey, getDependencies } from './router';
 import { TASK_TYPES, TASK_TTL_MS, getTtlMs, DEFAULT_MAX_RETRIES } from './contracts';
+import { AutomationRulesSchema, AUTOMATION_RULES_DEFAULTS } from '../../shared/controlPlaneSchemas';
 import type { EntityType } from './types';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
@@ -136,9 +137,49 @@ export async function runAutopilotScan(
     const orgData = orgDoc.data() || {};
     if (orgData.suspended || orgData.autopilotDisabled) continue;
 
+    // ── Read org-level autopilot overrides from Firestore ─────────────────────
+    let orgRules = AUTOMATION_RULES_DEFAULTS;
+    try {
+      const rulesSnap = await db
+        .collection('orgs').doc(orgId)
+        .collection('settings').doc('automationRules')
+        .get();
+      if (rulesSnap.exists) {
+        const parsed = AutomationRulesSchema.safeParse(rulesSnap.data());
+        if (parsed.success) orgRules = parsed.data;
+      }
+    } catch (e) {
+      console.warn(`[autopilot] Failed to read org rules for ${orgId}, using defaults:`, e);
+    }
+
+    // Org-level autopilot kill-switch
+    if (orgRules.autopilotEnabled === false) {
+      console.log(`[autopilot] Org ${orgId} has autopilotEnabled=false — skipping`);
+      continue;
+    }
+
+    // Org-level quiet hours (use org setting, fall back to env defaults)
+    const orgQuietStart = parseInt((orgRules.quietHoursUtc?.start ?? `${AUTOPILOT_DEFAULTS.QUIET_HOURS_START}:00`).split(':')[0], 10);
+    const orgQuietEnd   = parseInt((orgRules.quietHoursUtc?.end   ?? `${AUTOPILOT_DEFAULTS.QUIET_HOURS_END}:00`).split(':')[0], 10);
+    if (isQuietHoursRange(orgQuietStart, orgQuietEnd)) {
+      console.log(`[autopilot] Org ${orgId} quiet hours (${orgRules.quietHoursUtc?.start}–${orgRules.quietHoursUtc?.end} UTC) — skipping`);
+      continue;
+    }
+
     result.scannedOrgs++;
     result.byOrg[orgId] = 0;
-    const perOrgCap = options.limit ?? AUTOPILOT_DEFAULTS.SCAN_LIMIT_PER_ORG;
+
+    // Cap: org setting overrides env, options.limit overrides all
+    const perOrgCap = options.limit ?? orgRules.perDayCap ?? AUTOPILOT_DEFAULTS.SCAN_LIMIT_PER_ORG;
+
+    // Task type filtering from org rules
+    let orgTaskTypes = taskTypes;
+    if (orgRules.taskTypeAllow && orgRules.taskTypeAllow.length > 0) {
+      orgTaskTypes = taskTypes.filter(t => orgRules.taskTypeAllow!.includes(t));
+    } else if (orgRules.taskTypeDeny && orgRules.taskTypeDeny.length > 0) {
+      orgTaskTypes = taskTypes.filter(t => !orgRules.taskTypeDeny!.includes(t));
+    }
+
     let orgEnqueued = 0;
 
     for (const collectionName of scanEntities) {
@@ -171,7 +212,7 @@ export async function runAutopilotScan(
           if (entityData.deleted || entityData.status === 'archived') continue;
 
           // ── Per-entity TTL evaluation ──────────────────────────────────────
-          for (const taskType of taskTypes) {
+          for (const taskType of orgTaskTypes) {
             if (orgEnqueued >= perOrgCap) {
               result.skippedCap++;
               continue;
@@ -420,15 +461,20 @@ export async function reviveFromDeadLetter(
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Returns true during configured UTC quiet hours. */
+/** Returns true during configured UTC quiet hours (using global env defaults). */
 function isQuietHours(): boolean {
   const hour = new Date().getUTCHours();
   const { QUIET_HOURS_START, QUIET_HOURS_END } = AUTOPILOT_DEFAULTS;
-  // Handle wrap-around (e.g., 22:00 → 06:00)
-  if (QUIET_HOURS_START > QUIET_HOURS_END) {
-    return hour >= QUIET_HOURS_START || hour < QUIET_HOURS_END;
+  return isQuietHoursRange(QUIET_HOURS_START, QUIET_HOURS_END);
+}
+
+/** Returns true if current UTC hour falls within the given quiet window (supports wraparound). */
+function isQuietHoursRange(start: number, end: number): boolean {
+  const hour = new Date().getUTCHours();
+  if (start > end) {
+    return hour >= start || hour < end;
   }
-  return hour >= QUIET_HOURS_START && hour < QUIET_HOURS_END;
+  return hour >= start && hour < end;
 }
 
 /** Count total queued + running jobs across all orgs (or a single org). */

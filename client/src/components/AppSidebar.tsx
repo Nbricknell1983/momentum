@@ -15,6 +15,8 @@ import {
   Zap,
   Inbox,
   Map,
+  Activity,
+  Bot,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -52,6 +54,11 @@ const managerNavItems = [
   { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
   { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
   { title: 'Route Map',      url: '/routes',         icon: Map },
+];
+
+const adminNavItems = [
+  { title: 'Queue Health',       url: '/admin/queue-health',       icon: Activity },
+  { title: 'Autopilot Settings', url: '/admin/autopilot-settings', icon: Bot },
 ];
 
 function useMyWorkCount(orgId: string | null) {
@@ -125,6 +132,28 @@ export default function AppSidebar() {
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild isActive={isActive}>
                         <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {effectiveIsManager && isManager && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Admin</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminNavItems.map((item) => {
+                  const isActive = location.startsWith(item.url);
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={isActive}>
+                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(' ', '-')}`}>
                           <item.icon className="h-4 w-4" />
                           <span>{item.title}</span>
                         </Link>
