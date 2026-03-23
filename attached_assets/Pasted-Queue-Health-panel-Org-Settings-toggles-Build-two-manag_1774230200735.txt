@@ -1,0 +1,76 @@
+Queue Health panel + Org Settings toggles
+
+Build two manager-only features in Momentum:
+
+A) Queue Health Panel (UI + data)
+Goal: Give managers real-time visibility into agent job health.
+
+API integration
+Use existing endpoint GET /api/health/agent-queue (org-scoped auth)
+Types: define HealthSummary { queued, running, failed24h, ttlSkips24h, deadLetter, byTaskType: Record<string, { queued, running, success24h, failed24h, avgLatencyMs24h, retryRate24h }>, alerts: { highFailureRate?: boolean, staleRunningJobs?: boolean, deadLetterBacklog?: boolean } }
+Poll every 20s with React Query; mount-time fetch + background refetch
+UI (React + Tailwind + shadcn)
+Route: /admin/queue-health (manager-only)
+Top cards (KPI): Queued, Running, Failed (24h), TTL Skips (24h), Dead-letter
+Alerts banner (conditional): High failure rate / Stale running jobs / Dead-letter backlog
+Per-taskType table:
+Columns: Task, Queued, Running, Success(24h), Failed(24h), RetryRate(24h), P95 Latency
+Action row (manager-only):
+“Open Dead-Letter” button → navigates to /admin/dead-letter
+“Refresh Now” → refetch
+Nice-to-have charts
+Mini sparklines for queued/running last 60m (client-only; no new API needed — just accumulate samples)
+B) Org Settings: Autopilot Controls
+Goal: Managers can tune automation per org.
+
+Data model (Firestore-backed, already used elsewhere)
+Path: orgs/{orgId}/settings/automationRules
+Add fields:
+autopilotEnabled: boolean (default false)
+quietHoursUtc: { start: "22:00", end: "06:00" } (optional)
+perDayCap: number (default 500)
+taskTypeAllow: string[] | null (null = all allowed)
+taskTypeDeny: string[] | null (null = none denied)
+API
+GET /api/orgs/:orgId/settings/automation-rules (manager)
+POST /api/orgs/:orgId/settings/automation-rules (manager, Zod-validate, audit log on change)
+Server applies these to the scanner (already reading env; extend to prefer org overrides when present)
+UI (React form)
+Route: /admin/autopilot-settings (manager-only)
+Controls:
+Toggle: Autopilot Enabled
+TimeRange: Quiet Hours (UTC) start/end (validate HH:MM)
+Number: Per-day cap (min 0, max 100000)
+Multi-select: Task types (website_xray, serp, strategy, growth_prescription, prep, enrichment, gbp, ads)
+Two lists: Allow and Deny (mutually exclusive UI; normalize on save: if Allow non-empty, Deny ignored)
+Save/Cancel with optimistic updates; show last saved timestamp and “Effective Policy” summary pill (enabled/disabled + caps + quiet hours)
+C) Access control
+
+Hide both routes from non-managers
+If user isn’t manager, show 403 UI
+D) UX polish
+
+Use existing shadcn components (Card, Table, Badge, Switch, Input, Select, Alert)
+Respect light/dark theme
+Breadcrumbs: Admin > Queue Health; Admin > Autopilot Settings
+E) Acceptance criteria
+
+Queue Health shows live KPIs and per-taskType breakdown; refresh button works; alerts display when provided by API
+Autopilot settings read/write works; invalid inputs blocked; audit entry created on change
+Scanner respects org overrides on next run (e.g., disabling autopilot stops enqueues; changing quiet hours defers scans)
+No TypeScript errors; Zod schemas enforced on API; React Query cache keys stable; routes protected
+F) Files to add/modify (example)
+
+client/src/pages/admin/QueueHealthPage.tsx
+client/src/pages/admin/AutopilotSettingsPage.tsx
+client/src/api/health.ts (React Query hooks)
+client/src/api/automationRules.ts (GET/POST)
+server/routes/automation-rules.ts (get/set with Zod + audit)
+server/agent-jobs/autopilot.ts (read org overrides; prefer org settings to env)
+server/types/health.ts, server/types/automation.ts (shared DTOs)
+nav/sidebar: add Admin section links (manager-only)
+When done, provide:
+
+screenshots (light/dark)
+sample response from /api/health/agent-queue
+example automationRules doc for one org (before/after)

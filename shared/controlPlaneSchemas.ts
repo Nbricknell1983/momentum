@@ -15,9 +15,12 @@ import { z } from 'zod';
 // ─── AutomationRules ─────────────────────────────────────────────────────────
 // Controls Bullpen work-hours enforcement and approval gates.
 
+const HH_MM = z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format');
+
 export const AutomationRulesSchema = z.object({
-  workHoursStart:           z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format').default('08:00'),
-  workHoursEnd:             z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format').default('17:30'),
+  // ── Bullpen work-hours enforcement ───────────────────────────────────────
+  workHoursStart:           HH_MM.default('08:00'),
+  workHoursEnd:             HH_MM.default('17:30'),
   timezone:                 z.string().min(1).max(100).default('Australia/Brisbane'),
   blockSmsOutsideHours:     z.boolean().default(true),
   blockEmailOutsideHours:   z.boolean().default(false),
@@ -26,6 +29,16 @@ export const AutomationRulesSchema = z.object({
   requireApprovalHighRisk:  z.boolean().default(true),
   requireApprovalPublish:   z.boolean().default(true),
   requireApprovalProduction:z.boolean().default(true),
+
+  // ── Autopilot orchestrator controls ──────────────────────────────────────
+  autopilotEnabled:   z.boolean().default(false),
+  quietHoursUtc:      z.object({
+    start: HH_MM,
+    end:   HH_MM,
+  }).default({ start: '22:00', end: '06:00' }),
+  perDayCap:          z.number().int().min(0).max(100_000).default(500),
+  taskTypeAllow:      z.array(z.string()).nullable().default(null),
+  taskTypeDeny:       z.array(z.string()).nullable().default(null),
 });
 
 export type AutomationRules = z.infer<typeof AutomationRulesSchema>;
