@@ -2384,13 +2384,13 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   // Auto-trigger site plan generation on first open — fires for any real client with no existing blueprint
   useEffect(() => {
     if (autoTriggered.current) return;
-    if (!token || !authReady) return;
+    // All three must be ready — handleRun guards on all three; setting the ref before ensures no double-fire
+    if (!token || !authReady || !orgId) return;
     if (blueprint || loading) return;
-    // Any client with a name is enough — the server reads GBP + crawl + keyword intelligence
-    if (!client.businessName) return;
+    if (!client?.businessName) return;
     autoTriggered.current = true;
     handleRun(false);
-  }, [token, authReady, blueprint, loading, handleRun, client]);
+  }, [token, authReady, orgId, blueprint, loading, handleRun, client]);
 
   // ── Accept plan ──────────────────────────────────────────────────────────────
 
