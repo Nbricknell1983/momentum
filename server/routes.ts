@@ -10426,6 +10426,41 @@ Rules:
         ? `Scope audit: ${client.scopeAudit.auditSummary}. Website readiness: ${client.scopeAudit.channelReadiness?.website?.note || ''}`
         : '';
 
+      // ── GBP Intelligence (services and locations MUST match the website) ────
+      const gbpEb: any = si.evidenceBundle?.gbp || client.evidenceBundle?.gbp || {};
+      const gbpServices: string[] = gbpEb.services || si.services || client.services || [];
+      const gbpServiceAreas: string[] = gbpEb.serviceAreas || gbpEb.serviceArea || si.serviceAreas || [];
+      const gbpPrimaryCategory: string = gbpEb.primaryCategory || gbpEb.categories?.[0] || '';
+      const gbpRating: number | null = gbpEb.rating || gbpEb.avgRating || null;
+      const gbpReviewCount: number | null = gbpEb.totalReviews || gbpEb.reviewCount || null;
+
+      // ── Keyword Intelligence (Ahrefs import + keyword strategy clusters) ────
+      const importedKeywords: any[] = client.keywords || [];
+      const kwStrategy: any = client.keywordStrategy || null;
+      const kwClusters: any[] = kwStrategy?.clusters?.slice(0, 6) || [];
+      const quickWinKws: string[] = (kwStrategy?.quickWins || []).slice(0, 10);
+      const topKeywords: string[] = importedKeywords
+        .sort((a: any, b: any) => (b.volume || 0) - (a.volume || 0))
+        .slice(0, 25)
+        .map((k: any) => `${k.keyword}${k.volume ? ` (${k.volume}/mo)` : ''}`);
+
+      const gbpIntelBlock = (gbpServices.length || gbpServiceAreas.length) ? `
+═══ GBP INTELLIGENCE — WEBSITE MUST MIRROR THIS EXACTLY ═══
+Primary Category: ${gbpPrimaryCategory || 'not captured'}
+GBP Services (each needs its own dedicated page):
+${gbpServices.slice(0, 20).map((s: string) => `  - ${s}`).join('\n') || '  (none captured)'}
+Service Areas / Locations (each needs a location page):
+${gbpServiceAreas.slice(0, 20).map((a: string) => `  - ${a}`).join('\n') || '  (none captured)'}
+${gbpRating ? `Rating: ${gbpRating} stars from ${gbpReviewCount || '?'} reviews` : ''}
+═══════════════════════════════════════════════════════════` : '';
+
+      const kwIntelBlock = (topKeywords.length || kwClusters.length) ? `
+═══ KEYWORD INTELLIGENCE (Ahrefs data) ═══
+${topKeywords.length ? `Top Keywords by Volume:\n${topKeywords.map(k => `  - ${k}`).join('\n')}` : ''}
+${quickWinKws.length ? `\nQuick Win Keywords (low difficulty):\n${quickWinKws.map(k => `  - ${k}`).join('\n')}` : ''}
+${kwClusters.length ? `\nKeyword Clusters:\n${kwClusters.map((c: any) => `  [${c.intent || c.cluster}] ${(c.keywords || []).slice(0, 4).join(', ')}`).join('\n')}` : ''}
+═══════════════════════════════════════` : '';
+
       // ── Deep crawl evidence → SEO preservation scaffold ─────────────────────
       // Build a structured evidence block from the X-ray crawl so the AI can
       // generate a blueprint that is already seeded with real data instead of guesses.
@@ -10515,6 +10550,8 @@ Location: ${address}
 Existing website: ${website || 'none — new build from scratch'}
 
 ${preservationNote}
+${gbpIntelBlock}
+${kwIntelBlock}
 ${strategyContext}
 ${prepContext}
 ${prescriptionContext}
@@ -10601,7 +10638,11 @@ Generate a high-converting website delivery workstream in this exact JSON format
 }
 
 Rules:
-- pageStructure must include ALL discovered existing pages from the crawl evidence (listed above) PLUS any important pages that are missing — minimum 1 homepage + all found service/location pages
+- pageStructure MUST include a dedicated page for EVERY GBP service listed above — do not combine services onto one page unless they are very closely related
+- pageStructure MUST include a location page for EVERY service area listed above — these are the suburbs/locations the business wants to rank for
+- The services and locations on the website MUST mirror the GBP exactly — same services, same areas
+- If Ahrefs keyword data is provided: assign the best matching keyword to each page as its primaryKeyword, and use keyword volume data to prioritise which service pages are most important
+- pageStructure must also include ALL discovered existing pages from the crawl evidence (listed above) PLUS any important pages that are missing
 - For pages found in the crawl evidence: use the actual existing URL as existingUrl, preserve the slug unless the URL structure is messy
 - For pages with messy URLs (query strings, IDs, .php): create clean slugs AND set redirectFrom to the old URL
 - existingH1 must be filled in with the real H1 from the crawl evidence where known

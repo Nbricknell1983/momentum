@@ -2129,6 +2129,26 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
 
   const [open, setOpen]             = useState(true);
   const [loading, setLoading]       = useState(false);
+
+  // Auto-trigger site plan generation on first open when no blueprint exists yet
+  const autoTriggered = useRef(false);
+  useEffect(() => {
+    if (autoTriggered.current) return;
+    if (!token || !authReady) return;
+    if (blueprint || loading) return;
+    const si: any = (client as any).sourceIntelligence || {};
+    const eb = si.evidenceBundle || (client as any).evidenceBundle;
+    const hasIntel = !!(
+      eb ||
+      si.prepCallPack ||
+      si.strategyIntelligence ||
+      (client as any).website ||
+      (client as any).keywordStrategy
+    );
+    if (!hasIntel) return;
+    autoTriggered.current = true;
+    handleRun(false);
+  }, [token, authReady, blueprint, loading, handleRun, client]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
   const [activePage, setActivePage]       = useState<string | null>(null);
@@ -2154,6 +2174,8 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [chatPreviewSlug, setChatPreviewSlug] = useState<string>('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const ahrefsFileInputRef = useRef<HTMLInputElement>(null);
+  const [ahrefsUploading, setAhrefsUploading] = useState(false);
 
   const copyToClipboard = useCallback((text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -2203,16 +2225,79 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
     }
   }, [chatInput, chatImages, chatLoading, chatMessages, client.id, orgId]);
 
+  const parseAhrefsBuffer = (raw: ArrayBuffer): { keyword: string; volume: number; difficulty: number | null; cpc: number | null; parentKeyword: string | null; country: string }[] => {
+    let text = '';
+    const buf = new Uint8Array(raw);
+    if (buf[0] === 0xFF && buf[1] === 0xFE) {
+      const u16 = new Uint16Array(raw.slice(2));
+      text = String.fromCharCode(...Array.from(u16));
+    } else {
+      text = new TextDecoder('utf-8').decode(raw);
+    }
+    const lines = text.split('\n').filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const header = lines[0].split('\t').map(h => h.replace(/"/g, '').trim().toLowerCase());
+    const kwIdx = header.findIndex(h => h === 'keyword');
+    const volIdx = header.findIndex(h => h === 'volume');
+    const diffIdx = header.findIndex(h => h === 'difficulty');
+    const cpcIdx = header.findIndex(h => h === 'cpc');
+    const parentIdx = header.findIndex(h => h === 'parent keyword');
+    const countryIdx = header.findIndex(h => h === 'country');
+    if (kwIdx === -1) return [];
+    return lines.slice(1).map(line => {
+      const cols = line.split('\t').map(c => c.replace(/^"|"$/g, '').trim());
+      const kw = cols[kwIdx]?.toLowerCase().trim() || '';
+      if (!kw) return null;
+      const vol = parseInt(cols[volIdx] || '0', 10) || 0;
+      const diffStr = cols[diffIdx]?.trim();
+      const diff = diffStr ? parseInt(diffStr, 10) : null;
+      const cpcStr = cols[cpcIdx]?.trim();
+      const cpc = cpcStr ? parseFloat(cpcStr) : null;
+      return { keyword: kw, volume: vol, difficulty: isNaN(diff!) ? null : diff, cpc: isNaN(cpc!) ? null : cpc, parentKeyword: cols[parentIdx]?.toLowerCase().trim() || null, country: cols[countryIdx] || 'au' };
+    }).filter(Boolean) as any[];
+  };
+
+  const handleAhrefsUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !token) return;
+    setAhrefsUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const keywords = parseAhrefsBuffer(buf);
+      if (keywords.length === 0) {
+        toast({ title: 'No keywords found', description: 'Expected Ahrefs CSV with Keyword and Volume columns (tab-separated).', variant: 'destructive' });
+        return;
+      }
+      const res = await fetch(`/api/clients/${client.id}/import-keywords`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orgId, keywords }),
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      const count = data.count || keywords.length;
+      toast({ title: `${count} keywords imported`, description: 'Rebuilding your site plan with keyword data…' });
+      // Rebuild the site plan with the new keyword intelligence
+      autoTriggered.current = false;
+      setTimeout(() => handleRun(true), 800);
+    } catch (err: any) {
+      toast({ title: 'Keyword upload failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setAhrefsUploading(false);
+      if (ahrefsFileInputRef.current) ahrefsFileInputRef.current.value = '';
+    }
+  }, [token, orgId, client.id, handleRun, toast]);
+
   const CHAT_QUICK_ACTIONS: { label: string; action?: string; run?: boolean }[] = [
-    { label: 'Generate Blueprint', run: true },
-    { label: 'Write homepage copy with headline, hero text and CTA', action: 'Write homepage copy with headline, hero text and CTA' },
-    { label: 'Generate meta titles and descriptions for all pages', action: 'Generate meta titles and descriptions for all pages' },
-    { label: 'Write a services page with SEO-optimised descriptions', action: 'Write a services page with SEO-optimised descriptions' },
-    { label: 'Create an About Us page for a local trade business', action: 'Create an About Us page for a local trade business' },
-    { label: 'Write FAQ content targeting local search queries', action: 'Write FAQ content targeting local search queries' },
-    { label: 'Generate LocalBusiness schema markup', action: 'Generate LocalBusiness schema markup' },
-    { label: 'Write a Google review response strategy', action: 'Write a Google review response strategy' },
-    { label: 'Create location-specific landing page copy', action: 'Create location-specific landing page copy' },
+    { label: 'Write homepage copy', action: 'Write homepage copy with headline, hero text, supporting points and CTA — based on the site plan' },
+    { label: 'Write all service page copy', action: 'Write SEO-optimised copy for every service page in the site plan — include benefits, process and CTA for each' },
+    { label: 'Write location page copy', action: 'Write location-specific landing page copy for every service area in the site plan' },
+    { label: 'Generate meta titles & descriptions', action: 'Generate optimised meta titles and descriptions for every page in the site plan' },
+    { label: 'Create LocalBusiness schema', action: 'Generate complete LocalBusiness schema markup including all services, service areas and review signals' },
+    { label: 'Write FAQ content', action: 'Write FAQ content targeting the most common local search queries for each service' },
+    { label: 'Create About Us page', action: 'Write a compelling About Us page for a local trade business — include origin story, values and local trust signals' },
+    { label: 'Write Google review request emails', action: 'Write 3 review request email templates for getting more 5-star Google reviews' },
+    { label: 'Rebuild site plan', run: true },
   ];
 
   function renderChatContent(text: string) {
@@ -2299,7 +2384,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
         }).catch(() => {/* fire-and-forget */});
       }
 
-      toast({ title: force ? 'Regenerating blueprint…' : 'Generating blueprint…', description: 'This usually takes 1–2 minutes. The panel will update automatically.' });
+      toast({ title: force ? 'Rebuilding site plan…' : 'Building site plan from intelligence…', description: 'Pulling from GBP services, service areas and keyword data. The plan tab will update automatically.' });
       setNudge('');
       setShowNudge(false);
     } catch (e: any) {
@@ -3252,31 +3337,47 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
               <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50 dark:bg-gray-900">
                 {chatMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center mb-3">
-                      <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-3 ${loading ? 'bg-blue-600' : 'bg-blue-100 dark:bg-blue-900/40'}`}>
+                      <Globe className={`h-5 w-5 ${loading ? 'text-white animate-pulse' : 'text-blue-600 dark:text-blue-400'}`} />
                     </div>
-                    <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">SEO Website Machine</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-5 max-w-[260px]">
-                      Type anything — page copy, meta tags, FAQs, schema, local pages. Upload photos and I'll work them in. Preview updates on the right.
-                    </p>
-                    <div className="flex flex-col gap-1.5 w-full max-w-[280px]">
-                      {CHAT_QUICK_ACTIONS.slice(0, 5).map((item) => (
-                        <button
-                          key={item.label}
-                          onClick={() => item.run ? handleRun(false) : sendChat(item.action!)}
-                          disabled={item.run ? loading : chatLoading}
-                          className={`text-left text-[11px] px-3 py-1.5 rounded-lg border transition-colors ${
-                            item.run
-                              ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 font-medium'
-                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
-                          }`}
-                          data-testid={`button-quick-${item.label.slice(0, 20)}`}
-                        >
-                          {item.run && <Cpu className={`inline h-3 w-3 mr-1.5 ${loading ? 'animate-spin' : ''}`} />}
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
+                    {loading ? (
+                      <>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Building your site plan…</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-[260px]">
+                          Pulling from your client intelligence — GBP services, service areas, existing site data, and keyword targets.
+                        </p>
+                        <div className="flex gap-1 justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">SEO Website Machine</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-5 max-w-[260px]">
+                          Your site plan will be built automatically from your GBP services, service areas and keyword data. Upload Ahrefs keywords below to get started.
+                        </p>
+                        <div className="flex flex-col gap-1.5 w-full max-w-[280px]">
+                          {CHAT_QUICK_ACTIONS.slice(0, 5).map((item) => (
+                            <button
+                              key={item.label}
+                              onClick={() => item.run ? handleRun(false) : sendChat(item.action!)}
+                              disabled={item.run ? loading : chatLoading}
+                              className={`text-left text-[11px] px-3 py-1.5 rounded-lg border transition-colors ${
+                                item.run
+                                  ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 font-medium'
+                                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
+                              }`}
+                              data-testid={`button-quick-${item.label.slice(0, 20)}`}
+                            >
+                              {item.run && <Cpu className={`inline h-3 w-3 mr-1.5 ${loading ? 'animate-spin' : ''}`} />}
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -3348,15 +3449,20 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
               {/* Quick actions bar */}
               {chatMessages.length > 0 && (
                 <div className="px-3 py-1.5 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-1.5 overflow-x-auto shrink-0">
-                  {CHAT_QUICK_ACTIONS.slice(0, 5).map((action) => (
+                  {CHAT_QUICK_ACTIONS.map((item) => (
                     <button
-                      key={action}
-                      onClick={() => sendChat(action)}
-                      disabled={chatLoading}
-                      className="text-[9px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-blue-50 hover:text-blue-600 whitespace-nowrap transition-colors disabled:opacity-40 shrink-0"
-                      data-testid={`button-qa-${action.slice(0, 12)}`}
+                      key={item.label}
+                      onClick={() => item.run ? handleRun(false) : sendChat(item.action!)}
+                      disabled={item.run ? loading : chatLoading}
+                      className={`text-[9px] px-2 py-0.5 rounded-full whitespace-nowrap transition-colors disabled:opacity-40 shrink-0 ${
+                        item.run
+                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 hover:bg-blue-200'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-blue-50 hover:text-blue-600'
+                      }`}
+                      data-testid={`button-qa-${item.label.slice(0, 12)}`}
                     >
-                      {action}
+                      {item.run && <Cpu className={`inline h-2.5 w-2.5 mr-1 ${loading ? 'animate-spin' : ''}`} />}
+                      {item.label}
                     </button>
                   ))}
                 </div>
@@ -3374,6 +3480,14 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                     onChange={handleChatFileSelect}
                     data-testid="input-chat-file"
                   />
+                  <input
+                    ref={ahrefsFileInputRef}
+                    type="file"
+                    accept=".csv,.txt"
+                    className="hidden"
+                    onChange={handleAhrefsUpload}
+                    data-testid="input-ahrefs-file"
+                  />
                   <button
                     onClick={() => chatFileInputRef.current?.click()}
                     className="p-2 rounded-md border border-gray-200 dark:border-gray-600 text-gray-400 hover:text-blue-500 hover:border-blue-400 transition-colors shrink-0"
@@ -3381,6 +3495,15 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                     data-testid="button-chat-attach"
                   >
                     <Image className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => ahrefsFileInputRef.current?.click()}
+                    disabled={ahrefsUploading}
+                    className="p-2 rounded-md border border-gray-200 dark:border-gray-600 text-gray-400 hover:text-green-600 hover:border-green-400 transition-colors shrink-0 disabled:opacity-40"
+                    title="Upload Ahrefs keyword CSV — site plan rebuilds automatically"
+                    data-testid="button-ahrefs-upload"
+                  >
+                    {ahrefsUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart2 className="h-4 w-4" />}
                   </button>
                   <textarea
                     value={chatInput}
@@ -3403,7 +3526,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
                     {chatLoading ? <Loader2 className="h-4 w-4 text-white animate-spin" /> : <Send className="h-4 w-4 text-white" />}
                   </button>
                 </div>
-                <p className="text-[9px] text-gray-400 mt-1">Enter to send · Shift+Enter for new line · 📎 attach photos</p>
+                <p className="text-[9px] text-gray-400 mt-1">Enter to send · Shift+Enter for new line · 📎 attach photos · <span className="text-green-600">📊 upload Ahrefs CSV</span></p>
               </div>
             </div>
 
