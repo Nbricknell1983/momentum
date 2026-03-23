@@ -11876,6 +11876,84 @@ ${(linkMap.recommendations || []).map((r: any) => `- On /${r.fromSlug}: add link
     }
   });
 
+  // ── Website Chat (SEO Machine) ────────────────────────────────────────────────
+
+  app.post('/api/clients/:clientId/website-chat', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, message, history = [] } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      if (!message?.trim()) return res.status(400).json({ error: 'message required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const c = clientDoc.data() as any;
+
+      const bp = c.websiteWorkstream?.currentDraft;
+      const gbp = c.sourceIntelligence?.evidenceBundle?.gbp || (c as any).evidenceBundle?.gbp;
+      const kw = c.keywordStrategy;
+      const si = c.sourceIntelligence;
+
+      const systemPrompt = `You are an expert SEO website strategist and copywriter for a digital marketing agency. Your job is to help build high-converting, locally-optimised websites for service and trade businesses in Australia.
+
+CLIENT CONTEXT
+Business: ${c.businessName || 'Unknown'}
+Industry: ${c.industry || c.niche || 'Service business'}
+Location: ${c.suburb || c.city || c.state || 'Australia'}
+Website: ${c.website || 'Not yet built'}
+Services: ${(c.services || []).join(', ') || 'Not specified'}
+
+${gbp ? `GBP DATA
+Rating: ${gbp.rating ?? 'N/A'}★  |  Reviews: ${gbp.reviewCount ?? 'N/A'}  |  Category: ${gbp.category || 'N/A'}
+Address: ${gbp.address || 'N/A'}
+${gbp.editorialSummary ? `Google description: "${gbp.editorialSummary}"` : ''}` : ''}
+
+${si?.prepCallPack?.presenceSnapshot ? `CURRENT DIGITAL PRESENCE
+${si.prepCallPack.presenceSnapshot}` : ''}
+
+${bp ? `CURRENT WEBSITE BLUEPRINT
+Brand: ${bp.siteMeta?.brand || c.businessName}
+UVP: ${bp.siteMeta?.uvp || 'Not set'}
+Tone: ${bp.siteMeta?.tone || 'Professional'}
+Primary CTA: ${bp.siteMeta?.primaryCta || 'Contact us'}
+Pages: ${(bp.pages || []).map((p: any) => p.title || p.slug).join(', ')}` : 'No website blueprint generated yet.'}
+
+${kw?.clusters?.length ? `KEYWORD STRATEGY
+Quick wins: ${(kw.quickWins || []).slice(0, 5).map((k: any) => k.keyword).join(', ')}
+Priority clusters: ${(kw.clusters || []).slice(0, 3).map((cl: any) => cl.intent).join(', ')}` : ''}
+
+YOUR ROLE
+- Write compelling, SEO-optimised copy for any page, section, or component requested
+- Generate meta titles (50-60 chars) and meta descriptions (140-160 chars)
+- Build structured content: headings, body copy, CTAs, FAQs, service descriptions
+- Suggest schema markup, internal linking, and local SEO optimisations
+- Incorporate the client's real data (rating, location, services) into all copy
+- Always write in Australian English
+- Format responses clearly with headings and sections so content is easy to copy-paste
+- Be direct and practical — produce real content, not just advice`;
+
+      const messages: any[] = [
+        { role: 'system', content: systemPrompt },
+        ...history.slice(-20).map((m: any) => ({ role: m.role, content: m.content })),
+        { role: 'user', content: message },
+      ];
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages,
+        temperature: 0.7,
+        max_tokens: 2000,
+      });
+
+      const reply = completion.choices[0]?.message?.content || 'No response generated.';
+      res.json({ message: reply });
+    } catch (err: any) {
+      console.error('[website-chat]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Keyword Strategy Engine ───────────────────────────────────────────────────
 
   // Import and store keywords

@@ -16,7 +16,7 @@ import {
   Lock, Cpu, ExternalLink, Zap, MonitorPlay, Code2, Map, Rocket,
   Smartphone, Monitor, Shield, AlertTriangle, ArrowRight, Trash2,
   Upload, X, ListChecks, TrendingUp, TrendingDown, BarChart2,
-  GitCompare, Minus,
+  GitCompare, Minus, Send, Loader2, Copy,
 } from 'lucide-react';
 import { Hero } from '@/components/sections/Hero';
 import { ServicesGrid } from '@/components/sections/ServicesGrid';
@@ -2145,7 +2145,12 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
   const [robotsOpen, setRobotsOpen] = useState(false);
   const [schemaOpen, setSchemaOpen] = useState<Record<string, boolean>>({});
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const REPLIT_EMBED_URL = 'https://replit.com/@nathandbricknel/Momentum?embed=1';
+  // ── Website Chat state ──────────────────────────────────────────────────────
+  interface ChatMessage { role: 'user' | 'assistant'; content: string; ts: number; }
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const copyToClipboard = useCallback((text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -2153,6 +2158,66 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       setTimeout(() => setCopiedKey(null), 2000);
     });
   }, []);
+
+  const sendChat = useCallback(async (userMsg?: string) => {
+    const msg = (userMsg ?? chatInput).trim();
+    if (!msg || chatLoading) return;
+    const userEntry: ChatMessage = { role: 'user', content: msg, ts: Date.now() };
+    setChatMessages(prev => [...prev, userEntry]);
+    setChatInput('');
+    setChatLoading(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not signed in');
+      const idToken = await user.getIdToken();
+      const res = await fetch(`/api/clients/${clientId}/website-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ orgId, message: msg, history: chatMessages.slice(-20) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error');
+      setChatMessages(prev => [...prev, { role: 'assistant', content: data.message, ts: Date.now() }]);
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}`, ts: Date.now() }]);
+    } finally {
+      setChatLoading(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    }
+  }, [chatInput, chatLoading, chatMessages, clientId, orgId]);
+
+  const CHAT_QUICK_ACTIONS = [
+    'Write homepage copy with headline, hero text and CTA',
+    'Generate meta titles and descriptions for all pages',
+    'Write a services page with SEO-optimised descriptions',
+    'Create an About Us page for a local trade business',
+    'Write FAQ content targeting local search queries',
+    'Generate LocalBusiness schema markup',
+    'Write a Google review response strategy',
+    'Create location-specific landing page copy',
+  ];
+
+  function renderChatContent(text: string) {
+    const lines = text.split('\n');
+    return lines.map((line, i) => {
+      if (line.startsWith('### ')) return <h3 key={i} className="font-semibold text-sm mt-3 mb-1 text-gray-900 dark:text-white">{line.slice(4)}</h3>;
+      if (line.startsWith('## ')) return <h2 key={i} className="font-bold text-sm mt-4 mb-1 text-gray-900 dark:text-white">{line.slice(3)}</h2>;
+      if (line.startsWith('# ')) return <h1 key={i} className="font-bold text-base mt-4 mb-1 text-gray-900 dark:text-white">{line.slice(2)}</h1>;
+      if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-4 text-xs text-gray-700 dark:text-gray-300 list-disc">{line.slice(2)}</li>;
+      if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-semibold text-xs text-gray-800 dark:text-gray-200 mt-1">{line.slice(2, -2)}</p>;
+      if (line.trim() === '') return <div key={i} className="h-2" />;
+      const parts = line.split(/(\*\*[^*]+\*\*)/g);
+      return (
+        <p key={i} className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+          {parts.map((part, j) =>
+            part.startsWith('**') && part.endsWith('**')
+              ? <strong key={j} className="font-semibold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>
+              : part
+          )}
+        </p>
+      );
+    });
+  }
 
   const generatedSite = client.websiteWorkstream?.generatedSite;
   const siteReady = generatedSite?.status === 'ready' && generatedSite?.pages;
@@ -3156,32 +3221,152 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
             </Tabs>
           )}
 
-          {/* ── CODE / REPLIT — always visible ── */}
+          {/* ── SEO WEBSITE MACHINE — AI Chat ── */}
           <div className="mt-4">
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ height: '80vh' }}>
-              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-1.5">
-                  <Code2 className="h-3.5 w-3.5 text-gray-500" />
-                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Momentum — Replit Workspace</span>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col" style={{ height: '75vh' }}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-xs font-semibold text-white">SEO Website Machine</span>
+                  <span className="text-[10px] text-blue-200">· Powered by GPT-4o · Context: {client.businessName}</span>
                 </div>
-                <a
-                  href="https://replit.com/@nathandbricknel/Momentum"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[11px] text-blue-500 hover:underline shrink-0"
-                  data-testid="link-replit-open"
-                >
-                  <ExternalLink className="h-3 w-3" /> Open full screen
-                </a>
+                {chatMessages.length > 0 && (
+                  <button
+                    onClick={() => setChatMessages([])}
+                    className="text-[10px] text-blue-200 hover:text-white transition-colors"
+                    data-testid="button-chat-clear"
+                  >
+                    Clear chat
+                  </button>
+                )}
               </div>
-              <iframe
-                src={REPLIT_EMBED_URL}
-                className="w-full border-0"
-                style={{ height: 'calc(80vh - 32px)' }}
-                allow="clipboard-read; clipboard-write"
-                data-testid="iframe-replit-embed"
-                title="Momentum Replit Workspace"
-              />
+
+              {/* Messages area */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50 dark:bg-gray-900">
+                {chatMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center mb-3">
+                      <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Your SEO Website Machine is ready</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs mb-4">
+                      Tell me what you need — page copy, meta tags, schema markup, local SEO content, FAQs. I know {client.businessName}'s business inside out.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
+                      {CHAT_QUICK_ACTIONS.slice(0, 4).map((action) => (
+                        <button
+                          key={action}
+                          onClick={() => sendChat(action)}
+                          className="text-[10px] px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          data-testid={`button-quick-action-${action.slice(0, 20)}`}
+                        >
+                          {action}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {chatMessages.map((msg, i) => (
+                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        {msg.role === 'assistant' && (
+                          <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                            <Globe className="h-3 w-3 text-white" />
+                          </div>
+                        )}
+                        <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                          msg.role === 'user'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm'
+                        }`}>
+                          {msg.role === 'user' ? (
+                            <p className="text-xs text-white">{msg.content}</p>
+                          ) : (
+                            <div className="space-y-0.5">
+                              {renderChatContent(msg.content)}
+                            </div>
+                          )}
+                          {msg.role === 'assistant' && (
+                            <button
+                              onClick={() => navigator.clipboard.writeText(msg.content)}
+                              className="mt-2 text-[9px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1"
+                              data-testid={`button-copy-message-${i}`}
+                            >
+                              <Copy className="h-2.5 w-2.5" /> Copy all
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {chatLoading && (
+                      <div className="flex justify-start">
+                        <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                          <Globe className="h-3 w-3 text-white" />
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 shadow-sm">
+                          <div className="flex gap-1 items-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </>
+                )}
+              </div>
+
+              {/* Quick actions row (when chat has messages) */}
+              {chatMessages.length > 0 && (
+                <div className="px-3 py-1.5 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 flex gap-1.5 overflow-x-auto shrink-0">
+                  {CHAT_QUICK_ACTIONS.slice(0, 4).map((action) => (
+                    <button
+                      key={action}
+                      onClick={() => sendChat(action)}
+                      disabled={chatLoading}
+                      className="text-[9px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:hover:text-blue-400 whitespace-nowrap transition-colors disabled:opacity-50"
+                      data-testid={`button-quick-${action.slice(0, 15)}`}
+                    >
+                      {action}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Input area */}
+              <div className="px-3 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shrink-0">
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendChat();
+                      }
+                    }}
+                    placeholder={`Ask the SEO Machine anything about ${client.businessName}'s website…`}
+                    rows={2}
+                    className="flex-1 text-xs resize-none rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400"
+                    data-testid="input-chat-message"
+                    disabled={chatLoading}
+                  />
+                  <button
+                    onClick={() => sendChat()}
+                    disabled={chatLoading || !chatInput.trim()}
+                    className="p-2.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                    data-testid="button-chat-send"
+                  >
+                    {chatLoading
+                      ? <Loader2 className="h-4 w-4 text-white animate-spin" />
+                      : <Send className="h-4 w-4 text-white" />
+                    }
+                  </button>
+                </div>
+                <p className="text-[9px] text-gray-400 mt-1">Enter to send · Shift+Enter for new line</p>
+              </div>
             </div>
           </div>
         </div>
