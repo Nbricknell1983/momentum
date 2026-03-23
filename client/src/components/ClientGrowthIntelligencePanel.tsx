@@ -32,14 +32,26 @@ import ClientOnboardingHandover from '@/components/ClientOnboardingHandover';
 import GBPPlaybookPanel from '@/components/GBPPlaybookPanel';
 import GBPMapsEnginePanel from '@/components/GBPMapsEnginePanel';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateClientInFirestore } from '@/lib/firestoreService';
+import { updateClientInFirestore, deleteClientFromFirestore } from '@/lib/firestoreService';
 import { useDispatch } from 'react-redux';
-import { updateClient } from '@/store/index';
+import { updateClient, deleteClient } from '@/store/index';
 import { useToast } from '@/hooks/use-toast';
 import { useClientAutoFire } from '@/hooks/useClientAutoFire';
 import ClientVisibilityBaseline from '@/components/ClientVisibilityBaseline';
 import ClientIntelligencePanel from '@/components/ClientIntelligencePanel';
 import { KeywordStrategyPanel } from '@/components/KeywordStrategyPanel';
+import { useLocation } from 'wouter';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Trash2 } from 'lucide-react';
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = {
@@ -1004,7 +1016,12 @@ function GBPReviewsSection({ client }: { client: Client }) {
 
 export default function ClientGrowthIntelligencePanel({ client }: { client: Client }) {
   const { orgId, authReady } = useAuth();
+  const dispatch = useDispatch();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [expandedSection, setExpandedSection] = useState<string | null>('health');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const healthScore = healthScoreFromClient(client);
   const activeProducts = client.products?.filter(p => p.status === 'active') || [];
   const totalMRR = activeProducts.reduce((sum, p) => sum + (p.monthlyValue || 0), 0);
@@ -1020,6 +1037,20 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
   const { websiteRunning, gbpRunning, briefRunning, refetchBrief } = useClientAutoFire(client, orgId, authReady);
 
   const toggle = (key: string) => setExpandedSection(prev => prev === key ? null : key);
+
+  const handleDeleteClient = async () => {
+    if (!orgId) return;
+    setDeleting(true);
+    try {
+      await deleteClientFromFirestore(orgId, client.id, authReady);
+      dispatch(deleteClient(client.id));
+      toast({ title: 'Client deleted', description: `${client.businessName} has been permanently deleted.` });
+      setLocation('/clients');
+    } catch (e: any) {
+      toast({ title: 'Delete failed', description: e.message, variant: 'destructive' });
+      setDeleting(false);
+    }
+  };
 
   const [workspaceMode, setWorkspaceMode] = useState<'overview' | 'website' | 'seo' | 'gbp' | 'ads' | 'account'>('overview');
 
@@ -1323,9 +1354,55 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
 
             {/* AI Onboarding & Team Handover */}
             <ClientOnboardingHandover client={client} />
+
+            {/* Danger Zone */}
+            <div className="border border-red-200 dark:border-red-900 rounded-lg overflow-hidden mt-2">
+              <div className="px-3 py-2.5 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-900">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide">Danger Zone</p>
+              </div>
+              <div className="p-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Delete this client</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Permanently removes the client and all associated data. This cannot be undone.</p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  data-testid="button-delete-client"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
+            </div>
           </div>
         </ScrollArea>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {client.businessName}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this client and all their associated data including workstreams, strategies, and history. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteClient}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-client"
+            >
+              {deleting ? 'Deleting…' : 'Yes, delete client'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Overview mode ── */}
       {workspaceMode === 'overview' && (
