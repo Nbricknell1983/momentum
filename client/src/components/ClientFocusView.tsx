@@ -9,12 +9,13 @@ import { useToast } from '@/hooks/use-toast';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateClient } from '@/store';
+import { updateClient, addActivity, removeActivity } from '@/store';
 import {
   Client, ClientBoardStage, CLIENT_BOARD_STAGE_ORDER, CLIENT_BOARD_STAGE_LABELS,
   CLIENT_BOARD_STAGE_COLORS, HEALTH_STATUS_LABELS, ActivityType,
 } from '@/lib/types';
 import { logClientAction, updateClientInFirestore } from '@/lib/firestoreService';
+import { db, doc, deleteDoc } from '@/lib/firebase';
 import ClientGrowthIntelligencePanel from './ClientGrowthIntelligencePanel';
 import ClientDeliveryRail from './ClientDeliveryRail';
 import { format, addWeeks, addMonths } from 'date-fns';
@@ -73,26 +74,73 @@ function ClientLeftPanel({ client }: { client: Client }) {
   const [localNextContact, setLocalNextContact] = useState<Date | null>(
     client.nextContactDate ? new Date(client.nextContactDate) : null
   );
+  const [lastLoggedActivity, setLastLoggedActivity] = useState<{ type: ActivityType; id: string } | null>(null);
 
   useEffect(() => {
     setLocalStage(client.boardStage || 'steady_state');
     setLocalNextContact(client.nextContactDate ? new Date(client.nextContactDate) : null);
   }, [client.id, client.boardStage, client.nextContactDate]);
 
+  const undoActivity = useCallback(async () => {
+    if (!lastLoggedActivity || !orgId) return;
+    const { id } = lastLoggedActivity;
+    setLastLoggedActivity(null);
+    dispatch(removeActivity(id));
+    try {
+      await deleteDoc(doc(db, 'orgs', orgId, 'activities', id));
+    } catch {
+      // best-effort — onSnapshot will reconcile
+    }
+  }, [lastLoggedActivity, orgId, dispatch]);
+
   const logActivity = useCallback(async (type: ActivityType) => {
     if (!orgId || !authReady || !user) return;
     setLoggingType(type);
     try {
-      await logClientAction(orgId, {
+      const { activity } = await logClientAction(orgId, {
         userId: user.uid,
         clientId: client.id,
         type,
         clientName: client.businessName,
       }, authReady);
+
+      dispatch(addActivity(activity));
+      setLastLoggedActivity({ type, id: activity.id });
+      setTimeout(() => setLastLoggedActivity(null), 6000);
+
       const now = new Date();
-      dispatch(updateClient({ ...client, lastContactDate: now }));
-      await updateClientInFirestore(orgId, client.id, { lastContactDate: now }, authReady);
-      toast({ title: 'Activity logged', description: `${ACTIVITY_BUTTONS.find(b => b.type === type)?.label} logged for ${client.businessName}` });
+
+      // Smart next-contact scheduling: call the AI endpoint then persist
+      let nextContactDate: Date = addWeeks(now, 1); // safe default
+      try {
+        const schedRes = await fetch('/api/scheduling/suggest-next-contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            leadStage: 'won',   // clients are always "won"
+            activityType: type,
+            taskLoadByDate: {},
+            maxTasksPerDay: 8,
+            preferredDays: [1, 2, 3, 4, 5],
+          }),
+        });
+        if (schedRes.ok) {
+          const schedData = await schedRes.json();
+          nextContactDate = new Date(schedData.suggestedDate);
+        }
+      } catch {
+        // fall back to +1 week default
+      }
+
+      setLocalNextContact(nextContactDate);
+      const updates = { lastContactDate: now, nextContactDate, nextContactSource: 'ai' };
+      dispatch(updateClient({ ...client, ...updates }));
+      await updateClientInFirestore(orgId, client.id, updates, authReady);
+
+      toast({
+        title: `${ACTIVITY_BUTTONS.find(b => b.type === type)?.label ?? 'Activity'} logged`,
+        description: `Next contact set for ${format(nextContactDate, 'dd/MM/yyyy')}`,
+      });
     } catch {
       toast({ title: 'Failed to log activity', variant: 'destructive' });
     } finally {
@@ -256,6 +304,20 @@ function ClientLeftPanel({ client }: { client: Client }) {
               );
             })}
           </div>
+          {lastLoggedActivity && (
+            <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2 text-xs">
+              <span className="text-muted-foreground">
+                {ACTIVITY_BUTTONS.find(b => b.type === lastLoggedActivity.type)?.label} logged
+              </span>
+              <button
+                onClick={undoActivity}
+                className="text-xs font-medium text-primary underline underline-offset-2"
+                data-testid="button-undo-activity"
+              >
+                Undo
+              </button>
+            </div>
+          )}
         </div>
 
         <Separator />

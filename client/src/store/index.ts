@@ -115,7 +115,12 @@ const appSlice = createSlice({
       state.activities = action.payload;
     },
     addActivity(state, action: PayloadAction<Activity>) {
-      state.activities.push(action.payload);
+      // Deduplicate: onSnapshot fires before the dispatch resolves, so the
+      // activity may already be in the array via setActivities.
+      const alreadyExists = state.activities.some(a => a.id === action.payload.id);
+      if (!alreadyExists) {
+        state.activities.push(action.payload);
+      }
       // Update lead's lastActivityAt and lastContactDate
       const lead = state.leads.find(l => l.id === action.payload.leadId);
       if (lead) {
@@ -123,6 +128,9 @@ const appSlice = createSlice({
         lead.lastContactDate = action.payload.createdAt;
         lead.updatedAt = new Date();
       }
+    },
+    removeActivity(state, action: PayloadAction<string>) {
+      state.activities = state.activities.filter(a => a.id !== action.payload);
     },
     setTasks(state, action: PayloadAction<Task[]>) {
       state.tasks = action.payload;
@@ -615,6 +623,7 @@ export const {
   archiveLead,
   setActivities,
   addActivity,
+  removeActivity,
   setTasks,
   updateTask,
   addTask,
