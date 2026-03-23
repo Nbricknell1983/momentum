@@ -2217,56 +2217,31 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
     if (!orgId || !authReady || !token) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/agent-jobs', {
+      const res = await fetch(`/api/clients/${client.id}/generate-blueprint`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          taskType:   'website_workstream',
-          entityType: 'client',
-          entityId:   client.id,
-          orgId,
-          force,
-          input: {
-            orgId,
-            clientId:        client.id,
-            entityId:        client.id,
-            entityType:      'client',
-            businessName:    client.businessName,
-            brand:           client.businessName,
-            website:         client.website || client.clientOnboarding?.currentWebsiteUrl || '',
-            location:        client.city || client.location || '',
-            industry:        client.industry || '',
-            ...(nudge ? { promptNudge: nudge } : {}),
-          },
-        }),
+        body: JSON.stringify({ orgId, force }),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to queue job');
+        throw new Error(err.error || 'Blueprint generation failed');
       }
 
-      const { jobId } = await res.json();
-
-      if (jobId) {
-        fetch(`/api/agent-jobs/${jobId}/process`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ orgId }),
-        }).catch(() => {/* fire-and-forget */});
+      const data = await res.json();
+      if (data.skipped) {
+        // TTL guard hit — blueprint already exists and is fresh
+        toast({ title: 'Blueprint is up to date', description: 'Your site plan was generated recently. Use "Rebuild" to regenerate.' });
+      } else {
+        toast({ title: force ? 'Site plan rebuilt' : 'Site plan ready', description: 'Blueprint saved — building HTML pages now.' });
       }
-
-      toast({ title: force ? 'Rebuilding site plan…' : 'Building site plan from intelligence…', description: 'Pulling from GBP services, service areas and keyword data. The plan tab will update automatically.' });
       setNudge('');
       setShowNudge(false);
     } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      toast({ title: 'Error generating site plan', description: e.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }

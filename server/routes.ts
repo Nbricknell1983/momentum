@@ -10698,6 +10698,167 @@ Rules:
     }
   });
 
+  // ── Blueprint Generation (direct GPT-4o, no OpenClaw dependency) ─────────────
+
+  app.post('/api/clients/:clientId/generate-blueprint', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, force = false } = req.body;
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const client = clientDoc.data() as any;
+
+      // TTL guard — skip if a blueprint already exists and force=false
+      if (!force && client.websiteWorkstream?.currentDraft?.generatedAt) {
+        const age = Date.now() - new Date(client.websiteWorkstream.currentDraft.generatedAt).getTime();
+        if (age < 48 * 60 * 60 * 1000) {
+          return res.status(200).json({ success: true, skipped: true, reason: 'ttl', blueprint: client.websiteWorkstream.currentDraft });
+        }
+      }
+
+      const si: any = client.sourceIntelligence || {};
+      const businessName: string = client.businessName || 'this business';
+      const website: string = si.website || client.website || '';
+      const city: string = client.city || client.location || '';
+      const industry: string = si.industry || client.businessProfile?.industry || 'local service business';
+      const phone: string = si.phone || client.phone || '';
+      const address: string = client.address || '';
+
+      const eb: any = si.evidenceBundle?.website || client.evidenceBundle?.website || {};
+      const gbpEb: any = si.evidenceBundle?.gbp || client.evidenceBundle?.gbp || {};
+      const gbpServices: string[] = gbpEb.services || si.services || client.services || [];
+      const gbpAreas: string[] = gbpEb.serviceAreas || gbpEb.serviceArea || si.serviceAreas || [];
+      const gbpCategory: string = gbpEb.primaryCategory || gbpEb.categories?.[0] || '';
+      const gbpRating: number | null = gbpEb.rating || gbpEb.avgRating || null;
+      const gbpReviews: number | null = gbpEb.totalReviews || gbpEb.reviewCount || null;
+
+      const importedKws: any[] = client.keywords || [];
+      const topKws: string[] = importedKws.sort((a: any, b: any) => (b.volume || 0) - (a.volume || 0)).slice(0, 25).map((k: any) => `${k.keyword}${k.volume ? ` (${k.volume}/mo)` : ''}`);
+      const quickWins: string[] = (client.keywordStrategy?.quickWins || []).slice(0, 10);
+
+      const crawlBlock = eb.url ? `
+EXISTING SITE CRAWL (preserve and improve):
+URL: ${eb.url}
+H1s found: ${(eb.headings?.h1 || []).slice(0, 5).join(', ') || 'none'}
+H2s found: ${(eb.headings?.h2 || []).slice(0, 8).join(', ') || 'none'}
+Existing URLs: ${(eb.existingUrls || []).slice(0, 20).join(', ') || 'none found'}
+Mobile optimised: ${eb.hasViewport === false ? 'NO — fix this' : 'yes'}
+Schema types present: ${(eb.schemaTypes || []).join(', ') || 'none'}
+Schema fields missing: ${(eb.schemaFieldAudit?.missing || []).join(', ') || 'unknown'}
+Phone visible on site: ${eb.phone || 'not detected'}
+Load time: ${eb.loadTime ? `${eb.loadTime}ms` : 'unknown'}` : '';
+
+      const gbpBlock = (gbpServices.length || gbpAreas.length) ? `
+GBP INTELLIGENCE — WEBSITE MUST MIRROR THIS EXACTLY:
+Primary Category: ${gbpCategory || 'not captured'}
+Rating: ${gbpRating ? `${gbpRating} stars (${gbpReviews || '?'} reviews)` : 'not captured'}
+GBP Services (one dedicated page REQUIRED for each):
+${gbpServices.slice(0, 20).map((s: string) => `  - ${s}`).join('\n') || '  (none captured)'}
+Service Areas (one location page REQUIRED for each):
+${gbpAreas.slice(0, 20).map((a: string) => `  - ${a}`).join('\n') || '  (none captured)'}` : '';
+
+      const kwBlock = topKws.length ? `
+KEYWORD DATA (Ahrefs):
+Top by volume: ${topKws.slice(0, 15).join(', ')}
+Quick wins (low difficulty): ${quickWins.join(', ') || 'none'}` : '';
+
+      const stratCtx = si.strategyIntelligence ? `Strategy: ${JSON.stringify(si.strategyIntelligence).slice(0, 500)}` : '';
+
+      const prompt = `You are a senior SEO website architect. Generate a complete WebsiteBlueprint JSON for ${businessName}, a ${industry} business${city ? ` based in ${city}` : ''}.
+${website ? `Existing website: ${website}` : ''}
+${phone ? `Phone: ${phone}` : ''}
+${address ? `Address: ${address}` : ''}
+${crawlBlock}
+${gbpBlock}
+${kwBlock}
+${stratCtx}
+
+Output a single JSON object matching this TypeScript interface exactly:
+{
+  siteMeta: {
+    brand: string,
+    uvp: string,                // unique value proposition — specific to this business
+    tone: "professional" | "friendly" | "trade",
+    primaryCta: string,         // the main call to action button text
+    nap: { address: string, phone: string, email?: string },
+    license?: string,
+    social?: { gbp?: string, fb?: string, ig?: string },
+    tracking?: { ga4?: boolean, gtm?: boolean, gsc?: boolean }
+  },
+  nav: { items: Array<{ label: string, href: string }> },
+  footer: {
+    nap: { address: string, phone: string, email?: string },
+    links: Array<{ label: string, href: string }>
+  },
+  pages: Array<{
+    key: string,                // slug-style, e.g. "home", "electrician-sydney"
+    route: string,              // URL path WITHOUT leading slash, e.g. "" for homepage, "electrician-sydney"
+    title: string,              // human-readable page name
+    description: string,        // one-sentence page purpose
+    pageType: "home" | "service" | "location" | "about" | "contact" | "other",
+    targetKeyword?: string,     // primary SEO keyword for this page
+    seoMeta: {
+      title: string,            // ≤60 chars
+      description: string,      // ≤160 chars
+      canonical?: string,
+      og?: { title?: string, description?: string }
+    },
+    sections: Array<{
+      kind: "Hero" | "ServicesGrid" | "ServiceDetail" | "Trust" | "Areas" | "FAQ" | "ContactForm" | "CTABar" | "Testimonial" | "Gallery" | "Map",
+      props: Record<string, any>,    // section-specific data
+      copyVariants?: { a: string, b: string }
+    }>,
+    internalLinks?: Array<{ label: string, href: string }>
+  }>,
+  assets: Array<{
+    key: string,
+    alt: string,
+    suggestedSource?: string,
+    placement?: { pageKey: string, sectionKind: string }
+  }>,
+  performance: {
+    images: { format: "webp" | "avif", sizes: string[] },
+    fonts?: { preloads: string[] }
+  }
+}
+
+RULES:
+- pages array MUST include: homepage, one page per GBP service, one page per service area, plus about and contact
+- Every page needs at least 3 sections
+- Hero sections must have real, specific headline copy for this business — NOT placeholders
+- FAQ sections must have 4–6 real questions relevant to the service/location
+- seoMeta titles must include the target keyword and city name
+- All phone numbers, addresses, business names must be the REAL data from above
+- Output valid JSON only, no markdown fences`;
+
+      const completion = await (openai as any).chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 5000,
+        response_format: { type: 'json_object' },
+      });
+
+      const raw = completion.choices[0]?.message?.content || '{}';
+      let blueprint: any;
+      try { blueprint = JSON.parse(raw); } catch { blueprint = {}; }
+
+      blueprint.generatedAt = new Date().toISOString();
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        'websiteWorkstream.currentDraft': blueprint,
+        'websiteWorkstream.lastGeneratedAt': new Date().toISOString(),
+        updatedAt: new Date(),
+      });
+
+      res.json({ success: true, blueprint });
+    } catch (err: any) {
+      console.error('[generate-blueprint]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Site HTML Generation + Preview ──────────────────────────────────────────
 
   // Generate real HTML for each page from the existing Blueprint
