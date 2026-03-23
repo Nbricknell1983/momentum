@@ -38,6 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useClientAutoFire } from '@/hooks/useClientAutoFire';
 import ClientVisibilityBaseline from '@/components/ClientVisibilityBaseline';
 import ClientIntelligencePanel from '@/components/ClientIntelligencePanel';
+import { KeywordStrategyPanel } from '@/components/KeywordStrategyPanel';
 
 function HealthBadge({ status }: { status: HealthStatus }) {
   const config = {
@@ -182,6 +183,49 @@ function parseKeywordsFromSummary(summary: string): Array<{ keyword: string; vol
   return results.slice(0, 25);
 }
 
+
+// ── Keyword Strategy Panel Wrapper ───────────────────────────────────────────
+function KeywordStrategyPanelWrapper({ client }: { client: any }) {
+  const [open, setOpen] = useState(true);
+  const kwCount = client.keywords?.length ?? 0;
+  const hasStrategy = !!client.keywordStrategy;
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors bg-white dark:bg-gray-950"
+        onClick={() => setOpen(p => !p)}
+        data-testid="btn-toggle-keyword-strategy-panel"
+      >
+        <div className="flex items-center gap-2.5">
+          <Search className="h-4 w-4 text-violet-500 shrink-0" />
+          <p className="text-sm font-semibold text-left">Keyword Strategy Engine</p>
+          {kwCount > 0 && (
+            <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 px-2 py-0.5 rounded font-medium">
+              {kwCount} kws
+            </span>
+          )}
+          {hasStrategy && (
+            <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-0.5 rounded font-medium">
+              Strategy ready
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {!hasStrategy && kwCount === 0 && (
+            <span className="text-xs text-muted-foreground italic">Import keywords to start</span>
+          )}
+          <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
+        </div>
+      </button>
+      {open && (
+        <div className="border-t px-4 py-4">
+          <KeywordStrategyPanel client={client} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Local Falcon date helper ─────────────────────────────────────────────────
 function fmtLFDate(d: string) {
@@ -1005,6 +1049,10 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
         {/* Engine panels — Website, SEO, GBP, Ads */}
         <WebsiteEnginePanel client={client} />
         <SEOEnginePanel client={client} />
+
+        {/* Keyword Strategy Engine — import Ahrefs keywords, build clusters, generate SEO + GBP ranking plan */}
+        <KeywordStrategyPanelWrapper client={client} />
+
         <GBPEnginePanel client={client} />
         <AdsEnginePanel client={client} />
 

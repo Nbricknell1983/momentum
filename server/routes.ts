@@ -11876,6 +11876,189 @@ ${(linkMap.recommendations || []).map((r: any) => `- On /${r.fromSlug}: add link
     }
   });
 
+  // ── Keyword Strategy Engine ───────────────────────────────────────────────────
+
+  // Import and store keywords
+  app.post('/api/clients/:clientId/import-keywords', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId, keywords } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      if (!Array.isArray(keywords)) return res.status(400).json({ error: 'keywords must be an array' });
+
+      const enriched = keywords.map((kw: any) => ({
+        keyword: (kw.keyword || '').trim().toLowerCase(),
+        volume: kw.volume ? parseInt(kw.volume, 10) : 0,
+        difficulty: kw.difficulty != null && kw.difficulty !== '' ? parseInt(kw.difficulty, 10) : null,
+        cpc: kw.cpc ? parseFloat(kw.cpc) : null,
+        parentKeyword: kw.parentKeyword || null,
+        country: kw.country || 'au',
+        importedAt: new Date().toISOString(),
+      })).filter((kw: any) => kw.keyword.length > 0);
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        keywords: enriched,
+        keywordsUpdatedAt: new Date().toISOString(),
+      });
+
+      res.json({ success: true, count: enriched.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Generate keyword strategy (SEO + GBP)
+  app.post('/api/clients/:clientId/keyword-strategy', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Firestore not available' });
+      const { clientId } = req.params;
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const clientData = clientDoc.data() as any;
+
+      const keywords: any[] = clientData.keywords || [];
+      if (keywords.length === 0) return res.status(400).json({ error: 'No keywords imported yet' });
+
+      const businessName = clientData.businessName || clientData.name || 'this business';
+      const gbpCategory = clientData.gbpCategory || '';
+      const gbpServices = clientData.gbpServices || clientData.sourceIntelligence?.gbp?.categories || [];
+      const website = clientData.website || clientData.sourceIntelligence?.website || '';
+      const city = clientData.city || clientData.area || '';
+      const state = clientData.state || '';
+
+      const sortedKws = [...keywords].sort((a, b) => (b.volume || 0) - (a.volume || 0));
+      const kwTable = sortedKws.slice(0, 60).map(k =>
+        `${k.keyword} | vol:${k.volume || 0} | diff:${k.difficulty ?? '?'} | cpc:$${k.cpc ?? '?'}`
+      ).join('\n');
+
+      const prompt = `You are an expert local SEO and GBP strategist for an Australian digital marketing agency. 
+You are building a ranking strategy for a client from scratch.
+
+CLIENT: ${businessName}
+GBP Category: ${gbpCategory}
+Services: ${Array.isArray(gbpServices) ? gbpServices.slice(0, 10).join(', ') : gbpServices}
+Location: ${city}${state ? `, ${state}` : ''}
+Website: ${website || 'No website yet'}
+
+KEYWORD LIST (${keywords.length} keywords, sorted by volume):
+${kwTable}
+
+Generate a comprehensive SEO + GBP ranking strategy. Return JSON with this exact shape:
+{
+  "clusters": [
+    {
+      "name": "cluster name",
+      "theme": "service theme or intent",
+      "keywords": ["keyword1", "keyword2"],
+      "totalVolume": number,
+      "avgDifficulty": number,
+      "priority": "HIGH" | "MEDIUM" | "LOW",
+      "pageTarget": "existing slug or new slug to create",
+      "pageTitle": "H1 for the target page",
+      "primaryKeyword": "main keyword for this page",
+      "rationale": "why this cluster is important (1-2 sentences)"
+    }
+  ],
+  "quickWins": ["keyword1", "keyword2"],
+  "seoStrategy": {
+    "summary": "2-3 sentence overall SEO approach",
+    "priorityPages": [
+      {
+        "slug": "url-slug",
+        "title": "Page title",
+        "targetKeyword": "primary keyword",
+        "estimatedVolume": number,
+        "difficulty": number,
+        "contentPriority": "week1" | "week2" | "month1" | "month2" | "month3"
+      }
+    ],
+    "technicalNotes": ["note 1", "note 2"],
+    "linkBuildingFocus": "what to focus on for link building"
+  },
+  "gbpStrategy": {
+    "summary": "2-3 sentence GBP approach",
+    "primaryCategory": "recommended GBP primary category",
+    "additionalCategories": ["category1", "category2"],
+    "servicesToAdd": ["service1", "service2"],
+    "postSchedule": [
+      {
+        "week": 1,
+        "topic": "post topic",
+        "type": "UPDATE" | "OFFER" | "EVENT",
+        "targetKeyword": "keyword to include naturally",
+        "suggestedText": "50-80 word post text"
+      }
+    ],
+    "keywordFocusForPosts": ["keyword1", "keyword2"],
+    "reviewKeywords": ["phrases customers should mention in reviews"],
+    "qAndAKeywords": [
+      { "question": "question text", "keywordTarget": "keyword" }
+    ]
+  },
+  "executionPlan": [
+    { "week": 1, "actions": ["action1", "action2"], "channel": "SEO" | "GBP" | "BOTH" }
+  ],
+  "kpiTargets": {
+    "month3": "what to expect by month 3",
+    "month6": "what to expect by month 6",
+    "month12": "what to expect by month 12"
+  }
+}
+
+Cluster logic:
+- Group keywords by service type and location intent
+- "near me" keywords = generic service pages with local schema
+- "suburb" keywords = local landing pages (e.g., /electrician-hervey-bay)
+- Each cluster → one dedicated page
+- Quick wins = keywords with difficulty 0-5 and volume >= 50
+- Prioritise HIGH: high volume + low difficulty + commercial intent
+
+Return ONLY valid JSON, no markdown.`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        max_tokens: 3500,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+      });
+
+      let strategy: any = {};
+      try {
+        strategy = JSON.parse(completion.choices[0].message.content || '{}');
+      } catch {
+        strategy = { clusters: [], seoStrategy: {}, gbpStrategy: {} };
+      }
+
+      strategy.generatedAt = new Date().toISOString();
+      strategy.keywordCount = keywords.length;
+
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).update({
+        keywordStrategy: strategy,
+      });
+
+      // Also log to engine history
+      const { v4: uuidv4 } = await import('uuid');
+      const runId = uuidv4();
+      await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId)
+        .collection('engineHistory').doc(runId).set({
+          runId,
+          engineType: 'keywordStrategy',
+          status: 'complete',
+          createdAt: new Date().toISOString(),
+          output: strategy,
+        });
+
+      res.json(strategy);
+    } catch (err: any) {
+      console.error('[keyword-strategy]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Website Asset Upload ────────────────────────────────────────────────────
 
   // Upload or replace a named asset slot (blueprint key) or add to gallery
