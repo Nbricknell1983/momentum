@@ -56,12 +56,18 @@ export function buildWebsiteInsights(
   // Only surface "No sitemap" (negative) when detection is confirmed-absent;
   // use "not yet verified" (neutral) for stale/incomplete evidence.
   const detectedSitemapUrl: string | null = w.sitemapUrl ?? null;
+  // hasSitemap === true  → confirmed present
+  // hasSitemap === false → confirmed absent (crawl checked and didn't find one)
+  // hasSitemap === null/undefined → not checked yet
+  const sitemapConfirmedAbsent = w.hasSitemap === false;
   const sitemapStatus: InsightStatus = w.hasSitemap ? 'positive' : hasSitemapData ? 'neutral' : 'warning';
   const sitemapLabel = w.hasSitemap
     ? 'Sitemap found'
     : hasSitemapData
       ? `${sitemapPageCount} pages detected`
-      : 'Sitemap not yet verified';
+      : sitemapConfirmedAbsent
+        ? 'No sitemap found'
+        : 'Sitemap not yet verified';
   insights.push({
     id: 'sitemap',
     label: sitemapLabel,
@@ -70,13 +76,15 @@ export function buildWebsiteInsights(
       ? `Sitemap confirmed — search engines can discover all pages on this site.${detectedSitemapUrl ? ` Found at ${detectedSitemapUrl}.` : ''}`
       : hasSitemapData
         ? `A sitemap wasn't confirmed at common locations, but ${sitemapPageCount} pages were captured through a direct scan — the site is indexable.`
-        : 'Sitemap presence hasn\'t been confirmed yet. Re-running the website scan will check robots.txt and common sitemap paths.',
+        : sitemapConfirmedAbsent
+          ? 'No sitemap was found at robots.txt or any common sitemap paths. Search engines will need to crawl links to discover pages.'
+          : 'Sitemap presence hasn\'t been confirmed yet. Re-running the website scan will check robots.txt and common sitemap paths.',
     whyItMatters: 'A sitemap tells search engines what pages exist, how often they update, and which are most important. Without one, new or deep pages may not get indexed promptly.',
     recommendedImprovement: w.hasSitemap
       ? 'Ensure all key service and location pages are included in the sitemap and that it\'s submitted to Google Search Console.'
       : hasSitemapData
         ? 'Ensure all key service and location pages are included in the sitemap and that it\'s submitted to Google Search Console.'
-        : 'Re-run the website scan to check for a sitemap. If none exists, create an XML sitemap and submit it to Google Search Console.',
+        : 'Create an XML sitemap covering all key pages and submit it to Google Search Console. Most CMS platforms can generate this automatically.',
     evidence: [
       ...(sitemapPageCount > 0 ? [{ label: 'Pages detected', value: String(sitemapPageCount), type: 'count' as const }] : []),
       ...(detectedSitemapUrl

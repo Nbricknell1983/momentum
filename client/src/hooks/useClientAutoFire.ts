@@ -213,7 +213,7 @@ export function useClientAutoFire(
     }
   };
 
-  const fireIntelligenceBrief = async () => {
+  const fireIntelligenceBrief = async (forceRegenerate = false) => {
     if (!orgId || !authReady) return;
     setBriefRunning(true);
     try {
@@ -224,7 +224,7 @@ export function useClientAutoFire(
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ orgId }),
+        body: JSON.stringify({ orgId, ...(forceRegenerate ? { forceRegenerate: true } : {}) }),
       });
 
       if (!res.ok) throw new Error(await res.text());
@@ -271,12 +271,14 @@ export function useClientAutoFire(
   }, [orgId, authReady, client.id]);
 
   // ── Auto-fire Intelligence Brief at 1200ms (all clients) ─────────────────
+  // Always uses forceRegenerate: true since shouldAutoFireIntelligenceBrief only
+  // returns true when we've confirmed the brief is missing, stale, or bad.
   useEffect(() => {
     if (!orgId || !authReady) return;
     if (briefFiredRef.current) return;
     if (!shouldAutoFireIntelligenceBrief(client)) return;
     briefFiredRef.current = true;
-    const timer = setTimeout(() => fireIntelligenceBrief(), 1200);
+    const timer = setTimeout(() => fireIntelligenceBrief(true), 1200);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, authReady, client.id]);
@@ -310,7 +312,8 @@ export function useClientAutoFire(
     // already fired for this engine timestamp.
     if (latestEngineTime > briefTime && latestEngineTime > lastEngineFireRef.current) {
       lastEngineFireRef.current = latestEngineTime;
-      const timer = setTimeout(() => fireIntelligenceBrief(), 2000);
+      // forceRegenerate: true bypasses the 48h server-side cache
+      const timer = setTimeout(() => fireIntelligenceBrief(true), 2000);
       return () => clearTimeout(timer);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -326,5 +329,5 @@ export function useClientAutoFire(
     client.enrichmentData?.generatedAt,
   ]);
 
-  return { websiteRunning, gbpRunning, auditRunning, briefRunning, refetchBrief: fireIntelligenceBrief };
+  return { websiteRunning, gbpRunning, auditRunning, briefRunning, refetchBrief: () => fireIntelligenceBrief(true) };
 }

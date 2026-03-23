@@ -10846,8 +10846,10 @@ Output valid JSON only, no markdown.`;
       if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
       const client = clientDoc.data() as any;
 
-      // Cache: skip if fresh brief exists (< 48h)
-      if (client.intelligenceBrief?.generatedAt) {
+      // Cache: skip if fresh brief exists (< 48h) — unless caller signals forceRegenerate
+      // (used when new engine data arrives after the brief was generated)
+      const forceRegenerate = !!req.body.forceRegenerate;
+      if (!forceRegenerate && client.intelligenceBrief?.generatedAt) {
         const age = Date.now() - new Date(client.intelligenceBrief.generatedAt).getTime();
         if (age < 48 * 60 * 60 * 1000) {
           return res.json({ brief: client.intelligenceBrief, cached: true });
