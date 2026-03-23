@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Globe, MapPin, Search, Megaphone, Sparkles, Loader2, ChevronDown, ChevronRight,
   CheckCircle2, Clock, Zap, FileText, Layout, Type, Star, Check,
   AlertTriangle, ListChecks, CalendarDays, Tag, TrendingUp, Eye, Shield,
-  ArrowRight,
+  ArrowRight, Mic, MicOff, Upload, X, MessageSquare, Image, Table2, Send, ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,7 @@ import { useDispatch } from 'react-redux';
 import { updateClient } from '@/store';
 import { updateClientInFirestore } from '@/lib/firestoreService';
 import { auth } from '@/lib/firebase';
+import * as XLSX from 'xlsx';
 
 const SCOPE_CONFIG: Record<WorkstreamScope, { label: string; icon: typeof Globe; color: string; bg: string }> = {
   website: {
@@ -599,6 +600,405 @@ function GBPTaskRow({ task, onToggle }: { task: GBPTask; onToggle: (id: string, 
   );
 }
 
+// ── Workstream Feedback ─────────────────────────────────────────────────────
+
+interface FeedbackFile {
+  id: string;
+  name: string;
+  type: 'image' | 'spreadsheet';
+  dataUrl?: string;
+  rows?: string[][];
+}
+
+interface FeedbackItem {
+  id: string;
+  text: string;
+  files: FeedbackFile[];
+  createdAt: string;
+}
+
+function SpreadsheetPreview({ rows }: { rows: string[][] }) {
+  const headers = rows[0] || [];
+  const data = rows.slice(1);
+  const MAX_COLS = 8;
+  const MAX_ROWS = 20;
+  const visibleHeaders = headers.slice(0, MAX_COLS);
+  const visibleData = data.slice(0, MAX_ROWS);
+
+  return (
+    <div className="overflow-x-auto rounded border bg-background mt-1.5">
+      <table className="text-[10px] w-full min-w-max border-collapse">
+        <thead>
+          <tr className="bg-muted/60">
+            {visibleHeaders.map((h, i) => (
+              <th key={i} className="px-2 py-1 text-left font-semibold border-b border-r last:border-r-0 text-muted-foreground whitespace-nowrap max-w-[120px] truncate">
+                {h || `Col ${i + 1}`}
+              </th>
+            ))}
+            {headers.length > MAX_COLS && <th className="px-2 py-1 text-muted-foreground border-b">+{headers.length - MAX_COLS} more</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {visibleData.map((row, ri) => (
+            <tr key={ri} className={ri % 2 === 0 ? '' : 'bg-muted/20'}>
+              {visibleHeaders.map((_, ci) => (
+                <td key={ci} className="px-2 py-1 border-b border-r last:border-r-0 whitespace-nowrap max-w-[120px] truncate text-foreground/80">
+                  {row[ci] ?? ''}
+                </td>
+              ))}
+              {headers.length > MAX_COLS && <td className="px-2 py-1 border-b" />}
+            </tr>
+          ))}
+          {data.length > MAX_ROWS && (
+            <tr>
+              <td colSpan={Math.min(headers.length, MAX_COLS) + (headers.length > MAX_COLS ? 1 : 0)} className="px-2 py-1 text-center text-muted-foreground">
+                +{data.length - MAX_ROWS} more rows
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WorkstreamFeedback({
+  client,
+  scope,
+  orgId,
+  authReady,
+}: {
+  client: Client;
+  scope: WorkstreamScope;
+  orgId: string | null;
+  authReady: boolean;
+}) {
+  const dispatch = useDispatch();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<FeedbackFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [listening, setListening] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const existingFeedback: FeedbackItem[] = (client.activationPlan?.workstreams?.[scope] as any)?.feedback || [];
+
+  const processFile = useCallback((file: File): Promise<FeedbackFile> => {
+    return new Promise((resolve) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const isImage = file.type.startsWith('image/');
+      const isSheet = file.name.match(/\.(xlsx|xls|csv)$/i);
+
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve({ id, name: file.name, type: 'image', dataUrl: e.target?.result as string });
+        reader.readAsDataURL(file);
+      } else if (isSheet) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const wb = XLSX.read(e.target?.result, { type: 'binary' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1 }) as string[][];
+            resolve({ id, name: file.name, type: 'spreadsheet', rows });
+          } catch {
+            resolve({ id, name: file.name, type: 'spreadsheet', rows: [['Error reading file']] });
+          }
+        };
+        reader.readAsBinaryString(file);
+      } else {
+        resolve({ id, name: file.name, type: 'image' });
+      }
+    });
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    const processed = await Promise.all(files.map(processFile));
+    setPendingFiles(prev => [...prev, ...processed]);
+  }, [processFile]);
+
+  const handleFileInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const processed = await Promise.all(files.map(processFile));
+    setPendingFiles(prev => [...prev, ...processed]);
+    e.target.value = '';
+  }, [processFile]);
+
+  const removeFile = useCallback((id: string) => {
+    setPendingFiles(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  const toggleVoice = useCallback(() => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ title: 'Voice not supported', description: 'Your browser does not support voice input.', variant: 'destructive' });
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-AU';
+    let interim = '';
+    rec.onresult = (e: any) => {
+      let final = '';
+      interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      if (final) setText(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + final);
+    };
+    rec.onend = () => setListening(false);
+    rec.start();
+    recognitionRef.current = rec;
+    setListening(true);
+  }, [listening, toast]);
+
+  useEffect(() => {
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!text.trim() && pendingFiles.length === 0) return;
+    if (!orgId || !authReady) return;
+    setSaving(true);
+    try {
+      const newItem: FeedbackItem = {
+        id: `fb-${Date.now()}`,
+        text: text.trim(),
+        files: pendingFiles,
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [...existingFeedback, newItem];
+      const fieldPath = `activationPlan.workstreams.${scope}.feedback`;
+      await updateClientInFirestore(orgId, client.id, { [fieldPath]: updated } as any, authReady);
+      const plan = client.activationPlan!;
+      dispatch(updateClient({
+        ...client,
+        activationPlan: {
+          ...plan,
+          workstreams: {
+            ...plan.workstreams,
+            [scope]: {
+              ...plan.workstreams[scope],
+              feedback: updated,
+            },
+          },
+        },
+      }));
+      setText('');
+      setPendingFiles([]);
+      toast({ title: 'Feedback saved' });
+    } catch (err: any) {
+      toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }, [text, pendingFiles, existingFeedback, orgId, authReady, client, scope, dispatch, toast]);
+
+  const deleteFeedback = useCallback(async (id: string) => {
+    if (!orgId || !authReady) return;
+    const updated = existingFeedback.filter(f => f.id !== id);
+    const fieldPath = `activationPlan.workstreams.${scope}.feedback`;
+    await updateClientInFirestore(orgId, client.id, { [fieldPath]: updated } as any, authReady);
+    const plan = client.activationPlan!;
+    dispatch(updateClient({
+      ...client,
+      activationPlan: {
+        ...plan,
+        workstreams: {
+          ...plan.workstreams,
+          [scope]: { ...plan.workstreams[scope], feedback: updated },
+        },
+      },
+    }));
+  }, [existingFeedback, orgId, authReady, client, scope, dispatch]);
+
+  return (
+    <div className="mt-3 border-t pt-3">
+      <button
+        className="w-full flex items-center justify-between text-left group"
+        onClick={() => setOpen(o => !o)}
+        data-testid={`feedback-toggle-${scope}`}
+      >
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+            Feedback & Notes
+          </span>
+          {existingFeedback.length > 0 && (
+            <Badge variant="secondary" className="text-[10px] py-0">{existingFeedback.length}</Badge>
+          )}
+        </div>
+        {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-3">
+          {/* Existing feedback items */}
+          {existingFeedback.length > 0 && (
+            <div className="space-y-2">
+              {[...existingFeedback].reverse().map((item) => (
+                <div key={item.id} className="border rounded-lg p-3 bg-muted/20 space-y-2 relative group/item">
+                  <button
+                    onClick={() => deleteFeedback(item.id)}
+                    className="absolute top-2 right-2 opacity-0 group-hover/item:opacity-100 transition-opacity text-muted-foreground hover:text-red-500"
+                    data-testid={`delete-feedback-${item.id}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <p className="text-[10px] text-muted-foreground">
+                    {new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {item.text && <p className="text-xs leading-relaxed">{item.text}</p>}
+                  {item.files?.length > 0 && (
+                    <div className="space-y-2">
+                      {item.files.map((f) => (
+                        <div key={f.id}>
+                          {f.type === 'image' && f.dataUrl && (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <Image className="h-3 w-3" /> {f.name}
+                              </div>
+                              <img src={f.dataUrl} alt={f.name} className="max-w-full rounded border max-h-64 object-contain bg-muted/30" />
+                            </div>
+                          )}
+                          {f.type === 'spreadsheet' && f.rows && (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <Table2 className="h-3 w-3" /> {f.name}
+                              </div>
+                              <SpreadsheetPreview rows={f.rows} />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new feedback */}
+          <div className="border rounded-lg overflow-hidden">
+            {/* Drop zone */}
+            <div
+              className={`relative border-b p-2 transition-colors ${isDragging ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700' : 'bg-muted/20'}`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+            >
+              {pendingFiles.length === 0 ? (
+                <button
+                  className="w-full flex flex-col items-center gap-1.5 py-3 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid={`dropzone-${scope}`}
+                >
+                  <Upload className="h-4 w-4" />
+                  <span className="text-[11px]">Drop screenshots or spreadsheets here, or click to browse</span>
+                  <span className="text-[10px] text-muted-foreground/60">PNG, JPG, XLSX, XLS, CSV</span>
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">{pendingFiles.length} file{pendingFiles.length > 1 ? 's' : ''} attached</span>
+                    <button onClick={() => fileInputRef.current?.click()} className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                      <Upload className="h-3 w-3" /> Add more
+                    </button>
+                  </div>
+                  {pendingFiles.map((f) => (
+                    <div key={f.id} className="relative">
+                      {f.type === 'image' && f.dataUrl && (
+                        <div className="relative inline-block">
+                          <img src={f.dataUrl} alt={f.name} className="max-h-32 max-w-full rounded border object-contain bg-white dark:bg-black/20" />
+                          <button onClick={() => removeFile(f.id)} className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-500 text-white flex items-center justify-center">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </div>
+                      )}
+                      {f.type === 'spreadsheet' && f.rows && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                              <Table2 className="h-3 w-3" /> {f.name}
+                            </div>
+                            <button onClick={() => removeFile(f.id)} className="text-muted-foreground hover:text-red-500">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                          <SpreadsheetPreview rows={f.rows.slice(0, 5)} />
+                          {f.rows.length > 5 && <p className="text-[10px] text-muted-foreground">+{f.rows.length - 5} more rows (will be saved in full)</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.xlsx,.xls,.csv"
+                multiple
+                className="hidden"
+                onChange={handleFileInput}
+              />
+            </div>
+
+            {/* Text area */}
+            <div className="relative bg-background">
+              <textarea
+                ref={textareaRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={listening ? 'Listening…' : 'Add your feedback, notes, or context here…'}
+                className={`w-full px-3 py-2.5 text-xs resize-none bg-transparent outline-none placeholder:text-muted-foreground/60 min-h-[72px] ${listening ? 'bg-red-50/20 dark:bg-red-950/10' : ''}`}
+                data-testid={`feedback-textarea-${scope}`}
+              />
+              <div className="flex items-center justify-between px-2 pb-2">
+                <button
+                  onClick={toggleVoice}
+                  className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                    listening
+                      ? 'bg-red-500 text-white border-red-500 animate-pulse'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30'
+                  }`}
+                  data-testid={`voice-btn-${scope}`}
+                >
+                  {listening ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                  {listening ? 'Stop' : 'Speak'}
+                </button>
+                <Button
+                  size="sm"
+                  className="h-7 text-[11px] gap-1 px-2.5"
+                  onClick={handleSave}
+                  disabled={saving || (!text.trim() && pendingFiles.length === 0)}
+                  data-testid={`feedback-save-${scope}`}
+                >
+                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                  {saving ? 'Saving…' : 'Save Note'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Panel ──────────────────────────────────────────────────────────────
 
 interface ClientActivationPanelProps {
@@ -827,6 +1227,12 @@ export default function ClientActivationPanel({ client }: ClientActivationPanelP
                       </p>
                     </div>
                   )}
+                  <WorkstreamFeedback
+                    client={client}
+                    scope={scope}
+                    orgId={orgId}
+                    authReady={authReady}
+                  />
                 </div>
               )}
             </div>
