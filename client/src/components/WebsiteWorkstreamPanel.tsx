@@ -2170,7 +2170,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       const user = auth.currentUser;
       if (!user) throw new Error('Not signed in');
       const idToken = await user.getIdToken();
-      const res = await fetch(`/api/clients/${clientId}/website-chat`, {
+      const res = await fetch(`/api/clients/${client.id}/website-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ orgId, message: msg, history: chatMessages.slice(-20) }),
@@ -2184,7 +2184,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
       setChatLoading(false);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }
-  }, [chatInput, chatLoading, chatMessages, clientId, orgId]);
+  }, [chatInput, chatLoading, chatMessages, client.id, orgId]);
 
   const CHAT_QUICK_ACTIONS = [
     'Write homepage copy with headline, hero text and CTA',
