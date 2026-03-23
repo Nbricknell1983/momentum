@@ -1738,6 +1738,7 @@ function LaunchTab({
   const [savingDomain, setSavingDomain] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [copiedStep, setCopiedStep] = useState<string | null>(null);
+  const [hostingPlatform, setHostingPlatform] = useState<'netlify' | 'firebase' | 'cpanel'>('netlify');
 
   const sitePages = generatedSite?.pages ? Object.keys(generatedSite.pages) : [];
   const localPages = generatedSite?.localPages ? Object.keys(generatedSite.localPages) : [];
@@ -1940,60 +1941,132 @@ function LaunchTab({
         )}
       </div>
 
-      {/* DNS setup steps */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">DNS Setup</p>
-        <div className="border border-gray-200 dark:border-gray-700 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
-          {[
-            { step: '1', title: 'Log in to your domain registrar', detail: 'GoDaddy, Namecheap, Crazy Domains, VentraIP, etc.', copy: null },
-            { step: '2', title: 'Go to DNS / Zone management', detail: 'Look for "Manage DNS", "DNS Zone", or "Advanced DNS"', copy: null },
-            { step: '3', title: 'Add an A Record', detail: `Type: A | Name: @ | Value: <your host IP> | TTL: 3600`, copy: savedDomain || 'yourdomain.com.au' },
-            { step: '4', title: 'Add a www CNAME', detail: `Type: CNAME | Name: www | Value: ${savedDomain || 'yourdomain.com.au'} | TTL: 3600`, copy: `www.${savedDomain || 'yourdomain.com.au'}` },
-            { step: '5', title: 'Wait for propagation', detail: 'DNS changes take 24–48 hours to propagate globally.', copy: null },
-            { step: '6', title: 'Install SSL certificate', detail: 'Most hosts provide free Let\'s Encrypt SSL. Enable HTTPS.', copy: null },
-          ].map(item => (
-            <div key={item.step} className="flex items-start gap-3 px-4 py-3">
-              <span className="h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
-                <p className="text-[11px] text-gray-500 mt-0.5">{item.detail}</p>
-              </div>
-              {item.copy && (
-                <button
-                  onClick={() => copyVal(item.copy!, `dns-${item.step}`)}
-                  className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-blue-600 shrink-0"
-                  data-testid={`btn-copy-dns-${item.step}`}
-                >
-                  {copiedStep === `dns-${item.step}` ? <><CheckCircle className="h-3 w-3 text-emerald-500" /> Copied</> : <><Download className="h-3 w-3" /> Copy</>}
-                </button>
-              )}
-            </div>
-          ))}
+      {/* Hosting Platform + DNS Setup */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Hosting &amp; DNS Setup</p>
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+            {(['netlify', 'firebase', 'cpanel'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setHostingPlatform(p)}
+                data-testid={`btn-platform-${p}`}
+                className={`text-[11px] font-medium px-3 py-1 rounded-md transition-all ${hostingPlatform === p ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+              >
+                {p === 'netlify' ? 'Netlify' : p === 'firebase' ? 'Firebase' : 'cPanel'}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {hostingPlatform === 'netlify' && (
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+            {[
+              { step: '1', color: 'blue', title: 'Create a free Netlify account', detail: 'Go to netlify.com → Sign up. No credit card needed.', copy: 'https://netlify.com' },
+              { step: '2', color: 'blue', title: 'Deploy via ZIP upload', detail: 'Netlify Dashboard → Sites → Add new site → Deploy manually. Drag and drop your downloaded ZIP file.', copy: null },
+              { step: '3', color: 'blue', title: 'Add your custom domain', detail: `Netlify → Site settings → Domain management → Add a domain → Enter: ${savedDomain || 'yourdomain.com.au'}`, copy: savedDomain || null },
+              { step: '4', color: 'blue', title: 'Log in to your domain registrar', detail: 'GoDaddy, Namecheap, Crazy Domains, VentraIP, etc. Go to DNS / Zone management.', copy: null },
+              { step: '5', color: 'blue', title: 'Add DNS records for Netlify', detail: 'Type: CNAME | Name: www | Value: [your-site].netlify.app | TTL: 3600\nType: A | Name: @ | Value: 75.2.60.5 | TTL: 3600', copy: null },
+              { step: '6', color: 'blue', title: 'Wait for DNS propagation', detail: 'DNS changes take 24–48 hours. Netlify will auto-provision a free SSL certificate once verified.', copy: null },
+            ].map(item => (
+              <div key={item.step} className="flex items-start gap-3 px-4 py-3">
+                <span className="h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 whitespace-pre-line">{item.detail}</p>
+                </div>
+                {item.copy && (
+                  <button onClick={() => copyVal(item.copy!, `dns-${item.step}`)} className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-blue-600 shrink-0" data-testid={`btn-copy-dns-${item.step}`}>
+                    {copiedStep === `dns-${item.step}` ? <><CheckCircle className="h-3 w-3 text-emerald-500" /> Copied</> : <><Download className="h-3 w-3" /> Copy</>}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {hostingPlatform === 'firebase' && (
+          <div className="space-y-2">
+            <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800/40 rounded-lg px-4 py-2.5">
+              <p className="text-[11px] text-orange-700 dark:text-orange-400">Firebase Hosting requires two DNS TXT records — one to verify domain ownership for Firebase, and one for Google Search Console. Add both at the same time.</p>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+              {[
+                { step: '1', title: 'Go to Firebase Console → Hosting', detail: 'console.firebase.google.com → your project → Hosting. Click "Add custom domain".', copy: 'https://console.firebase.google.com' },
+                { step: '2', title: 'Enter your domain', detail: `Type: ${savedDomain || 'yourdomain.com.au'} and click Continue. Firebase will show you a TXT record to add.`, copy: savedDomain || null },
+                { step: '3', title: 'Step 1 — Prepare domain (TXT verification)', detail: 'Firebase shows: Type: TXT | Domain name: your domain | Value: hosting-site=[your-project-id]\nLog in to your domain registrar (GoDaddy, Namecheap, etc.) and add this TXT record exactly as shown.', copy: null },
+                { step: '4', title: 'Click "Verify" in Firebase', detail: 'Back in Firebase, click Verify. Firebase will check for the TXT record. If DNS hasn\'t propagated yet, wait a few hours and try again.', copy: null },
+                { step: '5', title: 'Step 2 — Firebase mints your SSL certificate', detail: 'Once verified, Firebase automatically provisions a free SSL certificate. This typically takes 5–30 minutes.', copy: null },
+                { step: '6', title: 'Step 3 — Direct to hosting (CNAME/A record)', detail: `Firebase will show you final DNS records:\nType: A | Name: @ | Value: 151.101.1.195\nType: CNAME | Name: www | Value: ${savedDomain ? savedDomain.replace(/^www\./, '') : 'yourdomain.com.au'}\nAdd these in your DNS registrar and wait 24–48 hours.`, copy: null },
+              ].map(item => (
+                <div key={item.step} className="flex items-start gap-3 px-4 py-3">
+                  <span className="h-5 w-5 rounded-full bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5 whitespace-pre-line">{item.detail}</p>
+                  </div>
+                  {item.copy && (
+                    <button onClick={() => copyVal(item.copy!, `dns-${item.step}`)} className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-orange-600 shrink-0" data-testid={`btn-copy-dns-${item.step}`}>
+                      {copiedStep === `dns-${item.step}` ? <><CheckCircle className="h-3 w-3 text-emerald-500" /> Copied</> : <><Download className="h-3 w-3" /> Copy</>}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hostingPlatform === 'cpanel' && (
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+            {[
+              { step: '1', title: 'Log in to cPanel / WHM', detail: 'Access your hosting control panel at yourdomain.com.au/cpanel or via your host\'s dashboard.', copy: null },
+              { step: '2', title: 'Upload site files via File Manager', detail: 'Go to File Manager → public_html. Extract your ZIP contents here. The index.html file must sit directly inside public_html.', copy: null },
+              { step: '3', title: 'Point your domain to the hosting server', detail: 'In your domain registrar, go to DNS / Zone management. Update Nameservers to your host\'s nameservers (e.g. ns1.yourhostingcompany.com). Or add:\nType: A | Name: @ | Value: [your server IP] | TTL: 3600\nType: CNAME | Name: www | Value: @ | TTL: 3600', copy: null },
+              { step: '4', title: 'Enable free SSL (Let\'s Encrypt)', detail: 'cPanel → SSL/TLS → Let\'s Encrypt SSL. Select your domain and click Issue. Wait 5–10 minutes.', copy: null },
+              { step: '5', title: 'Force HTTPS redirect', detail: 'cPanel → Domains → your domain → Force HTTPS Redirect toggle. This ensures all http:// traffic goes to https://.', copy: null },
+              { step: '6', title: 'Wait for propagation', detail: 'DNS changes take 24–48 hours to propagate globally. Use whatsmydns.net to check progress.', copy: 'https://www.whatsmydns.net' },
+            ].map(item => (
+              <div key={item.step} className="flex items-start gap-3 px-4 py-3">
+                <span className="h-5 w-5 rounded-full bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 whitespace-pre-line">{item.detail}</p>
+                </div>
+                {item.copy && (
+                  <button onClick={() => copyVal(item.copy!, `dns-${item.step}`)} className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-purple-600 shrink-0" data-testid={`btn-copy-dns-${item.step}`}>
+                    {copiedStep === `dns-${item.step}` ? <><CheckCircle className="h-3 w-3 text-emerald-500" /> Copied</> : <><Download className="h-3 w-3" /> Copy</>}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Google Search Console */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Google Search Console</p>
+        <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-lg px-4 py-2.5 mb-2">
+          <p className="text-[11px] text-blue-700 dark:text-blue-400">Choose <strong>Domain property</strong> (covers http + https + www + non-www) rather than URL prefix if possible. Both need a TXT record for verification.</p>
+        </div>
         <div className="border border-gray-200 dark:border-gray-700 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
           {[
-            { step: '1', title: 'Go to Google Search Console', detail: 'search.google.com/search-console', copy: 'https://search.google.com/search-console' },
-            { step: '2', title: 'Add property', detail: `Enter: https://${savedDomain || 'yourdomain.com.au'}`, copy: `https://${savedDomain || 'yourdomain.com.au'}` },
-            { step: '3', title: 'Verify ownership', detail: 'Use DNS TXT record verification (recommended) or HTML file upload.', copy: null },
-            { step: '4', title: 'Submit sitemap', detail: `Add: https://${savedDomain || 'yourdomain.com.au'}/sitemap.xml`, copy: `https://${savedDomain || 'yourdomain.com.au'}/sitemap.xml` },
+            { step: '1', title: 'Go to Google Search Console', detail: 'Open search.google.com/search-console and sign in with a Google account.', copy: 'https://search.google.com/search-console' },
+            { step: '2', title: 'Add a new property', detail: `Click "+ Add property" → choose "Domain" → enter: ${savedDomain || 'yourdomain.com.au'} (without https://). Or choose "URL prefix" and enter: https://${savedDomain || 'yourdomain.com.au'}`, copy: savedDomain || null },
+            { step: '3', title: 'Select DNS TXT record verification', detail: 'In the verification dialog, select record type: TXT (recommended). Google will display a unique TXT value like:\ngoogle-site-verification=xxxxxxxxxxxx\nCopy this value exactly — it\'s unique to your property.', copy: null },
+            { step: '4', title: 'Add the TXT record to your DNS', detail: 'Log in to your domain registrar → DNS / Zone management → Add record:\nType: TXT | Name: @ (or leave blank) | Value: google-site-verification=xxxx | TTL: 3600', copy: null },
+            { step: '5', title: 'Click "Verify" in Search Console', detail: 'Return to Search Console and click Verify. If DNS hasn\'t propagated yet, click "Verify Later" — you can come back after a few hours. DNS changes can take up to 24 hours.', copy: null },
+            { step: '6', title: 'Submit your sitemap', detail: `In Search Console → Sitemaps → New sitemap. Enter: ${savedDomain ? `https://${savedDomain}/sitemap.xml` : 'https://yourdomain.com.au/sitemap.xml'}`, copy: savedDomain ? `https://${savedDomain}/sitemap.xml` : null },
+            { step: '7', title: 'Request indexing of key pages', detail: `In the URL Inspection tool, enter: https://${savedDomain || 'yourdomain.com.au'} → "Request indexing". Repeat for your top 3–5 pages.`, copy: null },
           ].map(item => (
             <div key={item.step} className="flex items-start gap-3 px-4 py-3">
               <span className="h-5 w-5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{item.step}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
-                <p className="text-[11px] text-gray-500 mt-0.5 break-all">{item.detail}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5 whitespace-pre-line break-all">{item.detail}</p>
               </div>
               {item.copy && (
-                <button
-                  onClick={() => copyVal(item.copy!, `gsc-${item.step}`)}
-                  className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-emerald-600 shrink-0"
-                  data-testid={`btn-copy-gsc-${item.step}`}
-                >
+                <button onClick={() => copyVal(item.copy!, `gsc-${item.step}`)} className="text-[11px] flex items-center gap-1 text-gray-400 hover:text-emerald-600 shrink-0" data-testid={`btn-copy-gsc-${item.step}`}>
                   {copiedStep === `gsc-${item.step}` ? <><CheckCircle className="h-3 w-3 text-emerald-500" /> Copied</> : <><Download className="h-3 w-3" /> Copy</>}
                 </button>
               )}
