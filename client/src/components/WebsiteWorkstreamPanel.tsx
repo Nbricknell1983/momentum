@@ -2208,6 +2208,66 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
     }
   }, [chatInput, chatImages, chatLoading, chatMessages, client.id, orgId]);
 
+  // ── Enqueue / regenerate — declared here so handleAhrefsUpload and auto-trigger can reference it ──
+  const handleRun = useCallback(async (force = false) => {
+    if (!orgId || !authReady || !token) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/agent-jobs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          taskType:   'website_workstream',
+          entityType: 'client',
+          entityId:   client.id,
+          orgId,
+          force,
+          input: {
+            orgId,
+            clientId:        client.id,
+            entityId:        client.id,
+            entityType:      'client',
+            businessName:    client.businessName,
+            brand:           client.businessName,
+            website:         client.website || client.clientOnboarding?.currentWebsiteUrl || '',
+            location:        client.city || client.location || '',
+            industry:        client.industry || '',
+            ...(nudge ? { promptNudge: nudge } : {}),
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to queue job');
+      }
+
+      const { jobId } = await res.json();
+
+      if (jobId) {
+        fetch(`/api/agent-jobs/${jobId}/process`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ orgId }),
+        }).catch(() => {/* fire-and-forget */});
+      }
+
+      toast({ title: force ? 'Rebuilding site plan…' : 'Building site plan from intelligence…', description: 'Pulling from GBP services, service areas and keyword data. The plan tab will update automatically.' });
+      setNudge('');
+      setShowNudge(false);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId, authReady, token, client, nudge, toast]);
+
   const parseAhrefsBuffer = (raw: ArrayBuffer): { keyword: string; volume: number; difficulty: number | null; cpc: number | null; parentKeyword: string | null; country: string }[] => {
     let text = '';
     const buf = new Uint8Array(raw);
@@ -2317,67 +2377,7 @@ export default function WebsiteWorkstreamPanel({ client }: WebsiteWorkstreamPane
 
   // ── Enqueue / regenerate ─────────────────────────────────────────────────────
 
-  const handleRun = useCallback(async (force = false) => {
-    if (!orgId || !authReady || !token) return;
-    setLoading(true);
-    try {
-      const res = await fetch('/api/agent-jobs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          taskType:   'website_workstream',
-          entityType: 'client',
-          entityId:   client.id,
-          orgId,
-          force,
-          input: {
-            orgId,
-            clientId:        client.id,
-            entityId:        client.id,
-            entityType:      'client',
-            businessName:    client.businessName,
-            brand:           client.businessName,
-            website:         client.website || client.clientOnboarding?.currentWebsiteUrl || '',
-            location:        client.city || client.location || '',
-            industry:        client.industry || '',
-            ...(nudge ? { promptNudge: nudge } : {}),
-          },
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to queue job');
-      }
-
-      const { jobId } = await res.json();
-
-      // Immediately trigger processing — autopilot is disabled so we kick it manually
-      if (jobId) {
-        fetch(`/api/agent-jobs/${jobId}/process`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ orgId }),
-        }).catch(() => {/* fire-and-forget */});
-      }
-
-      toast({ title: force ? 'Rebuilding site plan…' : 'Building site plan from intelligence…', description: 'Pulling from GBP services, service areas and keyword data. The plan tab will update automatically.' });
-      setNudge('');
-      setShowNudge(false);
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId, authReady, token, client, nudge, toast]);
-
-  // Auto-trigger site plan generation on first open — placed AFTER handleRun to avoid TDZ
+  // Auto-trigger site plan generation on first open — handleRun is declared above parseAhrefsBuffer
   useEffect(() => {
     if (autoTriggered.current) return;
     if (!token || !authReady) return;
