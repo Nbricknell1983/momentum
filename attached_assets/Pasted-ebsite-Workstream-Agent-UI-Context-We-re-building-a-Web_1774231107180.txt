@@ -1,0 +1,89 @@
+ebsite Workstream (Agent + UI)
+
+Context
+We’re building a “Website Workstream” in Momentum (React/Node/Firestore app). The goal: agents synthesize existing intelligence (Website X-Ray, SERP, Strategy, Growth Prescription) into a structured Website Blueprint for a client, and the UI lets a manager review, tweak copy choices, accept, and export/publish. All runs are persisted (snapshot + engineHistory) and respect our job queue (TTL, idempotency, retries).
+
+What to deliver
+
+Contracts (Zod)
+File: src/agents/contracts.ts
+Add WebsiteWorkstreamInputSchema:
+{
+orgId: string,
+clientId: string,
+brand?: string,
+serviceAreas?: string[],
+primaryServices?: string[],
+intelligenceRefs: {
+websiteXrayRunId?: string,
+serpRunId?: string,
+strategyRunId?: string,
+growthPrescriptionRunId?: string
+}
+}
+Add WebsiteWorkstreamOutputSchema (“WebsiteBlueprint”):
+{
+siteMeta: { brand, uvp, tone, primaryCta, nap, license, social?: { gbp?: string, fb?: string, ig?: string }, tracking?: { ga4?: boolean, gtm?: boolean, gsc?: boolean } },
+nav: { items: { label, href }[] },
+footer: { nap, links: { label, href }[] },
+pages: [{
+key: string, route: string, title: string, description: string,
+jsonLd?: object,
+seoMeta: { title: string, description: string, canonical?: string, og?: object },
+sections: Array<{
+kind: "Hero"|"ServicesGrid"|"ServiceDetail"|"Trust"|"Areas"|"FAQ"|"ContactForm"|"CTABar"|"Testimonial"|"Gallery"|"Map",
+props: Record<string, any>,
+copyVariants?: { concise: string, standard: string, extended: string }
+}>,
+internalLinks?: { label: string, href: string }[]
+}],
+assets: Array<{ key: string, alt: string, suggestedSource?: string, placement?: { pageKey: string, sectionKind: string } }>,
+performance: { images: { format: "webp"|"avif", sizes: string[] }, fonts?: { preloads: string[] } }
+}
+Agent implementation
+Add taskType: “website_workstream” mapped to “website-workstream-agent”
+Input assembly: pull latest successful engineHistory for website_xray, serp, strategy, growth_prescription; condense into signals passed to the agent
+Validate output with WebsiteWorkstreamOutputSchema
+Dual-write:
+Snapshot: clients/{clientId}.websiteWorkstream.currentDraft + generatedAt
+History: clients/{clientId}/engineHistory/{runId} (taskType=website_workstream)
+Respect TTL + idempotency + retries (use existing queue helpers)
+UI: Client Workspace → “Website Workstream”
+Component: client/src/components/WebsiteWorkstreamPanel.tsx
+Tabs:
+Plan: siteMeta (UVP, CTA, NAP), nav/footer overview, site structure
+Pages: list + per-page view of sections with props
+Copy: pick copyVariants per section; store user selections on client.websiteWorkstream.userSelections
+SEO: per-page seoMeta + JSON-LD preview
+Assets: required assets list with status (existing/to-source/to-generate)
+Preview: simple mapped renderer (section.kind → component) to visualize the blueprint
+Controls:
+Regenerate (force=true) with optional prompt nudge
+Accept Plan → locks a version (websiteWorkstream.acceptedVersion = runId)
+Export ZIP → generate React skeleton (pages/sections from blueprint)
+(Stub) Create PR / Deploy to Hosting
+Data:
+onSnapshot client.websiteWorkstream.currentDraft
+Write back only manager choices (don’t mutate history doc)
+Rendering components (pure)
+client/src/components/sections/: Hero.tsx, ServicesGrid.tsx, Trust.tsx, Areas.tsx, FAQ.tsx, ContactForm.tsx, CTABar.tsx
+Consume props from blueprint; no external dependencies
+Autopilot orchestration
+After Strategy Diagnosis success (within TTL) on an onboarded client, enqueue website_workstream unless a recent one exists
+Manual Run button calls POST /api/agent-jobs with taskType=website_workstream, entityType=client
+Acceptance criteria
+Running the agent yields a valid WebsiteBlueprint (Zod-validated), snapshot + engineHistory written
+UI renders the Plan/Pages/Copy/SEO/Assets/Preview; manager can select copy variants
+Regenerate works with force; Accept Plan locks a version (pointer to history run)
+Export ZIP contains a working React + Tailwind scaffold with pages/sections prefilled
+No TypeScript errors; React Query hooks stable; routes manager-protected
+Files to add/modify (example)
+src/agents/contracts.ts
+src/agents/website-workstream/index.ts (agent assembly + validator + history write)
+src/agents/utils/history.ts (reuse; no change if already in place)
+src/queue/router.ts (taskType mapping)
+client/src/components/WebsiteWorkstreamPanel.tsx
+client/src/components/sections/{Hero,ServicesGrid,Trust,Areas,FAQ,ContactForm,CTABar}.tsx
+client/src/api/websiteWorkstream.ts (hooks to fetch currentDraft)
+client/src/routes: add the panel to Client Workspace UI
+Note: Keep output deterministic and lightweight; large media is out of scope for this PR (assets list only).

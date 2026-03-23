@@ -28,12 +28,13 @@ function extractRunSummary(run: Record<string, any>): string | null {
 }
 
 const ENGINE_LABELS: Record<EngineType, string> = {
-  websiteEngine: 'Website Engine',
-  seoEngine: 'SEO Engine',
-  gbpEngine: 'GBP Engine',
-  adsEngine: 'Ads Engine',
-  learningInsight: 'Learning Insights',
+  websiteEngine:      'Website Engine',
+  seoEngine:          'SEO Engine',
+  gbpEngine:          'GBP Engine',
+  adsEngine:          'Ads Engine',
+  learningInsight:    'Learning Insights',
   growthPrescription: 'Growth Prescription',
+  websiteWorkstream:  'Website Workstream',
 };
 
 interface HistoryRun {

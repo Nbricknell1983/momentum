@@ -13,6 +13,7 @@ const TASK_AGENT_MAP: Record<string, string> = {
   [TASK_TYPES.GROWTH_PRESCRIPTION]: 'strategy-specialist',
   [TASK_TYPES.ENRICHMENT]:          'strategy-specialist',
   [TASK_TYPES.PREP]:                'strategy-specialist',
+  [TASK_TYPES.WEBSITE_WORKSTREAM]:  'website-workstream-specialist',
   // Legacy aliases (kept for backward compat)
   strategy:  'strategy-specialist',
   seo:       'seo-specialist',

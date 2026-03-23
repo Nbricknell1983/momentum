@@ -11,6 +11,7 @@ import ClientActivationPanel from './ClientActivationPanel';
 import ClientExecutionIntelligence from './ClientExecutionIntelligence';
 import ClientOverviewStrip from './ClientOverviewStrip';
 import WebsiteEnginePanel from './WebsiteEnginePanel';
+import WebsiteWorkstreamPanel from './WebsiteWorkstreamPanel';
 import SEOEnginePanel from './SEOEnginePanel';
 import GBPEnginePanel from './GBPEnginePanel';
 import AdsEnginePanel from './AdsEnginePanel';
@@ -997,6 +998,9 @@ export default function ClientGrowthIntelligencePanel({ client }: { client: Clie
 
         {/* Client Activation Plan — workstream generation + task tracking */}
         {client.activationPlan && <ClientActivationPanel client={client} />}
+
+        {/* Website Workstream — full blueprint builder (Plan/Pages/Copy/SEO/Assets/Preview) */}
+        <WebsiteWorkstreamPanel client={client} />
 
         {/* Engine panels — Website, SEO, GBP, Ads */}
         <WebsiteEnginePanel client={client} />

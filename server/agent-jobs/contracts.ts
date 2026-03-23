@@ -11,6 +11,7 @@ export const TASK_TYPES = {
   GROWTH_PRESCRIPTION: 'growth_prescription',
   ENRICHMENT:          'enrichment',
   PREP:                'prep',
+  WEBSITE_WORKSTREAM:  'website_workstream',
 } as const;
 
 export type TaskType = typeof TASK_TYPES[keyof typeof TASK_TYPES];
@@ -26,6 +27,7 @@ export const TASK_TTL_MS: Record<string, number> = {
   [TASK_TYPES.GBP]:                 24 * 60 * 60 * 1000,  // 24 h
   [TASK_TYPES.ADS]:                 24 * 60 * 60 * 1000,  // 24 h
   [TASK_TYPES.ENRICHMENT]:          7  * 24 * 60 * 60 * 1000, // 7 d
+  [TASK_TYPES.WEBSITE_WORKSTREAM]:  48 * 60 * 60 * 1000,  // 48 h — blueprint is expensive
 };
 
 export function getTtlMs(taskType: string): number {
@@ -46,7 +48,8 @@ export function retryDelayMs(retryCount: number): number {
 // ─── Per-task dependency chains ────────────────────────────────────────────────
 
 export const TASK_DEPENDENCIES: Record<string, string[]> = {
-  [TASK_TYPES.STRATEGY]: [TASK_TYPES.WEBSITE_XRAY, TASK_TYPES.SERP],
+  [TASK_TYPES.STRATEGY]:           [TASK_TYPES.WEBSITE_XRAY, TASK_TYPES.SERP],
+  [TASK_TYPES.WEBSITE_WORKSTREAM]: [TASK_TYPES.STRATEGY, TASK_TYPES.WEBSITE_XRAY, TASK_TYPES.SERP, TASK_TYPES.GROWTH_PRESCRIPTION],
 };
 
 // ─── Input schemas ─────────────────────────────────────────────────────────────
@@ -134,6 +137,26 @@ export const PrepInputSchema = z.object({
   orgId:        z.string(),
 });
 
+export const WebsiteWorkstreamInputSchema = z.object({
+  orgId:            z.string(),
+  clientId:         z.string(),
+  entityId:         z.string(),
+  entityType:       z.enum(['lead', 'client']),
+  businessName:     z.string(),
+  brand:            z.string().optional(),
+  website:          z.string().optional(),
+  location:         z.string().optional(),
+  industry:         z.string().optional(),
+  serviceAreas:     z.array(z.string()).optional(),
+  primaryServices:  z.array(z.string()).optional(),
+  intelligenceRefs: z.object({
+    websiteXrayRunId:          z.string().optional(),
+    serpRunId:                 z.string().optional(),
+    strategyRunId:             z.string().optional(),
+    growthPrescriptionRunId:   z.string().optional(),
+  }).optional(),
+});
+
 // ─── Output schemas ────────────────────────────────────────────────────────────
 
 export const StrategyOutputSchema = z.object({
@@ -190,6 +213,81 @@ export const PrepOutputSchema = z.object({
   nextSteps:  z.array(z.string()).optional(),
 }).passthrough();
 
+const CopyVariantsSchema = z.object({
+  concise:   z.string(),
+  standard:  z.string(),
+  extended:  z.string(),
+}).optional();
+
+const SectionSchema = z.object({
+  kind: z.enum(['Hero', 'ServicesGrid', 'ServiceDetail', 'Trust', 'Areas', 'FAQ', 'ContactForm', 'CTABar', 'Testimonial', 'Gallery', 'Map']),
+  props:        z.record(z.any()),
+  copyVariants: CopyVariantsSchema,
+});
+
+const PageSchema = z.object({
+  key:         z.string(),
+  route:       z.string(),
+  title:       z.string(),
+  description: z.string(),
+  jsonLd:      z.record(z.any()).optional(),
+  seoMeta: z.object({
+    title:       z.string(),
+    description: z.string(),
+    canonical:   z.string().optional(),
+    og:          z.record(z.any()).optional(),
+  }),
+  sections:      z.array(SectionSchema),
+  internalLinks: z.array(z.object({ label: z.string(), href: z.string() })).optional(),
+});
+
+export const WebsiteWorkstreamOutputSchema = z.object({
+  siteMeta: z.object({
+    brand:       z.string(),
+    uvp:         z.string(),
+    tone:        z.string(),
+    primaryCta:  z.string(),
+    nap:         z.object({ address: z.string(), phone: z.string(), email: z.string().optional() }),
+    license:     z.string().optional(),
+    social: z.object({
+      gbp: z.string().optional(),
+      fb:  z.string().optional(),
+      ig:  z.string().optional(),
+    }).optional(),
+    tracking: z.object({
+      ga4: z.boolean().optional(),
+      gtm: z.boolean().optional(),
+      gsc: z.boolean().optional(),
+    }).optional(),
+  }),
+  nav: z.object({
+    items: z.array(z.object({ label: z.string(), href: z.string() })),
+  }),
+  footer: z.object({
+    nap:   z.object({ address: z.string(), phone: z.string(), email: z.string().optional() }),
+    links: z.array(z.object({ label: z.string(), href: z.string() })),
+  }),
+  pages: z.array(PageSchema),
+  assets: z.array(z.object({
+    key:             z.string(),
+    alt:             z.string(),
+    suggestedSource: z.string().optional(),
+    placement: z.object({
+      pageKey:     z.string(),
+      sectionKind: z.string(),
+    }).optional(),
+  })),
+  performance: z.object({
+    images: z.object({
+      format: z.enum(['webp', 'avif']),
+      sizes:  z.array(z.string()),
+    }),
+    fonts: z.object({
+      preloads: z.array(z.string()),
+    }).optional(),
+  }),
+}).passthrough();
+
 // ─── Schema registry ───────────────────────────────────────────────────────────
 
 type SchemaPair = {
@@ -206,6 +304,7 @@ export const TASK_SCHEMAS: Record<string, SchemaPair> = {
   [TASK_TYPES.GROWTH_PRESCRIPTION]: { input: GrowthPrescriptionInputSchema,  output: GrowthPrescriptionOutputSchema },
   [TASK_TYPES.ENRICHMENT]:          { input: EnrichmentInputSchema,          output: EnrichmentOutputSchema },
   [TASK_TYPES.PREP]:                { input: PrepInputSchema,                output: PrepOutputSchema },
+  [TASK_TYPES.WEBSITE_WORKSTREAM]:  { input: WebsiteWorkstreamInputSchema,   output: WebsiteWorkstreamOutputSchema },
 };
 
 /** Validate an input payload against the task's Zod schema. Returns null if valid, error string if not. */

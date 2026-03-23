@@ -42,6 +42,7 @@ const DEFAULT_TASK_SCAN_ORDER = [
   TASK_TYPES.STRATEGY,
   TASK_TYPES.GROWTH_PRESCRIPTION,
   TASK_TYPES.PREP,
+  TASK_TYPES.WEBSITE_WORKSTREAM,
 ];
 
 export interface AutopilotScanOptions {
@@ -520,7 +521,7 @@ function buildEntityInput(
   const industry     = data.industry || data.category || '';
 
   // Reject tasks that need a website but entity has none
-  if ([TASK_TYPES.WEBSITE_XRAY].includes(taskType) && !website) return null;
+  if ([TASK_TYPES.WEBSITE_XRAY, TASK_TYPES.WEBSITE_WORKSTREAM].includes(taskType) && !website) return null;
 
   const base = { orgId, entityId, entityType, businessName, website, location, industry };
 
@@ -541,6 +542,8 @@ function buildEntityInput(
       return { ...base };
     case TASK_TYPES.ENRICHMENT:
       return { ...base };
+    case TASK_TYPES.WEBSITE_WORKSTREAM:
+      return { ...base, clientId: entityId };
     default:
       return { ...base };
   }

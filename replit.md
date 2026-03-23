@@ -50,6 +50,7 @@ Preferred communication style: Simple, everyday language.
 - **AI Sales Engine**: 5-section AI layer for stage-aware defaults, conversation intelligence, insights, and email generation.
 - **AI Strategy & Research**: Strategy Engine, Leads Research, and Growth Plan Module.
 - **AI Engine Suite**: Growth Prescription, Website, SEO, GBP, and Ads Engines for diagnostics and strategic plans.
+- **Website Workstream Agent**: Full website blueprint builder (`website_workstream` task type) — Zod-validated `WebsiteBlueprint` with siteMeta, nav, footer, pages, assets, and performance spec. UI has 6 tabs (Plan, Pages, Copy, SEO, Assets, Preview) with copy variant selection, Accept Plan, history drawer, and JSON export. Dual-writes to `client.websiteWorkstream.currentDraft` + `engineHistory`. Agent ID: `website-workstream-specialist`. TTL: 48h. Deps: strategy, website_xray, serp, growth_prescription. Section preview components in `client/src/components/sections/`.
 - **AI Growth Operator**: Framework for automating growth activities with per-client automation modes and an AI Actions Feed.
 - **AI Growth Operator Daily Brief**: Portfolio-level morning briefing for managers.
 - **Autopilot Execution**: One-click auto-approval for queued AI actions.

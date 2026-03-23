@@ -1,6 +1,6 @@
 import { db, doc, setDoc } from './firebase';
 
-export type ClientEngineType = 'websiteEngine' | 'seoEngine' | 'gbpEngine' | 'adsEngine' | 'learningInsight';
+export type ClientEngineType = 'websiteEngine' | 'seoEngine' | 'gbpEngine' | 'adsEngine' | 'learningInsight' | 'websiteWorkstream';
 export type LeadEngineType = 'growthPrescription';
 export type EngineType = ClientEngineType | LeadEngineType;
 
@@ -13,12 +13,13 @@ export interface EngineOutputMeta {
 }
 
 export const ENGINE_STALE_DAYS: Record<EngineType, number> = {
-  websiteEngine: 30,
-  seoEngine: 30,
-  gbpEngine: 30,
-  adsEngine: 30,
-  learningInsight: 14,
+  websiteEngine:      30,
+  seoEngine:          30,
+  gbpEngine:          30,
+  adsEngine:          30,
+  learningInsight:    14,
   growthPrescription: 90,
+  websiteWorkstream:  48,
 };
 
 export function generateRunId(): string {

@@ -271,6 +271,7 @@ const TASK_SNAPSHOT_FIELD: Record<string, string> = {
   growth_prescription: 'growthPrescription',
   prep:                'prepCallPack',
   enrichment:          'enrichmentData',
+  website_workstream:  'websiteWorkstream',
   // legacy aliases
   website:             'websiteEngine',
   seo:                 'seoEngine',
