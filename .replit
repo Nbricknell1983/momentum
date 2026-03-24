@@ -45,3 +45,8 @@ integrations = ["firebase_barebones_javascript:1.0.0", "javascript_openai_ai_int
 
 [userenv.production]
 APP_BASE_URL = "https://momentum.battlescore.com.au"
+
+[userenv.shared]
+FIREBASE_HOSTING_SITE_ID = "prospectr-a8ef3"
+GBP_REDIRECT_URI = "https://momentum.battlescore.com.au/api/auth/gbp/callback"
+GSC_SERVICE_ACCOUNT = "firebase-adminsdk-fbsvc@prospectr-a8ef3.iam.gserviceaccount.com"
