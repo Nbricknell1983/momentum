@@ -70,6 +70,16 @@ Preferred communication style: Simple, everyday language.
 - **Functionality**: Derives `AccountGrowthSignal`, `ExpansionOpportunity`, `ChurnRiskSignal`, `ReferralOpportunity`, `ExpansionNextBestAction`, and `ExpansionPlay` from live client data without AI calls.
 - **Key Features**: Upsell/Cross-sell engine, Churn-Risk detection, Referral Timing engine, and a 6-tab premium workspace for account managers.
 
+### Automation Execution Layer
+- **Domain Model** (`execAutomationTypes.ts`): Defines `ExecutionItemLocalState`, `ExecutionItemStatus`, `QueueAction`, `QueueState`, `CommunicationHistoryItem`, `ChannelIntegrationState`, and `ExecutionSendResult`. All types derived from existing comms channel types.
+- **Channel Adapters** (`channelAdapters.ts`): Honest, explicit boundaries for each channel. Email uses `mailto:` link (no SMTP required). SMS uses `sms:` protocol on mobile, clipboard on desktop (no Twilio required). Call and voicemail are reference material with manual outcome logging. All missing integration config is documented with exact env var names needed to upgrade.
+- **`sendViaChannel()`**: Dispatcher function that fires the most capable available method per channel. Returns `ExecutionSendResult` with method, sentAt, and note. Never fakes a send.
+- **ExecutionQueue** (`ExecutionQueue.tsx`): Premium 4-tab approval-aware execution queue. Uses `useReducer` for local item state (idle → draft\_open → approved → sent/manually\_sent/cancelled/failed). Writes to Firestore `orgs/{orgId}/commHistory` on every send. Reads history via `onSnapshot`.
+- **Approval flow**: Generate Draft → Review/Edit → Approve → Send (fires channel adapter) or Mark as Sent Manually → logged to Firestore.
+- **Communication history**: Persisted to Firestore `commHistory` collection, read back via real-time listener. Stored per org with entity, channel, body snippet, sentBy, method, linked cadence item.
+- **Routes**: `/execution` (manager-gated), `Send` icon in manager nav sidebar after Comms Drafts.
+- **Rules**: No auto-sending. Every item requires human approval. All sends are auditable. Channel limitations are surfaced clearly, not hidden.
+
 ### Executive Reporting Layer
 - **Dashboard**: A 5-tab leadership dashboard (`/exec`) providing KPIs, risks, opportunities, bottlenecks, alerts, watchlists, and pipeline/account snapshots, all derived from live Redux data without AI or API calls. Focuses on actionable, interpretable metrics.
 

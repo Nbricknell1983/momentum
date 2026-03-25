@@ -1,0 +1,134 @@
+The Executive Reporting Layer is now complete and live.
+
+Next, I want to build the Automation Execution Layer.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, Communication Drafting, and Executive Reporting
+- The system can already determine what needs to happen, when it should happen, why it matters, and what draft/message should be used
+- What is missing is the execution layer that sends or logs approved communications and closes the loop operationally
+
+GOAL
+Build the Automation Execution Layer so Momentum can:
+- send approved communication drafts through supported channels
+- track what was sent, when, and by whom
+- connect cadence items to real execution outcomes
+- support human approval before sending
+- support manual send, queued send, and future automation rules
+- keep communication history tied to leads, clients, and accounts
+
+IMPORTANT
+This must be:
+- safe
+- auditable
+- approval-aware
+- operationally useful
+- premium in UX
+- channel-aware
+
+DO NOT:
+- auto-send everything by default
+- bypass human review
+- create fake sending integrations
+- duplicate a full email client or CRM inbox
+- hide send failures or delivery states
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Automation execution domain model
+Create typed models for at least:
+- executionDraft
+- executionApproval
+- executionSendRequest
+- executionDeliveryRecord
+- executionFailure
+- communicationHistoryItem
+- channelIntegrationState
+- automationExecutionState
+
+2. Channel adapter boundaries
+Create clean adapter boundaries for:
+- email send
+- SMS send
+- internal logged call outcome
+- future webhook/provider events
+
+If integrations are not configured, do not fake sending.
+Create the boundary and list exact missing setup.
+
+3. Approval-aware send flow
+Build the send flow so users can:
+- approve and send now
+- save for later
+- queue for follow-up
+- cancel
+- resend
+- mark as sent manually if it happened outside the system
+
+4. Delivery history model
+Store communication history against the lead/client/account with:
+- channel
+- subject or summary
+- sentAt
+- sentBy
+- linked cadence item
+- linked draft
+- delivery status
+- failure reason if applicable
+
+5. Cadence integration
+Update cadence items so they can move through:
+- reminder created
+- draft created
+- draft reviewed
+- sent
+- completed
+- failed / retry needed
+
+6. Drafting integration
+Connect the existing Communication Drafting Layer so approved drafts can move directly into execution.
+
+7. Execution queue UX
+Build a premium internal execution queue showing:
+- ready to send
+- awaiting approval
+- scheduled
+- sent today
+- failed
+- retry needed
+
+8. Communication history UX
+Create clean views on lead/client/account records showing:
+- recent communications
+- status
+- linked asset/reference
+- linked cadence context
+
+9. Admin and inspection support
+Create inspection views/services for:
+- what was sent
+- what failed
+- what is queued
+- what approval rule applied
+- which cadence or expansion signal triggered it
+
+IMPORTANT RULES
+- Keep this human-reviewed by default
+- Keep execution explainable and auditable
+- Do not auto-send unless explicitly allowed later by policy
+- Build channel adapters as boundaries if config is missing
+- Keep everything tied back to cadence, drafts, and account context
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- automation execution domain model
+- channel adapter boundaries
+- approval-aware send flow
+- execution queue UX

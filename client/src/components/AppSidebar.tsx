@@ -22,6 +22,7 @@ import {
   Bell,
   Mail,
   LineChart,
+  Send,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -61,6 +62,7 @@ const managerNavItems = [
   { title: 'Expansion Engine', url: '/expansion',   icon: TrendingUp },
   { title: 'Cadence',          url: '/cadence',     icon: Bell },
   { title: 'Comms Drafts',     url: '/comms',       icon: Mail },
+  { title: 'Execution Queue',  url: '/execution',   icon: Send },
   { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
   { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
   { title: 'Route Map',      url: '/routes',         icon: Map },
