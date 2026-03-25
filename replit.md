@@ -61,6 +61,7 @@ Preferred communication style: Simple, everyday language.
 
 ### AI Systems Integration Layer
 - **Architecture**: Modular, production-grade server-to-server REST integration with provisioning, audit logging, status polling, and typed patching, ensuring idempotency and an 8-stage lifecycle.
+- **Direct AI Systems API Sync Layer**: Server-side sync service (`server/integration/sync.ts`) that pulls live delivery summaries from AI Systems (`GET /api/integration/tenants/{tenantId}/summary`) and caches them in Firestore at `orgs/{orgId}/aiSystemsSync/{clientId}`. Supports both pull (scheduler + manual refresh) and push (AI Systems calls `POST /api/integration/sync/push`) directions. Client-side types in `client/src/lib/aiSystemsSyncTypes.ts`; live Firestore hook in `client/src/hooks/useAISystemsSync.ts`; adapter in `aiSystemsAdapter.ts` prefers live (&lt;4h) → cached (&lt;24h) → inferred state. Admin workspace at `/ai-systems-sync` with per-client sync health, drilldown, manual refresh, and data quality documentation. Syncs on a 4-hour schedule. Integration router has 5 new routes: `/sync/run`, `/sync/health`, `/sync/clients/:clientId`, `/sync/clients/:clientId/refresh`, `/sync/push`.
 
 ### Client-Facing Strategy Experience Layer
 - **Domain Model**: Defines typed interfaces for strategy documents, reports, and presentations, transforming Lead intelligence without AI calls. Includes a presentation layer for public reports with scope acceptance and ROI simulation.

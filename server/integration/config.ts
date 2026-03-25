@@ -78,9 +78,10 @@ export type IntegrationConfig = ReturnType<typeof getIntegrationConfig>;
 // ---------------------------------------------------------------------------
 
 export const INTEGRATION_PATHS = {
-  createTenant:   '/api/integration/tenants',
-  tenantStatus:   (tenantId: string) => `/api/integration/tenants/${tenantId}/status`,
-  updateTenant:   (tenantId: string) => `/api/integration/tenants/${tenantId}`,
+  createTenant:    '/api/integration/tenants',
+  tenantStatus:    (tenantId: string) => `/api/integration/tenants/${tenantId}/status`,
+  tenantSummary:   (tenantId: string) => `/api/integration/tenants/${tenantId}/summary`,
+  updateTenant:    (tenantId: string) => `/api/integration/tenants/${tenantId}`,
   triggerWorkflow: (tenantId: string) => `/api/integration/tenants/${tenantId}/workflows`,
   activateAgents:  (tenantId: string) => `/api/integration/tenants/${tenantId}/agents`,
 } as const;

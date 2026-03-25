@@ -4,6 +4,8 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { verifyFirebaseToken } from "./middleware/auth";
 import crypto from "crypto";
+import { isIntegrationConfigured } from "./integration/config";
+import { syncAllOrgClients } from "./integration/sync";
 
 const app = express();
 const httpServer = createServer(app);
@@ -106,6 +108,7 @@ app.use((req, res, next) => {
       startPrepReadinessScheduler(port);
       startAutopilotScheduler(port);
       startSweepScheduler(port);
+      startAISystemsSyncScheduler();
     },
   );
 })();
@@ -387,4 +390,47 @@ function startAutopilotScheduler(port: number) {
   setTimeout(runScan, 30_000);
   setInterval(runScan, INTERVAL_MS);
   log(`Autopilot orchestrator started (every ${INTERVAL_MS / 60000} min)`, 'autopilot');
+}
+
+// ── AI Systems Delivery Summary Sync Scheduler ─────────────────────────────
+// Runs every 4 hours. Sweeps all orgs and syncs delivery summaries from AI Systems.
+// Graceful — skips orgs / clients that are not yet provisioned.
+function startAISystemsSyncScheduler() {
+
+  const INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+  async function runSync() {
+    if (!isIntegrationConfigured()) {
+      log('[AISyncScheduler] Integration not configured — skipping scheduled sync', 'ai-sync');
+      return;
+    }
+    const { firestore } = await import('./firebase');
+    if (!firestore) {
+      log('[AISyncScheduler] Firestore not ready — skipping', 'ai-sync');
+      return;
+    }
+    try {
+      const orgsSnap = await firestore.collection('orgs').get();
+      log(`[AISyncScheduler] Syncing ${orgsSnap.size} org(s)`, 'ai-sync');
+      for (const orgDoc of orgsSnap.docs) {
+        try {
+          const result = await syncAllOrgClients({ db: firestore, orgId: orgDoc.id, triggeredBy: 'scheduler' });
+          const r = result.run;
+          log(
+            `[AISyncScheduler] org=${orgDoc.id} attempted=${r.clientsAttempted} ok=${r.clientsSucceeded} failed=${r.clientsFailed} skipped=${r.clientsSkipped}`,
+            'ai-sync'
+          );
+        } catch (orgErr: any) {
+          log(`[AISyncScheduler] org=${orgDoc.id} error: ${orgErr.message}`, 'ai-sync');
+        }
+      }
+    } catch (err: any) {
+      log(`[AISyncScheduler] top-level error: ${err.message}`, 'ai-sync');
+    }
+  }
+
+  // First run 2 minutes after startup (give everything time to settle)
+  setTimeout(runSync, 2 * 60 * 1000);
+  setInterval(runSync, INTERVAL_MS);
+  log('AI Systems sync scheduler started (every 4 hours)', 'ai-sync');
 }

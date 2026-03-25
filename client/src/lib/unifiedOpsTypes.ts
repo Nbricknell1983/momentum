@@ -176,7 +176,19 @@ export interface MomentumSideState {
 
 // ── AI Systems-side state ─────────────────────────────────────────────────────
 
-export type AISystemsDataQuality = 'live' | 'derived' | 'unavailable';
+export type AISystemsDataQuality = 'live' | 'cached' | 'derived' | 'unavailable';
+
+export interface AISystemsLiveSnapshot {
+  activeBlockers?:   unknown[];
+  recentMilestones?: unknown[];
+  nextActions?:      unknown[];
+  websiteUrl?:       string;
+  portalUrl?:        string;
+  overallHealth?:    'green' | 'amber' | 'red' | 'unknown';
+  healthNotes?:      string[];
+  activeAgents?:     string[];
+  summaryGeneratedAt?: string;
+}
 
 export interface AISystemsSideState {
   tenantId?: string;
@@ -192,6 +204,7 @@ export interface AISystemsSideState {
   lastRefreshed?: string;
   dataQuality: AISystemsDataQuality;
   dataQualityNote?: string;
+  liveSnapshot?: AISystemsLiveSnapshot;
 }
 
 // ── Entity-level health summary ───────────────────────────────────────────────

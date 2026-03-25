@@ -1,0 +1,133 @@
+The True Server-Side Autopilot Execution Layer is now complete and live.
+
+Next, I want to build the Direct AI Systems API Sync Layer into Momentum.
+
+Context:
+- Momentum already has Unified Cross-System Operations, Client Command Centre, Daily Briefing, Agent Command, Expansion Engine, Cadence, Comms, Autopilot Policy, Scheduled Sweeps, Real Provider Sending, and Server-Side Autopilot Execution
+- AI Systems already has tenant provisioning, startup, workflow execution, website engine, publishing, content generation, telemetry, optimisation, and delivery-side agents
+- Some Momentum views currently rely on inferred or derived AI Systems state rather than direct live delivery data
+- What is missing is a direct, structured sync/summary layer so Momentum can consume live AI Systems truth without duplicating AI Systems admin UI
+
+GOAL
+Build the Direct AI Systems API Sync Layer so Momentum can:
+- fetch live delivery summaries from AI Systems
+- store/cache the right cross-system summaries
+- improve Unified Ops, Client Command Centre, Agent Command, Daily Briefing, and Expansion logic with direct data
+- surface real delivery bottlenecks, health, milestones, and next actions
+- keep Momentum and AI Systems connected through a clean summary contract
+
+IMPORTANT
+This must be:
+- summary-first
+- cross-system
+- cache-aware
+- explainable
+- org-aware
+- client-safe where needed
+- operationally useful
+
+DO NOT:
+- duplicate full AI Systems admin state in Momentum
+- pull raw logs by default
+- tightly couple Momentum UI to AI Systems internal collections
+- replace the existing integration contract recklessly
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Cross-system sync domain model
+Create typed models for at least:
+- aiSystemsSummarySnapshot
+- aiSystemsTenantSummary
+- aiSystemsWorkflowSummary
+- aiSystemsDeliverySummary
+- aiSystemsHealthSummary
+- aiSystemsMilestoneSummary
+- aiSystemsNextActionSummary
+- aiSystemsSyncRun
+- aiSystemsSyncHealth
+
+2. AI Systems summary contract
+Define the exact summary payload(s) Momentum should consume from AI Systems, including:
+- tenant provisioning state
+- startup/onboarding state
+- website progress
+- content progress
+- publishing/live status
+- telemetry status
+- optimisation status
+- active blockers
+- recent milestones
+- next best delivery actions
+- delivery-side agent summaries
+
+Keep this summary-first and intentionally limited.
+
+3. Server-side sync service in Momentum
+Build a service that:
+- calls AI Systems summary endpoints securely
+- stores/caches the returned summaries
+- handles failures gracefully
+- tracks last sync time
+- records sync errors
+- can run manually and on a schedule
+
+4. Sync schedule + refresh controls
+Support:
+- manual refresh
+- scheduled refresh
+- stale-data detection
+- per-org sync status
+- per-client/tenant refresh where needed
+
+5. Adapter integration
+Update the existing Momentum adapters/views to prefer live AI Systems summaries over inferred state where available:
+- Unified Ops
+- Client Command Centre
+- Daily Briefing
+- Agent Command
+- Expansion / churn / referral timing where relevant
+
+6. AI Systems data quality and fallback rules
+Create clear rules for:
+- when live data is fresh enough
+- when to use cached data
+- when to fall back to inferred state
+- how to mark the confidence/quality of cross-system data in the UI
+
+7. Cross-system inspection support
+Create inspection/debug support for:
+- last sync per org/client
+- what summary data was pulled
+- what failed
+- what is inferred vs live
+- where each dashboard card got its data
+
+8. Admin workspace / sync health view
+Build a premium internal view showing:
+- AI Systems sync health
+- stale or failed syncs
+- recent sync runs
+- clients with missing live delivery summaries
+- drilldowns to the affected workspaces
+
+IMPORTANT RULES
+- Keep AI Systems represented in Momentum as a summary layer, not duplicated admin UI
+- Make stale/live/inferred status visible where appropriate
+- Keep all sync activity auditable
+- If AI Systems endpoints are missing, define the exact contract and boundary first
+- Build this to improve the existing Momentum experience, not replace AI Systems
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- cross-system sync domain model
+- AI Systems summary contract
+- server-side sync service
+- sync schedule + refresh controls

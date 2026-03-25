@@ -23,6 +23,14 @@ import {
   getProvisioningLog,
 } from './actions';
 import { readIntegrationMapping } from './provisioning';
+import {
+  syncAllOrgClients,
+  syncClientDeliverySummary,
+  receivePushedSummary,
+  computeOrgSyncHealth,
+  readSyncSnapshot,
+} from './sync';
+import type { AISystemsTenantDeliverySummary } from '../../client/src/lib/aiSystemsSyncTypes';
 import type { ConversionArchetype, PatchDomain } from './types';
 
 const router = Router();
@@ -381,6 +389,135 @@ router.get('/clients/:clientId/log', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[integration] log fetch error:', err);
     res.status(500).json({ error: err.message || 'Log fetch failed' });
+  }
+});
+
+// =============================================================================
+// DELIVERY SUMMARY SYNC ROUTES
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// POST /api/integration/sync/run
+// Trigger a manual delivery-summary sync for all clients in the org
+// ---------------------------------------------------------------------------
+
+router.post('/sync/run', async (req: Request, res: Response) => {
+  if (!isFirebaseAdminReady() || !firestore) {
+    return res.status(503).json({ error: 'Firestore not ready' });
+  }
+  const orgId = req.trustedOrgId!;
+  try {
+    const result = await syncAllOrgClients({ db: firestore, orgId, triggeredBy: 'manual' });
+    res.json({ success: true, run: result.run, log: result.log });
+  } catch (err: any) {
+    console.error('[integration/sync] run error:', err);
+    res.status(500).json({ error: err.message || 'Sync run failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/integration/sync/health
+// Return org-level sync health + per-client snapshots
+// ---------------------------------------------------------------------------
+
+router.get('/sync/health', async (req: Request, res: Response) => {
+  if (!isFirebaseAdminReady() || !firestore) {
+    return res.status(503).json({ error: 'Firestore not ready' });
+  }
+  const orgId = req.trustedOrgId!;
+  try {
+    const health = await computeOrgSyncHealth({ db: firestore, orgId });
+
+    // Fetch all snapshots for the drilldown table
+    const snapSnap = await firestore
+      .collection('orgs').doc(orgId)
+      .collection('aiSystemsSync').get();
+    const snapshots = snapSnap.docs.map(d => d.data());
+
+    res.json({ health: { orgId, ...health }, snapshots });
+  } catch (err: any) {
+    console.error('[integration/sync] health error:', err);
+    res.status(500).json({ error: err.message || 'Health fetch failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/integration/sync/clients/:clientId
+// Return the current sync snapshot for a specific client
+// ---------------------------------------------------------------------------
+
+router.get('/sync/clients/:clientId', async (req: Request, res: Response) => {
+  if (!isFirebaseAdminReady() || !firestore) {
+    return res.status(503).json({ error: 'Firestore not ready' });
+  }
+  const { clientId } = req.params;
+  const orgId = req.trustedOrgId!;
+  try {
+    const snapshot = await readSyncSnapshot(firestore, orgId, clientId);
+    if (!snapshot) return res.status(404).json({ error: 'No sync data for this client' });
+    res.json({ snapshot });
+  } catch (err: any) {
+    console.error('[integration/sync] client snapshot error:', err);
+    res.status(500).json({ error: err.message || 'Snapshot fetch failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/integration/sync/clients/:clientId/refresh
+// Trigger a single-client refresh (pulls from AI Systems immediately)
+// ---------------------------------------------------------------------------
+
+router.post('/sync/clients/:clientId/refresh', async (req: Request, res: Response) => {
+  if (!isFirebaseAdminReady() || !firestore) {
+    return res.status(503).json({ error: 'Firestore not ready' });
+  }
+  const { clientId } = req.params;
+  const orgId = req.trustedOrgId!;
+  try {
+    // Resolve tenantId from client doc
+    const clientSnap = await firestore
+      .collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+    if (!clientSnap.exists) return res.status(404).json({ error: 'Client not found' });
+    const d = clientSnap.data() as Record<string, any>;
+    const tenantId: string | undefined =
+      d?.aiSystemsIntegration?.tenantId ??
+      d?.onboardingState?.provisioning?.tenantId ??
+      d?.tenantId;
+    if (!tenantId) {
+      return res.status(422).json({ error: 'Client has no tenantId — not yet provisioned in AI Systems' });
+    }
+    const result = await syncClientDeliverySummary({ db: firestore, orgId, clientId, tenantId });
+    res.json({ success: result.success, cached: result.cached ?? false, error: result.error });
+  } catch (err: any) {
+    console.error('[integration/sync] refresh error:', err);
+    res.status(500).json({ error: err.message || 'Refresh failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/integration/sync/push
+// AI Systems can push a delivery summary into Momentum (inbound push path).
+// Protected by x-openclaw-key header (same shared secret as other AI System calls).
+// ---------------------------------------------------------------------------
+
+router.post('/sync/push', async (req: Request, res: Response) => {
+  if (!isFirebaseAdminReady() || !firestore) {
+    return res.status(503).json({ error: 'Firestore not ready' });
+  }
+  const orgId = req.trustedOrgId!;
+  const { clientId, summary } = req.body as {
+    clientId?: string;
+    summary?:  AISystemsTenantDeliverySummary;
+  };
+  if (!clientId || !summary?.tenantId) {
+    return res.status(400).json({ error: 'clientId and summary.tenantId are required' });
+  }
+  try {
+    await receivePushedSummary({ db: firestore, orgId, clientId, summary });
+    res.json({ success: true, tenantId: summary.tenantId, pushedAt: new Date().toISOString() });
+  } catch (err: any) {
+    console.error('[integration/sync] push error:', err);
+    res.status(500).json({ error: err.message || 'Push failed' });
   }
 });
 

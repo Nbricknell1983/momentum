@@ -1,21 +1,80 @@
 // ── AI Systems Summary Adapter ───────────────────────────────────────────────
 // Derives AI Systems-side state from available Momentum data.
 //
-// ARCHITECTURE NOTE:
-// Momentum does not have a live websocket connection to AI Systems.
-// AI Systems state is currently inferred from:
-//   1. Client.deliveryStatus / healthStatus / strategyStatus (Firestore-synced)
-//   2. Lead.onboardingState.provisioning (Firestore-synced)
-//   3. Client.products / selectedModules (Firestore-synced)
+// ARCHITECTURE:
+// 1. PRIMARY: Live sync snapshots from orgs/{orgId}/aiSystemsSync/{clientId}
+//    Written by the server-side sync service after each pull or AI Systems push.
+// 2. FALLBACK: Inferred from Momentum-synced fields (deliveryStatus, modules, etc.)
 //
-// When a direct AI Systems API connection is established, this adapter should
-// be upgraded to call server routes that proxy AI Systems REST endpoints.
-// All fields that cannot be derived are marked with dataQuality: 'unavailable'
-// so the UI can be honest about what it knows vs what it's inferring.
+// Freshness rules:
+//   - Live (< 4h):   use sync snapshot directly, mark dataQuality: 'live'
+//   - Stale (4–24h): use cached snapshot, mark dataQuality: 'cached'
+//   - Expired (>24h) or no snapshot: fall back to inferred, mark dataQuality: 'derived'
+//   - No tenantId:   mark dataQuality: 'unavailable'
+//
+// All fields that cannot be known are marked with dataQuality: 'unavailable'
+// so the UI is always honest about confidence.
 
 import type { Client, Lead } from '@/lib/types';
 import type { AISystemsSideState, AISystemsDataQuality } from '@/lib/unifiedOpsTypes';
 import type { OnboardingState, ProvisioningTriggerState } from '@/lib/proposalAcceptanceTypes';
+import type { AISystemsSyncSnapshot } from '@/lib/aiSystemsSyncTypes';
+import { STALE_THRESHOLD_MS, EXPIRED_THRESHOLD_MS } from '@/lib/aiSystemsSyncTypes';
+
+// ── Build AISystemsSideState from a live sync snapshot ───────────────────────
+// Called when fresh or stale (but not expired) data is available.
+
+export function buildAISystemsStateFromLiveSummary(
+  snapshot: AISystemsSyncSnapshot
+): AISystemsSideState | null {
+  if (!snapshot.summary) return null;
+  const s = snapshot.summary;
+
+  // Determine freshness
+  const ageMs = snapshot.lastSyncedAt
+    ? Date.now() - new Date(snapshot.lastSyncedAt).getTime()
+    : Infinity;
+
+  const isFresh = ageMs < STALE_THRESHOLD_MS;
+  const isStale = ageMs < EXPIRED_THRESHOLD_MS;
+
+  if (!isFresh && !isStale) return null;  // Expired — fall back to inferred
+
+  const dataQuality: AISystemsDataQuality = isFresh ? 'live' : 'cached';
+  const syncDate = snapshot.lastSyncedAt
+    ? new Date(snapshot.lastSyncedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : undefined;
+
+  return {
+    tenantId:          s.tenantId,
+    lifecycleState:    s.lifecycleState,
+    deliveryStatus:    s.isActive ? 'active' : s.isOnboarding ? 'onboarding' : s.isBlocked ? 'blocked' : 'unknown',
+    websiteStatus:     s.websiteStatus,
+    contentStatus:     s.contentStatus,
+    telemetryStatus:   s.telemetryStatus,
+    optimisationStatus: s.seoStatus,
+    portalStatus:      s.portalStatus,
+    healthStatus:      s.overallHealth === 'green' ? 'green' : s.overallHealth === 'red' ? 'red' : 'amber',
+    activeModules:     s.modules.filter(m => m.status !== 'not_included').map(m => m.key),
+    lastRefreshed:     syncDate,
+    dataQuality,
+    dataQualityNote:   isFresh
+      ? `Live AI Systems data — synced ${syncDate ?? 'recently'}`
+      : `Cached AI Systems data — synced ${syncDate ?? 'recently'} (may be slightly out of date)`,
+    // Extended fields from live summary
+    liveSnapshot: {
+      activeBlockers:   s.activeBlockers,
+      recentMilestones: s.recentMilestones,
+      nextActions:      s.nextActions,
+      websiteUrl:       s.websiteUrl,
+      portalUrl:        s.portalUrl,
+      overallHealth:    s.overallHealth,
+      healthNotes:      s.healthNotes,
+      activeAgents:     s.activeAgents,
+      summaryGeneratedAt: s.summaryGeneratedAt,
+    },
+  };
+}
 
 // ── Derive from Client ────────────────────────────────────────────────────────
 
