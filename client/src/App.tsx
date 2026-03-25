@@ -35,6 +35,7 @@ import CadencePage from '@/pages/cadence';
 import CommsPage from '@/pages/comms';
 import ExecPage from '@/pages/exec';
 import ExecutionPage from '@/pages/execution';
+import ReferralPage from '@/pages/referral';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -85,6 +86,7 @@ function ProtectedRoutes() {
       <Route path="/comms">{() => <ManagerGate component={CommsPage} />}</Route>
       <Route path="/exec">{() => <ManagerGate component={ExecPage} />}</Route>
       <Route path="/execution">{() => <ManagerGate component={ExecutionPage} />}</Route>
+      <Route path="/referral">{() => <ManagerGate component={ReferralPage} />}</Route>
       <Route path="/portal/:clientId" component={ClientPortalPage} />
       <Route component={NotFound} />
     </Switch>

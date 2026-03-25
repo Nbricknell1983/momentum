@@ -23,6 +23,7 @@ import {
   Mail,
   LineChart,
   Send,
+  GitMerge,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -63,6 +64,7 @@ const managerNavItems = [
   { title: 'Cadence',          url: '/cadence',     icon: Bell },
   { title: 'Comms Drafts',     url: '/comms',       icon: Mail },
   { title: 'Execution Queue',  url: '/execution',   icon: Send },
+  { title: 'Referral Engine',  url: '/referral',    icon: GitMerge },
   { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
   { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
   { title: 'Route Map',      url: '/routes',         icon: Map },

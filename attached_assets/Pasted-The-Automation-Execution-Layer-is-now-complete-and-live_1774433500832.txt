@@ -1,0 +1,150 @@
+The Automation Execution Layer is now complete and live.
+
+Next, I want to build the Referral Engine.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, Communication Drafting, Executive Reporting, and Automation Execution
+- The system can already detect referral windows and generate communication drafts
+- What is missing is the dedicated engine that turns successful delivery moments and positive client momentum into referral opportunities, referral asks, and referral tracking
+
+GOAL
+Build the Referral Engine so Momentum can:
+- detect the right time to ask for a referral
+- recommend the right referral ask style
+- generate referral ask communications
+- track referral asks and outcomes
+- create a repeatable referral loop across active accounts
+- help turn client success into new pipeline
+
+IMPORTANT
+This must be:
+- commercially useful
+- timing-aware
+- trust-aware
+- explainable
+- premium in UX
+- integrated with the existing expansion, cadence, drafting, and execution layers
+
+DO NOT:
+- make every client a referral candidate at all times
+- trigger pushy or poorly timed referral asks
+- duplicate generic CRM referral fields with no intelligence
+- hide why a referral ask was recommended
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Referral domain model
+Create typed models for at least:
+- referralCandidate
+- referralReadinessSignal
+- referralAsk
+- referralAskStyle
+- referralOutcome
+- referralLeadLink
+- referralMomentumState
+- referralProgramState
+- referralEvidence
+- referralNextBestAction
+
+2. Referral readiness engine
+Build a service that scores referral readiness using signals such as:
+- recent milestone/win
+- delivery health
+- portal engagement
+- approvals completed
+- positive momentum
+- low friction
+- recent communication success
+- churn risk absence
+- account health trend
+
+3. Referral ask style engine
+Support ask styles such as:
+- direct introduction ask
+- “who else do you know” ask
+- soft mention ask
+- milestone-based ask
+- testimonial-to-referral bridge
+- follow-up referral ask after visible win
+
+Each style should include:
+- when to use it
+- why it fits
+- wording angle
+- preferred channel
+
+4. Referral workspace UX
+Build a premium internal workspace showing:
+- referral-ready accounts
+- readiness score
+- suggested ask style
+- why now
+- proof/evidence to reference
+- recommended next action
+- referral history
+
+5. Referral ask integration
+Integrate with the existing Communication Drafting and Automation Execution layers so users can:
+- generate referral ask drafts
+- review/edit them
+- approve/send/log them
+- tie them back to the referral opportunity
+
+6. Referral outcome tracking
+Track:
+- ask created
+- ask sent
+- response received
+- referral lead created
+- referral won/lost
+- source client credited
+
+7. Lead linkage
+Support linking a referral ask outcome into a new lead in Momentum with:
+- referring client
+- referral source context
+- original ask record
+- timestamp
+- attribution path
+
+8. Cadence and expansion integration
+Integrate with:
+- expansion signals
+- cadence reminders
+- client milestones
+- account growth prompts
+
+So the system can:
+- remind at the right time
+- suppress asks when timing is poor
+- resurface asks later when timing improves
+
+9. Admin and inspection support
+Create inspection views/services for:
+- why a referral candidate scored highly
+- what evidence supported the ask
+- what style was chosen
+- what happened after the ask
+- referral conversion chain
+
+IMPORTANT RULES
+- Keep referral asks evidence-based and well-timed
+- Keep everything explainable
+- Keep the UX premium and useful in real conversations
+- Keep this connected to comms and execution rather than isolated
+- Do not auto-send referral asks by default
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- referral domain model
+- referral readiness engine
+- referral ask style engine
+- referral workspace UX

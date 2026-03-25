@@ -70,6 +70,14 @@ Preferred communication style: Simple, everyday language.
 - **Functionality**: Derives `AccountGrowthSignal`, `ExpansionOpportunity`, `ChurnRiskSignal`, `ReferralOpportunity`, `ExpansionNextBestAction`, and `ExpansionPlay` from live client data without AI calls.
 - **Key Features**: Upsell/Cross-sell engine, Churn-Risk detection, Referral Timing engine, and a 6-tab premium workspace for account managers.
 
+### Referral Engine
+- **Domain Model** (`referralTypes.ts`): Defines `ReferralReadinessSignal`, `ReferralCandidate`, `ReferralAsk`, `ReferralLeadLink`, `ReferralMomentumState`, `ReferralEvidence`. Six ask styles: `milestone_based`, `direct_intro`, `who_else`, `soft_mention`, `testimonial_bridge`, `follow_up`.
+- **Referral Adapter** (`referralAdapter.ts`): Pure derivation from live client data. Scores each client 0–100 across 6 weighted signals (health, delivery, churn risk, contact timing, live channels, upsell readiness). Selects the most appropriate ask style, generates conversation angle and evidence points, and flags suppression reasons when conditions are not right.
+- **ReferralWorkspace** (`ReferralWorkspace.tsx`): Premium 5-tab workspace: Overview (program summary + hot candidates), Candidates (filterable scored list with signal breakdown), Active Asks (Firestore-backed ask tracking with status progression), Outcomes (completed asks + conversion counts), Inspection (scoring rules audit + style catalog).
+- **Ask Tracking**: Persisted to Firestore `orgs/{orgId}/referralAsks`. Status lifecycle: `created → sent → responded → lead_created → won/lost/no_response`. Real-time via `onSnapshot`.
+- **Draft Generation**: `generateReferralAskContent(candidate, channel)` produces pre-filled call prep notes, email (with subject), or SMS body for each ask. All editable before saving.
+- **Routes**: `/referral` (manager-gated). `GitMerge` icon in sidebar after Execution Queue.
+
 ### Automation Execution Layer
 - **Domain Model** (`execAutomationTypes.ts`): Defines `ExecutionItemLocalState`, `ExecutionItemStatus`, `QueueAction`, `QueueState`, `CommunicationHistoryItem`, `ChannelIntegrationState`, and `ExecutionSendResult`. All types derived from existing comms channel types.
 - **Channel Adapters** (`channelAdapters.ts`): Honest, explicit boundaries for each channel. Email uses `mailto:` link (no SMTP required). SMS uses `sms:` protocol on mobile, clipboard on desktop (no Twilio required). Call and voicemail are reference material with manual outcome logging. All missing integration config is documented with exact env var names needed to upgrade.
