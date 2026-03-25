@@ -51,6 +51,7 @@ Preferred communication style: Simple, everyday language.
 - **Autopilot Execution**: One-click auto-approval for queued AI actions.
 - **Bullpen Work Queue**: Trigger-driven system for proactive operational management.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for leads and clients.
+- **Manager Daily Briefing Layer**: Pure derivation engine generating a daily operational briefing from all existing layers, with priority classification (critical/urgent/important/watchlist), section-based layout (approvals/risks/opportunities/blocked/watchlist), change detection vs previous snapshots, review tracking, Firestore persistence, and a debug/inspection log explaining every inclusion and exclusion decision. Accessible at `/briefing`.
 
 ### Client Portal & Command Centre
 - **Client Portal Access Layer**: Defines models for portal share links, invites, access logs, visibility rules, digest schedules, and client portal configurations, with an admin panel and public share page (`/share/:token`).

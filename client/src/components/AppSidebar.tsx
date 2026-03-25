@@ -26,6 +26,7 @@ import {
   GitMerge,
   SlidersHorizontal,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -68,6 +69,7 @@ const managerNavItems = [
   { title: 'Execution Queue',  url: '/execution',   icon: Send },
   { title: 'Referral Engine',  url: '/referral',    icon: GitMerge },
   { title: 'Autopilot Policy', url: '/autopilot',   icon: SlidersHorizontal },
+  { title: 'Daily Briefing',   url: '/briefing',    icon: Sparkles },
   { title: 'Scheduled Sweeps', url: '/sweeps',      icon: RefreshCw },
   { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
   { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },

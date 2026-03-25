@@ -1,0 +1,116 @@
+The Real Provider Sending Layer is now complete and live.
+
+Next, I want to build the Manager Daily Briefing Layer.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, Communication Drafting, Executive Reporting, Automation Execution, Referral Engine, Autopilot Policy, Scheduled Sweeps, and Real Provider Sending
+- AI Systems handles downstream delivery, website/content/publishing, telemetry, and optimisation
+- The system can now detect, prioritise, draft, approve, send, and track outcomes
+- What is missing is a top-level daily operating briefing for managers so they can quickly see what needs attention first
+
+GOAL
+Build the Manager Daily Briefing Layer so Momentum can:
+- generate a concise daily operational briefing
+- highlight the most urgent approvals, risks, opportunities, and failures
+- show what changed since the last briefing
+- help managers decide where to focus first each morning
+- provide drilldowns into the right workspaces
+
+IMPORTANT
+This must be:
+- concise
+- high-signal
+- manager-friendly
+- action-oriented
+- explainable
+- premium in UX
+
+DO NOT:
+- turn this into another giant dashboard
+- dump raw data without interpretation
+- repeat every metric already shown elsewhere
+- hide why an item is included in the briefing
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Daily briefing domain model
+Create typed models for at least:
+- dailyBriefing
+- dailyBriefingSection
+- dailyBriefingItem
+- dailyBriefingPriority
+- dailyBriefingChange
+- dailyBriefingSummary
+- dailyBriefingDrilldown
+- dailyBriefingDeliveryState
+
+2. Briefing adapter
+Build a pure derivation adapter that composes the briefing from existing state across:
+- approvals waiting
+- overdue cadence
+- failed sends / retry-needed communications
+- churn-risk accounts
+- hot expansion opportunities
+- referral-ready accounts
+- blocked onboarding/provisioning
+- important AI Systems summaries where available
+
+3. Priority and inclusion rules
+Create clear logic for:
+- what makes it into the briefing
+- what is urgent vs important vs watchlist
+- what changed since the last run/view
+- what should be excluded to keep it high-signal
+
+4. Daily briefing UX
+Build a premium briefing page/card experience showing:
+- today’s top priorities
+- what changed since yesterday / last briefing
+- urgent approvals
+- urgent risks
+- hot opportunities
+- blocked items
+- direct links to act
+
+5. Briefing history
+Support:
+- save briefing snapshots
+- compare latest vs previous
+- mark items reviewed
+- preserve a history of daily briefings
+
+6. Delivery options model
+Prepare support for:
+- in-app briefing
+- future email briefing
+- future Slack/Teams style summary
+Do not send externally yet unless explicitly configured later.
+
+7. Admin and inspection support
+Create inspection/debug support for:
+- why an item was included
+- what source data fed the briefing
+- when the briefing was derived
+- what changed from the previous version
+
+IMPORTANT RULES
+- Keep this summary-first and high-signal
+- Make every item actionable
+- Build from existing layers rather than duplicating logic
+- Keep it manager-focused, not client-facing
+- If any dependency is missing, create a clean boundary and list it
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- daily briefing domain model
+- briefing adapter
+- priority and inclusion rules
+- daily briefing UX
