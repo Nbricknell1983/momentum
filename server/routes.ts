@@ -17482,5 +17482,110 @@ Return ONLY JSON:
     }
   });
 
+  // ── Autopilot Execution Layer ────────────────────────────────────────────────
+
+  // Trigger an execution run manually
+  app.post('/api/orgs/:orgId/autopilot/exec/run', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId } = req.params;
+      const { runAutopilotExecutionForOrg } = await import('./autopilotExecution');
+      const logs: string[] = [];
+      const logger = (msg: string) => { logs.push(msg); console.log(msg); };
+      const summary = await runAutopilotExecutionForOrg(orgId, 'manual', logger);
+      res.json({ summary, logs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // List execution jobs
+  app.get('/api/orgs/:orgId/autopilot/exec/jobs', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId } = req.params;
+      const { status } = req.query;
+      let query = firestore.collection('orgs').doc(orgId).collection('autopilotExecJobs')
+        .orderBy('createdAt', 'desc').limit(100);
+      if (status) {
+        query = firestore.collection('orgs').doc(orgId).collection('autopilotExecJobs')
+          .where('status', '==', status).orderBy('createdAt', 'desc').limit(100) as any;
+      }
+      const snap = await query.get();
+      const jobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ jobs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get execution health
+  app.get('/api/orgs/:orgId/autopilot/exec/health', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId } = req.params;
+      const { getExecHealth } = await import('./autopilotExecution');
+      const health = await getExecHealth(orgId);
+      res.json({ health });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Cancel a job
+  app.post('/api/orgs/:orgId/autopilot/exec/jobs/:jobId/cancel', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId, jobId } = req.params;
+      const cancelledBy = (req as any).user?.email ?? 'admin';
+      const { cancelExecJob } = await import('./autopilotExecution');
+      await cancelExecJob(orgId, jobId, cancelledBy);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Retry a failed job
+  app.post('/api/orgs/:orgId/autopilot/exec/jobs/:jobId/retry', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId, jobId } = req.params;
+      const { retryExecJob } = await import('./autopilotExecution');
+      await retryExecJob(orgId, jobId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get attempts for a job
+  app.get('/api/orgs/:orgId/autopilot/exec/jobs/:jobId/attempts', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId, jobId } = req.params;
+      const snap = await firestore.collection('orgs').doc(orgId).collection('autopilotExecAttempts')
+        .where('jobId', '==', jobId).orderBy('attemptNumber', 'asc').get();
+      const attempts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ attempts });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Internal route: run execution as part of sweep cycle (called by scheduler)
+  app.post('/api/internal/orgs/:orgId/autopilot/exec/run', async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId } = req.params;
+      const { runAutopilotExecutionForOrg } = await import('./autopilotExecution');
+      const logs: string[] = [];
+      const summary = await runAutopilotExecutionForOrg(orgId, 'scheduler', msg => logs.push(msg));
+      res.json({ summary });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

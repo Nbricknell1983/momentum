@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Sparkles,
   Globe,
+  Cpu,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -70,6 +71,7 @@ const managerNavItems = [
   { title: 'Execution Queue',  url: '/execution',   icon: Send },
   { title: 'Referral Engine',  url: '/referral',    icon: GitMerge },
   { title: 'Autopilot Policy', url: '/autopilot',   icon: SlidersHorizontal },
+  { title: 'Exec Runner',      url: '/autopilot-execution', icon: Cpu },
   { title: 'Daily Briefing',   url: '/briefing',    icon: Sparkles },
   { title: 'Unified Ops',      url: '/unified-ops', icon: Globe },
   { title: 'Scheduled Sweeps', url: '/sweeps',      icon: RefreshCw },

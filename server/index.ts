@@ -321,6 +321,19 @@ function startSweepScheduler(port: number) {
             const data = await resp.json();
             const r = data.record;
             log(`[SweepScheduler] sweep complete for ${orgDoc.id} — candidates=${r?.candidateCount ?? 0} actions=${r?.actionCreatedCount ?? 0} approvals=${r?.approvalRequestedCount ?? 0} suppressed=${r?.suppressedDupeCount ?? 0} ${r?.durationMs ?? 0}ms`, 'sweep');
+            // Run autopilot execution after each sweep to process auto_created actions
+            try {
+              const execResp = await fetch(`http://localhost:${port}/api/internal/orgs/${orgDoc.id}/autopilot/exec/run`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+              });
+              if (execResp.ok) {
+                const execData = await execResp.json();
+                const s = execData.summary;
+                log(`[ExecRunner] org=${orgDoc.id} — succeeded=${s?.jobsSucceeded ?? 0} failed=${s?.jobsFailed ?? 0} suppressed=${s?.jobsSuppressed ?? 0} ${s?.durationMs ?? 0}ms`, 'sweep');
+              }
+            } catch (execErr: any) {
+              log(`[ExecRunner] error for org ${orgDoc.id}: ${execErr.message}`, 'sweep');
+            }
           }
         } catch (orgErr: any) {
           log(`[SweepScheduler] error for org ${orgDoc.id}: ${orgErr.message}`, 'sweep');

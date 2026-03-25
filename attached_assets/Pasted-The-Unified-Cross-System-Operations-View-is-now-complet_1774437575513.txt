@@ -1,0 +1,158 @@
+The Unified Cross-System Operations View is now complete and live.
+
+Next, I want to build the True Server-Side Autopilot Execution Layer.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, Communication Drafting, Executive Reporting, Automation Execution, Referral Engine, Autopilot Policy, Scheduled Sweeps, Real Provider Sending, Daily Briefing, and Unified Cross-System Operations
+- AI Systems handles downstream tenant provisioning, website/content/publishing, telemetry, optimisation, and delivery-side agent activity
+- The system can already detect candidate actions, apply policy, queue items, generate drafts, request approvals, and send through providers
+- What is missing is the server-side execution layer that allows approved low-risk actions to run automatically without depending on the UI being open
+
+GOAL
+Build the True Server-Side Autopilot Execution Layer so Momentum can:
+- execute approved low-risk actions automatically on the server
+- process queued autopilot actions in the background
+- respect org-level autopilot policy and global mode
+- require approval for medium/high-risk actions
+- track every execution, suppression, failure, and retry
+- make low-risk automation genuinely operational
+
+IMPORTANT
+This must be:
+- safe
+- policy-aware
+- auditable
+- idempotent
+- retry-aware
+- org-scoped
+- production-grade
+
+DO NOT:
+- auto-send high-risk external communications by default
+- bypass policy or approval gates
+- create duplicate executions
+- hide failed runs
+- build hidden automations that cannot be inspected later
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Server-side autopilot execution domain model
+Create typed models for at least:
+- autopilotExecutionJob
+- autopilotExecutionAttempt
+- autopilotExecutionResult
+- autopilotExecutionFailure
+- autopilotExecutionCooldown
+- autopilotExecutionLease
+- autopilotExecutionQueueState
+- autopilotExecutionHistory
+- autopilotExecutionHealth
+
+2. Execution queue and job model
+Build the server-side queue model for actions that are eligible for automatic execution.
+Each job should include:
+- orgId
+- entity type/id
+- action type
+- source signal
+- policy decision
+- createdAt
+- dueAt
+- status
+- cooldown key
+- dedup key
+- linked cadence/draft/referral/expansion context
+
+3. Policy-aware execution engine
+Build the server-side engine that:
+- reads queued candidate actions
+- re-checks current autopilot policy before execution
+- verifies that the action is still eligible
+- blocks or suppresses if conditions changed
+- executes only actions that are still allowed
+
+4. Low-risk action handlers
+Implement the first server-side autopilot handlers for safe low-risk actions such as:
+- create cadence reminder
+- flag churn risk
+- flag upsell opportunity
+- flag referral window
+- log activity
+- queue draft generation
+- queue approval request
+
+Do not start with high-risk auto-send actions.
+Build the low-risk base first.
+
+5. Leasing, idempotency, and deduplication
+Implement:
+- execution leasing/claiming
+- stale lease recovery
+- dedup keys
+- cooldown windows
+- “already completed” suppression
+- in-flight protection
+
+6. Retry and failure handling
+Support:
+- bounded retries
+- retry backoff
+- terminal failure rules
+- surfaced failure reasons
+- suppression when retry no longer makes sense
+
+7. Background runner / scheduler integration
+Connect the execution engine to the existing scheduled sweep runner so:
+- sweeps can create eligible execution jobs
+- the execution runner can process jobs on a cadence
+- jobs can also be run manually for inspection/testing
+
+8. Execution workspace / inspection
+Build a premium internal workspace showing:
+- queued execution jobs
+- running jobs
+- completed jobs
+- suppressed jobs
+- failed jobs
+- retry state
+- why each job ran or did not run
+
+9. Audit and explainability
+For every execution job, record:
+- why it was created
+- what policy allowed it
+- what was executed
+- whether it succeeded
+- what changed as a result
+- what retry/suppression logic applied
+
+10. Safety controls
+Support:
+- pause autopilot execution by org
+- pause by action type
+- replay eligible failed jobs
+- manually cancel queued jobs
+- inspect per-org execution health
+
+IMPORTANT RULES
+- Start with low-risk internal actions only
+- Re-check policy at execution time, not just queue time
+- Keep everything tied back to existing policy, cadence, drafting, and execution systems
+- Make every automated action inspectable
+- Keep all actions idempotent and org-scoped
+- If background scheduler or execution persistence needs additional setup, list it clearly
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- server-side autopilot execution domain model
+- execution queue and job model
+- policy-aware execution engine
+- low-risk action handlers
