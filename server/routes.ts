@@ -7617,6 +7617,127 @@ Make it specific to their industry and location.`;
     }
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // LEAD ONBOARDING STATE — Proposal Acceptance → Capture → Provisioning
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // GET /api/leads/:leadId/onboarding-state — read the full onboarding state document
+  app.get("/api/leads/:leadId/onboarding-state", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      const orgId: string = (req.query?.orgId as string) || (req.headers['x-org-id'] as string) || '';
+      if (!orgId) return res.status(400).json({ error: "orgId required" });
+      const { leadId } = req.params;
+
+      const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
+      const leadDoc = await leadRef.get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+      const data = leadDoc.data() as any;
+
+      return res.json({
+        leadId,
+        onboardingState: data.onboardingState || null,
+        // Helpful context fields from the lead
+        leadName: data.businessName || data.name || '',
+        leadStage: data.stage || '',
+        strategyReportId: data.strategyReportId || null,
+        clientId: data.clientId || null,
+      });
+    } catch (err) {
+      console.error("[onboarding-state GET]", err);
+      res.status(500).json({ error: "Failed to fetch onboarding state" });
+    }
+  });
+
+  // PATCH /api/leads/:leadId/onboarding-state — deep-merge update to onboarding state
+  app.patch("/api/leads/:leadId/onboarding-state", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      const orgId: string = req.body?.orgId || req.query?.orgId || (req.headers['x-org-id'] as string) || '';
+      if (!orgId) return res.status(400).json({ error: "orgId required" });
+      const { leadId } = req.params;
+      const { update, auditEntry } = req.body as { update: Record<string, any>; auditEntry?: any };
+      if (!update) return res.status(400).json({ error: "'update' payload required" });
+
+      const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
+      const leadDoc = await leadRef.get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+
+      const existingState = (leadDoc.data() as any).onboardingState || {};
+      const existingAudit: any[] = existingState.auditTrail || [];
+
+      const newAudit = auditEntry
+        ? [...existingAudit, { ...auditEntry, timestamp: auditEntry.timestamp || new Date().toISOString() }]
+        : existingAudit;
+
+      const newState = {
+        ...existingState,
+        ...update,
+        lastUpdatedAt: new Date().toISOString(),
+        lastUpdatedBy: uid,
+        auditTrail: newAudit,
+      };
+
+      await leadRef.update({ onboardingState: newState });
+
+      return res.json({ success: true, onboardingState: newState });
+    } catch (err) {
+      console.error("[onboarding-state PATCH]", err);
+      res.status(500).json({ error: "Failed to update onboarding state" });
+    }
+  });
+
+  // POST /api/leads/:leadId/onboarding-state/accept — record proposal acceptance event
+  app.post("/api/leads/:leadId/onboarding-state/accept", async (req: any, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const uid = req.firebaseUser?.uid;
+      if (!uid) return res.status(401).json({ error: "Unauthorised" });
+      const orgId: string = req.body?.orgId || '';
+      if (!orgId) return res.status(400).json({ error: "orgId required" });
+      const { leadId } = req.params;
+      const { acceptanceEvent, selectedModules } = req.body as { acceptanceEvent: any; selectedModules: any };
+
+      const leadRef = firestore.collection('orgs').doc(orgId).collection('leads').doc(leadId);
+      const leadDoc = await leadRef.get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+
+      const existingState = (leadDoc.data() as any).onboardingState || {};
+      const existingAudit: any[] = existingState.auditTrail || [];
+
+      const auditEntry = {
+        eventType: 'status_changed',
+        timestamp: new Date().toISOString(),
+        performedBy: uid,
+        fromStatus: existingState.status || 'proposal_pending',
+        toStatus: 'proposal_accepted',
+        detail: 'Proposal accepted and scope confirmed.',
+      };
+
+      const newState = {
+        ...existingState,
+        status: 'proposal_accepted',
+        acceptanceEvent: { ...acceptanceEvent, acceptedAt: new Date().toISOString(), acceptedBy: uid },
+        selectedModules: { ...selectedModules, selectedAt: new Date().toISOString(), selectedBy: uid },
+        statusChangedAt: new Date().toISOString(),
+        lastUpdatedAt: new Date().toISOString(),
+        lastUpdatedBy: uid,
+        auditTrail: [...existingAudit, auditEntry],
+      };
+
+      await leadRef.update({ onboardingState: newState });
+
+      return res.json({ success: true, onboardingState: newState });
+    } catch (err) {
+      console.error("[onboarding-state/accept POST]", err);
+      res.status(500).json({ error: "Failed to record proposal acceptance" });
+    }
+  });
+
   // Check slug availability (must come before /:reportId)
   app.get("/api/strategy-reports/check-slug", async (req, res) => {
     try {

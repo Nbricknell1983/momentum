@@ -1,0 +1,154 @@
+The Client-Facing Strategy Experience is now complete in Momentum.
+
+Next, I want to build the Proposal Acceptance + Onboarding Transition layer.
+
+Context:
+- Momentum already has lead intelligence
+- Momentum already has the internal sales workspace
+- Momentum already has the client-facing strategy experience
+- Momentum already has strategy report generation, versioning, locking, revocation, and share links
+- Momentum is already integrated with AI Systems for tenant provisioning
+- What is now needed is the transition layer that moves a prospect from strategy/proposal to accepted scope to onboarding-ready provisioning
+
+GOAL
+Build the Proposal Acceptance + Onboarding Transition layer so Momentum can:
+- let a prospect move from strategy review to proposal acceptance
+- capture selected modules/services clearly
+- collect onboarding-critical business details
+- confirm handoff readiness
+- trigger clean provisioning into AI Systems
+- track the state from proposal accepted → onboarding in progress → provisioned
+
+IMPORTANT
+This must be:
+- commercially clean
+- operationally clear
+- tightly integrated with the existing strategy report flow
+- aligned with the AI Systems provisioning contract
+- premium in UX
+- auditable
+
+DO NOT:
+- duplicate AI Systems execution functionality
+- make this a generic checkout page
+- hide scope decisions in raw forms
+- skip readiness checks before provisioning
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Proposal acceptance domain model
+Create typed models for at least:
+- proposalAcceptance
+- acceptedScope
+- selectedModules
+- onboardingCapture
+- onboardingChecklist
+- onboardingBlocker
+- onboardingTransitionState
+- acceptedStrategyVersion
+- provisioningTriggerState
+
+2. Strategy-to-proposal transition UX
+Extend the existing strategy/report flow so a user can:
+- accept the strategy
+- confirm selected scope/modules
+- choose what is included now vs later
+- move into onboarding capture cleanly
+
+3. Accepted scope UX
+Create a clean UI for selecting/confirming:
+- website
+- SEO
+- GBP
+- content
+- telemetry
+- optimisation/autopilot
+- portal access
+- any other supported modules
+
+This must be clear, commercial, and easy to understand.
+
+4. Onboarding capture UX
+Build the onboarding form/workflow for required inputs such as:
+- business details
+- primary contact
+- domain/website details
+- service areas
+- target services
+- branding/assets availability
+- GBP details if relevant
+- notes / handover notes
+
+5. Onboarding readiness engine
+Create a readiness layer that checks:
+- strategy locked?
+- accepted scope selected?
+- required onboarding fields complete?
+- blockers remaining?
+- ready to provision into AI Systems?
+
+6. Provisioning transition UX
+Build the final transition view that shows:
+- accepted strategy version
+- selected modules
+- handoff summary
+- onboarding readiness
+- provisioning button
+- provisioning status after trigger
+- linked tenant once created
+
+7. Proposal / onboarding status model
+Support statuses such as:
+- strategy_presented
+- proposal_pending
+- proposal_accepted
+- onboarding_in_progress
+- onboarding_ready
+- provisioning
+- provisioned
+- onboarding_failed
+
+8. Audit and version support
+Track:
+- who accepted
+- what strategy version was accepted
+- what scope was selected
+- when onboarding changed
+- when provisioning was triggered
+
+9. AI Systems integration linkage
+Use the existing provisioning integration rather than recreating it.
+Surface:
+- provisioning status
+- linked tenant id
+- errors/retries if provisioning fails
+
+10. Admin and inspection support
+Create internal inspection views/services for:
+- accepted scope
+- onboarding completeness
+- readiness blockers
+- provisioning history
+- linked tenant status
+
+IMPORTANT RULES
+- Keep this strategy-led and premium
+- Keep the accepted scope tied to the locked strategy version
+- Do not allow provisioning without readiness checks
+- Reuse the existing integration architecture
+- Keep the handoff explainable and auditable
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- proposal acceptance domain model
+- strategy-to-proposal transition UX
+- accepted scope UX
+- onboarding readiness engine

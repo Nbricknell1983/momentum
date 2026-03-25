@@ -77,8 +77,19 @@ Preferred communication style: Simple, everyday language.
 - **Adapter Layer**: `client/src/lib/strategyPresentationAdapter.ts` — Pure TypeScript adapter that transforms Lead intelligence fields (growthPrescription, strategyDiagnosis, aiCallPrepOutput, ahrefsData, crawledPages, etc.) into a `StrategyDocument` + `StrategyDiagnosis` compatible with the existing `StrategyReportPage`. Zero AI calls — deterministic derivation from already-computed data.
 - **Admin Panel**: `client/src/components/LeadStrategyReportPanel.tsx` — Generate, share, refresh, revoke, lock, and version-manage strategy reports from a lead. Shows data quality checklist, share link with copy/open, version history with snapshots, proposal lock mode. Accessible from the "Strategy Report" tab in LeadFocusView.
 - **Server Routes** (new in `server/routes.ts`): `POST /api/strategy-reports/from-lead` (generate from lead intelligence, idempotent — updates existing draft), `PATCH /api/strategy-reports/:id/revoke`, `PATCH /api/strategy-reports/:id/lock`, `GET /api/strategy-reports/:id/snapshots`. Revoked reports return 410. Each generation creates a versioned snapshot subcollection.
-- **LeadFocusView**: Now has 7 tabs — Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator, **Strategy Report** (new).
+- **LeadFocusView**: Now has 8 tabs — Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator, Strategy Report, **Onboarding** (new).
 - **Presentation layer**: Existing `client/src/pages/strategy-report.tsx` (1471 lines, `/strategy/:reportId` route) serves the public-facing report — fully compatible with adapter output, includes scope acceptance flow, live ROI simulator, and score rings.
+
+### Proposal Acceptance → Onboarding → Provisioning Flow
+- **Domain Model**: `client/src/lib/proposalAcceptanceTypes.ts` — typed interfaces for the full lifecycle: `ProposalStatus` (8 states), `ModuleSelection`, `SelectedModules`, `OnboardingCapture` (contact, business, address, web, service areas, target services, GBP, branding), `OnboardingReadinessResult`, `ProposalAcceptanceEvent`, `ProvisioningTriggerState`, `OnboardingAuditEntry`, `OnboardingState`. Also exports pure helper functions: `deriveReadiness()` (8-check checklist with blockers), `emptyCapture()`, `emptyModuleSelections()`.
+- **UI Panel**: `client/src/components/OnboardingTransitionPanel.tsx` — 4-step guided panel in LeadFocusView "Onboarding" tab:
+  - **Step 1 (Scope)**: Module scope selector for all 9 modules — now / later / not included timing per module.
+  - **Step 2 (Capture)**: Accordion-style onboarding form — Contact, Business Details, Address, Website & Domain, Service Areas & Target Services, Google Business Profile, Branding Assets, Handover Notes.
+  - **Step 3 (Readiness)**: Live readiness score (0–100), checklist with 8 required/recommended checks, critical blocker cards with fix actions.
+  - **Step 4 (Handoff)**: Onboarding summary + provisioning — embeds `ProvisioningPanel` when a `clientId` exists, or shows a "Convert to Client" prompt if the lead hasn't been converted yet.
+- **Server Routes**: `GET /api/leads/:leadId/onboarding-state`, `PATCH /api/leads/:leadId/onboarding-state`, `POST /api/leads/:leadId/onboarding-state/accept` — all write to the `onboardingState` field on the Lead Firestore document. Full audit trail maintained.
+- **Module Catalogue**: 9 defined modules — website, seo, gbp, google_ads, content, local_seo, telemetry, autopilot, portal_access.
+- **Status lifecycle**: `strategy_presented → proposal_pending → proposal_accepted → onboarding_in_progress → onboarding_ready → provisioning → provisioned`.
 
 ### Sales Intelligence UX Layer
 - **Domain Model**: `client/src/lib/salesIntelligenceTypes.ts` — typed models for `OpportunityAssessment`, `VisibilityGapSummary`, `MarketOpportunitySummary`, `SalesNextBestAction`, `ProposalReadiness`, `HandoffReadiness`, `SalesConversationState`, `ProvisioningReadiness`. All derived on-the-fly from existing Lead data using pure functions — no additional storage required.

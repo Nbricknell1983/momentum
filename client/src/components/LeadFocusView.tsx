@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   X, ArrowLeft, ArrowRight, Eye, BarChart3,
-  TrendingUp, Zap, CheckSquare, DollarSign, ShieldX, FileText,
+  TrendingUp, Zap, CheckSquare, DollarSign, ShieldX, FileText, PackageCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,6 +24,7 @@ import DigitalGrowthPlanPanel from './DigitalGrowthPlanPanel';
 import SalesNextBestActionPanel from './SalesNextBestActionPanel';
 import ProposalReadinessPanel from './ProposalReadinessPanel';
 import LeadStrategyReportPanel from './LeadStrategyReportPanel';
+import { OnboardingTransitionPanel } from './OnboardingTransitionPanel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,7 +37,8 @@ type CenterView =
   | 'sales_actions'
   | 'readiness'
   | 'calculator'
-  | 'strategy_report';
+  | 'strategy_report'
+  | 'onboarding';
 
 interface TabDef {
   id:    CenterView;
@@ -53,6 +55,7 @@ const TABS: TabDef[] = [
   { id: 'readiness',         label: 'Readiness',         shortLabel: 'Ready',    icon: CheckSquare },
   { id: 'calculator',        label: 'ROI Calculator',    shortLabel: 'ROI',      icon: DollarSign },
   { id: 'strategy_report',   label: 'Strategy Report',   shortLabel: 'Strategy', icon: FileText },
+  { id: 'onboarding',        label: 'Onboarding',         shortLabel: 'Onboard',  icon: PackageCheck },
 ];
 
 interface LeadFocusViewProps {
@@ -165,6 +168,16 @@ export default function LeadFocusView({
               />
             </div>
           </ScrollArea>
+        );
+      case 'onboarding':
+        return (
+          <div className="h-full flex flex-col">
+            <OnboardingTransitionPanel
+              leadId={lead.id}
+              orgId={(lead as any).orgId || ''}
+              lead={lead}
+            />
+          </div>
         );
       default:
         return null;
