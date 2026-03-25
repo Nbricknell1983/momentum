@@ -31,6 +31,7 @@ import QueueHealthPage from '@/pages/admin/QueueHealthPage';
 import AutopilotSettingsPage from '@/pages/admin/AutopilotSettingsPage';
 import AgentsPage from '@/pages/agents';
 import ExpansionPage from '@/pages/expansion';
+import CadencePage from '@/pages/cadence';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -77,6 +78,7 @@ function ProtectedRoutes() {
       <Route path="/admin/autopilot-settings">{() => <ManagerGate component={AutopilotSettingsPage} />}</Route>
       <Route path="/agents">{() => <ManagerGate component={AgentsPage} />}</Route>
       <Route path="/expansion">{() => <ManagerGate component={ExpansionPage} />}</Route>
+      <Route path="/cadence">{() => <ManagerGate component={CadencePage} />}</Route>
       <Route path="/portal/:clientId" component={ClientPortalPage} />
       <Route component={NotFound} />
     </Switch>

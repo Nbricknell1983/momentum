@@ -19,6 +19,7 @@ import {
   Bot,
   Brain,
   TrendingUp,
+  Bell,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -55,6 +56,7 @@ const managerNavItems = [
   { title: 'Management',     url: '/management',     icon: BarChart3 },
   { title: 'Agent Command',  url: '/agents',         icon: Brain },
   { title: 'Expansion Engine', url: '/expansion',   icon: TrendingUp },
+  { title: 'Cadence',          url: '/cadence',     icon: Bell },
   { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
   { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
   { title: 'Route Map',      url: '/routes',         icon: Map },

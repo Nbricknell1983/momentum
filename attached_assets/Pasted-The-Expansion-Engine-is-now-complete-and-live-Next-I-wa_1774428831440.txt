@@ -1,0 +1,158 @@
+The Expansion Engine is now complete and live.
+
+Next, I want to build the Cadence + Automation Layer.
+
+Context:
+- Momentum now has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, and the Expansion Engine
+- AI Systems handles downstream delivery and optimisation
+- The system can already detect next best actions, growth opportunities, churn risks, referral timing, and account expansion signals
+- What is missing is the operational cadence layer that ensures the right action happens at the right time without relying on memory or manual follow-up alone
+
+GOAL
+Build the Cadence + Automation Layer so Momentum can:
+- schedule and surface follow-ups automatically
+- create timing-based reminders for sales and account management
+- trigger nudges based on stage, inactivity, blockers, approvals, and growth moments
+- maintain momentum across leads, onboarding, active accounts, and expansion opportunities
+- make the system operationally consistent
+
+IMPORTANT
+This must be:
+- operationally useful
+- explainable
+- premium in UX
+- stage-aware
+- account-aware
+- revocable/editable
+- tightly integrated with the existing sales execution, client portal, agent command, and expansion layers
+
+DO NOT:
+- turn this into a generic calendar clone
+- create noisy reminder spam
+- fire automations without clear reason
+- hide why an automation or cadence item exists
+- duplicate external calendar/email systems unless needed
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Cadence domain model
+Create typed models for at least:
+- cadenceRule
+- cadenceEvent
+- cadenceReminder
+- cadenceQueueItem
+- cadenceTrigger
+- cadenceState
+- followUpPlan
+- approvalReminder
+- inactivityAlert
+- growthMomentReminder
+- interventionReminder
+- referralAskReminder
+
+2. Cadence rule engine
+Build a rule engine that derives timing recommendations from:
+- sales stage
+- last activity date
+- proposal status
+- onboarding readiness
+- provisioning state
+- expansion opportunities
+- churn risk signals
+- referral opportunities
+- approval blockers
+- portal engagement where available
+
+Examples:
+- follow up 2 days after strategy sent if no movement
+- remind after 3 days if proposal viewed but not accepted
+- raise onboarding reminder if critical fields incomplete for 5 days
+- nudge after live milestone for referral ask
+- escalate churn-risk intervention if no engagement for X days
+
+3. Reminder generation engine
+Create the service that turns rules into concrete reminders/tasks with:
+- due date
+- reason
+- owner
+- urgency
+- linked lead/client/account
+- linked source signal
+- recommended action
+- recommended wording angle where relevant
+
+4. Cadence queue UX
+Build a premium operational workspace showing:
+- due today
+- due this week
+- overdue
+- upcoming
+- grouped by sales / onboarding / account growth / churn intervention / referrals
+
+5. Reminder detail UX
+For each item show:
+- why this reminder exists
+- what triggered it
+- what stage it relates to
+- what to do next
+- what asset to reference
+- suggested wording / talking point where appropriate
+
+6. Automated nudges model
+Create support for future-triggerable nudges such as:
+- internal-only reminders
+- client reminder drafts
+- approval reminder drafts
+- referral ask prompts
+- follow-up suggestions
+
+Do not send automatically yet unless explicitly configured later.
+Build the model and preview layer first.
+
+7. Stage and account integration
+Integrate cadence with:
+- Lead workspace
+- Sales Execution Hub
+- Onboarding panel
+- Expansion workspace
+- Client command / portal state where relevant
+
+8. Admin and inspection support
+Create inspection views/services for:
+- why a cadence item was generated
+- what rule fired it
+- what source data supported it
+- whether it was dismissed/completed/snoozed
+- reminder history per lead/client
+
+9. Safe controls
+Support:
+- dismiss
+- snooze
+- reschedule
+- mark complete
+- regenerate
+- suppress noisy reminder types per org if needed
+
+IMPORTANT RULES
+- Keep reminders evidence-based
+- Keep the system useful, not noisy
+- Make every item explainable
+- Keep this internal-first, with future-ready support for client-facing reminder drafts
+- Do not auto-send external messages yet unless explicitly designed later
+- Build reusable rule + queue abstractions, not hardcoded one-off reminders
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- cadence domain model
+- cadence rule engine
+- reminder generation engine
+- cadence queue UX
