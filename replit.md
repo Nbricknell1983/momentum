@@ -72,6 +72,14 @@ Preferred communication style: Simple, everyday language.
 - **Key Rules**: Uses `provisioningRequestId` for idempotency, follows an 8-stage lifecycle, and enforces field ownership.
 - **Frontend**: `ProvisioningPanel.tsx` for readiness checks, scope editing, lifecycle display, action buttons, and audit log viewing.
 
+### Sales Intelligence UX Layer
+- **Domain Model**: `client/src/lib/salesIntelligenceTypes.ts` — typed models for `OpportunityAssessment`, `VisibilityGapSummary`, `MarketOpportunitySummary`, `SalesNextBestAction`, `ProposalReadiness`, `HandoffReadiness`, `SalesConversationState`, `ProvisioningReadiness`. All derived on-the-fly from existing Lead data using pure functions — no additional storage required.
+- **Lead Focus View** (enhanced): `LeadFocusView.tsx` — 6-tab command workspace: Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator. Left panel shows LeadCardExpanded + ConversationIntelligence; right panel shows DealLiveActivityFeed.
+- **Visibility Gap Panel**: `LeadVisibilityGapPanel.tsx` — premium gap analysis UI with visibility score, opportunity score, gap cards sorted by severity (critical → quick wins), trust signal checklist, and opportunity dimension breakdown. Derived from prepCallPack, aiCallPrepOutput, competitorData, ahrefsData, strategyDiagnosis.
+- **Digital Growth Plan Panel**: `DigitalGrowthPlanPanel.tsx` — strategy-led plan view with urgency diagnosis, growth barriers, recommended product stack (website/SEO/GBP/ads) with expandable detail, priority actions, investment tier cards, and expected outcome forecast band.
+- **Sales Next Best Action Panel**: `SalesNextBestActionPanel.tsx` — stage/conversation-aware NBA engine with NEPQ-style questions (situation/problem/consequence/solution/commitment), conversation state tracker with stall risk detection, objection handling scripts, copyable follow-up scripts.
+- **Proposal & Handoff Readiness Panel**: `ProposalReadinessPanel.tsx` — 3-tab readiness system: Proposal Readiness (7-item weighted checklist with blockers), Handoff Readiness (scope, modules, archetype), Provisioning (AI Systems workflow description and next steps).
+
 ## External Dependencies
 
 ### Database

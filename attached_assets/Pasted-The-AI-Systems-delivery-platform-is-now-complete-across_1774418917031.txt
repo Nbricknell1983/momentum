@@ -1,0 +1,185 @@
+The AI Systems delivery platform is now complete across all 8 core layers:
+
+- Provisioning
+- Post-provisioning startup
+- Workflow execution runner
+- Website execution engine
+- Website publishing engine
+- AI content generation engine
+- Real telemetry integration layer
+- Autonomous optimisation engine
+
+The next step is to build the Momentum Sales Intelligence UX so the system becomes commercially usable, persuasive, and operational on the sales side.
+
+Context:
+- Momentum is the prospecting, strategy, and orchestration platform
+- AI Systems is now the downstream execution engine
+- The integration between the two platforms is already live
+- Momentum can already provision tenants into AI Systems
+- What is now needed is the front-end and workflow layer that allows a salesperson or strategist to see the intelligence clearly, present it to prospects, move deals forward, and trigger onboarding cleanly
+
+GOAL
+Build the Momentum Sales Intelligence UX so Momentum can:
+- capture and qualify leads
+- display visibility gaps and opportunity clearly
+- show a structured Digital Growth Plan
+- present website / SEO / GBP strategy in a persuasive way
+- surface AI-generated next best sales actions
+- manage handoff readiness into AI Systems
+- support pipeline movement from discovery → close → onboarding
+
+IMPORTANT
+This must be:
+- operational
+- commercially persuasive
+- strategy-led
+- clean and premium in UX
+- multi-tenant/org aware where relevant
+- explainable
+- tightly aligned to the AI Systems delivery architecture
+
+DO NOT:
+- make this a generic CRM
+- reduce it to tables and forms only
+- duplicate AI Systems functionality
+- hide the intelligence inside raw JSON views
+- build shallow dashboards without decision support
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Sales intelligence domain model
+Create typed models for at least:
+- leadProfile
+- opportunityAssessment
+- visibilityGapSummary
+- marketOpportunitySummary
+- growthPlan
+- salesNextBestAction
+- proposalReadiness
+- handoffReadiness
+- provisioningReadiness
+- salesConversationState
+
+2. Lead intelligence workspace
+Build the core Momentum lead/account workspace that shows:
+- business snapshot
+- target market
+- current website / GBP / visibility status
+- top competitors
+- opportunity summary
+- current stage in sales journey
+- AI-recommended next action
+
+This should be the main “command view” for a lead.
+
+3. Visibility and gap UX
+Create a premium UI layer for showing:
+- what Google sees vs what the business thinks
+- visibility gaps
+- keyword opportunity
+- location/service coverage gaps
+- competitor comparison
+- missing trust/conversion signals
+
+This should feel like a strategy product, not a report.
+
+4. Digital Growth Plan UX
+Build the structured growth plan experience showing:
+- diagnosis
+- what is limiting growth
+- what needs to be built/fixed
+- recommended website structure
+- recommended SEO/GBP actions
+- expected outcomes
+- confidence and assumptions
+
+5. Sales next best action engine UI
+Surface:
+- AI-generated next best actions
+- why they matter
+- suggested NEPQ-style questions
+- follow-up suggestions
+- objection-handling prompts
+- recommended next meeting step or close step
+
+6. Proposal and handoff readiness UX
+Create clear readiness panels for:
+- strategy complete?
+- enough data collected?
+- scope selected?
+- website/SEO/GBP modules selected?
+- handoff notes complete?
+- ready to provision tenant into AI Systems?
+
+7. Provisioning control UX
+Build the sales-side controls to:
+- create tenant in AI Systems
+- view provisioning status
+- view linked tenant
+- retry provisioning if needed
+- inspect sync issues
+
+8. Pipeline and stage UX
+Build a premium pipeline/stage system showing:
+- discovery
+- diagnosed
+- strategy presented
+- proposal sent
+- decision pending
+- won
+- provisioning
+- onboarded
+
+Each stage should show the most relevant intelligence and action prompts.
+
+9. Executive/client-facing strategy view
+Build a polished shareable/viewable strategy presentation mode inside Momentum that can show:
+- current position
+- growth opportunity
+- what needs to happen next
+- why your system is different
+- what the roadmap looks like
+
+This should feel much more like a live growth experience than a static PDF report.
+
+10. AI Systems linkage
+Where relevant, surface delivery-side status from AI Systems back into Momentum, such as:
+- tenant provisioning status
+- onboarding progress
+- website generation progress
+- publishing status
+- telemetry health
+- optimisation status summary
+
+Do not recreate AI Systems inside Momentum — just show the right summary and link through.
+
+11. Admin and inspection support
+Create admin-safe inspection views/services for:
+- handoff readiness
+- provisioning history
+- linked tenant status
+- sales activity state
+- proposal readiness
+- missing blockers preventing close or onboarding
+
+IMPORTANT RULES
+- Keep this premium and strategy-led
+- Use the already-built integration rather than duplicating delivery logic
+- Keep all AI-generated recommendations explainable
+- Keep the UX commercially useful, not just technically complete
+- If any data dependency from AI Systems is not yet exposed cleanly, create an adapter boundary and list what is missing
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- sales intelligence domain model
+- lead intelligence workspace
+- visibility and gap UX
+- Digital Growth Plan UX
