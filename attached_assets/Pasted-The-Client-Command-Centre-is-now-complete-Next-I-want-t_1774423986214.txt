@@ -1,0 +1,157 @@
+The Client Command Centre is now complete.
+
+Next, I want to build the Client Portal Access + Scheduled Client Updates layer.
+
+Context:
+- Momentum now has a client-safe Command Centre
+- There is already a standalone portal page at /portal/:clientId
+- Right now this is primarily an internal preview/foundation
+- What is missing is secure client access and an automated cadence layer so clients can actually use this as their portal and receive ongoing updates
+
+GOAL
+Build the Client Portal Access + Scheduled Client Updates layer so Momentum can:
+- provide secure client-facing access to the Command Centre
+- control who can view which client dashboard
+- support shareable/revocable access patterns where appropriate
+- send scheduled update summaries based on dashboard state
+- increase client trust, visibility, and engagement without exposing internal-only data
+
+IMPORTANT
+This must be:
+- secure
+- premium
+- client-friendly
+- revocable
+- auditable
+- simple to use
+- aligned with the existing client-safe Command Centre model
+
+DO NOT:
+- expose internal admin-only data
+- expose raw AI Systems internals
+- rely on internal logged-in admin access as the final client model
+- make this a generic notification spam system
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Client portal access domain model
+Create typed models for at least:
+- clientPortalAccess
+- portalUser
+- portalSessionPolicy
+- portalInvite
+- portalAccessLog
+- portalShareLink
+- portalVisibilityRule
+- clientUpdateDigest
+- digestSchedule
+- digestDeliveryRecord
+
+2. Secure portal access layer
+Build the access model for the client portal so we can support:
+- direct client login access
+- invited portal users
+- revocable access
+- client-specific scoping
+- optional temporary share links if appropriate
+
+Include:
+- access checks
+- revocation support
+- expiry support
+- audit logging
+
+3. Portal visibility controls
+Create a visibility-rule layer that determines:
+- what the client can see
+- what internal users can see
+- what sections can be hidden per client
+- what future modules can be shown or suppressed
+
+This must build on the existing admin inspection bar and client-safe dashboard model.
+
+4. Portal invite flow
+Build the internal flow to:
+- invite a client user
+- resend invite
+- revoke invite
+- view invite status
+- activate portal access
+
+5. Scheduled client update domain logic
+Create the model and service layer for scheduled updates, including:
+- weekly digest
+- monthly digest
+- milestone-triggered update
+- approval-needed reminder
+- missing-input reminder
+
+6. Digest generation adapter
+Build a pure derivation adapter that converts the existing Client Command Centre state into client update summaries such as:
+- what was completed this period
+- what is in progress
+- what is coming next
+- what the client needs to do
+- key wins / milestones
+- health summary
+
+Keep this client-safe and non-technical.
+
+7. Digest preview UX
+Create an internal preview interface for:
+- weekly digest
+- monthly digest
+- milestone update
+- approval reminder
+
+This should allow internal users to inspect what the client would receive before sending.
+
+8. Delivery tracking
+Track:
+- when a digest was generated
+- what snapshot/version it was based on
+- whether it was delivered
+- whether it was opened/clicked if later instrumentation is added
+- delivery failures
+
+9. Portal and digest admin controls
+Create internal controls for:
+- enable portal access
+- disable portal access
+- create invite
+- revoke invite/share link
+- configure digest cadence
+- preview digest
+- trigger digest manually
+
+10. Client portal UX refinement
+Refine the existing portal experience so it feels like a real client product:
+- clean entry state
+- welcome state
+- empty/fallback states
+- clearer action prompts
+- better “Your Actions” guidance
+- better milestone framing
+
+IMPORTANT RULES
+- Keep all client-facing content client-safe
+- Keep all access client-scoped
+- Keep revocation and expiry first-class
+- Do not expose admin-only diagnostic details to clients
+- Keep digest generation derived from existing state, not hardcoded summaries
+- If any auth/email dependency is missing, create a clean boundary and list what is missing
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- client portal access domain model
+- secure portal access layer
+- portal visibility controls
+- scheduled client update domain logic

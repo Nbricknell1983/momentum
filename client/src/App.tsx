@@ -33,6 +33,7 @@ import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
 import ClientPortalPage from '@/pages/client-portal';
+import PortalSharePage from '@/pages/portal-share';
 import NotFound from '@/pages/not-found';
 import MarketingHome from '@/pages/marketing/index';
 import MarketingServices from '@/pages/marketing/services';
@@ -228,6 +229,7 @@ function AppRoutes() {
       <Route path="/signin" component={LoginPage} />
       <Route path="/report/:reportId" component={ReportPage} />
       <Route path="/strategy/:reportId" component={StrategyReportPage} />
+      <Route path="/share/:token" component={PortalSharePage} />
       <Route component={AppLayout} />
     </Switch>
   );

@@ -20,6 +20,7 @@ import { db, doc, deleteDoc } from '@/lib/firebase';
 import ClientGrowthIntelligencePanel from './ClientGrowthIntelligencePanel';
 import ClientDeliveryRail from './ClientDeliveryRail';
 import { ClientCommandCentre } from './ClientCommandCentre';
+import { PortalAdminPanel } from './PortalAdminPanel';
 import { format, addWeeks, addMonths } from 'date-fns';
 
 const HEALTH_COLORS = {
@@ -422,37 +423,32 @@ function ClientLeftPanel({ client }: { client: Client }) {
   );
 }
 
-type CentreTab = 'intelligence' | 'command_centre';
+type CentreTab = 'intelligence' | 'command_centre' | 'portal';
 
 function CentreTabBar({ tab, onTab }: { tab: CentreTab; onTab: (t: CentreTab) => void }) {
+  const tabs: { id: CentreTab; label: string; icon: typeof BrainCircuit }[] = [
+    { id: 'intelligence',   label: 'Account Intelligence', icon: BrainCircuit },
+    { id: 'command_centre', label: 'Command Centre',       icon: LayoutDashboard },
+    { id: 'portal',         label: 'Portal Admin',         icon: ExternalLink },
+  ];
   return (
-    <div className="flex items-center gap-1 px-3 py-2 border-b bg-muted/20 shrink-0">
-      <button
-        data-testid="centre-tab-intelligence"
-        onClick={() => onTab('intelligence')}
-        className={[
-          'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all',
-          tab === 'intelligence'
-            ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-            : 'text-muted-foreground hover:bg-muted',
-        ].join(' ')}
-      >
-        <BrainCircuit className="w-3 h-3" />
-        Account Intelligence
-      </button>
-      <button
-        data-testid="centre-tab-command-centre"
-        onClick={() => onTab('command_centre')}
-        className={[
-          'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all',
-          tab === 'command_centre'
-            ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-            : 'text-muted-foreground hover:bg-muted',
-        ].join(' ')}
-      >
-        <LayoutDashboard className="w-3 h-3" />
-        Command Centre
-      </button>
+    <div className="flex items-center gap-1 px-3 py-2 border-b bg-muted/20 shrink-0 overflow-x-auto">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          data-testid={`centre-tab-${t.id}`}
+          onClick={() => onTab(t.id)}
+          className={[
+            'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap',
+            tab === t.id
+              ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+              : 'text-muted-foreground hover:bg-muted',
+          ].join(' ')}
+        >
+          <t.icon className="w-3 h-3" />
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -554,10 +550,9 @@ export default function ClientFocusView({ client, onClose, onNavigate, hasPrev, 
         <div className="flex-1 border-r min-w-0 flex flex-col">
           <CentreTabBar tab={centreTab} onTab={setCentreTab} />
           <div className="flex-1 min-h-0 overflow-hidden">
-            {centreTab === 'intelligence'
-              ? <ClientGrowthIntelligencePanel client={client} />
-              : <ClientCommandCentre client={client} showAdminBar />
-            }
+            {centreTab === 'intelligence'  && <ClientGrowthIntelligencePanel client={client} />}
+            {centreTab === 'command_centre' && <ClientCommandCentre client={client} showAdminBar />}
+            {centreTab === 'portal'         && <PortalAdminPanel client={client} />}
           </div>
         </div>
 

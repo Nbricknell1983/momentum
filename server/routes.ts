@@ -16905,6 +16905,296 @@ Return ONLY JSON:
   });
 
   // ============================================
+  // Client Portal Access Layer
+  // ============================================
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function makePortalLog(action: string, actorType: 'admin' | 'client', actorLabel: string, detail: string) {
+    return { id: require('crypto').randomUUID(), timestamp: new Date().toISOString(), action, actorType, actorLabel, detail };
+  }
+
+  function sanitizeClientForPortal(data: any): any {
+    const STRIP_FIELDS = [
+      'orgId', 'userId', 'ownerId', 'churnRiskScore', 'healthReasons',
+      'sourceDealId', 'notes', 'enrichmentData', 'scopeAudit', 'intelligenceBrief',
+      'strategyDiagnosis', 'growthPrescription', 'boardStage', 'cadenceTier',
+      'preferredContactCadenceDays', 'daysSinceContact', 'upsellReadiness',
+      'appliedPlays', 'learningInsight', 'activeStrategyPlanId', 'crmLink',
+      'nextAction', 'nextActionSetAt', 'taskStats', 'termOverrides',
+      'clientOnboarding', 'archived',
+    ];
+    const clean = { ...data };
+    STRIP_FIELDS.forEach(f => delete clean[f]);
+    // Zero out churnRisk if somehow left
+    clean.churnRiskScore = 0;
+    clean.healthReasons = [];
+    return clean;
+  }
+
+  async function getPortalConfig(orgId: string, clientId: string): Promise<any> {
+    if (!firestore) return null;
+    const doc = await firestore.collection('orgs').doc(orgId).collection('portalConfigs').doc(clientId).get();
+    if (!doc.exists) return null;
+    return { ...doc.data(), clientId };
+  }
+
+  async function savePortalConfig(orgId: string, clientId: string, data: any): Promise<void> {
+    if (!firestore) return;
+    await firestore.collection('orgs').doc(orgId).collection('portalConfigs').doc(clientId).set(
+      { ...data, orgId, clientId, updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
+  }
+
+  async function appendPortalLog(orgId: string, clientId: string, entry: any): Promise<void> {
+    if (!firestore) return;
+    const ref = firestore.collection('orgs').doc(orgId).collection('portalConfigs').doc(clientId);
+    const doc = await ref.get();
+    const existing = doc.exists ? (doc.data()?.accessLog || []) : [];
+    const updated = [entry, ...existing].slice(0, 50); // keep last 50
+    await ref.set({ accessLog: updated }, { merge: true });
+  }
+
+  // ── Public: validate share token and return client-safe data ──────────────
+  app.get('/api/portal/share/:token', async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { token } = req.params;
+      const tokenDoc = await firestore.collection('portalTokens').doc(token).get();
+      if (!tokenDoc.exists) return res.status(404).json({ error: 'Portal link not found' });
+      const tokenData = tokenDoc.data()!;
+      if (tokenData.status === 'revoked') return res.status(410).json({ error: 'This portal link has been revoked' });
+      if (tokenData.expiresAt && new Date(tokenData.expiresAt) < new Date()) return res.status(410).json({ error: 'This portal link has expired' });
+
+      const { orgId, clientId } = tokenData;
+
+      // Check portal config — access must be enabled
+      const portalConfig = await getPortalConfig(orgId, clientId);
+      if (portalConfig && !portalConfig.accessEnabled) {
+        return res.status(403).json({ error: 'Portal access is currently disabled' });
+      }
+
+      // Get client data
+      const clientDoc = await firestore.collection('orgs').doc(orgId).collection('clients').doc(clientId).get();
+      if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+      const rawClient = { id: clientDoc.id, ...clientDoc.data() };
+      const safeClient = sanitizeClientForPortal(rawClient);
+
+      // Update access count on token
+      await firestore.collection('portalTokens').doc(token).update({
+        lastAccessedAt: new Date().toISOString(),
+        accessCount: (tokenData.accessCount || 0) + 1,
+      });
+
+      // Log the access
+      const logEntry = makePortalLog('link_accessed', 'client', 'Client (share link)', `Portal viewed via link: ${tokenData.label || token.slice(0, 8)}`);
+      await appendPortalLog(orgId, clientId, logEntry);
+
+      res.json({
+        client: safeClient,
+        businessName: safeClient.businessName,
+        visibilityRules: portalConfig?.visibilityRules || null,
+      });
+    } catch (err: any) {
+      console.error('[portal/share GET]', err);
+      res.status(500).json({ error: 'Failed to load portal' });
+    }
+  });
+
+  // ── Protected: get portal config ──────────────────────────────────────────
+  app.get('/api/portal/config/:clientId', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId } = req.params;
+      const config = await getPortalConfig(orgId, clientId);
+      if (!config) {
+        // Return default config
+        return res.json({
+          clientId, orgId, accessEnabled: false,
+          shareLinks: [], invites: [], visibilityRules: {
+            sections: { delivery: true, performance: true, milestones: true, nextActions: true, optimisation: true, strategyAlignment: true },
+            showHealthScore: true, showMRR: false,
+          },
+          digestSchedule: { cadence: 'weekly', enabled: false, deliveryDay: 'monday', deliveryHour: 8 },
+          deliveryHistory: [], accessLog: [],
+          sessionPolicy: { requireEmailVerification: false, allowShareLinks: true, sessionDurationHours: 0, enforceIPRestriction: false },
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      res.json(config);
+    } catch (err: any) {
+      console.error('[portal/config GET]', err);
+      res.status(500).json({ error: 'Failed to fetch portal config' });
+    }
+  });
+
+  // ── Protected: enable/disable portal ─────────────────────────────────────
+  app.post('/api/portal/config/:clientId', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId } = req.params;
+      const { accessEnabled } = req.body as { accessEnabled: boolean };
+      await savePortalConfig(orgId, clientId, { accessEnabled });
+      const logEntry = makePortalLog(
+        accessEnabled ? 'access_enabled' : 'access_disabled', 'admin',
+        (req as any).user?.email || 'Admin',
+        `Portal access ${accessEnabled ? 'enabled' : 'disabled'} by admin`,
+      );
+      await appendPortalLog(orgId, clientId, logEntry);
+      res.json({ ok: true, accessEnabled });
+    } catch (err: any) {
+      console.error('[portal/config POST]', err);
+      res.status(500).json({ error: 'Failed to update portal config' });
+    }
+  });
+
+  // ── Protected: create share link ──────────────────────────────────────────
+  app.post('/api/portal/config/:clientId/links', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId } = req.params;
+      const { label = 'Client portal link', expiry = 'never' } = req.body as { label?: string; expiry?: string };
+      const crypto = require('crypto');
+      const token = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      let expiresAt: string | undefined;
+      if (expiry === '7d') expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
+      else if (expiry === '30d') expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
+      else if (expiry === '90d') expiresAt = new Date(Date.now() + 90 * 86400000).toISOString();
+
+      const link = { token, label, createdAt, expiresAt, createdBy: (req as any).user?.uid || 'admin', status: 'active', accessCount: 0 };
+
+      // Save to global portalTokens collection for fast lookup
+      await firestore.collection('portalTokens').doc(token).set({ token, orgId, clientId, label, createdAt, expiresAt, status: 'active', accessCount: 0 });
+
+      // Add to portal config
+      const config = await getPortalConfig(orgId, clientId) || {};
+      const links = [...(config.shareLinks || []), link];
+      await savePortalConfig(orgId, clientId, { shareLinks: links });
+
+      const logEntry = makePortalLog('link_created', 'admin', (req as any).user?.email || 'Admin', `Share link created: "${label}"`);
+      await appendPortalLog(orgId, clientId, logEntry);
+
+      res.json({ ok: true, link });
+    } catch (err: any) {
+      console.error('[portal/links POST]', err);
+      res.status(500).json({ error: 'Failed to create share link' });
+    }
+  });
+
+  // ── Protected: revoke share link ──────────────────────────────────────────
+  app.delete('/api/portal/config/:clientId/links/:token', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId, token } = req.params;
+      const revokedAt = new Date().toISOString();
+
+      // Update global token record
+      await firestore.collection('portalTokens').doc(token).update({ status: 'revoked', revokedAt });
+
+      // Update config
+      const config = await getPortalConfig(orgId, clientId) || {};
+      const links = (config.shareLinks || []).map((l: any) => l.token === token ? { ...l, status: 'revoked', revokedAt } : l);
+      await savePortalConfig(orgId, clientId, { shareLinks: links });
+
+      const logEntry = makePortalLog('link_revoked', 'admin', (req as any).user?.email || 'Admin', `Share link revoked: ${token.slice(0, 8)}…`);
+      await appendPortalLog(orgId, clientId, logEntry);
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[portal/links DELETE]', err);
+      res.status(500).json({ error: 'Failed to revoke link' });
+    }
+  });
+
+  // ── Protected: create invite ──────────────────────────────────────────────
+  app.post('/api/portal/config/:clientId/invites', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId } = req.params;
+      const { email, name, message } = req.body as { email: string; name: string; message?: string };
+      if (!email || !name) return res.status(400).json({ error: 'email and name are required' });
+      const crypto = require('crypto');
+      const invite = {
+        id: crypto.randomUUID(), email, name, role: 'client_primary',
+        createdAt: new Date().toISOString(),
+        status: 'pending', invitedBy: (req as any).user?.uid || 'admin',
+        sentAt: new Date().toISOString(), message,
+      };
+      const config = await getPortalConfig(orgId, clientId) || {};
+      const invites = [...(config.invites || []), invite];
+      await savePortalConfig(orgId, clientId, { invites });
+
+      const logEntry = makePortalLog('invite_sent', 'admin', (req as any).user?.email || 'Admin', `Invite created for ${name} <${email}>`);
+      await appendPortalLog(orgId, clientId, logEntry);
+
+      res.json({ ok: true, invite });
+    } catch (err: any) {
+      console.error('[portal/invites POST]', err);
+      res.status(500).json({ error: 'Failed to create invite' });
+    }
+  });
+
+  // ── Protected: revoke invite ──────────────────────────────────────────────
+  app.delete('/api/portal/config/:clientId/invites/:inviteId', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId, inviteId } = req.params;
+      const config = await getPortalConfig(orgId, clientId) || {};
+      const invites = (config.invites || []).map((i: any) => i.id === inviteId ? { ...i, status: 'revoked', revokedAt: new Date().toISOString() } : i);
+      await savePortalConfig(orgId, clientId, { invites });
+      const logEntry = makePortalLog('invite_revoked', 'admin', (req as any).user?.email || 'Admin', `Invite revoked: ${inviteId.slice(0, 8)}…`);
+      await appendPortalLog(orgId, clientId, logEntry);
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[portal/invites DELETE]', err);
+      res.status(500).json({ error: 'Failed to revoke invite' });
+    }
+  });
+
+  // ── Protected: update visibility rules ───────────────────────────────────
+  app.patch('/api/portal/config/:clientId/visibility', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId } = req.params;
+      await savePortalConfig(orgId, clientId, { visibilityRules: req.body });
+      const logEntry = makePortalLog('visibility_updated', 'admin', (req as any).user?.email || 'Admin', 'Portal visibility rules updated');
+      await appendPortalLog(orgId, clientId, logEntry);
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[portal/visibility PATCH]', err);
+      res.status(500).json({ error: 'Failed to update visibility' });
+    }
+  });
+
+  // ── Protected: update digest schedule ────────────────────────────────────
+  app.patch('/api/portal/config/:clientId/digest', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.trustedOrgId as string;
+      const { clientId } = req.params;
+      const { cadence, enabled, deliveryDay } = req.body;
+      await savePortalConfig(orgId, clientId, {
+        digestSchedule: { cadence, enabled, deliveryDay, deliveryHour: 8 },
+      });
+      const logEntry = makePortalLog('digest_config_updated', 'admin', (req as any).user?.email || 'Admin', `Digest schedule updated: ${cadence}, ${enabled ? 'enabled' : 'disabled'}`);
+      await appendPortalLog(orgId, clientId, logEntry);
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[portal/digest PATCH]', err);
+      res.status(500).json({ error: 'Failed to update digest schedule' });
+    }
+  });
+
+  // ============================================
   // AI Systems Integration Layer
   // ============================================
   app.use('/api/integration', integrationRouter);
