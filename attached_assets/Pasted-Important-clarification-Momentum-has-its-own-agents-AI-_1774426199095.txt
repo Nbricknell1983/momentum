@@ -1,0 +1,126 @@
+Important clarification:
+
+Momentum has its own agents.
+AI Systems also has its own agents.
+
+So the architecture is not:
+- Momentum = no agents
+- AI Systems = all agents
+
+It is:
+- Momentum agents = sales, strategy, proposal, onboarding, client communication, account growth
+- AI Systems agents = delivery, website, content, telemetry, publishing, optimisation
+
+The next step is to build the Agent Command Layer in Momentum.
+
+GOAL
+Build a unified Agent Command Layer so Momentum can:
+- show Momentum-side agents clearly
+- show linked summaries of AI Systems-side agent activity where relevant
+- coordinate responsibilities between sales/strategy agents and delivery/optimisation agents
+- surface blockers, approvals, and next moves
+- make the full system feel like one coordinated workforce
+
+IMPORTANT
+This must preserve the distinction between:
+- Momentum agents
+- AI Systems agents
+
+Do not collapse them into one vague list.
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Agent command domain model
+Create typed models for at least:
+- momentumAgentStatus
+- momentumAgentActivity
+- momentumAgentBlocker
+- momentumAgentOutcome
+- linkedDeliveryAgentSummary
+- crossSystemAgentView
+- agentResponsibilityMap
+- agentCommandState
+
+2. Momentum agent registry / visibility layer
+Build the visibility model for Momentum’s own agents, including examples like:
+- lead research agent
+- strategy agent
+- proposal agent
+- onboarding agent
+- sales execution agent
+- follow-up / communication agent
+- account growth agent
+
+For each, show:
+- status
+- current focus
+- recent activity
+- blockers
+- next move
+- expected outcome
+
+3. AI Systems linked agent summary adapter
+Build a clean adapter that pulls/summarises AI Systems agent activity into Momentum in a lightweight way.
+Only show:
+- delivery agent name
+- status
+- current focus
+- recent completed work
+- approvals needed
+- next expected move
+
+Do not duplicate the full AI Systems admin interface.
+
+4. Agent command workspace UX
+Build a premium internal workspace view in Momentum that shows:
+- Momentum agents
+- linked AI Systems delivery agents
+- responsibility split
+- current blockers
+- coordinated next steps
+
+5. Agent timeline
+Create a timeline that shows cross-system activity such as:
+- strategy generated
+- proposal prepared
+- onboarding readiness updated
+- tenant provisioned
+- website structure generated
+- content produced
+- telemetry scan completed
+- optimisation action triggered
+
+6. Agent explanation layer
+Create structured plain-language explanations for:
+- what each Momentum agent is doing
+- why it is doing it
+- what it needs next
+- what success looks like
+
+7. Client-safe visibility rules
+Create rules for what part of agent activity can later be shown in the client portal versus what stays internal only.
+
+8. Digest integration
+Extend digest logic so Momentum agents and AI Systems agents can both contribute to update summaries in the correct tone and fidelity.
+
+IMPORTANT RULES
+- Keep Momentum agents and AI Systems agents distinct
+- Show coordination, not duplication
+- Keep the UI premium and explainable
+- Do not expose internal-only agent details externally
+- Build this as a true command layer, not a generic activity feed
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- agent command domain model
+- Momentum agent registry / visibility layer
+- AI Systems linked agent summary adapter
+- agent command workspace UX
