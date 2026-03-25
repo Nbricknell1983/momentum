@@ -32,6 +32,7 @@ import AutopilotSettingsPage from '@/pages/admin/AutopilotSettingsPage';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
+import ClientPortalPage from '@/pages/client-portal';
 import NotFound from '@/pages/not-found';
 import MarketingHome from '@/pages/marketing/index';
 import MarketingServices from '@/pages/marketing/services';
@@ -71,6 +72,7 @@ function ProtectedRoutes() {
       <Route path="/routes">{() => <ManagerGate component={RoutesOverviewPage} />}</Route>
       <Route path="/admin/queue-health">{() => <ManagerGate component={QueueHealthPage} />}</Route>
       <Route path="/admin/autopilot-settings">{() => <ManagerGate component={AutopilotSettingsPage} />}</Route>
+      <Route path="/portal/:clientId" component={ClientPortalPage} />
       <Route component={NotFound} />
     </Switch>
   );

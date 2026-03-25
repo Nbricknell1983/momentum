@@ -1,0 +1,126 @@
+The Sales Execution Layer is now complete.
+
+Next, I want to build the Client Command Centre.
+
+Context:
+- Momentum handles lead intelligence, strategy, proposal, onboarding, and sales execution
+- AI Systems handles delivery: website, content, publishing, telemetry, optimisation
+- The two systems are connected via provisioning and integration
+- What is missing is a unified client-facing experience that shows both strategy and execution together
+
+GOAL
+Build the Client Command Centre so we can:
+- show clients what was promised (strategy)
+- show what has been built (website, content, pages)
+- show what is happening now (workflows, optimisation)
+- show performance (telemetry summaries)
+- show what is happening next (Next Best Actions)
+- create a single source of truth for the client
+
+IMPORTANT
+This must be:
+- simple
+- premium
+- visual
+- non-technical
+- trust-building
+- outcome-focused
+
+DO NOT:
+- expose raw system data
+- duplicate AI Systems UI
+- overwhelm the client
+- show technical logs or internal states
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Client command centre domain model
+Create models for:
+- clientDashboardState
+- deliverySummary
+- performanceSummary
+- optimisationSummary
+- clientNextActions
+- clientMilestones
+- clientHealthScore
+
+2. AI Systems data adapter
+Build a clean adapter that pulls from AI Systems:
+- provisioning status
+- website build status
+- published pages
+- content completion
+- telemetry health
+- optimisation activity
+
+Only surface simplified, client-safe summaries.
+
+3. Strategy vs delivery alignment
+Create a view that shows:
+- what was planned (growth plan)
+- what has been delivered so far
+- what is still to come
+
+4. Delivery progress UX
+Show:
+- website progress
+- content completion
+- publishing status
+- onboarding progress
+
+5. Performance summary UX
+Show:
+- visibility trend (simple up/down)
+- traffic trend (if available)
+- health indicators
+- key wins
+
+6. Optimisation activity UX
+Show:
+- what the system is currently improving
+- recent actions taken
+- upcoming improvements
+
+7. Client next steps UX
+Show:
+- anything the client needs to do
+- approvals required
+- missing inputs
+
+8. Milestones and wins
+Show:
+- first page published
+- first rankings
+- growth milestones
+- key achievements
+
+9. Client-safe access layer
+Build:
+- a client portal view
+- or shareable dashboard link
+- secure, scoped, and revocable
+
+10. Admin inspection support
+Allow internal users to see:
+- what the client sees
+- what is hidden
+- data source mapping
+
+IMPORTANT RULES
+- This is not an admin tool
+- This is not a developer tool
+- This is a client trust layer
+- Everything must be simplified and intentional
+
+OUTPUT FORMAT
+For each step:
+1. explain what you are building
+2. show file structure
+3. show code
+4. explain assumptions
+5. list blockers
+
+Start with:
+- client dashboard model
+- AI Systems adapter
+- delivery progress UX

@@ -65,6 +65,14 @@ Preferred communication style: Simple, everyday language.
 - **Bullpen Daily Brief**: Scheduled daily agent review and GPT synthesis into a morning brief.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for leads and clients.
 
+### Client Command Centre
+- **Domain Model**: `client/src/lib/clientCommandTypes.ts` defines client-facing types: `ClientDashboardState`, `DeliverySummary`, `ChannelDelivery`, `PerformanceSummary`, `ClientHealthScore`, `ClientMilestone`, `ClientNextAction`, `OptimisationActivity`, `StrategyAlignment`.
+- **Adapter Layer**: `client/src/lib/clientCommandAdapter.ts` — pure derivation function `deriveClientDashboard(client)` that transforms all existing `Client` fields into a simplified, client-safe `ClientDashboardState` with zero AI or API calls.
+- **ClientCommandCentre Panel**: `client/src/components/ClientCommandCentre.tsx` — 5-tab premium client-facing dashboard (Overview, Delivery, Performance, Milestones, Your Actions). Includes health score ring, delivery phase banner, channel cards, milestone timeline, performance metrics, optimisation activity, strategy alignment (planned/delivered/upcoming), and admin inspection bar.
+- **ClientFocusView Integration**: Centre panel now has a tab switcher between "Account Intelligence" (existing) and "Command Centre" (new). Header includes a "Portal Preview" button.
+- **Client Portal Page**: `client/src/pages/client-portal.tsx` at `/portal/:clientId` — full-page client portal preview with branded header, admin preview badge, and command centre embedded inside.
+- **Rules**: No raw data, no jargon, no internal states surfaced to client. All client-facing content is outcome-focused and simplified.
+
 ### AI Systems Integration Layer
 - **Architecture**: Modular, production-grade server-to-server REST integration between Momentum (upstream) and AI Systems (downstream).
 - **Core Services**: Provisioning, audit logging, status polling, and typed patching.
