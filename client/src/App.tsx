@@ -37,6 +37,7 @@ import ExecPage from '@/pages/exec';
 import ExecutionPage from '@/pages/execution';
 import ReferralPage from '@/pages/referral';
 import AutopilotPage from '@/pages/autopilot';
+import SweepsPage from '@/pages/sweeps';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -89,6 +90,7 @@ function ProtectedRoutes() {
       <Route path="/execution">{() => <ManagerGate component={ExecutionPage} />}</Route>
       <Route path="/referral">{() => <ManagerGate component={ReferralPage} />}</Route>
       <Route path="/autopilot">{() => <ManagerGate component={AutopilotPage} />}</Route>
+      <Route path="/sweeps">{() => <ManagerGate component={SweepsPage} />}</Route>
       <Route path="/portal/:clientId" component={ClientPortalPage} />
       <Route component={NotFound} />
     </Switch>

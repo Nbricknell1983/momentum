@@ -17199,5 +17199,137 @@ Return ONLY JSON:
   // ============================================
   app.use('/api/integration', integrationRouter);
 
+  // ============================================
+  // Sweep Runner Routes
+  // ============================================
+
+  // Manual sweep trigger (manager auth)
+  app.post('/api/orgs/:orgId/sweeps/run', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.params.orgId as string;
+      const { runSweepForOrg } = await import('./sweepRunner');
+      const logger = (msg: string) => console.log(msg);
+      const record = await runSweepForOrg(orgId, 'manual', logger);
+      res.json({ ok: true, record });
+    } catch (err: any) {
+      console.error('[sweeps/run]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Internal scheduler trigger (x-scheduler-key)
+  app.post('/api/sweeps/run-internal', async (req: any, res: any) => {
+    const key = req.headers['x-scheduler-key'];
+    if (key !== process.env.INTERNAL_SCHEDULER_KEY) return res.status(403).json({ error: 'Forbidden' });
+    try {
+      const { orgId } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'orgId required' });
+      const { runSweepForOrg } = await import('./sweepRunner');
+      const logger = (msg: string) => console.log(msg);
+      const record = await runSweepForOrg(orgId, 'scheduler', logger);
+      res.json({ ok: true, record });
+    } catch (err: any) {
+      console.error('[sweeps/run-internal]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get sweep status + recent history
+  app.get('/api/orgs/:orgId/sweeps/status', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.params.orgId as string;
+      const [schedSnap, runsSnap] = await Promise.all([
+        firestore.collection('orgs').doc(orgId).collection('settings').doc('sweepSchedule').get(),
+        firestore.collection('orgs').doc(orgId).collection('sweepRuns')
+          .orderBy('startedAt', 'desc').limit(1).get(),
+      ]);
+      const schedule = schedSnap.exists ? schedSnap.data() : null;
+      const lastRun = runsSnap.empty ? null : { id: runsSnap.docs[0].id, ...runsSnap.docs[0].data() };
+      res.json({ schedule, lastRun });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get sweep run history
+  app.get('/api/orgs/:orgId/sweeps/history', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.params.orgId as string;
+      const limitN = parseInt(req.query.limit as string ?? '20', 10);
+      const snap = await firestore.collection('orgs').doc(orgId).collection('sweepRuns')
+        .orderBy('startedAt', 'desc').limit(limitN).get();
+      const runs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ runs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get sweep actions (approval queue + recommendations)
+  app.get('/api/orgs/:orgId/sweeps/actions', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.params.orgId as string;
+      const limitN = parseInt(req.query.limit as string ?? '50', 10);
+      const snap = await firestore.collection('orgs').doc(orgId).collection('sweepActions')
+        .orderBy('createdAt', 'desc').limit(limitN).get();
+      const actions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ actions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get suppressed actions
+  app.get('/api/orgs/:orgId/sweeps/suppressed', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.params.orgId as string;
+      const limitN = parseInt(req.query.limit as string ?? '30', 10);
+      const snap = await firestore.collection('orgs').doc(orgId).collection('sweepSuppressions')
+        .orderBy('suppressedAt', 'desc').limit(limitN).get();
+      const suppressions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ suppressions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Update sweep schedule settings
+  app.put('/api/orgs/:orgId/sweeps/schedule', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.params.orgId as string;
+      const { mode, dailyHour, weekdaysOnly, enabledScopes } = req.body;
+      await firestore.collection('orgs').doc(orgId).collection('settings').doc('sweepSchedule').set({
+        orgId, mode, dailyHour, weekdaysOnly, enabledScopes,
+        updatedAt: new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        updatedBy: (req as any).user?.email || 'admin',
+      }, { merge: true });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Mark sweep action as reviewed
+  app.patch('/api/orgs/:orgId/sweeps/actions/:actionId/review', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { orgId, actionId } = req.params;
+      await firestore.collection('orgs').doc(orgId).collection('sweepActions').doc(actionId).update({
+        reviewed: true,
+        reviewedAt: new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        reviewedBy: (req as any).user?.email || 'admin',
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

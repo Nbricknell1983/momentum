@@ -105,6 +105,7 @@ app.use((req, res, next) => {
       startBullpenScheduler(port);
       startPrepReadinessScheduler(port);
       startAutopilotScheduler(port);
+      startSweepScheduler(port);
     },
   );
 })();
@@ -239,6 +240,99 @@ function startPrepReadinessScheduler(port: number) {
   // Check every 30 minutes (same interval as bullpen scheduler)
   setInterval(checkAndRun, 30 * 60 * 1000);
   log('Prep readiness scheduler started (fires at 6am and 2pm AEST)', 'prep-scheduler');
+}
+
+// ── Sweep Runner Scheduler ────────────────────────────────────────────────────
+// Checks every 30 minutes. Fires per-org based on org sweep schedule settings.
+// Modes: every_hour | twice_daily | daily_morning | manual | disabled
+function startSweepScheduler(port: number) {
+  const TZ_OFFSET_MS = 10 * 3600 * 1000; // AEST = UTC+10
+  const TWICE_DAILY_HOURS = [6, 14];
+
+  async function checkAndRun() {
+    try {
+      const { firestore } = await import('./firebase');
+      if (!firestore) return;
+
+      const nowUtc = new Date();
+      const localMs = nowUtc.getTime() + TZ_OFFSET_MS;
+      const localDate = new Date(localMs);
+      const localHour = localDate.getUTCHours();
+      const localDay = localDate.getUTCDay(); // 0=Sun, 6=Sat
+
+      const orgsSnap = await firestore.collection('orgs').get();
+      for (const orgDoc of orgsSnap.docs) {
+        try {
+          const schedSnap = await orgDoc.ref.collection('settings').doc('sweepSchedule').get();
+          const sched = schedSnap.exists ? schedSnap.data()! : { mode: 'manual' };
+          const mode = sched.mode ?? 'manual';
+
+          if (mode === 'disabled' || mode === 'manual') continue;
+
+          const weekdaysOnly = sched.weekdaysOnly ?? true;
+          if (weekdaysOnly && (localDay === 0 || localDay === 6)) continue;
+
+          // Parse last run
+          const lastRunAt = sched.lastRunAt ? new Date(sched.lastRunAt) : null;
+          const lastRunMs = lastRunAt ? lastRunAt.getTime() + TZ_OFFSET_MS : 0;
+          const lastRunLocal = new Date(lastRunMs);
+
+          let shouldRun = false;
+
+          if (mode === 'every_hour') {
+            // Run if not run in the last 55 minutes (buffer for timing drift)
+            const minutesSinceRun = lastRunAt ? (Date.now() - lastRunAt.getTime()) / 60_000 : 9999;
+            shouldRun = minutesSinceRun >= 55;
+
+          } else if (mode === 'twice_daily') {
+            if (!TWICE_DAILY_HOURS.includes(localHour)) continue;
+            shouldRun = !(
+              lastRunLocal.getUTCFullYear() === localDate.getUTCFullYear() &&
+              lastRunLocal.getUTCMonth() === localDate.getUTCMonth() &&
+              lastRunLocal.getUTCDate() === localDate.getUTCDate() &&
+              lastRunLocal.getUTCHours() === localHour
+            );
+
+          } else if (mode === 'daily_morning') {
+            const dailyHour = typeof sched.dailyHour === 'number' ? sched.dailyHour : 8;
+            if (localHour !== dailyHour) continue;
+            shouldRun = !(
+              lastRunLocal.getUTCFullYear() === localDate.getUTCFullYear() &&
+              lastRunLocal.getUTCMonth() === localDate.getUTCMonth() &&
+              lastRunLocal.getUTCDate() === localDate.getUTCDate()
+            );
+          }
+
+          if (!shouldRun) continue;
+
+          log(`[SweepScheduler] Running sweep for org ${orgDoc.id} (mode: ${mode})`, 'sweep');
+          const resp = await fetch(`http://localhost:${port}/api/sweeps/run-internal`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-scheduler-key': process.env.INTERNAL_SCHEDULER_KEY || '',
+            },
+            body: JSON.stringify({ orgId: orgDoc.id }),
+          });
+          if (!resp.ok) {
+            const body = await resp.text();
+            log(`[SweepScheduler] sweep failed for ${orgDoc.id}: ${body}`, 'sweep');
+          } else {
+            const data = await resp.json();
+            const r = data.record;
+            log(`[SweepScheduler] sweep complete for ${orgDoc.id} — candidates=${r?.candidateCount ?? 0} actions=${r?.actionCreatedCount ?? 0} approvals=${r?.approvalRequestedCount ?? 0} suppressed=${r?.suppressedDupeCount ?? 0} ${r?.durationMs ?? 0}ms`, 'sweep');
+          }
+        } catch (orgErr: any) {
+          log(`[SweepScheduler] error for org ${orgDoc.id}: ${orgErr.message}`, 'sweep');
+        }
+      }
+    } catch (err: any) {
+      log(`[SweepScheduler] top-level error: ${err.message}`, 'sweep');
+    }
+  }
+
+  setInterval(checkAndRun, 30 * 60 * 1000);
+  log('Sweep scheduler started (30 min check interval)', 'sweep');
 }
 
 // ── Autopilot Orchestrator Scheduler ──────────────────────────────────────────

@@ -1,0 +1,148 @@
+The Autopilot Policy Layer is now complete and live.
+
+Next, I want to build the Scheduled Sweeps + Background Automation Runner.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, Communication Drafting, Executive Reporting, Automation Execution, Referral Engine, and the Autopilot Policy Layer
+- The system can already derive candidate actions, classify them by policy, require approval where needed, and surface them in the UI
+- What is missing is the background runner that executes these checks and policy evaluations on a schedule without relying on the UI being open
+
+GOAL
+Build the Scheduled Sweeps + Background Automation Runner so Momentum can:
+- run recurring background scans across leads and accounts
+- evaluate cadence, churn, referral, expansion, and comms opportunities automatically
+- apply the autopilot policy engine to candidate actions
+- create queue items, approvals, reminders, and recommendations in the background
+- maintain operational momentum without manual triggering
+
+IMPORTANT
+This must be:
+- safe
+- explainable
+- auditable
+- schedulable
+- idempotent
+- org-aware
+- operationally useful
+
+DO NOT:
+- auto-send external communications by default
+- create duplicate queue items on every sweep
+- run hidden automations without audit logs
+- build a fake scheduler
+- ignore org-level autopilot settings
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Background automation domain model
+Create typed models for at least:
+- automationSweepRun
+- automationSweepScope
+- automationCandidateAction
+- automationExecutionRecord
+- automationQueueResult
+- automationSuppressionRecord
+- automationSchedule
+- automationRunnerState
+- automationOrgSettings
+
+2. Sweep orchestration engine
+Build the engine that can run recurring sweeps across:
+- leads
+- onboarding items
+- active accounts
+- expansion opportunities
+- churn-risk clients
+- referral-ready clients
+- cadence queue health
+
+Each sweep should:
+- gather candidate actions
+- run them through the autopilot policy engine
+- create the right outputs
+- write audit/execution records
+- avoid duplication
+
+3. Schedule model and controls
+Support schedule definitions such as:
+- every hour
+- every morning
+- weekdays only
+- custom cadence by org
+- manual run now
+- disabled
+
+4. Idempotency and deduplication
+Build protection so the runner:
+- does not recreate the same reminder repeatedly
+- does not spam approval requests
+- respects cooldowns
+- respects existing queued/in-flight items
+- records suppression reasons
+
+5. Queue creation integration
+Connect background sweeps to existing systems:
+- cadence items
+- communication drafts
+- execution queue
+- referral asks
+- expansion actions
+- approval-required actions
+
+6. Approval request generation
+Where policy requires approval, create approval-ready items automatically with:
+- reason
+- source signal
+- suggested action
+- context summary
+- linked entity
+
+7. Automation runner workspace
+Build a premium internal workspace showing:
+- last sweep runs
+- next scheduled run
+- auto-created actions
+- approval requests raised
+- suppressed actions
+- failures
+- per-org automation status
+
+8. Manual run + inspection support
+Allow managers/admins to:
+- run a sweep now
+- inspect what candidate actions were found
+- inspect what policy did to each action
+- inspect why an action was suppressed
+- inspect duplicate-prevention behavior
+
+9. Audit and history
+Track:
+- when each sweep ran
+- what it evaluated
+- what it created
+- what it suppressed
+- what failed
+- what org policy was active at the time
+
+IMPORTANT RULES
+- Keep all external communication human-reviewed by default
+- Reuse the autopilot policy engine; do not duplicate the logic
+- Make every background action traceable
+- Build strong deduplication and cooldown handling
+- Keep everything org-scoped and inspectable
+- If a real background scheduler is not yet configured, build the runner and schedule model first, then list the exact missing setup
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- background automation domain model
+- sweep orchestration engine
+- schedule model and controls
+- idempotency and deduplication

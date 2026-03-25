@@ -70,50 +70,36 @@ Preferred communication style: Simple, everyday language.
 - **Functionality**: Derives `AccountGrowthSignal`, `ExpansionOpportunity`, `ChurnRiskSignal`, `ReferralOpportunity`, `ExpansionNextBestAction`, and `ExpansionPlay` from live client data without AI calls.
 - **Key Features**: Upsell/Cross-sell engine, Churn-Risk detection, Referral Timing engine, and a 6-tab premium workspace for account managers.
 
+### Scheduled Sweeps + Background Automation Runner
+- **Core Functionality**: Server-side orchestrator for scheduled sweeps, processing leads and clients, applying autopilot policies, and managing actions with deduplication and suppression logic.
+- **Safety Guarantees**: Never auto-sends external communications; high/medium-risk actions require approval by default. All sweeps, actions, and suppressions are auditable.
+
 ### Autopilot Policy Layer
-- **Domain Model** (`autopilotTypes.ts`): Defines `AutopilotSafetyLevel` (low/medium/high/restricted), `AutopilotOutcome` (auto_allowed/approval_required/recommendation_only/blocked), `AutopilotGlobalMode` (active/approval_only/recommendations_only/off), `AutopilotRule`, `AutopilotOrgPolicy`, `AutopilotDecision`, `AutopilotAuditEvent`, `AutopilotState`. 12 default rules across all action types.
-- **Policy Engine** (`autopilotEngine.ts`): Pure deterministic classifier. Takes org policy + live data → produces `AutopilotDecision[]`. Evaluates: rule safety level, escalation conditions (health/churn/stage), global mode override. Explains every decision and states what would need to change for the outcome to differ.
-- **AutopilotWorkspace** (`AutopilotWorkspace.tsx`): Premium 5-tab workspace: Policy Settings (global mode selector + per-rule enable/outcome toggles), Live Decisions (all current decisions grouped by outcome), Pending Approval (actions awaiting human review), Blocked (suppressed actions with explanations), Audit Trail (Firestore-backed immutable log).
-- **Policy Persistence**: Policy stored in Firestore `orgs/{orgId}/autopilotPolicy/policy`. Loads on mount, merges new default rules if missing. Audit events logged to `orgs/{orgId}/autopilotAudit`.
-- **Default safe state**: Global mode defaults to `approval_only` — nothing auto-runs until explicitly enabled. Low-risk rules are `auto_allowed` by default; high-risk rules are `approval_required` or `recommendation_only`.
-- **Routes**: `/autopilot` (manager-gated). `SlidersHorizontal` icon in sidebar after Referral Engine.
+- **Policy Engine**: Pure deterministic classifier that evaluates rules based on safety level, escalation conditions, and global mode overrides, providing transparent decision explanations.
+- **Default Safe State**: Global mode defaults to `approval_only`; nothing auto-runs until explicitly enabled.
 
 ### Referral Engine
-- **Domain Model** (`referralTypes.ts`): Defines `ReferralReadinessSignal`, `ReferralCandidate`, `ReferralAsk`, `ReferralLeadLink`, `ReferralMomentumState`, `ReferralEvidence`. Six ask styles: `milestone_based`, `direct_intro`, `who_else`, `soft_mention`, `testimonial_bridge`, `follow_up`.
-- **Referral Adapter** (`referralAdapter.ts`): Pure derivation from live client data. Scores each client 0–100 across 6 weighted signals (health, delivery, churn risk, contact timing, live channels, upsell readiness). Selects the most appropriate ask style, generates conversation angle and evidence points, and flags suppression reasons when conditions are not right.
-- **ReferralWorkspace** (`ReferralWorkspace.tsx`): Premium 5-tab workspace: Overview (program summary + hot candidates), Candidates (filterable scored list with signal breakdown), Active Asks (Firestore-backed ask tracking with status progression), Outcomes (completed asks + conversion counts), Inspection (scoring rules audit + style catalog).
-- **Ask Tracking**: Persisted to Firestore `orgs/{orgId}/referralAsks`. Status lifecycle: `created → sent → responded → lead_created → won/lost/no_response`. Real-time via `onSnapshot`.
-- **Draft Generation**: `generateReferralAskContent(candidate, channel)` produces pre-filled call prep notes, email (with subject), or SMS body for each ask. All editable before saving.
-- **Routes**: `/referral` (manager-gated). `GitMerge` icon in sidebar after Execution Queue.
+- **Referral Adapter**: Derives referral readiness signals and appropriate ask styles from live client data, generating conversation angles and evidence points.
+- **Ask Tracking**: Persisted to Firestore, tracking referral asks through their lifecycle.
 
 ### Automation Execution Layer
-- **Domain Model** (`execAutomationTypes.ts`): Defines `ExecutionItemLocalState`, `ExecutionItemStatus`, `QueueAction`, `QueueState`, `CommunicationHistoryItem`, `ChannelIntegrationState`, and `ExecutionSendResult`. All types derived from existing comms channel types.
-- **Channel Adapters** (`channelAdapters.ts`): Honest, explicit boundaries for each channel. Email uses `mailto:` link (no SMTP required). SMS uses `sms:` protocol on mobile, clipboard on desktop (no Twilio required). Call and voicemail are reference material with manual outcome logging. All missing integration config is documented with exact env var names needed to upgrade.
-- **`sendViaChannel()`**: Dispatcher function that fires the most capable available method per channel. Returns `ExecutionSendResult` with method, sentAt, and note. Never fakes a send.
-- **ExecutionQueue** (`ExecutionQueue.tsx`): Premium 4-tab approval-aware execution queue. Uses `useReducer` for local item state (idle → draft\_open → approved → sent/manually\_sent/cancelled/failed). Writes to Firestore `orgs/{orgId}/commHistory` on every send. Reads history via `onSnapshot`.
-- **Approval flow**: Generate Draft → Review/Edit → Approve → Send (fires channel adapter) or Mark as Sent Manually → logged to Firestore.
-- **Communication history**: Persisted to Firestore `commHistory` collection, read back via real-time listener. Stored per org with entity, channel, body snippet, sentBy, method, linked cadence item.
-- **Routes**: `/execution` (manager-gated), `Send` icon in manager nav sidebar after Comms Drafts.
-- **Rules**: No auto-sending. Every item requires human approval. All sends are auditable. Channel limitations are surfaced clearly, not hidden.
+- **Channel Adapters**: Provides explicit boundaries for communication channels (Email, SMS, Call, Voicemail) with clear documentation for integration upgrades.
+- **Approval Flow**: All communication items require human approval before sending; all sends are auditable.
 
 ### Executive Reporting Layer
-- **Dashboard**: A 5-tab leadership dashboard (`/exec`) providing KPIs, risks, opportunities, bottlenecks, alerts, watchlists, and pipeline/account snapshots, all derived from live Redux data without AI or API calls. Focuses on actionable, interpretable metrics.
+- **Dashboard**: A 5-tab leadership dashboard providing KPIs, risks, opportunities, bottlenecks, alerts, watchlists, and pipeline/account snapshots, derived from live Redux data.
 
 ### Communication Drafting Layer
-- **Drafting System**: Generates entity-specific communication drafts across 4 channels (Email / SMS / Call Prep / Voicemail) for 12 communication intents, driven by a context builder and template engine.
-- **Workspaces**: `CommsDraftPanel` for reviewing drafts and a 5-tab `CommsWorkspace` (`/comms`) for managing all drafts. Integrated with cadence items.
+- **Drafting System**: Generates entity-specific communication drafts across 4 channels for 12 communication intents, driven by a context builder and template engine.
 
 ### Cadence + Automation Layer
-- **Rule Engine**: 14 derivation rules (7 lead, 7 client) for generating reminders based on stage, inactivity, proposal status, delivery blocks, churn risk, upsell readiness, and referral timing.
-- **Workspace**: A 8-tab premium `CadenceWorkspace` (`/cadence`) with safe controls (dismiss, snooze, complete, restore) and integration with the communication drafting layer.
+- **Rule Engine**: 14 derivation rules for generating reminders based on lead/client status, inactivity, and other key signals.
 
 ### Sales Execution Layer
 - **Tools**: Provides `SalesMeetingPrep`, `SalesFollowUpRecommendation`, `StageActionPlan`, and `PipelineMomentumScore`, derived from existing Lead data without AI calls. Includes a static objection bank.
-- **SalesExecutionHub**: Replaces "Sales Actions" tab in LeadFocusView with sections for Actions, Meeting Prep, Objections, and Follow-up Guide.
 
 ### Sales Intelligence UX Layer
-- **Lead Focus View**: Enhanced 6-tab command workspace: Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator.
-- **Panels**: Includes Visibility Gap Panel, Digital Growth Plan Panel, Sales Next Best Action Panel (with NEPQ-style questions), and Proposal & Handoff Readiness Panel.
+- **Lead Focus View**: Enhanced 6-tab command workspace including Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, and ROI Calculator.
 
 ## External Dependencies
 
