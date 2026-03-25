@@ -33,6 +33,7 @@ import AgentsPage from '@/pages/agents';
 import ExpansionPage from '@/pages/expansion';
 import CadencePage from '@/pages/cadence';
 import CommsPage from '@/pages/comms';
+import ExecPage from '@/pages/exec';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -81,6 +82,7 @@ function ProtectedRoutes() {
       <Route path="/expansion">{() => <ManagerGate component={ExpansionPage} />}</Route>
       <Route path="/cadence">{() => <ManagerGate component={CadencePage} />}</Route>
       <Route path="/comms">{() => <ManagerGate component={CommsPage} />}</Route>
+      <Route path="/exec">{() => <ManagerGate component={ExecPage} />}</Route>
       <Route path="/portal/:clientId" component={ClientPortalPage} />
       <Route component={NotFound} />
     </Switch>

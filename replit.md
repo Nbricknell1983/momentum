@@ -1,7 +1,7 @@
 # Momentum Agent
 
 ## Overview
-Momentum Agent is an AI-assisted sales operating system designed to transform daily sales activities into consistent pipeline momentum. It functions as a productivity-focused admin dashboard, offering features such as a Kanban-style pipeline, activity tracking, nurture automation, and momentum scoring. The application aims to facilitate frictionless logging, reinforce follow-up discipline, and provide stage-aware coaching to enhance sales performance and pipeline growth. Its business vision is to provide a comprehensive, intelligent platform for sales teams, improving efficiency and driving pipeline growth.
+Momentum Agent is an AI-assisted sales operating system designed to transform daily sales activities into consistent pipeline momentum. It functions as a productivity-focused admin dashboard, offering features such as a Kanban-style pipeline, activity tracking, nurture automation, and momentum scoring. The application aims to facilitate frictionless logging, reinforce follow-up discipline, and provide stage-aware coaching to enhance sales performance and pipeline growth. Its business vision is to provide a comprehensive, intelligent platform for sales teams, improving efficiency and driving pipeline growth, and unlocking significant market potential by streamlining sales operations.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -31,6 +31,9 @@ Preferred communication style: Simple, everyday language.
 - **Agent Job System**: Firestore-backed job queue for dispatching tasks to specialist agents, including idempotency, dependency chains, and retry/backoff mechanisms.
 - **Autopilot Orchestrator**: Proactive agent job scanner managing task queues and back-pressure.
 - **Proactive Watchdog / Self-Audit System**: Runtime QA layer for detecting workflow bugs and UI-state mismatches.
+- **AI Sales Engine**: 5-section AI layer for stage-aware defaults, conversation intelligence, insights, and email generation.
+- **AI Strategy & Research**: Strategy Engine, Leads Research, and Growth Plan Module.
+- **AI Engine Suite**: Growth Prescription, Website, SEO, GBP, and Ads Engines for diagnostics and strategic plans.
 
 ### Auth & Security
 - **Firebase Authentication**: User identity management and token verification.
@@ -39,9 +42,6 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Features
 - **Sales Operating System**: Pipeline Management, Conversation Intelligence, Lead & Client Management, Territory System, Nurture System, Activity Tracking, and Momentum Scoring.
-- **AI Sales Engine**: 5-section AI layer for stage-aware defaults, conversation intelligence, insights, and email generation.
-- **AI Strategy & Research**: Strategy Engine, Leads Research, and Growth Plan Module.
-- **AI Engine Suite**: Growth Prescription, Website, SEO, GBP, and Ads Engines for diagnostics and strategic plans.
 - **Website Workstream Agent**: Full website blueprint builder with UI tabs for planning, content, SEO, assets, and preview, including copy variant selection and JSON export.
 - **Website HTML Generation Engine**: Generates production-ready HTML pages, sitemap.xml, and robots.txt from the blueprint, supporting live iframe preview.
 - **SEO Preservation Engine**: Four-stage process for analysing, classifying, and managing existing site URLs for SEO preservation, including doorway page detection, technical SEO audits, and internal link mapping.
@@ -52,72 +52,42 @@ Preferred communication style: Simple, everyday language.
 - **Bullpen Work Queue**: Trigger-driven system for proactive operational management.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for leads and clients.
 
-### Client Portal Access Layer
-- **Domain Model**: Defines typed interfaces for portal share links, invites, access logs, visibility rules, digest schedules, and client portal configurations.
-- **Portal Admin Panel**: Internal admin panel for managing links, invites, visibility, digest schedules, and audit logs.
-- **Portal Share Page**: Public client-facing portal at `/share/:token` rendering stripped client data.
-
-### Client Command Centre
-- **Domain Model**: Defines client-facing types for dashboard state, delivery summaries, performance summaries, health scores, milestones, and next actions.
-- **Adapter Layer**: Transforms existing `Client` fields into a simplified, client-safe `ClientDashboardState` with zero AI or API calls.
-- **ClientCommandCentre Panel**: 5-tab premium client-facing dashboard (Overview, Delivery, Performance, Milestones, Your Actions). Includes health score, delivery phase, channel cards, milestone timeline, performance metrics, optimisation activity, and strategy alignment.
-- **Client Portal Page**: Full-page client portal preview at `/portal/:clientId` with branded header and embedded command centre.
-- **Rules**: No raw data, jargon, or internal states surfaced to client; content is outcome-focused and simplified.
+### Client Portal & Command Centre
+- **Client Portal Access Layer**: Defines models for portal share links, invites, access logs, visibility rules, digest schedules, and client portal configurations, with an admin panel and public share page (`/share/:token`).
+- **Client Command Centre**: Client-facing dashboard with a simplified view of performance, delivery, and milestones, avoiding jargon and raw data. Accessible at `/portal/:clientId`.
 
 ### AI Systems Integration Layer
-- **Architecture**: Modular, production-grade server-to-server REST integration between Momentum (upstream) and AI Systems (downstream).
-- **Core Services**: Provisioning, audit logging, status polling, and typed patching.
-- **Key Rules**: Uses `provisioningRequestId` for idempotency, follows an 8-stage lifecycle, and enforces field ownership.
+- **Architecture**: Modular, production-grade server-to-server REST integration with provisioning, audit logging, status polling, and typed patching, ensuring idempotency and an 8-stage lifecycle.
 
 ### Client-Facing Strategy Experience Layer
-- **Domain Model**: Defines typed interfaces for strategy documents, reports, and presentations.
-- **Adapter Layer**: Transforms Lead intelligence into a `StrategyDocument` and `StrategyDiagnosis` without AI calls.
-- **Presentation layer**: Serves the public-facing report, compatible with adapter output, including scope acceptance and ROI simulation.
+- **Domain Model**: Defines typed interfaces for strategy documents, reports, and presentations, transforming Lead intelligence without AI calls. Includes a presentation layer for public reports with scope acceptance and ROI simulation.
 
 ### Proposal Acceptance → Onboarding → Provisioning Flow
-- **Domain Model**: Defines typed interfaces for the full lifecycle, including proposal status, module selection, onboarding capture, readiness results, provisioning trigger state, and onboarding state.
-- **UI Panel**: `OnboardingTransitionPanel.tsx` provides a 4-step guided panel for scope selection, data capture, readiness assessment, and handoff/provisioning.
-- **Module Catalogue**: 9 defined modules: website, seo, gbp, google_ads, content, local_seo, telemetry, autopilot, portal_access.
-- **Status lifecycle**: `strategy_presented → proposal_pending → proposal_accepted → onboarding_in_progress → onboarding_ready → provisioning → provisioned`.
+- **Workflow**: Guided 4-step panel for scope selection, data capture, readiness assessment, and handoff/provisioning, supporting 9 defined modules (website, seo, gbp, google_ads, content, local_seo, telemetry, autopilot, portal_access).
+- **Status Lifecycle**: Tracks proposal from `strategy_presented` to `provisioned`.
 
 ### Expansion Engine
-- **Domain Model**: Defines typed interfaces for `AccountGrowthSignal`, `ExpansionOpportunity`, `ChurnRiskSignal`, `ReferralOpportunity`, `ExpansionNextBestAction`, `AccountHealthTrend`, `ExpansionPlay`, `GrowthTriggerEvent`, `ClientSafeGrowthMoment`, `ClientExpansionState`, and `ExpansionState`.
-- **Signal Engine**: Derives all expansion state from live Redux client data. No AI or API calls. Signals include module gaps (website live but no SEO/GBP), autopilot eligibility, delivery stalls, referral windows, churn indicators, and scope expansion flags.
-- **Upsell / Cross-sell Engine**: Generates structured `ExpansionOpportunity` records with WHY, expected outcome, conversation angle, evidence, priority, and confidence.
-- **Churn-Risk Detection**: Four severity levels with likely cause, indicators, suggested intervention, owner, and urgency.
-- **Referral Timing Engine**: Scores each client's referral readiness, selects ask style, and generates a conversation angle with suggested timing.
-- **Expansion Workspace**: 6-tab premium view (Overview / Opportunities / Churn Risks / Referrals / Actions / Inspection) for account managers.
+- **Functionality**: Derives `AccountGrowthSignal`, `ExpansionOpportunity`, `ChurnRiskSignal`, `ReferralOpportunity`, `ExpansionNextBestAction`, and `ExpansionPlay` from live client data without AI calls.
+- **Key Features**: Upsell/Cross-sell engine, Churn-Risk detection, Referral Timing engine, and a 6-tab premium workspace for account managers.
+
+### Executive Reporting Layer
+- **Dashboard**: A 5-tab leadership dashboard (`/exec`) providing KPIs, risks, opportunities, bottlenecks, alerts, watchlists, and pipeline/account snapshots, all derived from live Redux data without AI or API calls. Focuses on actionable, interpretable metrics.
 
 ### Communication Drafting Layer
-- **Domain Model**: Defines typed interfaces for `CommunicationDraft`, `CommunicationChannelDraft`, `CommunicationIntent`, `CommunicationAssetReference`, `CommunicationOutcomeGoal`, `CommunicationVariant`, and `CommsDraftInspection`.
-- **Context Builder**: Assembles draft context from cadence item, entity state, stage, assets, and signals using `buildDraftFromCadenceItem()` and `buildDraftsFromQueue()`.
-- **Template Engine**: Generates entity-specific drafts across 4 channels (Email / SMS / Call Prep / Voicemail) for 12 communication intents — proposal nudge, verbal commit chase, discovery follow-up, reactivation, approval reminder, churn intervention, upsell opener, referral ask, and more.
-- **CommsDraftPanel**: Embeddable per-draft review panel with channel tabs, inline editing, copy, mark-as-used, discard, restore, and full explanation section (why created, signal, channel rationale, outcome).
-- **CommsWorkspace**: 5-tab standalone workspace (Overview / All Drafts / Sales / Accounts / Inspection). Derives all drafts from the cadence queue. Filterable by intent, status, and channel.
-- **Cadence Integration**: Each cadence item card has a "Draft" button that opens an in-context draft modal with the CommsDraftPanel pre-loaded with channel drafts for that specific item.
-- **Routes**: `/comms` (manager-gated), `Mail` icon in manager nav sidebar.
+- **Drafting System**: Generates entity-specific communication drafts across 4 channels (Email / SMS / Call Prep / Voicemail) for 12 communication intents, driven by a context builder and template engine.
+- **Workspaces**: `CommsDraftPanel` for reviewing drafts and a 5-tab `CommsWorkspace` (`/comms`) for managing all drafts. Integrated with cadence items.
 
 ### Cadence + Automation Layer
-- **Domain Model**: 15 typed interfaces covering cadence rules, triggers, queue items, urgency levels, category groups, follow-up plans, automated nudges, and override maps.
-- **Rule Engine**: 14 derivation rules (7 lead, 7 client) firing from stage, inactivity, proposal status, delivery blocks, churn risk, upsell readiness, and referral timing.
-- **Reminder Generator**: Each item includes why it exists, what triggered it, stage context, what to do, asset to reference, suggested wording, and supporting evidence.
-- **CadenceWorkspace**: 8-tab premium workspace (Overview / Queue / Sales / Onboarding / Accounts / Referrals / Nudges / Inspection) at `/cadence` (manager-gated, Bell icon).
-- **Safe Controls**: Dismiss, snooze (2d/5d/1w/2w), complete, and restore per item. Session state via useReducer. Upgradeable to Firestore without domain model changes.
-- **Draft Integration**: "Draft" button on every cadence card opens CommsDraftPanel in a slide-over modal.
+- **Rule Engine**: 14 derivation rules (7 lead, 7 client) for generating reminders based on stage, inactivity, proposal status, delivery blocks, churn risk, upsell readiness, and referral timing.
+- **Workspace**: A 8-tab premium `CadenceWorkspace` (`/cadence`) with safe controls (dismiss, snooze, complete, restore) and integration with the communication drafting layer.
 
 ### Sales Execution Layer
-- **Domain Model**: Extends `salesIntelligenceTypes.ts` with models for `SalesMeetingPrep`, `SalesFollowUpRecommendation`, `StageActionPlan`, and `PipelineMomentumScore`.
-- **Static Objection Bank**: Contains scripted objection patterns with detailed response guidance.
-- **Derivation functions**: Pure functions derive meeting prep, follow-up recommendations, stage action plans, pipeline momentum scores, and applicable objections from existing Lead data without AI calls.
-- **SalesExecutionHub**: A 4-section hub replacing the "Sales Actions" tab in LeadFocusView, featuring Actions, Meeting Prep, Objections, and Follow-up Guide.
+- **Tools**: Provides `SalesMeetingPrep`, `SalesFollowUpRecommendation`, `StageActionPlan`, and `PipelineMomentumScore`, derived from existing Lead data without AI calls. Includes a static objection bank.
+- **SalesExecutionHub**: Replaces "Sales Actions" tab in LeadFocusView with sections for Actions, Meeting Prep, Objections, and Follow-up Guide.
 
 ### Sales Intelligence UX Layer
-- **Domain Model**: Defines typed models for `OpportunityAssessment`, `VisibilityGapSummary`, `MarketOpportunitySummary`, `SalesNextBestAction`, `ProposalReadiness`, `HandoffReadiness`, `SalesConversationState`, and `ProvisioningReadiness`, all derived on-the-fly.
-- **Lead Focus View** (enhanced): Provides a 6-tab command workspace: Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator.
-- **Visibility Gap Panel**: Offers premium gap analysis UI with scores, gap cards, trust signal checklist, and opportunity dimension breakdown.
-- **Digital Growth Plan Panel**: Presents a strategy-led plan view with urgency diagnosis, growth barriers, recommended product stack, priority actions, investment tiers, and outcome forecasts.
-- **Sales Next Best Action Panel**: A stage/conversation-aware NBA engine with NEPQ-style questions, conversation state tracking, objection handling, and follow-up scripts.
-- **Proposal & Handoff Readiness Panel**: A 3-tab readiness system covering Proposal Readiness, Handoff Readiness, and Provisioning.
+- **Lead Focus View**: Enhanced 6-tab command workspace: Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator.
+- **Panels**: Includes Visibility Gap Panel, Digital Growth Plan Panel, Sales Next Best Action Panel (with NEPQ-style questions), and Proposal & Handoff Readiness Panel.
 
 ## External Dependencies
 
@@ -125,7 +95,7 @@ Preferred communication style: Simple, everyday language.
 - **Firebase Firestore**: Main NoSQL database.
 
 ### AI Integration
-- **OpenAI API**: Provides AI capabilities.
+- **OpenAI API**: Provides core AI capabilities.
 - **OpenClaw API**: External AI orchestration layer.
 
 ### Authentication & Authorization

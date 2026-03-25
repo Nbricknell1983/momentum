@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Bell,
   Mail,
+  LineChart,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -54,8 +55,9 @@ const navItems = [
 ];
 
 const managerNavItems = [
-  { title: 'Management',     url: '/management',     icon: BarChart3 },
-  { title: 'Agent Command',  url: '/agents',         icon: Brain },
+  { title: 'Exec Dashboard',   url: '/exec',         icon: LineChart },
+  { title: 'Management',       url: '/management',   icon: BarChart3 },
+  { title: 'Agent Command',    url: '/agents',       icon: Brain },
   { title: 'Expansion Engine', url: '/expansion',   icon: TrendingUp },
   { title: 'Cadence',          url: '/cadence',     icon: Bell },
   { title: 'Comms Drafts',     url: '/comms',       icon: Mail },

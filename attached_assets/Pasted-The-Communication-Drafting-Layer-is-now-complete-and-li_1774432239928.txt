@@ -1,0 +1,148 @@
+The Communication Drafting Layer is now complete and live.
+
+Next, I want to build the Executive Reporting Layer.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, and Communication Drafting
+- AI Systems handles downstream delivery and optimisation
+- The business now needs a leadership / management layer that turns all of this into a clear operating picture
+
+GOAL
+Build the Executive Reporting Layer so Momentum can:
+- show top-line health across sales, onboarding, active accounts, and expansion
+- surface the most important risks and opportunities
+- show pipeline movement and bottlenecks
+- show account growth, churn risk, and referral readiness
+- show operational workload and execution pressure
+- support leadership decisions with a clear, premium dashboard
+
+IMPORTANT
+This must be:
+- executive-friendly
+- visually clear
+- not overloaded
+- actionable
+- explainable
+- premium in UX
+- built from real system state, not hardcoded summaries
+
+DO NOT:
+- make this a raw data dump
+- recreate every detailed workspace at the top level
+- overload with too many charts
+- show metrics with no action or interpretation
+- turn it into a generic BI dashboard
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Executive reporting domain model
+Create typed models for at least:
+- executiveDashboardState
+- executiveKPI
+- executiveTrend
+- executiveRiskSummary
+- executiveOpportunitySummary
+- executiveBottleneck
+- executiveWorkloadSummary
+- executiveAlert
+- executiveDrilldownReference
+
+2. Executive state adapter
+Build a pure derivation adapter that combines existing Momentum state into executive summaries across:
+- pipeline
+- sales execution
+- onboarding
+- active accounts
+- expansion
+- cadence
+- communication drafting
+- client portal engagement where available
+
+3. KPI and trend layer
+Create summary logic for metrics such as:
+- active pipeline count
+- strategy presented count
+- proposal acceptance rate
+- onboarding in progress
+- provisioned accounts
+- active churn risks
+- hot expansion opportunities
+- referral-ready accounts
+- overdue cadence items
+- urgent communications pending
+
+Include trend direction where possible.
+
+4. Risk and opportunity summaries
+Build clean executive summaries for:
+- biggest current sales blockers
+- onboarding blockers
+- at-risk accounts
+- biggest expansion opportunities
+- most referral-ready clients
+- most stalled areas of execution
+
+5. Workload and pressure view
+Create a summary of:
+- urgent work by category
+- who/what needs attention now
+- queue pressure
+- overloaded areas
+- operational hotspots
+
+6. Executive dashboard UX
+Build a premium executive dashboard with:
+- KPI row
+- risk/opportunity cards
+- bottleneck view
+- workload summary
+- top priorities for today/this week
+- drilldown links into the right workspace
+
+7. Drilldown integration
+Allow the executive layer to link into:
+- pipeline
+- lead workspace
+- onboarding
+- expansion
+- cadence
+- comms
+- client command centre
+- agent command
+
+8. Alerts and watchlist model
+Create a layer for:
+- critical alerts
+- watchlist accounts
+- watchlist leads
+- rising risks
+- significant wins
+
+9. Admin and inspection support
+Create inspection/debug support showing:
+- what source data fed the dashboard
+- how a KPI was derived
+- why a risk/opportunity surfaced
+- refresh/derivation timestamp
+
+IMPORTANT RULES
+- Keep this summary-first and action-oriented
+- Make every metric interpretable
+- Prefer fewer stronger insights over many weak ones
+- Keep the UI premium and leadership-friendly
+- Build from existing domain layers rather than inventing parallel logic
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- executive reporting domain model
+- executive state adapter
+- KPI and trend layer
+- executive dashboard UX
