@@ -1,7 +1,7 @@
 # Momentum Agent
 
 ## Overview
-Momentum Agent is an AI-assisted sales operating system designed to transform daily sales activities into consistent pipeline momentum. It functions as a productivity-focused admin dashboard, offering features such as a Kanban-style pipeline, activity tracking, nurture automation, and momentum scoring. The application aims to facilitate frictionless logging, reinforce follow-up discipline, and provide stage-aware coaching to enhance sales performance and pipeline growth. Its business vision is to provide a comprehensive, intelligent platform for sales teams, improving efficiency and driving pipeline growth.
+Momentum Agent is an AI-assisted sales operating system designed to transform daily sales activities into consistent pipeline momentum. It functions as a productivity-focused admin dashboard, offering features such as a Kanban-style pipeline, activity tracking, nurture automation, and momentum scoring. The application aims to facilitate frictionless logging, reinforce follow-up discipline, and provide stage-aware coaching to enhance sales performance and pipeline growth. Its business vision is to provide a comprehensive, intelligent platform for sales teams, improving efficiency and and driving pipeline growth.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -30,7 +30,6 @@ Preferred communication style: Simple, everyday language.
 - **Role-Aware Agent Architecture**: "Bullpen" command layer for `owner`/`admin` roles, and "My Work" page for `bullpenWork` items.
 - **Agent Job System**: Firestore-backed job queue for dispatching tasks to specialist agents, including idempotency, dependency chains, and retry/backoff mechanisms.
 - **Autopilot Orchestrator**: Proactive agent job scanner managing task queues and back-pressure.
-- **First-Open Lead Orchestration**: Rapid evidence gathering and prep-pack generation, followed by deeper background analysis.
 - **Proactive Watchdog / Self-Audit System**: Runtime QA layer for detecting workflow bugs, UI-state mismatches, and misleading states, with findings displayed in a `WatchdogPanel`.
 
 ### Auth & Security
@@ -73,31 +72,34 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: `ProvisioningPanel.tsx` for readiness checks, scope editing, lifecycle display, action buttons, and audit log viewing.
 
 ### Client-Facing Strategy Experience Layer
-- **Domain Model**: `client/src/lib/strategyPresentationTypes.ts` — 20+ typed interfaces: `StrategyDocument`, `StrategyDiagnosis`, `StrategyReport`, `DigitalVisibilityTriangle`, `DiscoveryPathStage`, `IntentGap`, `BuyerRealityGap`, `MarketOpportunity`, `GrowthPillar`, `GrowthPhase`, `PresentationRoadmap`, `PresentationConfidenceBlock`, `ShareLinkConfig`, `PresentationSnapshot`, and more.
-- **Adapter Layer**: `client/src/lib/strategyPresentationAdapter.ts` — Pure TypeScript adapter that transforms Lead intelligence fields (growthPrescription, strategyDiagnosis, aiCallPrepOutput, ahrefsData, crawledPages, etc.) into a `StrategyDocument` + `StrategyDiagnosis` compatible with the existing `StrategyReportPage`. Zero AI calls — deterministic derivation from already-computed data.
-- **Admin Panel**: `client/src/components/LeadStrategyReportPanel.tsx` — Generate, share, refresh, revoke, lock, and version-manage strategy reports from a lead. Shows data quality checklist, share link with copy/open, version history with snapshots, proposal lock mode. Accessible from the "Strategy Report" tab in LeadFocusView.
-- **Server Routes** (new in `server/routes.ts`): `POST /api/strategy-reports/from-lead` (generate from lead intelligence, idempotent — updates existing draft), `PATCH /api/strategy-reports/:id/revoke`, `PATCH /api/strategy-reports/:id/lock`, `GET /api/strategy-reports/:id/snapshots`. Revoked reports return 410. Each generation creates a versioned snapshot subcollection.
-- **LeadFocusView**: Now has 8 tabs — Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator, Strategy Report, **Onboarding** (new).
-- **Presentation layer**: Existing `client/src/pages/strategy-report.tsx` (1471 lines, `/strategy/:reportId` route) serves the public-facing report — fully compatible with adapter output, includes scope acceptance flow, live ROI simulator, and score rings.
+- **Domain Model**: `client/src/lib/strategyPresentationTypes.ts` defines various typed interfaces for strategy documents, reports, and presentations.
+- **Adapter Layer**: `client/src/lib/strategyPresentationAdapter.ts` transforms Lead intelligence into a `StrategyDocument` and `StrategyDiagnosis` without AI calls.
+- **Admin Panel**: `client/src/components/LeadStrategyReportPanel.tsx` manages strategy report generation, sharing, and versioning.
+- **Server Routes**: New routes in `server/routes.ts` handle strategy report generation, revocation, locking, and snapshot retrieval.
+- **LeadFocusView**: Now includes an "Onboarding" tab in addition to Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, and ROI Calculator.
+- **Presentation layer**: `client/src/pages/strategy-report.tsx` serves the public-facing report, compatible with adapter output, including scope acceptance and ROI simulation.
 
 ### Proposal Acceptance → Onboarding → Provisioning Flow
-- **Domain Model**: `client/src/lib/proposalAcceptanceTypes.ts` — typed interfaces for the full lifecycle: `ProposalStatus` (8 states), `ModuleSelection`, `SelectedModules`, `OnboardingCapture` (contact, business, address, web, service areas, target services, GBP, branding), `OnboardingReadinessResult`, `ProposalAcceptanceEvent`, `ProvisioningTriggerState`, `OnboardingAuditEntry`, `OnboardingState`. Also exports pure helper functions: `deriveReadiness()` (8-check checklist with blockers), `emptyCapture()`, `emptyModuleSelections()`.
-- **UI Panel**: `client/src/components/OnboardingTransitionPanel.tsx` — 4-step guided panel in LeadFocusView "Onboarding" tab:
-  - **Step 1 (Scope)**: Module scope selector for all 9 modules — now / later / not included timing per module.
-  - **Step 2 (Capture)**: Accordion-style onboarding form — Contact, Business Details, Address, Website & Domain, Service Areas & Target Services, Google Business Profile, Branding Assets, Handover Notes.
-  - **Step 3 (Readiness)**: Live readiness score (0–100), checklist with 8 required/recommended checks, critical blocker cards with fix actions.
-  - **Step 4 (Handoff)**: Onboarding summary + provisioning — embeds `ProvisioningPanel` when a `clientId` exists, or shows a "Convert to Client" prompt if the lead hasn't been converted yet.
-- **Server Routes**: `GET /api/leads/:leadId/onboarding-state`, `PATCH /api/leads/:leadId/onboarding-state`, `POST /api/leads/:leadId/onboarding-state/accept` — all write to the `onboardingState` field on the Lead Firestore document. Full audit trail maintained.
-- **Module Catalogue**: 9 defined modules — website, seo, gbp, google_ads, content, local_seo, telemetry, autopilot, portal_access.
+- **Domain Model**: `client/src/lib/proposalAcceptanceTypes.ts` defines typed interfaces for the full lifecycle, including `ProposalStatus`, `ModuleSelection`, `OnboardingCapture`, `OnboardingReadinessResult`, `ProvisioningTriggerState`, and `OnboardingState`. Includes helper functions for readiness derivation.
+- **UI Panel**: `client/src/components/OnboardingTransitionPanel.tsx` provides a 4-step guided panel in LeadFocusView "Onboarding" tab for scope selection, data capture, readiness assessment, and handoff/provisioning.
+- **Server Routes**: Routes manage the `onboardingState` field on the Lead Firestore document, including retrieval, patching, and acceptance, with full audit trails.
+- **Module Catalogue**: 9 defined modules: website, seo, gbp, google_ads, content, local_seo, telemetry, autopilot, portal_access.
 - **Status lifecycle**: `strategy_presented → proposal_pending → proposal_accepted → onboarding_in_progress → onboarding_ready → provisioning → provisioned`.
 
+### Sales Execution Layer
+- **Domain Model**: Extends `salesIntelligenceTypes.ts` with models for `SalesMeetingPrep`, `SalesFollowUpRecommendation`, `StageActionPlan`, and `PipelineMomentumScore`.
+- **Static Objection Bank**: `OBJECTION_BANK` contains 8 scripted objection patterns with detailed response guidance.
+- **Derivation functions**: Pure functions derive meeting prep, follow-up recommendations, stage action plans, pipeline momentum scores, and applicable objections from existing Lead data without AI calls.
+- **SalesExecutionHub**: `client/src/components/SalesExecutionHub.tsx` is a 4-section hub replacing the "Sales Actions" tab in LeadFocusView, featuring Actions, Meeting Prep, Objections, and Follow-up Guide.
+- **PipelineMomentumPanel**: `client/src/components/PipelineMomentumPanel.tsx` offers a portfolio-level momentum view with summary tiles, a filterable lead list, and trajectory/urgency indicators.
+
 ### Sales Intelligence UX Layer
-- **Domain Model**: `client/src/lib/salesIntelligenceTypes.ts` — typed models for `OpportunityAssessment`, `VisibilityGapSummary`, `MarketOpportunitySummary`, `SalesNextBestAction`, `ProposalReadiness`, `HandoffReadiness`, `SalesConversationState`, `ProvisioningReadiness`. All derived on-the-fly from existing Lead data using pure functions — no additional storage required.
-- **Lead Focus View** (enhanced): `LeadFocusView.tsx` — 6-tab command workspace: Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator. Left panel shows LeadCardExpanded + ConversationIntelligence; right panel shows DealLiveActivityFeed.
-- **Visibility Gap Panel**: `LeadVisibilityGapPanel.tsx` — premium gap analysis UI with visibility score, opportunity score, gap cards sorted by severity (critical → quick wins), trust signal checklist, and opportunity dimension breakdown. Derived from prepCallPack, aiCallPrepOutput, competitorData, ahrefsData, strategyDiagnosis.
-- **Digital Growth Plan Panel**: `DigitalGrowthPlanPanel.tsx` — strategy-led plan view with urgency diagnosis, growth barriers, recommended product stack (website/SEO/GBP/ads) with expandable detail, priority actions, investment tier cards, and expected outcome forecast band.
-- **Sales Next Best Action Panel**: `SalesNextBestActionPanel.tsx` — stage/conversation-aware NBA engine with NEPQ-style questions (situation/problem/consequence/solution/commitment), conversation state tracker with stall risk detection, objection handling scripts, copyable follow-up scripts.
-- **Proposal & Handoff Readiness Panel**: `ProposalReadinessPanel.tsx` — 3-tab readiness system: Proposal Readiness (7-item weighted checklist with blockers), Handoff Readiness (scope, modules, archetype), Provisioning (AI Systems workflow description and next steps).
+- **Domain Model**: `client/src/lib/salesIntelligenceTypes.ts` defines typed models for `OpportunityAssessment`, `VisibilityGapSummary`, `MarketOpportunitySummary`, `SalesNextBestAction`, `ProposalReadiness`, `HandoffReadiness`, `SalesConversationState`, and `ProvisioningReadiness`, all derived on-the-fly.
+- **Lead Focus View** (enhanced): `LeadFocusView.tsx` provides a 6-tab command workspace: Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator.
+- **Visibility Gap Panel**: `LeadVisibilityGapPanel.tsx` offers premium gap analysis UI with scores, gap cards, trust signal checklist, and opportunity dimension breakdown.
+- **Digital Growth Plan Panel**: `DigitalGrowthPlanPanel.tsx` presents a strategy-led plan view with urgency diagnosis, growth barriers, recommended product stack, priority actions, investment tiers, and outcome forecasts.
+- **Sales Next Best Action Panel**: `SalesNextBestActionPanel.tsx` provides a stage/conversation-aware NBA engine with NEPQ-style questions, conversation state tracking, objection handling, and follow-up scripts.
+- **Proposal & Handoff Readiness Panel**: `ProposalReadinessPanel.tsx` is a 3-tab readiness system covering Proposal Readiness, Handoff Readiness, and Provisioning.
 
 ## External Dependencies
 

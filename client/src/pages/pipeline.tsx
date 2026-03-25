@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation, useSearch } from 'wouter';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { Plus, Filter, Download, Loader2 } from 'lucide-react';
+import { Plus, Filter, Download, Loader2, BarChart2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -14,6 +14,7 @@ import ConversionModal from '@/components/ConversionModal';
 import { TERRITORY_CONFIG, getAreasForRegion, computeTerritoryFields, isAreaRequiredForRegion, validateTerritorySelection } from '@/lib/territoryConfig';
 import KanbanColumnExpandable from '@/components/KanbanColumnExpandable';
 import LeadFocusView from '@/components/LeadFocusView';
+import { PipelineMomentumPanel } from '@/components/PipelineMomentumPanel';
 import { v4 as uuidv4 } from 'uuid';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { createLead as createLeadInFirestore, updateLeadInFirestore, createClient as createClientInFirestore, createClientHistoryEntry } from '@/lib/firestoreService';
@@ -47,6 +48,7 @@ export default function PipelinePage() {
   const [matchingArchivedLead, setMatchingArchivedLead] = useState<Lead | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingConversionLead, setPendingConversionLead] = useState<Lead | null>(null);
+  const [showMomentumPanel, setShowMomentumPanel] = useState(false);
 
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -564,6 +566,15 @@ export default function PipelinePage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant={showMomentumPanel ? 'default' : 'outline'}
+            className="gap-2"
+            onClick={() => setShowMomentumPanel(v => !v)}
+            data-testid="button-toggle-momentum"
+          >
+            <BarChart2 className="h-4 w-4" />
+            Momentum
+          </Button>
           <Button variant="outline" className="gap-2" data-testid="button-export">
             <Download className="h-4 w-4" />
             Export
@@ -713,34 +724,46 @@ export default function PipelinePage() {
         </div>
       </div>
 
-      {/* Kanban Board */}
-      <ScrollArea className="flex-1">
-        <div className="p-4">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
+      {/* Kanban Board + optional Momentum Panel */}
+      <div className="flex flex-1 overflow-hidden">
+        <ScrollArea className="flex-1">
+          <div className="p-4">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="flex gap-4 min-w-max">
+                {STAGE_ORDER.slice(0, -2).map(stage => (
+                  <KanbanColumnExpandable
+                    key={stage}
+                    stage={stage}
+                    leads={getLeadsByStage(stage)}
+                    expandedLeadId={null}
+                    onLeadToggle={handleLeadClick}
+                    onAddLead={() => {
+                      setNewStage(stage);
+                      setIsAddDialogOpen(true);
+                    }}
+                    onConvertToClient={setPendingConversionLead}
+                  />
+                ))}
+              </div>
+            </DndContext>
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+
+        {/* Momentum Panel — slide in from right */}
+        {showMomentumPanel && (
+          <div
+            className="w-80 flex-shrink-0 border-l border-zinc-200 dark:border-zinc-700 bg-background overflow-hidden flex flex-col"
+            data-testid="momentum-panel-sidebar"
           >
-            <div className="flex gap-4 min-w-max">
-              {STAGE_ORDER.slice(0, -2).map(stage => (
-                <KanbanColumnExpandable
-                  key={stage}
-                  stage={stage}
-                  leads={getLeadsByStage(stage)}
-                  expandedLeadId={null}
-                  onLeadToggle={handleLeadClick}
-                  onAddLead={() => {
-                    setNewStage(stage);
-                    setIsAddDialogOpen(true);
-                  }}
-                  onConvertToClient={setPendingConversionLead}
-                />
-              ))}
-            </div>
-          </DndContext>
-        </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+            <PipelineMomentumPanel onLeadClick={(lead) => handleLeadClick(lead.id)} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

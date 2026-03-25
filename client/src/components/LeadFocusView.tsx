@@ -21,7 +21,7 @@ import GrowthPlanWorkspace from './GrowthPlanWorkspace';
 import DealLiveActivityFeed from './DealLiveActivityFeed';
 import LeadVisibilityGapPanel from './LeadVisibilityGapPanel';
 import DigitalGrowthPlanPanel from './DigitalGrowthPlanPanel';
-import SalesNextBestActionPanel from './SalesNextBestActionPanel';
+import { SalesExecutionHub } from './SalesExecutionHub';
 import ProposalReadinessPanel from './ProposalReadinessPanel';
 import LeadStrategyReportPanel from './LeadStrategyReportPanel';
 import { OnboardingTransitionPanel } from './OnboardingTransitionPanel';
@@ -134,11 +134,9 @@ export default function LeadFocusView({
         );
       case 'sales_actions':
         return (
-          <ScrollArea className="h-full">
-            <div className="p-4">
-              <SalesNextBestActionPanel lead={lead} />
-            </div>
-          </ScrollArea>
+          <div className="h-full flex flex-col">
+            <SalesExecutionHub lead={lead} />
+          </div>
         );
       case 'readiness':
         return (

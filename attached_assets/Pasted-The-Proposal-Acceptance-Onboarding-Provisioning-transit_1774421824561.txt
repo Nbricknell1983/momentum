@@ -1,0 +1,152 @@
+The Proposal Acceptance → Onboarding → Provisioning transition flow is now complete in Momentum.
+
+Next, I want to build the Sales Execution Layer.
+
+Context:
+- Momentum already has lead intelligence
+- Momentum already has the lead workspace
+- Momentum already has the visibility gap UX
+- Momentum already has the Digital Growth Plan UX
+- Momentum already has the client-facing strategy experience
+- Momentum already has proposal acceptance, onboarding capture, readiness scoring, and provisioning transition into AI Systems
+
+What is now missing is the layer that actively helps the salesperson move deals forward between first contact and close.
+
+GOAL
+Build the Sales Execution Layer so Momentum can:
+- surface the next best sales action for each lead
+- support stage-based selling
+- generate follow-up guidance
+- generate NEPQ-style questions
+- help prepare for calls and meetings
+- surface objections and suggested responses
+- keep pipeline momentum moving
+- improve consistency from discovery to close
+
+IMPORTANT
+This must be:
+- practical
+- commercially useful
+- premium in UX
+- stage-aware
+- explainable
+- tightly integrated with the existing lead workspace
+
+DO NOT:
+- turn this into a generic CRM task list
+- duplicate the AI Systems delivery engine
+- hide recommendations in raw JSON
+- make the outputs vague or generic
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Sales execution domain model
+Create typed models for at least:
+- salesExecutionState
+- salesNextBestAction
+- salesTask
+- salesPromptSet
+- salesObjection
+- salesMeetingPrep
+- salesFollowUpRecommendation
+- stageActionPlan
+- pipelineMomentumScore
+
+2. Stage-aware next best action engine
+Build a service that generates next best actions based on:
+- current proposal/pipeline stage
+- visibility gap summary
+- growth plan
+- strategy presentation state
+- proposal acceptance state
+- onboarding readiness state
+- last activity / interaction timing
+- blockers to close
+
+3. NEPQ / consultative prompt layer
+Generate stage-aware sales prompts such as:
+- discovery questions
+- problem-awareness questions
+- implication questions
+- solution-framing questions
+- closing questions
+
+These should be visible in the lead workspace and tied to stage/context.
+
+4. Meeting prep UX
+Build a view/card that prepares the rep for a meeting or call with:
+- business summary
+- current opportunity
+- likely objections
+- recommended angle
+- next best questions
+- what to show/demo
+- ideal outcome for the meeting
+
+5. Objection handling UX
+Create a structured objection layer with examples such as:
+- too expensive
+- need to think about it
+- already have a website/provider
+- not ready yet
+- want to wait
+- don’t understand the value
+
+For each objection, provide:
+- likely underlying concern
+- suggested response framing
+- recommended next move
+
+6. Follow-up recommendation engine
+Build a system that recommends:
+- when to follow up
+- what the follow-up should focus on
+- suggested message framing
+- what asset to reference (strategy, report, roadmap, opportunity)
+
+7. Pipeline momentum UX
+Create a momentum view showing:
+- stalled leads
+- hot opportunities
+- leads waiting on the rep
+- leads waiting on the client
+- readiness to close
+- urgency / momentum score
+
+8. Workspace integration
+Integrate the Sales Execution Layer into the existing LeadFocusView so the rep can see:
+- next best action
+- meeting prep
+- objection prompts
+- follow-up recommendations
+- momentum score
+without leaving the lead workspace
+
+9. Admin and inspection support
+Create internal inspection views/services for:
+- why a sales recommendation was generated
+- what stage signals triggered it
+- what blockers are affecting close probability
+- recommendation history
+
+IMPORTANT RULES
+- Keep this sales-side only
+- Do not recreate delivery-side telemetry/optimisation logic here
+- Keep outputs explainable and stage-aware
+- Make this useful in real conversations, not theoretical
+- Keep the UX clean and premium
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- sales execution domain model
+- stage-aware next best action engine
+- NEPQ / consultative prompt layer
+- meeting prep UX
