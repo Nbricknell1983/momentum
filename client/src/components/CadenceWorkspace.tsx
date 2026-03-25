@@ -12,7 +12,7 @@
  * changing the domain model.
  */
 
-import { useMemo, useReducer, useState } from 'react';
+import { useMemo, useReducer, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { format, addDays } from 'date-fns';
@@ -38,9 +38,11 @@ import {
   ChevronRight, ChevronDown, MessageSquare, BookOpen, Award,
   ArrowRight, XCircle, MinusCircle, RotateCcw, Megaphone,
   Users, Zap, TrendingUp, Shield, UserPlus, Calendar,
-  Activity,
+  Activity, Mail, X,
 } from 'lucide-react';
-
+import { buildDraftFromCadenceItem } from '@/lib/commsAdapter';
+import { CommsDraftPanel, DraftAction } from './CommsDraftPanel';
+import { CommunicationDraft } from '@/lib/commsTypes';
 // ── Override Reducer ──────────────────────────────────────────────────────────
 
 type OverrideAction =
@@ -132,9 +134,10 @@ interface CardProps {
   onDismiss: () => void;
   onSnooze: (days: number) => void;
   onRestore: () => void;
+  onGenerateDraft: () => void;
 }
 
-function CadenceItemCard({ item, onComplete, onDismiss, onSnooze, onRestore }: CardProps) {
+function CadenceItemCard({ item, onComplete, onDismiss, onSnooze, onRestore, onGenerateDraft }: CardProps) {
   const [expanded, setExpanded] = useState(false);
   const [showSnooze, setShowSnooze] = useState(false);
 
@@ -295,6 +298,14 @@ function CadenceItemCard({ item, onComplete, onDismiss, onSnooze, onRestore }: C
           >
             <XCircle className="w-3 h-3" /> Dismiss
           </button>
+
+          <button
+            data-testid={`cadence-draft-${item.id}`}
+            onClick={onGenerateDraft}
+            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-violet-50 text-violet-700 hover:bg-violet-100 font-medium ml-auto"
+          >
+            <Mail className="w-3 h-3" /> Draft
+          </button>
         </div>
       )}
 
@@ -318,9 +329,10 @@ interface ItemListProps {
   items: CadenceQueueItem[];
   dispatch: React.Dispatch<OverrideAction>;
   showDone?: boolean;
+  onGenerateDraft: (item: CadenceQueueItem) => void;
 }
 
-function ItemList({ items, dispatch, showDone = false }: ItemListProps) {
+function ItemList({ items, dispatch, showDone = false, onGenerateDraft }: ItemListProps) {
   const visible = showDone ? items : items.filter(i => i.status === 'pending');
 
   if (visible.length === 0) {
@@ -342,6 +354,7 @@ function ItemList({ items, dispatch, showDone = false }: ItemListProps) {
           onDismiss={() => dispatch({ type: 'dismiss', itemId: item.id })}
           onSnooze={days => dispatch({ type: 'snooze', itemId: item.id, days })}
           onRestore={() => dispatch({ type: 'restore', itemId: item.id })}
+          onGenerateDraft={() => onGenerateDraft(item)}
         />
       ))}
     </div>
@@ -353,9 +366,11 @@ function ItemList({ items, dispatch, showDone = false }: ItemListProps) {
 function OverviewTab({
   state,
   dispatch,
+  onGenerateDraft,
 }: {
   state: CadenceState;
   dispatch: React.Dispatch<OverrideAction>;
+  onGenerateDraft: (item: CadenceQueueItem) => void;
 }) {
   const tiles = [
     {
@@ -437,7 +452,7 @@ function OverviewTab({
             <AlertTriangle className="w-4 h-4 text-red-500" />
             Requires Immediate Attention
           </h3>
-          <ItemList items={spotlightItems} dispatch={dispatch} />
+          <ItemList items={spotlightItems} dispatch={dispatch} onGenerateDraft={onGenerateDraft} />
         </div>
       )}
 
@@ -461,9 +476,11 @@ function OverviewTab({
 function QueueTab({
   state,
   dispatch,
+  onGenerateDraft,
 }: {
   state: CadenceState;
   dispatch: React.Dispatch<OverrideAction>;
+  onGenerateDraft: (item: CadenceQueueItem) => void;
 }) {
   const [showDone, setShowDone] = useState(false);
 
@@ -508,7 +525,7 @@ function QueueTab({
               <section.icon className="w-3.5 h-3.5" />
               {section.label}
             </h3>
-            <ItemList items={section.items} dispatch={dispatch} showDone={showDone} />
+            <ItemList items={section.items} dispatch={dispatch} showDone={showDone} onGenerateDraft={onGenerateDraft} />
           </div>
         );
       })}
@@ -518,7 +535,7 @@ function QueueTab({
           <h3 className="text-xs font-semibold uppercase tracking-wide mb-2 text-zinc-400">
             Dismissed / Snoozed / Completed ({doneItems.length})
           </h3>
-          <ItemList items={doneItems} dispatch={dispatch} showDone />
+          <ItemList items={doneItems} dispatch={dispatch} showDone onGenerateDraft={onGenerateDraft} />
         </div>
       )}
     </div>
@@ -532,11 +549,13 @@ function CategoryTab({
   dispatch,
   emptyIcon: EmptyIcon,
   emptyMessage,
+  onGenerateDraft,
 }: {
   items: CadenceQueueItem[];
   dispatch: React.Dispatch<OverrideAction>;
   emptyIcon: React.ComponentType<{ className?: string }>;
   emptyMessage: string;
+  onGenerateDraft: (item: CadenceQueueItem) => void;
 }) {
   if (items.length === 0) {
     return (
@@ -546,7 +565,7 @@ function CategoryTab({
       </div>
     );
   }
-  return <ItemList items={items} dispatch={dispatch} />;
+  return <ItemList items={items} dispatch={dispatch} onGenerateDraft={onGenerateDraft} />;
 }
 
 // ── Nudges Tab ────────────────────────────────────────────────────────────────
@@ -777,8 +796,33 @@ export function CadenceWorkspace() {
     [state],
   );
 
+  // ── Draft modal state ──────────────────────────────────────────────────────
+  const [draftItem, setDraftItem] = useState<CadenceQueueItem | null>(null);
+  const [modalDraft, setModalDraft] = useState<CommunicationDraft | null>(null);
+
+  const handleGenerateDraft = useCallback((item: CadenceQueueItem) => {
+    const draft = buildDraftFromCadenceItem(item, leads, clients);
+    setModalDraft(draft);
+    setDraftItem(item);
+  }, [leads, clients]);
+
+  const handleDraftAction = useCallback((action: DraftAction) => {
+    if (!modalDraft) return;
+    if (action.type === 'set_channel') {
+      setModalDraft(d => d ? { ...d, activeChannel: action.channel } : d);
+    } else if (action.type === 'edit_body') {
+      setModalDraft(d => d ? { ...d, editedBodies: { ...d.editedBodies, [action.channel]: action.body }, status: 'reviewed' } : d);
+    } else if (action.type === 'mark_used') {
+      setModalDraft(d => d ? { ...d, status: 'used', usedChannel: action.channel } : d);
+    } else if (action.type === 'discard') {
+      setModalDraft(d => d ? { ...d, status: 'discarded' } : d);
+    } else if (action.type === 'restore') {
+      setModalDraft(d => d ? { ...d, status: 'draft' } : d);
+    }
+  }, [modalDraft]);
+
   return (
-    <div className="flex flex-col h-full bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex flex-col h-full bg-zinc-50 dark:bg-zinc-950 relative">
       {/* Header */}
       <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -839,14 +883,15 @@ export function CadenceWorkspace() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        {activeTab === 'overview' && <OverviewTab state={state} dispatch={dispatch} />}
-        {activeTab === 'queue' && <QueueTab state={state} dispatch={dispatch} />}
+        {activeTab === 'overview' && <OverviewTab state={state} dispatch={dispatch} onGenerateDraft={handleGenerateDraft} />}
+        {activeTab === 'queue' && <QueueTab state={state} dispatch={dispatch} onGenerateDraft={handleGenerateDraft} />}
         {activeTab === 'sales' && (
           <CategoryTab
             items={state.byCategory.sales}
             dispatch={dispatch}
             emptyIcon={TrendingUp}
             emptyMessage="No sales cadence items in this period."
+            onGenerateDraft={handleGenerateDraft}
           />
         )}
         {activeTab === 'onboarding' && (
@@ -855,6 +900,7 @@ export function CadenceWorkspace() {
             dispatch={dispatch}
             emptyIcon={Zap}
             emptyMessage="No onboarding reminders at this time."
+            onGenerateDraft={handleGenerateDraft}
           />
         )}
         {activeTab === 'accounts' && (
@@ -863,6 +909,7 @@ export function CadenceWorkspace() {
             dispatch={dispatch}
             emptyIcon={Users}
             emptyMessage="No account or churn reminders detected."
+            onGenerateDraft={handleGenerateDraft}
           />
         )}
         {activeTab === 'referrals' && (
@@ -871,11 +918,47 @@ export function CadenceWorkspace() {
             dispatch={dispatch}
             emptyIcon={UserPlus}
             emptyMessage="No referral windows detected right now."
+            onGenerateDraft={handleGenerateDraft}
           />
         )}
         {activeTab === 'nudges' && <NudgesTab nudges={state.nudges} />}
         {activeTab === 'inspection' && <InspectionTab state={state} />}
       </div>
+
+      {/* Draft Modal Overlay */}
+      {draftItem && modalDraft && (
+        <div
+          data-testid="cadence-draft-modal"
+          className="absolute inset-0 bg-black/40 dark:bg-black/60 z-50 flex items-start justify-end p-4 overflow-y-auto"
+          onClick={e => { if (e.target === e.currentTarget) { setDraftItem(null); setModalDraft(null); } }}
+        >
+          <div className="w-full max-w-xl mt-16">
+            <div className="bg-zinc-100 dark:bg-zinc-950 rounded-xl overflow-hidden shadow-2xl">
+              <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-violet-600" />
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Communication Draft</span>
+                  <span className="text-xs text-zinc-500">— {draftItem.entityName}</span>
+                </div>
+                <button
+                  data-testid="cadence-draft-modal-close"
+                  onClick={() => { setDraftItem(null); setModalDraft(null); }}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="overflow-y-auto max-h-[75vh]">
+                <CommsDraftPanel
+                  draft={modalDraft}
+                  dispatch={handleDraftAction}
+                  compact
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

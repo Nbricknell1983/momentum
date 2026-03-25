@@ -1,0 +1,149 @@
+The Cadence + Automation Layer is now complete and live.
+
+Next, I want to build the Communication Drafting Layer.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, and Cadence + Automation
+- The cadence layer can already determine who needs attention, why, when, and what asset to reference
+- What is missing is the layer that turns those recommendations into usable communication drafts for sales and account management
+
+GOAL
+Build the Communication Drafting Layer so Momentum can:
+- generate follow-up drafts from cadence items
+- create email, SMS, call prep, and voicemail drafts
+- tailor drafts to stage, urgency, and account context
+- reference the right asset (strategy, roadmap, milestone, blocker, opportunity)
+- support sales follow-up, onboarding reminders, approval nudges, churn intervention, upsell prompts, and referral asks
+- keep all drafts explainable and editable by humans before use
+
+IMPORTANT
+This must be:
+- practical
+- commercially useful
+- stage-aware
+- context-aware
+- premium in UX
+- explainable
+- human-reviewed by default
+
+DO NOT:
+- auto-send external messages yet
+- generate vague generic templates
+- hide why a draft was created
+- produce one-size-fits-all messaging
+- duplicate a full email client
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Communication drafting domain model
+Create typed models for at least:
+- communicationDraft
+- communicationThreadContext
+- communicationIntent
+- communicationVariant
+- communicationChannelDraft
+- communicationPromptContext
+- communicationReviewState
+- communicationAssetReference
+- communicationOutcomeGoal
+
+2. Draft context builder
+Build a service that assembles the right draft context from:
+- cadence item
+- lead/client/account state
+- sales stage
+- onboarding/provisioning state
+- expansion signals
+- churn-risk signals
+- referral timing
+- linked assets (strategy report, roadmap, milestone, proposal, portal, etc.)
+
+3. Draft generation engine
+Create a drafting service that can generate:
+- email draft
+- SMS draft
+- call prep summary
+- voicemail script
+
+Each draft should include:
+- purpose
+- tone
+- recommended CTA
+- key reference point
+- optional short and long versions where appropriate
+
+4. Stage-aware communication intents
+Support intents such as:
+- discovery follow-up
+- strategy review follow-up
+- proposal acceptance nudge
+- onboarding completion reminder
+- approval reminder
+- dormant lead reactivation
+- churn-risk intervention
+- upsell conversation opener
+- referral ask
+
+5. Draft review UX
+Build a premium internal interface where users can:
+- preview drafts
+- switch channel
+- choose between variants
+- edit before use
+- copy content
+- mark as used
+- regenerate if needed
+
+6. Cadence integration
+Integrate drafting directly into the cadence queue and detail views so each cadence item can show:
+- draft available
+- recommended channel
+- suggested wording
+- linked asset reference
+- call prep notes if relevant
+
+7. Workspace integration
+Integrate the drafting layer with:
+- Lead workspace
+- Sales Execution Hub
+- Expansion workspace
+- Cadence workspace
+- Client/account views where relevant
+
+8. Draft explanation layer
+For each draft, show:
+- why it was created
+- what signal triggered it
+- what outcome it is aiming for
+- why the recommended channel was chosen
+
+9. Admin and inspection support
+Create inspection views/services for:
+- draft history
+- what context generated the draft
+- which variant was used
+- whether it was edited
+- which cadence item or signal it came from
+
+IMPORTANT RULES
+- Keep drafts human-reviewed by default
+- Keep everything explainable
+- Keep drafts tied to real context and assets
+- Do not auto-send yet
+- Make the system useful in real sales/account conversations, not theoretical
+- If AI drafting dependencies are missing, create a clean boundary and list what is missing
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- communication drafting domain model
+- draft context builder
+- draft generation engine
+- draft review UX

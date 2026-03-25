@@ -88,6 +88,23 @@ Preferred communication style: Simple, everyday language.
 - **Referral Timing Engine**: Scores each client's referral readiness, selects ask style, and generates a conversation angle with suggested timing.
 - **Expansion Workspace**: 6-tab premium view (Overview / Opportunities / Churn Risks / Referrals / Actions / Inspection) for account managers.
 
+### Communication Drafting Layer
+- **Domain Model**: Defines typed interfaces for `CommunicationDraft`, `CommunicationChannelDraft`, `CommunicationIntent`, `CommunicationAssetReference`, `CommunicationOutcomeGoal`, `CommunicationVariant`, and `CommsDraftInspection`.
+- **Context Builder**: Assembles draft context from cadence item, entity state, stage, assets, and signals using `buildDraftFromCadenceItem()` and `buildDraftsFromQueue()`.
+- **Template Engine**: Generates entity-specific drafts across 4 channels (Email / SMS / Call Prep / Voicemail) for 12 communication intents — proposal nudge, verbal commit chase, discovery follow-up, reactivation, approval reminder, churn intervention, upsell opener, referral ask, and more.
+- **CommsDraftPanel**: Embeddable per-draft review panel with channel tabs, inline editing, copy, mark-as-used, discard, restore, and full explanation section (why created, signal, channel rationale, outcome).
+- **CommsWorkspace**: 5-tab standalone workspace (Overview / All Drafts / Sales / Accounts / Inspection). Derives all drafts from the cadence queue. Filterable by intent, status, and channel.
+- **Cadence Integration**: Each cadence item card has a "Draft" button that opens an in-context draft modal with the CommsDraftPanel pre-loaded with channel drafts for that specific item.
+- **Routes**: `/comms` (manager-gated), `Mail` icon in manager nav sidebar.
+
+### Cadence + Automation Layer
+- **Domain Model**: 15 typed interfaces covering cadence rules, triggers, queue items, urgency levels, category groups, follow-up plans, automated nudges, and override maps.
+- **Rule Engine**: 14 derivation rules (7 lead, 7 client) firing from stage, inactivity, proposal status, delivery blocks, churn risk, upsell readiness, and referral timing.
+- **Reminder Generator**: Each item includes why it exists, what triggered it, stage context, what to do, asset to reference, suggested wording, and supporting evidence.
+- **CadenceWorkspace**: 8-tab premium workspace (Overview / Queue / Sales / Onboarding / Accounts / Referrals / Nudges / Inspection) at `/cadence` (manager-gated, Bell icon).
+- **Safe Controls**: Dismiss, snooze (2d/5d/1w/2w), complete, and restore per item. Session state via useReducer. Upgradeable to Firestore without domain model changes.
+- **Draft Integration**: "Draft" button on every cadence card opens CommsDraftPanel in a slide-over modal.
+
 ### Sales Execution Layer
 - **Domain Model**: Extends `salesIntelligenceTypes.ts` with models for `SalesMeetingPrep`, `SalesFollowUpRecommendation`, `StageActionPlan`, and `PipelineMomentumScore`.
 - **Static Objection Bank**: Contains scripted objection patterns with detailed response guidance.
