@@ -70,6 +70,14 @@ Preferred communication style: Simple, everyday language.
 - **Functionality**: Derives `AccountGrowthSignal`, `ExpansionOpportunity`, `ChurnRiskSignal`, `ReferralOpportunity`, `ExpansionNextBestAction`, and `ExpansionPlay` from live client data without AI calls.
 - **Key Features**: Upsell/Cross-sell engine, Churn-Risk detection, Referral Timing engine, and a 6-tab premium workspace for account managers.
 
+### Autopilot Policy Layer
+- **Domain Model** (`autopilotTypes.ts`): Defines `AutopilotSafetyLevel` (low/medium/high/restricted), `AutopilotOutcome` (auto_allowed/approval_required/recommendation_only/blocked), `AutopilotGlobalMode` (active/approval_only/recommendations_only/off), `AutopilotRule`, `AutopilotOrgPolicy`, `AutopilotDecision`, `AutopilotAuditEvent`, `AutopilotState`. 12 default rules across all action types.
+- **Policy Engine** (`autopilotEngine.ts`): Pure deterministic classifier. Takes org policy + live data → produces `AutopilotDecision[]`. Evaluates: rule safety level, escalation conditions (health/churn/stage), global mode override. Explains every decision and states what would need to change for the outcome to differ.
+- **AutopilotWorkspace** (`AutopilotWorkspace.tsx`): Premium 5-tab workspace: Policy Settings (global mode selector + per-rule enable/outcome toggles), Live Decisions (all current decisions grouped by outcome), Pending Approval (actions awaiting human review), Blocked (suppressed actions with explanations), Audit Trail (Firestore-backed immutable log).
+- **Policy Persistence**: Policy stored in Firestore `orgs/{orgId}/autopilotPolicy/policy`. Loads on mount, merges new default rules if missing. Audit events logged to `orgs/{orgId}/autopilotAudit`.
+- **Default safe state**: Global mode defaults to `approval_only` — nothing auto-runs until explicitly enabled. Low-risk rules are `auto_allowed` by default; high-risk rules are `approval_required` or `recommendation_only`.
+- **Routes**: `/autopilot` (manager-gated). `SlidersHorizontal` icon in sidebar after Referral Engine.
+
 ### Referral Engine
 - **Domain Model** (`referralTypes.ts`): Defines `ReferralReadinessSignal`, `ReferralCandidate`, `ReferralAsk`, `ReferralLeadLink`, `ReferralMomentumState`, `ReferralEvidence`. Six ask styles: `milestone_based`, `direct_intro`, `who_else`, `soft_mention`, `testimonial_bridge`, `follow_up`.
 - **Referral Adapter** (`referralAdapter.ts`): Pure derivation from live client data. Scores each client 0–100 across 6 weighted signals (health, delivery, churn risk, contact timing, live channels, upsell readiness). Selects the most appropriate ask style, generates conversation angle and evidence points, and flags suppression reasons when conditions are not right.

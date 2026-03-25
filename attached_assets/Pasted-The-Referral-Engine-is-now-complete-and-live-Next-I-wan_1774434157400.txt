@@ -1,0 +1,161 @@
+The Referral Engine is now complete and live.
+
+Next, I want to build the True Autopilot Policy Layer.
+
+Context:
+- Momentum already has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, Communication Drafting, Executive Reporting, Automation Execution, and the Referral Engine
+- The system can already detect next best actions, generate drafts, queue communications, and identify upsell, churn-risk, and referral opportunities
+- What is missing is the policy layer that decides what actions can run automatically, what requires approval, and what must remain recommendation-only
+
+GOAL
+Build the True Autopilot Policy Layer so Momentum can:
+- classify actions by automation safety
+- support org-level and workflow-level automation rules
+- auto-progress low-risk actions when allowed
+- require approval for medium-risk actions
+- suppress or recommend only for high-risk actions
+- make automation explainable, auditable, and configurable
+
+IMPORTANT
+This must be:
+- safe
+- explainable
+- auditable
+- configurable
+- stage-aware
+- account-aware
+- operationally useful
+
+DO NOT:
+- auto-send everything by default
+- create hidden automation
+- bypass approval where risk is meaningful
+- make policies vague
+- create policy logic that cannot be inspected later
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Autopilot domain model
+Create typed models for at least:
+- autopilotPolicy
+- autopilotRule
+- autopilotDecision
+- autopilotExecution
+- autopilotApprovalRequirement
+- autopilotSuppression
+- autopilotAuditEvent
+- autopilotScope
+- autopilotSafetyLevel
+- autopilotState
+
+2. Policy classification engine
+Build a service that classifies actions into categories such as:
+- auto_allowed
+- approval_required
+- recommendation_only
+- blocked
+
+Policy should consider:
+- action type
+- sales stage
+- account health
+- churn risk
+- referral timing
+- cadence urgency
+- communication channel
+- client-facing sensitivity
+- org settings
+- module readiness
+- whether the action affects external communication
+
+3. Safety levels
+Define clear safety levels such as:
+- low risk
+- medium risk
+- high risk
+- restricted
+
+Examples:
+- low risk: internal reminder generation, internal task creation, queue refresh
+- medium risk: draft generation, reminder queueing, scheduling a follow-up item
+- high risk: sending client-facing communication, upsell ask, referral ask
+- restricted: anything policy-disabled or blocked by context
+
+4. Org-level policy controls
+Build policy settings so each org can configure:
+- what is allowed automatically
+- what requires approval
+- what is disabled
+- channel-by-channel rules
+- reminder category rules
+- referral/upsell automation boundaries
+- communication execution boundaries
+
+5. Autopilot decision engine
+For every candidate action, generate:
+- policy outcome
+- why it was classified that way
+- what rule applied
+- whether approval is required
+- what would need to change for it to auto-run
+
+6. Approval-aware execution integration
+Connect the policy layer with existing systems:
+- cadence
+- communication drafting
+- automation execution
+- expansion
+- referral engine
+
+So the system can:
+- auto-create low-risk actions
+- raise approval requests for medium/high-risk actions
+- suppress blocked actions cleanly
+- log everything
+
+7. Autopilot workspace UX
+Build a premium internal workspace showing:
+- active policies
+- recently auto-run actions
+- approval-required actions
+- blocked/suppressed actions
+- policy decision audit trail
+- suggested policy improvements
+
+8. Policy editing UX
+Create internal controls for:
+- enable/disable policy rules
+- set safety levels
+- choose auto vs approval vs recommendation
+- define allowed channels
+- define stage-based boundaries
+
+9. Audit and inspection support
+Create inspection views/services for:
+- why an action was auto-run
+- why an action was blocked
+- what policy rule applied
+- what approval gate was triggered
+- execution history by policy
+
+IMPORTANT RULES
+- Keep external communication human-reviewed by default unless explicitly enabled
+- Keep every autopilot decision explainable
+- Keep all automation tied to real system context and existing domain layers
+- Do not create hidden background actions without audit events
+- Build this as a policy layer on top of the existing system, not a replacement for it
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- autopilot domain model
+- policy classification engine
+- safety levels
+- org-level policy controls
