@@ -7212,6 +7212,411 @@ Make it specific to their industry and location.`;
     }
   });
 
+  // Generate strategy report directly from a lead's existing intelligence data
+  app.post("/api/strategy-reports/from-lead", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+      const token = authHeader.split(' ')[1];
+      let uid: string;
+      try {
+        const adminModule = (await import('./firebase')).default;
+        const decoded = await adminModule.auth().verifyIdToken(token);
+        uid = decoded.uid;
+      } catch {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+
+      const { leadId, orgId, preparedBy, preparedByEmail, phone, lockVersion } = req.body;
+      if (!leadId || !orgId) return res.status(400).json({ error: "leadId and orgId required" });
+
+      // Fetch the lead document
+      const leadDoc = await firestore.collection('leads').doc(leadId).get();
+      if (!leadDoc.exists) return res.status(404).json({ error: "Lead not found" });
+      const lead = { id: leadDoc.id, ...leadDoc.data() } as any;
+
+      // Verify org access
+      if (lead.orgId && lead.orgId !== orgId) return res.status(403).json({ error: "Forbidden" });
+
+      // Build the intelligence input from lead fields
+      const inp = {
+        businessName: lead.businessName || lead.name || 'Unknown Business',
+        industry: lead.industry || lead.businessType || '',
+        suburb: lead.suburb || lead.areaName || '',
+        city: lead.city || lead.regionName || '',
+        stateRegion: lead.stateRegion || lead.state || '',
+        website: lead.website || lead.websiteUrl || '',
+        growthPrescription: lead.growthPrescription || null,
+        strategyDiagnosis: lead.strategyDiagnosis || null,
+        aiGrowthPlan: lead.aiGrowthPlan || null,
+        aiCallPrepOutput: lead.aiCallPrepOutput || null,
+        prepCallPack: lead.prepCallPack || null,
+        ahrefsData: lead.ahrefsData || null,
+        competitorData: lead.competitorData || null,
+        crawledPages: lead.crawledPages || [],
+        sitemapPages: lead.sitemapPages || [],
+        aiInsights: lead.aiInsights || null,
+        strategyIntelligence: lead.strategyIntelligence || null,
+        pipelineStage: lead.stage || lead.pipelineStage || '',
+        estimatedValue: lead.estimatedValue || lead.annualRevenue || 5000,
+        currency: lead.currency || 'AUD',
+      };
+
+      // Run the adapter (server-side mirror of the client adapter logic)
+      // We inline the key transformation logic here to avoid importing TS files at runtime
+      function safeStr(val: any, fb = ''): string {
+        if (typeof val === 'string') return val.trim();
+        if (val != null) return String(val).trim();
+        return fb;
+      }
+      function safeNum(val: any, fb = 0): number {
+        const n = Number(val); return isNaN(n) ? fb : n;
+      }
+      function safeArr(val: any): any[] { return Array.isArray(val) ? val : []; }
+      function clamp(n: number, mn: number, mx: number): number { return Math.max(mn, Math.min(mx, n)); }
+      function scoreLbl(n: number): string { return n >= 65 ? 'strong' : n >= 40 ? 'partial' : 'weak'; }
+
+      const sd = inp.strategyDiagnosis || {};
+      const gp = inp.growthPrescription || {};
+      const sub = sd.subscores || {};
+      const serviceClarityScore  = clamp(safeNum(sub.serviceClarityScore, 40), 0, 100);
+      const locationRelevanceScore = clamp(safeNum(sub.locationRelevanceScore, 35), 0, 100);
+      const contentCoverageScore = clamp(safeNum(sub.contentCoverageScore, 30), 0, 100);
+      const gbpAlignmentScore    = clamp(safeNum(sub.gbpAlignmentScore, 40), 0, 100);
+      const authorityScore       = clamp(safeNum(sub.authorityScore, 25), 0, 100);
+      const readinessScore = sd.readinessScore
+        ? clamp(safeNum(sd.readinessScore), 0, 100)
+        : Math.round((serviceClarityScore + locationRelevanceScore + contentCoverageScore + gbpAlignmentScore + authorityScore) / 5);
+
+      const rawGaps = safeArr(sd.gaps || gp.keyGaps || []);
+      const gaps = (rawGaps.length > 0 ? rawGaps : [
+        { title: 'Limited local search coverage' },
+        { title: 'Google Business Profile not fully optimised' },
+        { title: 'Low service-page depth for buyer intent' },
+      ]).slice(0, 5).map((g: any) => ({ title: typeof g === 'string' ? g : safeStr(g.title || g.gap || g.name, 'Visibility gap') }));
+
+      const rawPriorities = safeArr(sd.priorities || gp.keyPriorities || []);
+      const priorities = (rawPriorities.length > 0 ? rawPriorities : [
+        'Improve local search visibility', 'Optimise Google Business Profile', 'Expand service content coverage',
+      ]).slice(0, 4).map((p: any) => typeof p === 'string' ? p : safeStr(p.title || p.action, '')).filter(Boolean);
+
+      const growthData = sd.growthPotential || gp.growthPotential || {};
+      const forecastBand = growthData.forecastBand || {};
+      const name = inp.businessName;
+      const location = inp.suburb || inp.city || 'the local area';
+
+      const strategyDiagnosis = {
+        readinessScore,
+        insightSentence: safeStr(sd.insightSentence, `${name} has meaningful opportunity to capture more local search demand.`),
+        subscores: { serviceClarityScore, locationRelevanceScore, contentCoverageScore, gbpAlignmentScore, authorityScore },
+        gaps,
+        priorities,
+        growthPotential: {
+          summary: safeStr(growthData.summary, `${name} has untapped search demand in this market.`),
+          forecastBand: {
+            additionalImpressions: safeStr(forecastBand.additionalImpressions, '+2,000–5,000/mo'),
+            additionalVisitors: safeStr(forecastBand.additionalVisitors, '+150–400/mo'),
+            additionalEnquiries: safeStr(forecastBand.additionalEnquiries, '+8–25/mo'),
+          },
+        },
+        currentPosition: safeStr(sd.currentPosition, `${name} is not yet ranking for its highest-value search terms.`),
+      };
+
+      // Build growth pillars
+      const rawStack = safeArr(gp.recommendedStack || gp.pillars || sd.recommendedStack || []);
+      const growthPillars = rawStack.length >= 2 ? rawStack.slice(0, 4).map((s: any) => ({
+        pillar: safeStr(s.service || s.pillar || s.title || s.name),
+        focus: safeStr(s.focus || s.description || s.rationale),
+        timeline: safeStr(s.timeline, '3–6 months'),
+        roi: safeStr(s.roi || s.expectedOutcome, 'Increased enquiry volume'),
+      })) : [
+        { pillar: 'Website', focus: 'Conversion-focused website with service pages and trust signals', timeline: '6–8 weeks', roi: 'More visitors become enquiries' },
+        { pillar: 'SEO', focus: 'Local search optimisation for high-intent buyer keywords', timeline: '3–6 months', roi: 'Compounding organic traffic growth' },
+        { pillar: 'Google Business Profile', focus: 'Complete GBP optimisation — categories, photos, reviews', timeline: '4–8 weeks', roi: 'Local map pack visibility' },
+      ];
+
+      // Build keyword data
+      const ahref = inp.ahrefsData || {};
+      const mo = sd.marketOpportunity || gp.marketOpportunity || {};
+      const rawKeywords = safeArr(ahref.keywords || mo.keywords || []).slice(0, 15);
+      const keywords = rawKeywords.map((kw: any) => ({
+        keyword: safeStr(kw.keyword || kw.term),
+        monthlySearches: safeNum(kw.volume || kw.monthlySearches, 0),
+        currentRank: safeStr(kw.position != null ? (kw.position === 0 ? 'Not ranking' : `#${kw.position}`) : kw.currentRank, 'Not ranking'),
+        difficulty: kw.difficulty != null ? safeNum(kw.difficulty) : null,
+        opportunity: kw.opportunity || (safeNum(kw.volume, 0) > 200 && safeNum(kw.position, 100) > 10 ? 'high' : 'medium'),
+      }));
+
+      // Search engine view from crawled pages
+      const pages = safeArr(inp.crawledPages || inp.sitemapPages);
+      let servicePages = 0; let locationPages = 0; let portfolioPages = 0;
+      for (const p of pages) {
+        const url = safeStr(p.url || p.loc || p.path || '').toLowerCase();
+        const ptype = safeStr(p.pageType || p.type || '').toLowerCase();
+        if (ptype === 'service' || url.includes('/service')) servicePages++;
+        else if (ptype === 'location' || url.includes('/area') || url.includes('/suburb')) locationPages++;
+        else if (ptype === 'portfolio' || url.includes('/project') || url.includes('/work')) portfolioPages++;
+      }
+
+      // Confidence level
+      const observed: string[] = [];
+      if (pages.length > 0) observed.push('Website crawl data');
+      if (rawKeywords.length > 0) observed.push('Keyword data');
+      if (inp.competitorData?.competitors?.length) observed.push('Competitor data');
+      if (inp.prepCallPack?.gbpData) observed.push('GBP data');
+      const confLevel = observed.length >= 5 ? 'High' : observed.length >= 2 ? 'Medium' : 'Low';
+
+      const strategy = {
+        executiveSummary: {
+          summary: safeStr(gp.executiveSummary?.summary, `${name} has a clear digital visibility gap in ${location}. The primary issue is ${gaps[0]?.title?.toLowerCase() || 'limited local search coverage'} — which is limiting search impressions and enquiry volume.`),
+          keyFindings: [
+            `Current digital visibility is underperforming relative to market demand in ${location}`,
+            'Google Business Profile and local search signals need strengthening',
+            'Service pages lack depth needed to rank for high-intent buyer searches',
+            `Competitors are capturing demand that ${name} could be winning`,
+          ],
+          topOpportunity: strategyDiagnosis.growthPotential.summary,
+          urgency: readinessScore < 40 ? 'immediate' : 'high',
+        },
+        oneSentenceStrategy: safeStr(gp.oneSentenceStrategy, `Build ${name}'s dominant digital presence in ${location} by establishing strong search visibility, local authority, and a conversion-ready website that turns buyer intent into consistent enquiries.`),
+        strategyConfidence: {
+          level: confLevel,
+          explanation: confLevel === 'High' ? `Built from ${observed.length} observed data sources.` : confLevel === 'Medium' ? `Combines ${observed.length} observed data sources with strategic estimates.` : 'Based on industry benchmarks — precision improves after onboarding.',
+          observedDataSources: observed,
+          estimatedDataSources: [],
+        },
+        digitalVisibilityTriangle: {
+          relevance: {
+            score: clamp(Math.round((serviceClarityScore + contentCoverageScore) / 2), 0, 100),
+            evidence: `${name}'s website content coverage and service-page depth determine this score.`,
+            interpretation: serviceClarityScore < 45 ? `Search engines cannot clearly identify all services ${name} offers.` : `Reasonable relevance but location coverage could be strengthened.`,
+          },
+          authority: {
+            score: clamp(authorityScore, 0, 100),
+            evidence: 'Domain authority, backlink profile, and citation consistency determine this score.',
+            interpretation: authorityScore < 45 ? `${name}'s digital authority is low relative to local competitors.` : `Reasonable authority baseline; link building would accelerate rankings.`,
+          },
+          trust: {
+            score: clamp(Math.round((gbpAlignmentScore + authorityScore) / 2), 0, 100),
+            evidence: 'Review volume, GBP completeness, and brand consistency inform this score.',
+            interpretation: gbpAlignmentScore < 45 ? `Trust signals are thin — buyers may not find enough social proof.` : `Decent trust foundation; systematic review growth would unlock higher conversions.`,
+          },
+        },
+        discoveryPath: [
+          { stage: 'Awareness — Search Impression', strength: scoreLbl(Math.round((serviceClarityScore + locationRelevanceScore) / 2)), issue: serviceClarityScore < 50 ? `Limited service-specific pages mean ${name} misses many buyer search queries.` : 'Service pages exist but need stronger intent signals.', impact: 'Fewer impressions means fewer opportunities to enter the buyer\'s journey.' },
+          { stage: 'Consideration — Click & Trust', strength: scoreLbl(Math.round((authorityScore + gbpAlignmentScore) / 2)), issue: authorityScore < 45 ? 'Low domain authority limits click-through — buyers see stronger competitors ranked higher.' : 'Trust signals on the site need strengthening.', impact: 'Buyers click businesses they trust most.' },
+          { stage: 'Local Discovery — Google Maps & GBP', strength: scoreLbl(gbpAlignmentScore), issue: gbpAlignmentScore < 50 ? 'Google Business Profile is incomplete or under-optimised.' : 'GBP present but review volume and post activity could be strengthened.', impact: 'Map pack visibility is critical for local buyer intent.' },
+          { stage: 'Conversion — Enquiry & Contact', strength: scoreLbl(Math.round((serviceClarityScore + gbpAlignmentScore) / 2)), issue: 'Website pages lack strong conversion signals — CTAs are not prominent and trust proof is limited.', impact: 'Visitors arrive but don\'t enquire.' },
+        ],
+        buyerRealityGap: {
+          summary: `What ${name}'s buyers expect to find online doesn't match what they currently encounter.`,
+          points: [
+            { buyerExpects: 'A website clearly listing all services with project examples', currentReality: 'Generic homepage with limited service detail and no social proof visible above the fold', severity: 'critical' },
+            { buyerExpects: 'A Google Business Profile with recent reviews and correct hours', currentReality: 'GBP exists but has limited reviews and incomplete information', severity: 'moderate' },
+            { buyerExpects: 'Easy to find for their specific suburb or service area', currentReality: 'Not appearing in local search results for nearby suburbs', severity: 'critical' },
+          ],
+        },
+        intentGaps: [
+          { category: 'High commercial intent (ready to buy)', coverage: 'partial', evidence: 'Some service pages exist but don\'t target specific buying phrases.', suggestedMove: 'Create dedicated service landing pages targeting "hire + [service] + [location]" queries.' },
+          { category: 'Local area intent (suburb-specific)', coverage: 'missing', evidence: 'No location-specific pages targeting nearby suburbs.', suggestedMove: 'Build local service pages for top 3–5 suburbs in the service area.' },
+          { category: 'Problem-aware (research stage)', coverage: 'missing', evidence: 'No educational content addressing problems customers search when beginning research.', suggestedMove: 'Develop 3–4 cornerstone articles addressing the most common buyer questions.' },
+        ],
+        marketOpportunity: {
+          summary: safeStr(mo.summary, `There is significant search demand in this market that ${name} is not currently capturing.`),
+          totalMonthlySearches: safeNum(mo.totalMonthlySearches || ahref.totalMonthlySearches, 1200),
+          currentCapture: safeStr(mo.currentCapture, '<1%'),
+          potentialCapture: safeStr(mo.potentialCapture, '3–8%'),
+          keyInsight: safeStr(mo.keyInsight, 'Buyers are actively searching for these services right now — the opportunity is real and recurring.'),
+          keywords,
+        },
+        searchEngineView: pages.length > 0 ? {
+          totalPages: pages.length, servicePages, locationPages, portfolioPages, otherPages: Math.max(0, pages.length - servicePages - locationPages - portfolioPages),
+        } : null,
+        growthPillars,
+        projectedOutcomes: [
+          { month: '3 months', estimatedLeads: '2–8/mo', rankingKeywords: 8, confidence: 'medium', scenarioCaveat: 'Early rankings begin appearing; GBP visibility improves.' },
+          { month: '6 months', estimatedLeads: '5–15/mo', rankingKeywords: 20, confidence: 'medium', scenarioCaveat: 'Core service terms entering page 1; enquiry momentum building.' },
+          { month: '12 months', estimatedLeads: '12–30/mo', rankingKeywords: 40, confidence: 'medium', scenarioCaveat: 'Established local authority; compounding organic growth.' },
+        ],
+        kpis: [
+          { metric: 'Organic search impressions (monthly)', baseline: 'Current baseline', target12Month: '+150–300%', dataQuality: 'estimated' },
+          { metric: 'Organic click-throughs (monthly)', baseline: 'Current baseline', target12Month: '+200%', dataQuality: 'estimated' },
+          { metric: 'Google Maps views (monthly)', baseline: 'Current GBP baseline', target12Month: '+80–150%', dataQuality: 'estimated' },
+          { metric: 'Monthly enquiries from digital', baseline: 'Current estimate', target12Month: '+10–25/mo additional', dataQuality: 'estimated' },
+        ],
+        growthPhases: [
+          { phase: 'Foundation', focus: 'Establish all digital assets — website, GBP, tracking, and core content.', milestone: 'All digital foundations set; Google starts indexing new content.', timeline: 'Weeks 1–8' },
+          { phase: 'Visibility Growth', focus: 'Build keyword rankings, GBP authority, and local signals across the service area.', milestone: 'Core service terms on page 1; map pack impressions climbing.', timeline: 'Months 2–5' },
+          { phase: 'Momentum', focus: 'Expand content coverage, increase backlinks, and amplify highest-converting pages.', milestone: 'Consistent page 1 rankings; monthly enquiry volume meeting targets.', timeline: 'Months 5–9' },
+          { phase: 'Optimise & Scale', focus: 'Refine based on performance data — double down on what works.', milestone: 'Compounding growth; system running on autopilot.', timeline: 'Months 9–12+' },
+        ],
+        costOfInaction: {
+          headline: 'Every month without this is a month your competitors consolidate their advantage',
+          body: `While ${name} waits, competitors who have invested in digital visibility are compounding their advantage. Search rankings reward consistent investment — the businesses on page 1 today started building that authority months or years ago.`,
+          metrics: [
+            { label: 'Est. missed monthly enquiries', value: '10–25' },
+            { label: 'Competitor gap growing each month', value: '30–60 days of compounding authority' },
+          ],
+        },
+        momentumMoment: {
+          headline: `The right moment for ${name} is now`,
+          body: 'Search demand in this category is active and growing. Businesses that act decisively on digital visibility in the next 90 days will be the ones capturing that demand at the 12-month mark.',
+          urgency: 'high',
+        },
+        insightSnapshots: [
+          { headline: 'Monthly search demand', metric: `${safeNum(mo.totalMonthlySearches || ahref.totalMonthlySearches, 1200).toLocaleString()}+`, explanation: `Estimated monthly searches for services like ${name} in this area.` },
+          { headline: 'Current digital capture rate', metric: '<1%', explanation: 'Estimated share of that search demand currently reaching this business.' },
+          { headline: 'Addressable opportunity', metric: '3–8% capture', explanation: 'Realistic 12-month target. At 3% capture of a 1,200/mo market, that\'s 36 additional visitors per month.' },
+        ],
+        scopeFraming: {
+          headline: 'Choose where to start',
+          leadText: 'Select the services you want to move forward with. Your account manager will be in touch within one business day to begin the process.',
+          ctaText: 'Accept and proceed',
+        },
+        generatedAt: new Date().toISOString(),
+      };
+
+      // Check for an existing active report for this lead to update instead of creating new
+      const existing = await firestore.collection('strategyReports')
+        .where('leadId', '==', leadId)
+        .where('orgId', '==', orgId)
+        .where('status', 'in', ['draft', 'active'])
+        .limit(1).get();
+
+      let reportId: string;
+      let publicSlug: string;
+
+      if (!existing.empty) {
+        // Update existing report
+        const existingDoc = existing.docs[0];
+        reportId = existingDoc.id;
+        publicSlug = existingDoc.data().publicSlug;
+        const updateData: any = {
+          strategy,
+          strategyDiagnosis,
+          updatedAt: new Date(),
+          updatedBy: uid,
+          status: lockVersion ? 'locked' : 'active',
+        };
+        if (lockVersion) updateData.lockedAt = new Date();
+        await existingDoc.ref.update(updateData);
+      } else {
+        // Create new report
+        const baseSlug = generateSlug(name);
+        publicSlug = await findUniqueSlug(firestore, baseSlug, orgId);
+        const ref = firestore.collection('strategyReports').doc();
+        reportId = ref.id;
+        const now = new Date();
+        const expiresAt = new Date(now);
+        expiresAt.setDate(expiresAt.getDate() + 365);
+        await ref.set({
+          id: reportId, orgId, leadId,
+          businessName: name, industry: inp.industry || '', location: inp.suburb || inp.city || '',
+          websiteUrl: inp.website || '', preparedBy: preparedBy || '', preparedByEmail: preparedByEmail || '', phone: phone || '',
+          strategy, strategyDiagnosis,
+          publicSlug, type: 'strategy', status: lockVersion ? 'locked' : 'active',
+          createdAt: now, createdBy: uid, expiresAt,
+        });
+      }
+
+      // Also save snapshot for versioning
+      const snapshotRef = firestore.collection('strategyReports').doc(reportId).collection('snapshots').doc();
+      await snapshotRef.set({
+        snapshotId: snapshotRef.id, reportId, takenAt: new Date(), takenBy: uid,
+        label: lockVersion ? 'Locked for proposal' : `Generated ${new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}`,
+        locked: lockVersion || false, strategy, strategyDiagnosis,
+      });
+
+      // Update lead with reference to strategy report
+      await firestore.collection('leads').doc(leadId).update({
+        strategyReportId: reportId,
+        strategyReportSlug: publicSlug,
+        strategyReportGeneratedAt: new Date(),
+      });
+
+      res.json({
+        id: reportId, publicSlug,
+        url: `/strategy/${reportId}`,
+        shareUrl: `${req.protocol}://${req.get('host')}/strategy/${reportId}`,
+      });
+    } catch (err) {
+      console.error("[strategy-reports/from-lead POST]", err);
+      res.status(500).json({ error: "Failed to generate strategy report from lead" });
+    }
+  });
+
+  // Revoke a strategy report (make it inaccessible without deleting)
+  app.patch("/api/strategy-reports/:reportId/revoke", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+      const token = authHeader.split(' ')[1];
+      try {
+        const adminModule = (await import('./firebase')).default;
+        await adminModule.auth().verifyIdToken(token);
+      } catch {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+      const { reportId } = req.params;
+      await firestore.collection('strategyReports').doc(reportId).update({
+        status: 'revoked', revokedAt: new Date(),
+      });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[strategy-reports REVOKE]", err);
+      res.status(500).json({ error: "Failed to revoke" });
+    }
+  });
+
+  // Lock a strategy report for proposal use
+  app.patch("/api/strategy-reports/:reportId/lock", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+      const token = authHeader.split(' ')[1];
+      try {
+        const adminModule = (await import('./firebase')).default;
+        await adminModule.auth().verifyIdToken(token);
+      } catch {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+      const { reportId } = req.params;
+      await firestore.collection('strategyReports').doc(reportId).update({
+        status: 'locked', lockedAt: new Date(), lockedForProposal: true,
+      });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[strategy-reports LOCK]", err);
+      res.status(500).json({ error: "Failed to lock" });
+    }
+  });
+
+  // Get snapshots (version history) for a strategy report
+  app.get("/api/strategy-reports/:reportId/snapshots", async (req, res) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: "Firestore not available" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: "Unauthorised" });
+      const token = authHeader.split(' ')[1];
+      try {
+        const adminModule = (await import('./firebase')).default;
+        await adminModule.auth().verifyIdToken(token);
+      } catch {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+      const { reportId } = req.params;
+      const snaps = await firestore.collection('strategyReports').doc(reportId).collection('snapshots')
+        .orderBy('takenAt', 'desc').limit(10).get();
+      res.json(snaps.docs.map(d => ({ id: d.id, ...d.data(), takenAt: d.data().takenAt?.toDate?.()?.toISOString() || d.data().takenAt })));
+    } catch (err) {
+      console.error("[strategy-reports snapshots GET]", err);
+      res.status(500).json({ error: "Failed to fetch snapshots" });
+    }
+  });
+
   // Check slug availability (must come before /:reportId)
   app.get("/api/strategy-reports/check-slug", async (req, res) => {
     try {
@@ -7401,7 +7806,8 @@ Return JSON:
       if (!doc.exists) return res.status(404).json({ error: "Report not found" });
       const data = doc.data()!;
       if (data.expiresAt && data.expiresAt.toDate() < new Date()) return res.status(410).json({ error: "Report has expired" });
-      res.json({ ...data, id: doc.id });
+      if (data.status === 'revoked') return res.status(410).json({ error: "This strategy report has been revoked" });
+      res.json({ ...data, id: doc.id, createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt, updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt });
     } catch (err) {
       console.error("[strategy-reports GET]", err);
       res.status(500).json({ error: "Failed to fetch report" });

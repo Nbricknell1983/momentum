@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   X, ArrowLeft, ArrowRight, Eye, BarChart3,
-  TrendingUp, Zap, CheckSquare, DollarSign, ShieldX,
+  TrendingUp, Zap, CheckSquare, DollarSign, ShieldX, FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,6 +23,7 @@ import LeadVisibilityGapPanel from './LeadVisibilityGapPanel';
 import DigitalGrowthPlanPanel from './DigitalGrowthPlanPanel';
 import SalesNextBestActionPanel from './SalesNextBestActionPanel';
 import ProposalReadinessPanel from './ProposalReadinessPanel';
+import LeadStrategyReportPanel from './LeadStrategyReportPanel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,7 +35,8 @@ type CenterView =
   | 'growth_plan'
   | 'sales_actions'
   | 'readiness'
-  | 'calculator';
+  | 'calculator'
+  | 'strategy_report';
 
 interface TabDef {
   id:    CenterView;
@@ -50,6 +52,7 @@ const TABS: TabDef[] = [
   { id: 'sales_actions',     label: 'Sales Actions',     shortLabel: 'Actions',  icon: Zap },
   { id: 'readiness',         label: 'Readiness',         shortLabel: 'Ready',    icon: CheckSquare },
   { id: 'calculator',        label: 'ROI Calculator',    shortLabel: 'ROI',      icon: DollarSign },
+  { id: 'strategy_report',   label: 'Strategy Report',   shortLabel: 'Strategy', icon: FileText },
 ];
 
 interface LeadFocusViewProps {
@@ -148,6 +151,20 @@ export default function LeadFocusView({
             lead={lead}
             onBack={() => setCenterView('deal_intelligence')}
           />
+        );
+      case 'strategy_report':
+        return (
+          <ScrollArea className="h-full">
+            <div className="p-4">
+              <LeadStrategyReportPanel
+                lead={lead}
+                orgId={(lead as any).orgId || ''}
+                preparedBy={(lead as any).assignedTo || ''}
+                preparedByEmail={(lead as any).assignedToEmail || ''}
+                phone={(lead as any).phone || ''}
+              />
+            </div>
+          </ScrollArea>
         );
       default:
         return null;

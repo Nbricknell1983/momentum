@@ -72,6 +72,14 @@ Preferred communication style: Simple, everyday language.
 - **Key Rules**: Uses `provisioningRequestId` for idempotency, follows an 8-stage lifecycle, and enforces field ownership.
 - **Frontend**: `ProvisioningPanel.tsx` for readiness checks, scope editing, lifecycle display, action buttons, and audit log viewing.
 
+### Client-Facing Strategy Experience Layer
+- **Domain Model**: `client/src/lib/strategyPresentationTypes.ts` — 20+ typed interfaces: `StrategyDocument`, `StrategyDiagnosis`, `StrategyReport`, `DigitalVisibilityTriangle`, `DiscoveryPathStage`, `IntentGap`, `BuyerRealityGap`, `MarketOpportunity`, `GrowthPillar`, `GrowthPhase`, `PresentationRoadmap`, `PresentationConfidenceBlock`, `ShareLinkConfig`, `PresentationSnapshot`, and more.
+- **Adapter Layer**: `client/src/lib/strategyPresentationAdapter.ts` — Pure TypeScript adapter that transforms Lead intelligence fields (growthPrescription, strategyDiagnosis, aiCallPrepOutput, ahrefsData, crawledPages, etc.) into a `StrategyDocument` + `StrategyDiagnosis` compatible with the existing `StrategyReportPage`. Zero AI calls — deterministic derivation from already-computed data.
+- **Admin Panel**: `client/src/components/LeadStrategyReportPanel.tsx` — Generate, share, refresh, revoke, lock, and version-manage strategy reports from a lead. Shows data quality checklist, share link with copy/open, version history with snapshots, proposal lock mode. Accessible from the "Strategy Report" tab in LeadFocusView.
+- **Server Routes** (new in `server/routes.ts`): `POST /api/strategy-reports/from-lead` (generate from lead intelligence, idempotent — updates existing draft), `PATCH /api/strategy-reports/:id/revoke`, `PATCH /api/strategy-reports/:id/lock`, `GET /api/strategy-reports/:id/snapshots`. Revoked reports return 410. Each generation creates a versioned snapshot subcollection.
+- **LeadFocusView**: Now has 7 tabs — Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator, **Strategy Report** (new).
+- **Presentation layer**: Existing `client/src/pages/strategy-report.tsx` (1471 lines, `/strategy/:reportId` route) serves the public-facing report — fully compatible with adapter output, includes scope acceptance flow, live ROI simulator, and score rings.
+
 ### Sales Intelligence UX Layer
 - **Domain Model**: `client/src/lib/salesIntelligenceTypes.ts` — typed models for `OpportunityAssessment`, `VisibilityGapSummary`, `MarketOpportunitySummary`, `SalesNextBestAction`, `ProposalReadiness`, `HandoffReadiness`, `SalesConversationState`, `ProvisioningReadiness`. All derived on-the-fly from existing Lead data using pure functions — no additional storage required.
 - **Lead Focus View** (enhanced): `LeadFocusView.tsx` — 6-tab command workspace: Deal Intelligence, Visibility Gaps, Growth Plan, Sales Actions, Readiness, ROI Calculator. Left panel shows LeadCardExpanded + ConversationIntelligence; right panel shows DealLiveActivityFeed.

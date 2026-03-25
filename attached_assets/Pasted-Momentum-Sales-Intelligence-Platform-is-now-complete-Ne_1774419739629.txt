@@ -1,0 +1,178 @@
+Momentum Sales Intelligence Platform is now complete.
+
+Next, I want to build the Client-Facing Strategy Experience layer.
+
+Context:
+- Momentum now has the internal sales intelligence workspace
+- AI Systems now has the full downstream execution platform
+- The integration between the two is live
+- Momentum can already analyse leads, generate growth plans, assess handoff readiness, and provision tenants into AI Systems
+- What is now needed is the external-facing presentation layer that turns this intelligence into a persuasive strategy experience for prospects and clients
+
+GOAL
+Build a polished, client-facing Strategy Experience inside Momentum that can:
+- present a lead’s current position clearly
+- show visibility gaps and market opportunity visually
+- explain what is limiting growth
+- show the recommended website / SEO / GBP roadmap
+- communicate why our approach is different
+- support sales conversations, proposal conversion, and onboarding readiness
+- optionally be shared via a clean URL or presentation mode
+
+IMPORTANT
+This must be:
+- visually premium
+- persuasive
+- easy for a non-technical business owner to understand
+- strategy-led
+- data-backed
+- presentation-ready
+- aligned with the internal growth plan and AI Systems downstream execution model
+
+DO NOT:
+- expose raw internal admin/state objects
+- make it feel like a CRM screen
+- make it look like a static PDF dropped into the browser
+- overload it with technical jargon
+- duplicate all internal tooling in the client view
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Strategy experience domain model
+Create typed models for at least:
+- strategyPresentation
+- strategySection
+- presentationSnapshot
+- presentationVisibilitySummary
+- presentationOpportunityMap
+- presentationRoadmap
+- presentationConfidenceBlock
+- presentationCTAState
+- shareLinkConfig
+
+2. Presentation data adapter
+Build a clean adapter layer that transforms internal Momentum data into client-facing presentation data.
+It should map from:
+- leadProfile
+- visibilityGapSummary
+- growthPlan
+- salesConversationState
+- proposalReadiness
+- handoffReadiness
+
+Into:
+- plain-language summaries
+- visual opportunity blocks
+- strategic priorities
+- roadmap milestones
+- assumptions and confidence
+
+3. Presentation mode UX
+Build a dedicated client-facing strategy experience with sections such as:
+- Hero / business snapshot
+- Current visibility position
+- What Google sees vs what the business thinks
+- Market opportunity
+- Competitor position
+- What is limiting growth
+- Recommended roadmap
+- Why this system is different
+- Expected outcomes
+- Next step / CTA
+
+This should feel premium and presentation-ready.
+
+4. Opportunity visualisation UX
+Create visual sections for:
+- keyword opportunity
+- service/location coverage gaps
+- competitor comparison
+- website / GBP / trust signal gaps
+- current vs recommended structure
+
+These should be clean, commercial, and visual — not technical dumps.
+
+5. Roadmap presentation UX
+Build a roadmap layer showing:
+- immediate quick wins
+- foundational work
+- growth phase
+- optimisation phase
+
+Each phase should explain:
+- what happens
+- why it matters
+- what outcome it supports
+
+6. Confidence and assumptions UX
+Create a section that clearly explains:
+- what is based on actual observed data
+- what is estimated
+- what assumptions exist
+- what will become more precise after onboarding/integrations
+
+7. CTA and conversion UX
+Support presentation CTAs such as:
+- book strategy session
+- approve proposal
+- proceed to onboarding
+- request follow-up
+- view recommended modules
+
+This must be adaptable by sales stage.
+
+8. Share-link / presentation access model
+Build a safe way to generate a shareable presentation mode.
+Include:
+- presentation tokens or share keys
+- expiry support if appropriate
+- revocation support
+- access logging
+- optional “internal only” vs “shareable externally” modes
+
+9. Presentation versioning
+Support:
+- regenerating the strategy presentation
+- preserving previous versions
+- comparing strategy revisions
+- locking a version for a proposal conversation
+
+10. Momentum ↔ AI Systems linkage in presentation
+Where appropriate, support a future-ready section that can show:
+- onboarding status
+- delivery readiness
+- execution roadmap handoff
+
+But keep it high-level and client-friendly.
+
+11. Admin controls and inspection
+Create internal controls for:
+- generate presentation
+- refresh presentation
+- create share link
+- revoke share link
+- inspect what version was shared
+- lock presentation for proposal use
+
+IMPORTANT RULES
+- Keep the experience client-safe and non-technical
+- Keep the internal intelligence hidden behind a clear narrative
+- Make this feel like a premium growth strategy product
+- Do not flatten everything into one long wall of text
+- Build reusable section components and a structured presentation model
+- If any dependency is missing, create a clean adapter boundary and list it
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- strategy experience domain model
+- presentation data adapter
+- presentation mode UX
+- opportunity visualisation UX
