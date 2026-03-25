@@ -1,0 +1,154 @@
+The architecture is now strong enough to move to the exact handoff payload contract.
+
+I want you to define the full TenantProvisionPayload schema that Momentum will send to AI Systems when a lead becomes a customer.
+
+This must align with the architecture already defined, including:
+- ProvisioningRequest identity
+- HandoverSnapshot
+- capabilities
+- modules
+- requested workflows
+- source artifacts
+- ownership rules
+- PATCH update rules
+- audit logging
+- NextBestAction / ActionOutcome compatibility
+
+Please produce the exact payload contract with:
+
+1. Top-level JSON schema
+2. Type definitions for every field
+3. Required vs optional fields
+4. Validation rules for every domain
+5. Example payload
+6. Field-level descriptions
+7. Default values where relevant
+8. Versioning rules
+9. Idempotency rules
+10. What AI Systems must do if a required field is missing
+11. What AI Systems must do if optional sections are missing
+12. Which fields create source artifacts on receipt
+13. Which fields are used immediately for tenant creation
+14. Which fields are only advisory / enrichment
+15. Which fields are immutable after provisioning
+16. Which fields can later be updated by PATCH from Momentum
+17. Merge vs replace semantics for PATCH by field/domain
+18. Example PATCH payloads for:
+   - business details update
+   - strategy refresh
+   - keyword refresh
+   - adding a new requested module
+19. Response contracts for:
+   - POST /api/integration/tenants
+   - GET /api/integration/tenants/:tenantId/status
+   - PATCH /api/integration/tenants/:tenantId
+20. MISSING SETUP / ACTION REQUIRED FROM NATHAN
+
+The payload must include at least these domains:
+
+A. provisioningRequest
+- provisioningRequestId
+- sourceSystem
+- sourceOrgId
+- sourceClientId
+- requestedAt
+- requestedBy
+- schemaVersion
+
+B. business
+- legalName
+- tradingName
+- abn (optional)
+- primaryContact
+- phone
+- email
+- website
+- address
+- businessCategory
+- industry
+- serviceModel
+
+C. handoverSnapshot
+- snapshotId
+- sourceLead
+- strategyVersion
+- conversionArchetype
+- initialGamePlan
+- expectedOutcome
+- confidenceScore
+
+D. targetMarket
+- targetServices
+- targetLocations
+- serviceAreas
+- prioritySuburbs
+- primaryServiceArea
+
+E. strategy
+- strategy summary
+- growth diagnosis
+- key risks
+- key opportunities
+- starting position
+- recommendations
+
+F. researchArtifacts
+- competitor summary
+- website audit summary
+- GBP audit summary
+- keyword research summary
+- market opportunity notes
+
+G. keywords
+- primary keywords
+- secondary keywords
+- clusters
+- quick wins
+- priority keyword targets
+
+H. requestedCapabilities
+- website
+- localSEO
+- gbpManagement
+- adsStrategy
+- customerPortal
+- agentAutopilot
+
+I. requestedModules
+- website
+- seo
+- gbp
+- ads
+
+J. requestedAgents
+- onboarding_agent
+- seo_agent
+- gbp_agent
+- content_agent
+- telemetry_agent
+(only if capability/module requirements are satisfied)
+
+K. onboarding
+- plan/tier
+- portal access requested
+- send invite yes/no
+- notes / handover notes
+
+L. metadata
+- tags
+- source campaign
+- sales owner
+- close date
+- any internal references
+
+Important rules:
+- Do not code yet
+- Do not simplify this
+- Do not leave domains vague
+- Make the schema production-grade
+- Be explicit about nullability
+- Be explicit about arrays vs optional omission
+- Prefer strongly typed contracts
+- Include example values
+- Include Zod schema recommendations if appropriate
+- Wait for approval after producing the contract
