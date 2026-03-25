@@ -1,0 +1,156 @@
+The Scheduled Sweeps + Background Automation Runner is now complete and live.
+
+Next, I want to build the Real Provider Sending Layer.
+
+Context:
+- Momentum already has Cadence + Automation, Communication Drafting, Automation Execution, Autopilot Policy, and Scheduled Sweeps
+- The system can already identify what needs to be sent, generate the right draft, route it through approvals, and queue actions safely
+- What is missing is real provider-backed sending so approved communications can actually be sent from the platform instead of relying on mailto:, sms:, or manual logging
+
+GOAL
+Build the Real Provider Sending Layer so Momentum can:
+- send approved emails through a real email provider
+- send approved SMS through a real SMS provider
+- track delivery attempts and outcomes
+- update communication history with real execution results
+- support retries, failures, and provider health visibility
+- keep all sending policy-aware, approval-aware, and auditable
+
+IMPORTANT
+This must be:
+- safe
+- production-grade
+- provider-aware
+- auditable
+- approval-aware
+- retry-aware
+- operationally useful
+
+DO NOT:
+- auto-send everything by default
+- bypass the existing approval and policy layers
+- hide provider failures
+- create fake success states
+- tightly couple the system to one provider only
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Provider sending domain model
+Create typed models for at least:
+- providerSendRequest
+- providerSendAttempt
+- providerDeliveryStatus
+- providerFailure
+- providerWebhookEvent
+- providerIntegrationState
+- providerHealthState
+- providerRetryState
+- providerSendResult
+
+2. Provider adapter boundaries
+Create clean adapter boundaries for:
+- email provider (start with Resend or SMTP abstraction)
+- SMS provider (start with Twilio abstraction)
+
+Each adapter must support:
+- config check
+- send
+- normalize result
+- map delivery status
+- failure normalization
+- health check
+
+If provider credentials are missing:
+- do not fake sending
+- create the adapter boundary only
+- list exact missing setup under MISSING SETUP / ACTION REQUIRED FROM NATHAN
+
+3. Execution integration
+Connect the real provider layer to the existing Automation Execution flow so that:
+- approved items can send through a provider
+- manual logging remains available as fallback
+- channel adapter selection prefers real provider when configured
+- otherwise falls back safely to existing manual/open-client methods
+
+4. Delivery status tracking
+Track:
+- queued
+- sending
+- sent
+- delivered
+- failed
+- bounced
+- rejected
+- retrying
+
+Store status against:
+- the execution item
+- communication history
+- linked cadence item
+- linked draft
+
+5. Retry and failure handling
+Implement:
+- retry policies per channel
+- terminal failure rules
+- retry backoff
+- surfaced failure reasons
+- escalation into cadence or execution queue when manual intervention is needed
+
+6. Provider webhook/event model
+Create the model and endpoints for future provider callbacks such as:
+- delivered
+- opened
+- bounced
+- failed
+- unsubscribed
+- SMS delivery state changes
+
+Do not assume all providers are configured yet, but build the boundary and storage model cleanly.
+
+7. Execution queue UX upgrade
+Upgrade the existing Execution Queue so it shows:
+- real send status
+- provider used
+- retry state
+- delivery outcome
+- failed items needing intervention
+
+8. Communication history upgrade
+Extend communication history so users can see:
+- provider-backed sends
+- real delivery result
+- retries/failures
+- method used (provider vs manual)
+
+9. Provider settings / inspection support
+Create internal inspection/support for:
+- provider config status
+- last send attempt
+- provider health
+- recent failures
+- webhook/event history
+- exact missing configuration
+
+IMPORTANT RULES
+- Keep sending human-reviewed by default
+- Reuse the existing policy and approval layers
+- Keep every send auditable
+- Build adapters, not provider lock-in
+- If credentials are missing, stop cleanly and list them
+- Do not remove the manual fallback path
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- provider sending domain model
+- provider adapter boundaries
+- execution integration
+- delivery status tracking

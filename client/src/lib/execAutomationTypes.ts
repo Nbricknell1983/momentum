@@ -11,7 +11,7 @@ export type ExecutionItemStatus =
   | 'cancelled'
   | 'failed';
 
-export type SendMethod = 'mailto' | 'sms_app' | 'clipboard' | 'manual_log';
+export type SendMethod = 'mailto' | 'sms_app' | 'clipboard' | 'manual_log' | 'provider_email' | 'provider_sms';
 
 export interface ExecutionItemLocalState {
   status: ExecutionItemStatus;
@@ -63,6 +63,11 @@ export interface CommunicationHistoryItem {
   cadenceTitle?: string;
   status: 'sent' | 'manually_sent' | 'failed';
   failureReason?: string;
+  // Real provider delivery tracking
+  deliveryStatus?: string;
+  providerMessageId?: string;
+  providerName?: string;
+  retryable?: boolean;
 }
 
 export interface ChannelIntegrationState {

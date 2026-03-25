@@ -17200,6 +17200,157 @@ Return ONLY JSON:
   app.use('/api/integration', integrationRouter);
 
   // ============================================
+  // Real Provider Sending Layer
+  // ============================================
+
+  // Send email via Resend provider
+  app.post('/api/orgs/:orgId/send/email', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      const orgId = req.params.orgId as string;
+      const { to, subject, body, entityId, entityName } = req.body;
+      if (!to || !body) return res.status(400).json({ error: 'to and body are required' });
+
+      const { sendEmailViaResend } = await import('./providerAdapters');
+      const result = await sendEmailViaResend({ to, subject, body, orgId, entityId, entityName });
+
+      // Write attempt record to Firestore (non-fatal)
+      if (firestore) {
+        await firestore.collection('orgs').doc(orgId).collection('sendAttempts').add({
+          orgId, entityId, entityName, channel: 'email',
+          provider: result.provider, method: result.method,
+          to, subject, bodySnippet: (body as string).slice(0, 200),
+          messageId: result.messageId,
+          deliveryStatus: result.deliveryStatus,
+          sentAt: result.sentAt,
+          sentBy: (req as any).user?.email ?? 'unknown',
+          attemptNumber: 1,
+          errorReason: result.errorReason,
+          errorCode: result.errorCode,
+          retryable: result.retryable,
+        }).catch(() => {});
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[send/email]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Send SMS via Twilio provider
+  app.post('/api/orgs/:orgId/send/sms', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      const orgId = req.params.orgId as string;
+      const { to, body, entityId, entityName } = req.body;
+      if (!to || !body) return res.status(400).json({ error: 'to and body are required' });
+
+      const { sendSmsViaTwilio } = await import('./providerAdapters');
+      const result = await sendSmsViaTwilio({ to, body, orgId, entityId, entityName });
+
+      if (firestore) {
+        await firestore.collection('orgs').doc(orgId).collection('sendAttempts').add({
+          orgId, entityId, entityName, channel: 'sms',
+          provider: result.provider, method: result.method,
+          to, bodySnippet: (body as string).slice(0, 200),
+          messageId: result.messageId,
+          deliveryStatus: result.deliveryStatus,
+          sentAt: result.sentAt,
+          sentBy: (req as any).user?.email ?? 'unknown',
+          attemptNumber: 1,
+          errorReason: result.errorReason,
+          errorCode: result.errorCode,
+          retryable: result.retryable,
+        }).catch(() => {});
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[send/sms]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Provider health / config status
+  app.get('/api/orgs/:orgId/send/status', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      const { getProviderHealthSummary } = await import('./providerAdapters');
+      const health = getProviderHealthSummary();
+      res.json(health);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Send attempt history for an org
+  app.get('/api/orgs/:orgId/send/history', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const orgId = req.params.orgId as string;
+      const limitN = parseInt(req.query.limit as string ?? '30', 10);
+      const snap = await firestore.collection('orgs').doc(orgId).collection('sendAttempts')
+        .orderBy('sentAt', 'desc').limit(limitN).get();
+      const attempts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ attempts });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Resend webhook receiver
+  // Events: email.sent, email.delivered, email.delivery_delayed, email.bounced, email.complained
+  app.post('/api/send/webhook/resend', async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const event = req.body;
+      await firestore.collection('providerWebhooks').add({
+        provider: 'resend',
+        eventType: event.type ?? 'unknown',
+        messageId: event.data?.email_id ?? event.data?.message_id ?? null,
+        receivedAt: new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+        rawPayload: event,
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[webhook/resend]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Twilio status callback
+  // Fields: MessageSid, MessageStatus, To, From, ErrorCode, ErrorMessage
+  app.post('/api/send/webhook/twilio', async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const { MessageSid, MessageStatus, To, From, ErrorCode, ErrorMessage } = req.body;
+      await firestore.collection('providerWebhooks').add({
+        provider: 'twilio',
+        eventType: `sms.${MessageStatus ?? 'unknown'}`,
+        messageId: MessageSid ?? null,
+        receivedAt: new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+        rawPayload: { MessageSid, MessageStatus, To, From, ErrorCode, ErrorMessage },
+      });
+      res.status(200).send('');
+    } catch (err: any) {
+      console.error('[webhook/twilio]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Webhook event history (for inspection)
+  app.get('/api/orgs/:orgId/send/webhooks', requireOrgAccess, async (req: any, res: any) => {
+    try {
+      if (!firestore) return res.status(503).json({ error: 'Service unavailable' });
+      const limitN = parseInt(req.query.limit as string ?? '30', 10);
+      const snap = await firestore.collection('providerWebhooks')
+        .orderBy('receivedAt', 'desc').limit(limitN).get();
+      const events = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ events });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================
   // Sweep Runner Routes
   // ============================================
 

@@ -28,7 +28,8 @@ import { db, collection, addDoc, query, orderBy, limit, onSnapshot } from '@/lib
 import { deriveCadenceState } from '@/lib/cadenceAdapter';
 import { buildDraftFromCadenceItem } from '@/lib/commsAdapter';
 import type { CadenceQueueItem } from '@/lib/cadenceTypes';
-import { CHANNEL_STATES, sendViaChannel } from '@/lib/channelAdapters';
+import { CHANNEL_STATES, sendViaChannel, sendViaProvider } from '@/lib/channelAdapters';
+import ProviderStatusPanel from '@/components/ProviderStatusPanel';
 import type {
   QueueState,
   QueueAction,
@@ -136,7 +137,7 @@ interface QueueItemCardProps {
   userName: string;
 }
 
-function QueueItemCard({ item, localState, dispatch, leads, clients, onHistoryWrite, userName }: QueueItemCardProps) {
+function QueueItemCard({ item, localState, dispatch, leads, clients, onHistoryWrite, orgId, userName }: QueueItemCardProps) {
   const [copying, setCopying] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -180,7 +181,55 @@ function QueueItemCard({ item, localState, dispatch, leads, clients, onHistoryWr
   const handleSend = useCallback(async () => {
     setSending(true);
     try {
-      const result = await sendViaChannel(localState.selectedChannel, {
+      const ch = localState.selectedChannel;
+
+      // Try real provider first for email and SMS
+      if ((ch === 'email' || ch === 'sms') && orgId) {
+        const entity = [...(leads as any[]), ...(clients as any[])].find((e: any) => e.id === item.entityId) as any;
+        const to = ch === 'email'
+          ? (entity?.email ?? entity?.contactEmail ?? '')
+          : (entity?.phone ?? entity?.contactPhone ?? '');
+
+        const provResult = await sendViaProvider(ch, {
+          to,
+          subject: localState.editedSubject,
+          body: localState.editedBody,
+        }, orgId, item.entityId, item.entityName);
+
+        if (provResult && !provResult.notConfigured) {
+          const method = (ch === 'email' ? 'provider_email' : 'provider_sms') as SendMethod;
+          if (provResult.success) {
+            dispatch({ type: 'mark_sent', id: item.id, sentAt: provResult.sentAt, method, note: `Sent via ${provResult.provider}` });
+            await onHistoryWrite({
+              orgId: '',
+              entityId: item.entityId,
+              entityType: item.entityType,
+              entityName: item.entityName,
+              channel: ch,
+              summary: item.title,
+              subject: localState.editedSubject,
+              bodySnippet: localState.editedBody.slice(0, 200),
+              sentAt: provResult.sentAt,
+              sentBy: userName,
+              method,
+              linkedCadenceItemId: item.id,
+              cadenceTitle: item.title,
+              status: 'sent',
+              deliveryStatus: provResult.deliveryStatus,
+              providerMessageId: provResult.messageId,
+              providerName: provResult.provider,
+            });
+            return;
+          } else {
+            dispatch({ type: 'mark_failed', id: item.id, reason: provResult.errorReason ?? 'Provider send failed' });
+            return;
+          }
+        }
+        // provResult null or notConfigured → fall through to channel fallback below
+      }
+
+      // Fallback: open email client / SMS app / clipboard
+      const result = await sendViaChannel(ch, {
         subject: localState.editedSubject,
         body: localState.editedBody,
       });
@@ -192,7 +241,7 @@ function QueueItemCard({ item, localState, dispatch, leads, clients, onHistoryWr
           entityId: item.entityId,
           entityType: item.entityType,
           entityName: item.entityName,
-          channel: localState.selectedChannel,
+          channel: ch,
           summary: item.title,
           subject: localState.editedSubject,
           bodySnippet: localState.editedBody.slice(0, 200),
@@ -211,7 +260,7 @@ function QueueItemCard({ item, localState, dispatch, leads, clients, onHistoryWr
     } finally {
       setSending(false);
     }
-  }, [localState, item, dispatch, onHistoryWrite, userName]);
+  }, [localState, item, dispatch, onHistoryWrite, orgId, leads, clients, userName]);
 
   const handleMarkManual = useCallback(async () => {
     const at = nowLabel();
@@ -471,6 +520,18 @@ function HistoryRow({ record }: { record: CommunicationHistoryItem }) {
     clipboard: 'clipboard',
     manual_log: 'logged',
     manual: 'manual',
+    provider_email: 'Resend',
+    provider_sms: 'Twilio',
+  };
+
+  const deliveryBadge = (record as any).deliveryStatus;
+  const deliveryBadgeStyle: Record<string, string> = {
+    sent: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    delivered: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    failed: 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
+    bounced: 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
+    rejected: 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
+    queued: 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
   };
 
   return (
@@ -489,16 +550,29 @@ function HistoryRow({ record }: { record: CommunicationHistoryItem }) {
             }`}>
               {record.status === 'manually_sent' ? 'manual' : record.status}
             </span>
+            {deliveryBadge && (
+              <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${deliveryBadgeStyle[deliveryBadge] ?? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>
+                {deliveryBadge}
+              </span>
+            )}
+            {(record as any).providerName && (
+              <span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                {(record as any).providerName}
+              </span>
+            )}
           </div>
           <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">{record.summary}</p>
           {record.bodySnippet && (
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1 truncate">{record.bodySnippet}</p>
           )}
-          <div className="flex items-center gap-3 mt-1 text-[10px] text-zinc-400">
+          <div className="flex items-center gap-3 mt-1 text-[10px] text-zinc-400 flex-wrap">
             <span>{record.sentAt}</span>
             <span>by {record.sentBy}</span>
             <span>via {methodLabel[record.method] ?? record.method}</span>
             {record.cadenceTitle && <span>· {record.cadenceTitle}</span>}
+            {(record as any).providerMessageId && (
+              <span className="font-mono truncate max-w-[140px]">ID: {(record as any).providerMessageId}</span>
+            )}
           </div>
         </div>
       </div>
@@ -560,13 +634,14 @@ function ChannelTile({ state }: { state: (typeof CHANNEL_STATES)[0] }) {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 
-type Tab = 'queue' | 'approved' | 'sent' | 'channels';
+type Tab = 'queue' | 'approved' | 'sent' | 'channels' | 'provider';
 
 const TABS: { id: Tab; label: string; icon: typeof Send }[] = [
   { id: 'queue', label: 'Queue', icon: Clock },
   { id: 'approved', label: 'Approved', icon: ShieldCheck },
   { id: 'sent', label: 'Sent', icon: CheckCircle },
   { id: 'channels', label: 'Channels', icon: Radio },
+  { id: 'provider', label: 'Provider', icon: ExternalLink },
 ];
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -824,6 +899,9 @@ export default function ExecutionQueue() {
             </section>
           </div>
         )}
+
+        {/* Provider tab */}
+        {activeTab === 'provider' && <ProviderStatusPanel />}
 
         {/* Channels tab */}
         {activeTab === 'channels' && (

@@ -1,4 +1,6 @@
 import type { ChannelIntegrationState, ExecutionChannel, ExecutionSendResult, SendMethod } from '@/lib/execAutomationTypes';
+import type { ProviderSendResult } from '@/lib/providerTypes';
+import { auth } from '@/lib/firebase';
 
 // ── Channel integration states ────────────────────────────────────────────────
 // Honest declaration of exactly what is available and how it works.
@@ -126,4 +128,58 @@ export async function sendViaChannel(
     sentAt,
     note: 'Use the reference notes above, then log the outcome below.',
   };
+}
+
+// ── Real provider send ────────────────────────────────────────────────────────
+// Calls the server-side provider adapter (Resend for email, Twilio for SMS).
+// Returns null if the network call itself fails.
+// Returns a result with notConfigured=true if the provider is not set up.
+// The caller should fall back to sendViaChannel if notConfigured.
+
+export async function sendViaProvider(
+  channel: 'email' | 'sms',
+  params: { to?: string; subject?: string; body: string },
+  orgId: string,
+  entityId?: string,
+  entityName?: string,
+): Promise<ProviderSendResult | null> {
+  try {
+    const user = auth.currentUser;
+    if (!user) return null;
+    const token = await user.getIdToken();
+
+    const res = await fetch(`/api/orgs/${orgId}/send/${channel}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        to: params.to ?? '',
+        subject: params.subject,
+        body: params.body,
+        entityId,
+        entityName,
+      }),
+    });
+
+    if (!res.ok && res.status !== 200) {
+      const text = await res.text().catch(() => '');
+      console.warn('[sendViaProvider] non-ok response', res.status, text);
+      return null;
+    }
+
+    return await res.json() as ProviderSendResult;
+  } catch (err) {
+    console.warn('[sendViaProvider] network error', err);
+    return null;
+  }
+}
+
+// Whether provider API is likely available (env-set) for a given channel
+// Used by the UI to show "Send via Resend" vs "Open email client"
+export function getProviderLabel(channel: 'email' | 'sms'): string {
+  if (channel === 'email') return 'Send via Resend';
+  if (channel === 'sms') return 'Send via Twilio';
+  return 'Send';
 }
