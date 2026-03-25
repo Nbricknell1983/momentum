@@ -1,0 +1,118 @@
+We have completed the pre-implementation architecture and payload contract for the Momentum ↔ AI Systems integration.
+
+Implementation may now begin on the Momentum side only.
+
+Context:
+- Momentum is the upstream source of truth for pre-sale intelligence, strategy, and handoff
+- AI Systems is the downstream source of truth for tenant execution and delivery
+- The two systems remain separate
+- Integration is server-to-server REST
+- No shared database
+- Firestore is isolated per project
+- The TenantProvisionPayload contract has already been defined and approved
+- Provisioning uses provisioningRequestId as the idempotency key
+- Lifecycle, ownership, PATCH rules, source artifacts, audit logs, HandoverSnapshot, NextBestAction, and ActionOutcome have already been designed
+
+Your task now is to build the Momentum-side integration layer only.
+
+Build this in a modular, production-grade, TypeScript-first way.
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Environment and integration configuration
+Create a clear integration config layer for:
+- AI Systems base URL
+- shared secret / API auth config
+- webhook callback base if needed
+- timeout / retry settings
+- schema version defaults
+
+2. Typed contract layer
+Create:
+- TypeScript types/interfaces for the approved TenantProvisionPayload
+- Zod validation schemas
+- types for POST /status / PATCH responses
+- helper mappers for internal Momentum models → payload contract
+
+3. Provisioning service
+Build a service that:
+- creates provisioningRequestId
+- assembles the approved payload
+- validates it with Zod before sending
+- sends POST request to AI Systems
+- handles retry-safe submission
+- stores the returned tenantId / lifecycleState / tracking URL
+- writes a provisioning log entry
+
+4. Sync and mapping model
+Create the Momentum-side mapping structure on the client/account record:
+- tenantId
+- provisioningRequestId
+- status
+- portalUrl
+- provisionedAt
+- lastSyncedAt
+- lastSyncedVersion
+- syncErrors
+
+5. Provisioning log / audit support
+Create a Momentum-side provisioning log model and service that records:
+- request creation
+- payload validation pass/fail
+- outbound request attempt
+- response received
+- retry attempts
+- failures
+- status refreshes
+- PATCH updates sent later
+
+6. Status polling service
+Create a service that can call:
+GET /api/integration/tenants/:tenantId/status
+and update Momentum’s stored integration state safely.
+
+7. PATCH update service
+Create a typed PATCH integration service for approved update domains only.
+Respect the approved merge/replace/additive semantics.
+Do not allow updates to locked AI Systems-owned fields.
+
+8. Admin action layer
+Create admin-safe actions for:
+- Create Tenant in AI Systems
+- Retry Provisioning
+- Refresh Provisioning Status
+- Send PATCH Update
+
+9. UI wiring
+Create the Momentum-side admin/provisioning UI or panel showing:
+- readiness for provisioning
+- missing required fields
+- current provisioning state
+- tenant link if provisioned
+- last sync time
+- recent sync/provisioning errors
+- actions to create / retry / refresh / patch
+
+IMPORTANT RULES
+- Do not implement fake AI Systems endpoints
+- If AI Systems is not live yet, create adapter boundaries cleanly
+- Do not invent credentials
+- Clearly list all required environment variables
+- Keep this tenant-safe and auditable
+- Keep everything aligned to the already-approved schema and ownership model
+- Do not build the AI Systems side yet
+- Do not change the contract unless absolutely necessary; if changes are needed, explain them explicitly first
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- integration config
+- typed contract layer
+- provisioning service

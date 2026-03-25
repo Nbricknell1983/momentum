@@ -30,6 +30,7 @@ import {
 import { scoreGbpCandidate, buildLeadContext, scoreGbpSibling, type GbpLeadContext } from "./lib/gbp-scorer";
 import { gatherPaidSearchEvidence } from "./services/paid-search/transparency-service";
 import { gatherPaidSearchViaSerpApi, isSerpApiConfigured } from "./services/paid-search/serpapi-service";
+import { integrationRouter } from "./integration";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -16375,6 +16376,11 @@ Return ONLY JSON:
       res.status(500).json({ error: e.message });
     }
   });
+
+  // ============================================
+  // AI Systems Integration Layer
+  // ============================================
+  app.use('/api/integration', integrationRouter);
 
   return httpServer;
 }

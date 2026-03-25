@@ -9,12 +9,12 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend
-- **Framework**: React 18 with TypeScript, using Vite.
+- **Framework**: React 18 with TypeScript and Vite.
 - **Routing**: Wouter.
 - **State Management**: Redux Toolkit for global state, TanStack React Query for server state.
 - **Styling**: Tailwind CSS with theming via CSS variables.
 - **UI Components**: shadcn/ui library, built on Radix primitives.
-- **Design System**: Emphasizes information density and clarity, using a fixed left sidebar, top bar, main content area, and right drawer overlay.
+- **Design System**: Fixed left sidebar, top bar, main content area, and right drawer overlay, emphasizing information density and clarity.
 
 ### Backend
 - **Runtime**: Node.js with Express, written in TypeScript.
@@ -22,43 +22,43 @@ Preferred communication style: Simple, everyday language.
 - **Serving**: Express serves static frontend assets in production.
 
 ### Data Layer
-- **Primary Database**: Firebase Firestore — all live application data lives here. Sole source of truth.
-- **Live State**: Leads and clients are synced via `onSnapshot` listeners. Redux `leads[]` and `clients[]` are listener-fed live state.
-- **AI Output Storage**: Engine outputs are dual-written: latest snapshot on the entity doc + durable history record in `engineHistory/{runId}` subcollection. History is immutable.
+- **Primary Database**: Firebase Firestore for all live application data.
+- **Live State**: Leads and clients synced via `onSnapshot` listeners, feeding Redux state.
+- **AI Output Storage**: Latest AI output snapshot on the entity document, plus immutable history records in `engineHistory/{runId}` subcollection.
 
 ### AI Integration & Agent Orchestration
-- **Role-Aware Agent Architecture**: Internal AI workforce command layer ("Bullpen") visible to `owner`/`admin` roles, with a team-facing "My Work" page for pending `bullpenWork` items.
-- **Agent Job System**: Firestore-backed job queue for dispatching tasks (`strategy`, `seo`, `gbp`, `ads`, `website`, `growth_prescription`, `enrichment`, `prep`) to OpenClaw specialist agents. Includes idempotency, dependency chains, retry/backoff mechanisms, and dual-writing of results.
-- **Autopilot Orchestrator**: Proactive agent job scanner that runs on a schedule, enqueues overdue jobs, and manages back-pressure.
-- **First-Open Lead Orchestration (Two-Speed)**: Orchestrates evidence gathering and prep-pack generation rapidly on lead open, followed by deeper background analysis (X-Ray, SERP, Strategy Diagnosis).
-- **Proactive Watchdog / Self-Audit System**: Runtime QA layer (`runWatchdog`) that detects workflow bugs, UI-state mismatches, and misleading fallback states. Findings are displayed in a `WatchdogPanel`.
+- **Role-Aware Agent Architecture**: "Bullpen" command layer for `owner`/`admin` roles, and "My Work" page for `bullpenWork` items.
+- **Agent Job System**: Firestore-backed job queue for dispatching tasks to specialist agents, including idempotency, dependency chains, and retry/backoff mechanisms.
+- **Autopilot Orchestrator**: Proactive agent job scanner managing task queues and back-pressure.
+- **First-Open Lead Orchestration**: Rapid evidence gathering and prep-pack generation, followed by deeper background analysis.
+- **Proactive Watchdog / Self-Audit System**: Runtime QA layer for detecting workflow bugs, UI-state mismatches, and misleading states, with findings displayed in a `WatchdogPanel`.
 
 ### Auth & Security
 - **Firebase Authentication**: User identity management and token verification.
 - **Middleware**: `verifyFirebaseToken`, `requireOrgAccess`, and `requireManager` for route protection.
-- **Firestore Rules**: Deployed separately via Firebase CLI.
+- **Firestore Rules**: Deployed via Firebase CLI.
 
 ### Lead to Client Conversion System
-- **Evidence Bundle Pipeline**: Gathers structured real-world evidence (GBP/Places API, website crawl, social URLs, paid search) before AI analysis, tracking deltas.
-- **Conversion Workflow**: Intercepts lead-to-won pipeline transitions, showing lead intelligence and allowing scope selection (Website, GBP/Local, SEO, Ads). Carries intelligence into `sourceIntelligence` on the client record, creating an `activationPlan`.
-- **Workstream Generation**: AI generates detailed plans for website (conversion brief, page structure, content, SEO foundations) and GBP (optimisation tasks, content calendar, category recommendations, review strategy).
-- **Client Intelligence**: `ClientIntelligencePanel` provides AI-synthesized execution intelligence (presence snapshot, market context, website interpretation, opportunities, risks, execution strategy, delivery priorities). `ClientVisibilityBaseline` shows static digital footprint data.
-- **Activation Panel**: Displays active workstreams, generation options, and collapsible output sections for each workstream.
+- **Evidence Bundle Pipeline**: Gathers structured real-world evidence before AI analysis.
+- **Conversion Workflow**: Intercepts lead-to-won transitions, showing lead intelligence and allowing scope selection, carrying intelligence into `sourceIntelligence` to create an `activationPlan`.
+- **Workstream Generation**: AI generates detailed plans for website (conversion brief, page structure, content, SEO foundations) and GBP (optimisation tasks, content calendar, review strategy).
+- **Client Intelligence**: `ClientIntelligencePanel` provides AI-synthesized execution intelligence; `ClientVisibilityBaseline` shows static digital footprint data.
+- **Activation Panel**: Displays active workstreams, generation options, and collapsible output sections.
 
 ### Core Features
-- **Sales Operating System**: Pipeline Management (Kanban, Lead Focus View), Conversation Intelligence, Lead & Client Management, Territory System, Nurture System, Activity Tracking, and Momentum Scoring.
+- **Sales Operating System**: Pipeline Management, Conversation Intelligence, Lead & Client Management, Territory System, Nurture System, Activity Tracking, and Momentum Scoring.
 - **AI Sales Engine**: 5-section AI layer for stage-aware defaults, conversation intelligence, insights, and email generation.
 - **AI Strategy & Research**: Strategy Engine, Leads Research, and Growth Plan Module.
 - **AI Engine Suite**: Growth Prescription, Website, SEO, GBP, and Ads Engines for diagnostics and strategic plans.
-- **Website Workstream Agent**: Full website blueprint builder (`website_workstream` task type) — Zod-validated `WebsiteBlueprint` with siteMeta, nav, footer, pages, assets, and performance spec. UI has 6 tabs (Plan, Pages, Copy, SEO, Assets, Preview) with copy variant selection, Accept Plan, history drawer, and JSON export. Dual-writes to `client.websiteWorkstream.currentDraft` + `engineHistory`. Agent ID: `website-workstream-specialist`. TTL: 48h. Deps: strategy, website_xray, serp, growth_prescription. Section preview components in `client/src/components/sections/`.
-- **Website HTML Generation Engine**: `POST /api/clients/:clientId/generate-site` — Takes the Blueprint and generates production-ready HTML per page via GPT-4o. Includes Tailwind CSS via CDN, Google Fonts, SEO meta, Schema JSON-LD, nav, footer, responsive layout. Also generates `sitemap.xml` and `robots.txt`. Stored in `client.websiteWorkstream.generatedSite.pages[slug].html`. Preview served at `GET /api/clients/:clientId/site-preview/:slug?orgId=`. Live iframe preview with desktop/mobile toggle in WebsiteWorkstreamPanel.tsx Preview tab. "Build Site" button triggers generation. Sitemap also available at `GET /api/clients/:clientId/sitemap.xml?orgId=`.
-- **Local SEO Page Generator**: `POST /api/clients/:clientId/generate-local-pages` — Two-step AI process: GPT-4o-mini plans up to 12 local pages (service, location, combo types) from GBP/SEO data; GPT-4o generates full production HTML for each. Stored in `websiteWorkstream.generatedSite.localPages`. Preview at `GET /api/clients/:clientId/local-preview/:slug`. Sitemap auto-updated. "Local" tab in WebsiteWorkstreamPanel with page cards, type badges, and iframe preview.
-- **SEO Technical Audit**: SEO tab enhanced with meta-length indicators (title 30–60, description 70–160), collapsible Schema Markup (JSON-LD) viewer per page, collapsible sitemap.xml viewer with URL count and copy button, collapsible robots.txt viewer with copy button.
-- **Asset Upload System**: `POST /api/clients/:clientId/upload-asset` — stores base64 image dataURLs in `websiteWorkstream.assets.{key}` (5 MB limit). `DELETE /api/clients/:clientId/upload-asset/:key` removes a slot. Gallery: `POST` with `isGallery: true` appends to `_gallery[]`; `DELETE /api/clients/:clientId/upload-gallery/:index` removes by index. Assets tab now has drag-and-drop upload per blueprint slot, thumbnail preview, "✓ Uploaded" badge, replace/remove buttons, and freeform gallery grid.
-- **Website ZIP Export & Launch Tab**: `GET /api/clients/:clientId/export-site.zip` — archives all HTML pages, local pages, sitemap.xml, robots.txt, decoded asset images, gallery images, README.md, _redirects (Netlify), redirects.htaccess (Apache), SEO-PRESERVATION-REPORT.md, and INTERNAL-LINK-MAP.md using `archiver`. `POST /api/clients/:clientId/set-custom-domain` saves domain to `websiteWorkstream.customDomain`. "Launch" tab shows 10-point readiness score/checklist (including SEO preservation + GBP alignment checks), pre-launch gate banner from tech audit, custom domain input, Download ZIP button, DNS setup steps, Google Search Console setup steps, and 10-item post-launch checklist.
-- **SEO Preservation Engine (4 stages)**: "Preserve" tab between SEO and Local tabs in WebsiteWorkstreamPanel. Stage 1: `POST /analyse-urls` — sitemap crawl, manual URL, Ahrefs CSV ingestion; GPT-4o-mini classifies each URL into page records (riskLevel HIGH/MEDIUM/LOW, recommendedAction KEEP/REDIRECT/CONSOLIDATE/REBUILD_SAME_URL/REVIEW, targetKeyword, pageType, notes); stores at `websiteWorkstream.seoPreservation`; includes GBP alignment scoring and defensiveMode banner. `PATCH /seo-preservation/page` and `POST/DELETE /seo-preservation/redirect` allow editing. Stage 2: `POST /detect-doorway-pages` — GPT-4o-mini scans local pages for THIN_CONTENT, DOORWAY_RISK, DUPLICATION_RISK, KEYWORD_STUFFING; stores at `seoPreservation.doorwayDetection`. Stage 3: `POST /tech-seo-audit` — HTML regex checks for title length, meta description length, H1 presence, canonical tag, JSON-LD schema, viewport meta, Open Graph tags; computes per-page score and pass rate; includes pre-launch gate (blocks launch when high-risk pages lack redirects or critical SEO issues exist); stores at `seoPreservation.techAudit`. Stage 4: `POST /build-link-map` — scans href patterns in HTML to build internal link graph; identifies orphan pages (0 inbound), weakly linked pages (1 inbound); GPT-4o-mini generates anchor text recommendations; stores at `seoPreservation.linkMap`. ZIP export includes all preservation files.
-- **SEO Transparency + Comparison Engine**: "Compare" tab (between Assets and Preview) in WebsiteWorkstreamPanel. Two-step flow: (1) `POST /crawl-existing-site` — crawls up to 20 pages of the client's live site via sitemap XML + internal link discovery; per-page captures title, meta, H1, H2s, schema types, word count, canonical, viewport, OG; also fetches sitemap.xml and robots.txt; stored at `client.websiteWorkstream.currentSiteCrawl`. (2) `POST /generate-seo-comparison` — computes before/after comparison using `currentSiteCrawl` + `seoPreservation` + `generatedSite` + `techAudit`; assigns per-page status: PRESERVED/IMPROVED/NEW/REDIRECTED/AT_RISK; calculates SEO Confidence Score (0-100) and SEO Risk Score (0-100) based on unmapped high-risk pages, tech audit pass rate, GBP alignment, critical issues; generates site-level before/after stats and GBP alignment before/after estimate; stored at `client.websiteWorkstream.seoComparison`. UI: confidence/risk score pair, SEO launch gate (clear/blocked), status distribution clickable filter tiles, site-level comparison table with trend arrows, GBP alignment before/after, page-by-page comparison table with filter, collapsible Current Site Snapshot and New Site SEO Snapshot tables. "!" badge on tab when riskScore > 45.
-- **Keyword Strategy Engine**: `POST /api/clients/:clientId/import-keywords` — parses and stores keyword arrays (from Ahrefs CSV/paste) at `client.keywords[]` with volume, difficulty, CPC, parentKeyword, country. `POST /api/clients/:clientId/keyword-strategy` — GPT-4o clusters keywords by intent/service/location, maps each cluster to a target page, identifies quick wins (diff ≤5, vol ≥50), generates SEO strategy (priority pages, technical notes, link building), GBP strategy (primary/additional categories, services to add, 8-week post schedule with suggested text, review keywords, Q&A seeding), and a 12-week execution plan with KPI targets. Stored at `client.keywordStrategy`. Dual-writes to `engineHistory`. UI: `KeywordStrategyPanel` component (CSV drag-drop or paste import, UTF-16 LE BOM parsing, keyword table with diff colour badges, cluster cards, SEO/GBP/Execution tabs) wrapped in `KeywordStrategyPanelWrapper` collapsible panel inside `ClientGrowthIntelligencePanel` between SEO and GBP engine panels.
+- **Website Workstream Agent**: Full website blueprint builder with UI tabs for planning, content, SEO, assets, and preview, including copy variant selection and JSON export.
+- **Website HTML Generation Engine**: Generates production-ready HTML pages, sitemap.xml, and robots.txt from the blueprint, supporting live iframe preview.
+- **Local SEO Page Generator**: AI plans and generates HTML for local service/location pages.
+- **SEO Technical Audit**: Enhanced SEO tab with meta-length indicators, Schema Markup viewer, sitemap.xml viewer, and robots.txt viewer.
+- **Asset Upload System**: Supports drag-and-drop image uploads for blueprint slots and a freeform gallery.
+- **Website ZIP Export & Launch Tab**: Archives all generated site files for download, includes a readiness checklist, custom domain input, and post-launch steps.
+- **SEO Preservation Engine**: Four-stage process for analysing, classifying, and managing existing site URLs for SEO preservation, including doorway page detection, technical SEO audits, and internal link mapping.
+- **SEO Transparency + Comparison Engine**: Compares the new site's SEO performance against the existing site, providing confidence/risk scores, status distribution, and detailed before/after statistics.
+- **Keyword Strategy Engine**: Imports keywords, clusters them by intent, maps to target pages, identifies quick wins, and generates comprehensive SEO, GBP, and 12-week execution strategies.
 - **AI Growth Operator**: Framework for automating growth activities with per-client automation modes and an AI Actions Feed.
 - **AI Growth Operator Daily Brief**: Portfolio-level morning briefing for managers.
 - **Autopilot Execution**: One-click auto-approval for queued AI actions.
@@ -66,13 +66,19 @@ Preferred communication style: Simple, everyday language.
 - **Bullpen Daily Brief**: Scheduled daily agent review and GPT synthesis into a morning brief.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for leads and clients.
 
+### AI Systems Integration Layer
+- **Architecture**: Modular, production-grade server-to-server REST integration between Momentum (upstream) and AI Systems (downstream).
+- **Core Services**: Provisioning, audit logging, status polling, and typed patching.
+- **Key Rules**: Uses `provisioningRequestId` for idempotency, follows an 8-stage lifecycle, and enforces field ownership.
+- **Frontend**: `ProvisioningPanel.tsx` for readiness checks, scope editing, lifecycle display, action buttons, and audit log viewing.
+
 ## External Dependencies
 
 ### Database
 - **Firebase Firestore**: Main NoSQL database.
 
 ### AI Integration
-- **OpenAI API**: Provides AI capabilities (GPT-4o-mini).
+- **OpenAI API**: Provides AI capabilities.
 - **OpenClaw API**: External AI orchestration layer.
 
 ### Authentication & Authorization
