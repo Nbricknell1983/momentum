@@ -1,0 +1,157 @@
+The Agent Command Layer is now complete and live.
+
+Next, I want to build the Expansion Engine.
+
+Context:
+- Momentum now has lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, and the Agent Command Layer
+- AI Systems now handles delivery, website, content, telemetry, publishing, and optimisation
+- The two systems are connected and agents are visible
+- What is missing is the layer that helps us expand, retain, and grow client accounts automatically over time
+
+GOAL
+Build the Expansion Engine so Momentum can:
+- detect upsell opportunities
+- detect churn risk
+- identify referral timing
+- surface account growth prompts
+- recommend next best account actions
+- help sales/account managers grow existing revenue, not just win new deals
+
+IMPORTANT
+This must be:
+- commercially useful
+- explainable
+- premium in UX
+- stage-aware
+- account-aware
+- integrated with Momentum agents and AI Systems summaries
+
+DO NOT:
+- turn this into a generic CRM reminder system
+- expose vague “health” with no action
+- duplicate AI Systems optimisation logic
+- create recommendations without evidence
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Expansion domain model
+Create typed models for at least:
+- accountGrowthSignal
+- expansionOpportunity
+- churnRiskSignal
+- referralOpportunity
+- expansionNextBestAction
+- accountHealthTrend
+- expansionPlay
+- growthTriggerEvent
+- expansionState
+
+2. Expansion signal engine
+Build a service that derives signals from:
+- client command centre state
+- delivery summaries
+- optimisation progress
+- portal engagement
+- onboarding completion
+- module adoption
+- approvals / blockers
+- sales history where available
+
+Examples:
+- client only has website but not SEO
+- telemetry connected but GBP not active
+- website published and stable but optimisation not enabled
+- strong milestones achieved → referral opportunity
+- stalled approvals / poor engagement → churn risk
+
+3. Upsell / cross-sell opportunity engine
+Generate structured opportunities such as:
+- add SEO
+- add GBP management
+- add content engine
+- add optimisation/autopilot
+- add portal access for more stakeholders
+- expand service/location scope
+
+Each opportunity must include:
+- why it was triggered
+- expected outcome
+- confidence
+- suggested conversation angle
+
+4. Churn-risk detection
+Create churn-risk logic using signals such as:
+- missed approvals
+- low engagement
+- stalled progress
+- declining momentum
+- repeated blockers
+- poor portal engagement
+- lack of visible wins
+
+For each churn risk:
+- severity
+- likely cause
+- suggested intervention
+- owner
+
+5. Referral timing engine
+Build logic to detect when a client is a good referral candidate, for example:
+- recent visible win
+- milestone achieved
+- strong portal health
+- successful onboarding
+- positive momentum
+- low friction
+
+Generate:
+- referral opportunity
+- suggested ask timing
+- suggested wording angle
+
+6. Expansion workspace UX
+Create a premium internal view showing:
+- top upsell opportunities
+- churn-risk alerts
+- referral opportunities
+- growth triggers
+- next best account actions
+
+7. Account-level action prompts
+Integrate with the existing sales execution and agent command layers so account managers can see:
+- what to say
+- what asset to reference
+- what proof point to use
+- what next move to take
+
+8. Client-safe growth moments
+Create a model for future client-safe surfacing of growth opportunities without making it salesy or pushy.
+
+9. Admin and inspection support
+Create inspection views/services for:
+- why an expansion signal was created
+- what data supported it
+- what recommendation was generated
+- what action was taken
+
+IMPORTANT RULES
+- Keep recommendations evidence-based
+- Keep churn risk actionable, not just alarming
+- Keep upsell prompts tied to real delivery context
+- Keep this internal-first, with optional future client-safe surfaces
+- Make this useful for account growth in real conversations
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- expansion domain model
+- expansion signal engine
+- upsell / cross-sell opportunity engine
+- churn-risk detection

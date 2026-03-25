@@ -18,6 +18,7 @@ import {
   Activity,
   Bot,
   Brain,
+  TrendingUp,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -53,6 +54,7 @@ const navItems = [
 const managerNavItems = [
   { title: 'Management',     url: '/management',     icon: BarChart3 },
   { title: 'Agent Command',  url: '/agents',         icon: Brain },
+  { title: 'Expansion Engine', url: '/expansion',   icon: TrendingUp },
   { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
   { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
   { title: 'Route Map',      url: '/routes',         icon: Map },
