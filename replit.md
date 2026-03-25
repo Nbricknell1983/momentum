@@ -52,6 +52,7 @@ Preferred communication style: Simple, everyday language.
 - **Bullpen Work Queue**: Trigger-driven system for proactive operational management.
 - **Intelligence Enrichment Engine**: Three-pass auto-enrichment for leads and clients.
 - **Manager Daily Briefing Layer**: Pure derivation engine generating a daily operational briefing from all existing layers, with priority classification (critical/urgent/important/watchlist), section-based layout (approvals/risks/opportunities/blocked/watchlist), change detection vs previous snapshots, review tracking, Firestore persistence, and a debug/inspection log explaining every inclusion and exclusion decision. Accessible at `/briefing`.
+- **Unified Cross-System Operations View**: Operator console combining Momentum (sales-side) and AI Systems (delivery-side) into one command surface. Includes a typed cross-system domain model (`unifiedOpsTypes.ts`), an AI Systems summary adapter deriving delivery-side state from Momentum-synced fields (`aiSystemsAdapter.ts`), a unified ops adapter with lifecycle stage classification and bottleneck/stall detection (`unifiedOpsAdapter.ts`), and a premium operator UX with lifecycle flow bar, cross-system bottlenecks, entity health/drilldown grid, recent milestones, and an inspect panel. Accessible at `/unified-ops`.
 
 ### Client Portal & Command Centre
 - **Client Portal Access Layer**: Defines models for portal share links, invites, access logs, visibility rules, digest schedules, and client portal configurations, with an admin panel and public share page (`/share/:token`).

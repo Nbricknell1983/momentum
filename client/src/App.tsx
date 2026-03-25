@@ -39,6 +39,7 @@ import ReferralPage from '@/pages/referral';
 import AutopilotPage from '@/pages/autopilot';
 import SweepsPage from '@/pages/sweeps';
 import BriefingPage from '@/pages/briefing';
+import UnifiedOpsPage from '@/pages/unified-ops';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -92,6 +93,7 @@ function ProtectedRoutes() {
       <Route path="/referral">{() => <ManagerGate component={ReferralPage} />}</Route>
       <Route path="/autopilot">{() => <ManagerGate component={AutopilotPage} />}</Route>
       <Route path="/briefing">{() => <ManagerGate component={BriefingPage} />}</Route>
+      <Route path="/unified-ops">{() => <ManagerGate component={UnifiedOpsPage} />}</Route>
       <Route path="/sweeps">{() => <ManagerGate component={SweepsPage} />}</Route>
       <Route path="/portal/:clientId" component={ClientPortalPage} />
       <Route component={NotFound} />

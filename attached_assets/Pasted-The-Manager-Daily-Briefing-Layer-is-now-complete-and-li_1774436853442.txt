@@ -1,0 +1,142 @@
+The Manager Daily Briefing Layer is now complete and live.
+
+Next, I want to build the Unified Cross-System Operations View.
+
+Context:
+- Momentum now handles lead intelligence, strategy presentation, proposal acceptance, onboarding transition, sales execution, client portal access, Agent Command, Expansion Engine, Cadence + Automation, Communication Drafting, Executive Reporting, Automation Execution, Referral Engine, Autopilot Policy, Scheduled Sweeps, Real Provider Sending, and Daily Briefing
+- AI Systems handles tenant provisioning, startup orchestration, workflow execution, website generation, content generation, publishing, telemetry, optimisation, and delivery-side agent activity
+- The two systems are connected, but what is still missing is one high-level operator console that shows both systems together
+
+GOAL
+Build the Unified Cross-System Operations View so managers/operators can:
+- see sales-side and delivery-side state together
+- understand handoff flow from lead → proposal → onboarding → provisioning → delivery → optimisation
+- identify cross-system bottlenecks
+- spot blocked or stalled accounts across the full lifecycle
+- see where intervention is needed right now
+- operate the whole business from one command surface
+
+IMPORTANT
+This must be:
+- operator-focused
+- high-signal
+- premium in UX
+- explainable
+- cross-system
+- action-oriented
+
+DO NOT:
+- duplicate every detailed workspace
+- expose raw internal logs by default
+- make it a generic BI dashboard
+- rebuild AI Systems admin inside Momentum
+- flatten both systems into an unreadable wall of widgets
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Cross-system domain model
+Create typed models for at least:
+- unifiedOpsState
+- crossSystemEntityState
+- handoffFlowState
+- crossSystemBottleneck
+- crossSystemAlert
+- crossSystemOpportunity
+- crossSystemMilestone
+- crossSystemDrilldown
+- crossSystemHealthSummary
+
+2. AI Systems summary adapter
+Build a clean adapter that pulls/summarises AI Systems state into Momentum for:
+- tenant provisioning status
+- onboarding/startup status
+- website generation status
+- content generation status
+- publishing status
+- telemetry health
+- optimisation health
+- delivery-side blockers
+- delivery-side next actions
+
+Only surface high-value summaries, not full raw internals.
+
+3. Cross-system flow model
+Create a lifecycle flow that clearly shows:
+- lead captured
+- strategy generated
+- proposal accepted
+- onboarding readiness
+- tenant provisioned
+- delivery active
+- portal active
+- telemetry active
+- optimisation active
+
+This should make gaps and stalls obvious.
+
+4. Unified operations UX
+Build a premium operator dashboard with sections such as:
+- end-to-end flow overview
+- cross-system bottlenecks
+- blocked handoffs
+- at-risk delivery transitions
+- highest-priority interventions
+- recent milestones/wins
+- direct drilldowns into the right workspace
+
+5. Handoff and stall detection
+Create specific logic to detect issues such as:
+- proposal accepted but onboarding incomplete
+- onboarding ready but tenant not provisioned
+- tenant provisioned but startup stalled
+- website built but not published
+- telemetry not connected after launch
+- optimisation inactive despite eligibility
+
+6. Cross-system health summaries
+Support entity-level health summaries for:
+- pre-sale
+- onboarding
+- delivery
+- optimisation
+- communication / engagement
+
+7. Drilldown integration
+Link each unified view item to the right underlying screen:
+- lead workspace
+- onboarding panel
+- provisioning panel
+- client command centre
+- cadence
+- comms
+- briefing
+- AI Systems-linked views where relevant
+
+8. Admin and inspection support
+Create inspection/debug support for:
+- what source data came from Momentum
+- what source data came from AI Systems
+- how a bottleneck/alert/opportunity was derived
+- when the cross-system state was last refreshed
+
+IMPORTANT RULES
+- Keep this summary-first and operational
+- Keep AI Systems surfaced as high-value summaries, not duplicated admin UI
+- Make every alert/intervention explainable
+- Build on the existing integration rather than creating parallel logic
+- Keep the experience premium and manager-usable
+
+OUTPUT FORMAT
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- cross-system domain model
+- AI Systems summary adapter
+- cross-system flow model
+- unified operations UX
