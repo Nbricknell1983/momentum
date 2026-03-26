@@ -33,6 +33,8 @@ import type {
   CreateBookingRequestToolPayload,
   EricaBookingSlot,
 } from './bookingTypes';
+import { generateBookingConfirmation, generateBookingRequestAcknowledgement } from './bookingConfirmationService';
+import { buildReminderSchedule } from './bookingReminderService';
 
 // ---------------------------------------------------------------------------
 // LIVE BOOKING FLOW
@@ -158,6 +160,19 @@ export async function createConfirmedBooking(
     }
   }
 
+  // ── Trigger confirmation + reminder schedule ────────────────────────────
+  try {
+    const [confirmation] = await Promise.all([
+      generateBookingConfirmation(orgId, confirmedBooking, {}, 'booking_confirmed', performedBy),
+    ]);
+    // Build reminder schedule only if appointment is in the future
+    if (new Date(slot.startIso).getTime() > Date.now()) {
+      await buildReminderSchedule(orgId, confirmedBooking, {}, performedBy);
+    }
+  } catch (err: any) {
+    console.warn('[booking-service] Confirmation/reminder trigger failed (non-critical):', err.message);
+  }
+
   return {
     outcomeKey:       'booked',
     success:          true,
@@ -169,7 +184,7 @@ export async function createConfirmedBooking(
     calendarEventId,
     meetingLink,
     notes:            `Appointment confirmed: ${slot.timeLabel}${meetingLink ? ` | Meeting link: ${meetingLink}` : ''}`,
-    nextStep:         `Send confirmation details to ${entityData.contactName ?? entityData.entityName}`,
+    nextStep:         `Confirmation sent. Reminders scheduled.`,
     processedAt:      now,
     processedBy:      performedBy,
   };
@@ -261,6 +276,13 @@ export async function createBookingRequest(
     });
   }
 
+  // ── Trigger acknowledgement ────────────────────────────────────────────
+  try {
+    await generateBookingRequestAcknowledgement(orgId, bookingRequest, {}, performedBy);
+  } catch (err: any) {
+    console.warn('[booking-service] Request acknowledgement failed (non-critical):', err.message);
+  }
+
   return {
     outcomeKey:       'booking_request_created',
     success:          true,
@@ -268,7 +290,7 @@ export async function createBookingRequest(
     fallbackUsed:     true,
     fallbackReason:   payload.fallbackReason,
     slotOfferedCount: 0,
-    notes:            `Booking request created. Follow-up task assigned to operator. Reason: ${payload.fallbackReason.replace(/_/g, ' ')}`,
+    notes:            `Booking request created. Acknowledgement sent where possible. Follow-up task assigned.`,
     nextStep:         `Operator to confirm appointment time with ${entityData.contactName ?? entityData.entityName} and convert to confirmed booking`,
     processedAt:      now,
     processedBy:      performedBy,

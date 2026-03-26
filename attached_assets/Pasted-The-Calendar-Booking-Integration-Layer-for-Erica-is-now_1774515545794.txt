@@ -1,0 +1,122 @@
+The Calendar + Booking Integration Layer for Erica is now complete.
+
+Next, I want to build the Confirmation + Reminder Automation Layer.
+
+Context:
+- Erica calling batches are live
+- Deal Intelligence, Client Intelligence, call briefs, runtime packets, Vapi launch, webhook reconciliation, and outcomes are all working
+- Calendar + Booking Integration is complete
+- Erica can now check availability, create real bookings, and create booking requests when live booking is unavailable
+- What is missing is the post-booking communication and reminder layer
+
+GOAL
+Build the Confirmation + Reminder Automation Layer so Momentum can:
+- send booking confirmations
+- send reminder communications before the appointment
+- support reschedule/cancel flows later
+- reduce no-shows
+- keep communication tied to the booking, entity, and call outcome
+- complete the appointment-setting loop after Erica books
+
+IMPORTANT
+Momentum remains the source of truth for:
+- booking records
+- booking requests
+- booking outcomes
+- related communications
+- reminder timing
+- appointment status history
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Booking communication domain model
+Create typed models for at least:
+- EricaBookingConfirmation
+- EricaBookingReminder
+- EricaBookingCommunicationPlan
+- EricaBookingCommunicationEvent
+- EricaBookingStatusHistory
+- EricaReminderSchedule
+- EricaReminderOutcome
+
+2. Confirmation generation layer
+Build the logic that creates a booking confirmation payload after:
+- real confirmed booking
+- converted booking request
+- optionally booking request receipt acknowledgement
+
+Include:
+- contact name
+- booking date/time
+- timezone-safe formatting
+- business/meeting context
+- reschedule/cancel note placeholder
+- linked booking/call/entity IDs
+
+3. Reminder scheduling layer
+Build a reminder schedule service supporting:
+- immediate confirmation
+- 24-hour reminder
+- same-day reminder
+- configurable org-level defaults
+- suppression rules if booking is too close in time
+
+4. Channel integration
+Connect to existing communication infrastructure so confirmations/reminders can use:
+- email
+- SMS
+- manual fallback if provider is unavailable
+
+Use the Real Provider Sending Layer where configured.
+If provider config is missing, fall back safely and surface it clearly.
+
+5. Booking status + history
+Track:
+- booked
+- confirmed_sent
+- reminder_scheduled
+- reminder_sent
+- cancelled
+- rescheduled
+- no_show
+- completed
+
+Store a clear status history per booking.
+
+6. Erica workspace integration
+Add booking communication visibility to the Bookings tab:
+- confirmation status
+- reminder status
+- next scheduled reminder
+- communication history for that booking
+
+7. Admin and inspection support
+Create inspection for:
+- confirmation payload generated
+- reminder schedule created
+- delivery result
+- failures/fallbacks
+- exact linked booking and entity context
+
+IMPORTANT RULES
+- Do not fake sends
+- Use provider-backed sending when configured
+- Keep reminders tied to actual bookings
+- Keep all communication auditable
+- If config is missing, fall back safely and show exactly what is missing
+
+OUTPUT FORMAT
+
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- booking communication domain model
+- confirmation generation layer
+- reminder scheduling layer
+- booking status/history model

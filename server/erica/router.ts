@@ -50,6 +50,9 @@ import type {
   EricaBookingSlot,
   CheckAvailabilityToolPayload,
 } from './bookingTypes';
+import { listConfirmations, getConfirmationForBooking, getChannelProviderState } from './bookingConfirmationService';
+import { listReminderSchedules, listReminders, getScheduleForBooking, processDueReminders } from './bookingReminderService';
+import { listCommEvents, listStatusHistory } from './bookingStatusService';
 
 export const ericaRouter = Router();
 
@@ -580,6 +583,100 @@ ericaRouter.post('/orgs/:orgId/bookings/check-availability', async (req: Request
       lookAheadDays:   Number(req.body.lookAheadDays ?? 7),
     };
     const result = await checkAvailability(req.params.orgId, payload);
+    res.json({ result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================================
+// CONFIRMATION + REMINDER COMMUNICATION ENDPOINTS
+// =============================================================================
+
+// GET /api/erica/orgs/:orgId/comm/channel-state
+ericaRouter.get('/orgs/:orgId/comm/channel-state', async (_req: Request, res: Response) => {
+  try {
+    res.json({ channelState: getChannelProviderState() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/comm/confirmations
+ericaRouter.get('/orgs/:orgId/comm/confirmations', async (req: Request, res: Response) => {
+  try {
+    const items = await listConfirmations(req.params.orgId, Number(req.query.limit ?? 50));
+    res.json({ confirmations: items });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/comm/confirmations/booking/:bookingId
+ericaRouter.get('/orgs/:orgId/comm/confirmations/booking/:bookingId', async (req: Request, res: Response) => {
+  try {
+    const confirmation = await getConfirmationForBooking(req.params.orgId, req.params.bookingId);
+    res.json({ confirmation });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/comm/reminders
+ericaRouter.get('/orgs/:orgId/comm/reminders', async (req: Request, res: Response) => {
+  try {
+    const reminders = await listReminders(req.params.orgId, Number(req.query.limit ?? 50));
+    res.json({ reminders });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/comm/reminder-schedules
+ericaRouter.get('/orgs/:orgId/comm/reminder-schedules', async (req: Request, res: Response) => {
+  try {
+    const schedules = await listReminderSchedules(req.params.orgId, Number(req.query.limit ?? 20));
+    res.json({ schedules });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/comm/reminder-schedules/booking/:bookingId
+ericaRouter.get('/orgs/:orgId/comm/reminder-schedules/booking/:bookingId', async (req: Request, res: Response) => {
+  try {
+    const schedule = await getScheduleForBooking(req.params.orgId, req.params.bookingId);
+    res.json({ schedule });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/comm/events
+ericaRouter.get('/orgs/:orgId/comm/events', async (req: Request, res: Response) => {
+  try {
+    const events = await listCommEvents(req.params.orgId, Number(req.query.limit ?? 100));
+    res.json({ events });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/comm/status-history
+ericaRouter.get('/orgs/:orgId/comm/status-history', async (req: Request, res: Response) => {
+  try {
+    const history = await listStatusHistory(req.params.orgId, Number(req.query.limit ?? 100));
+    res.json({ history });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/erica/orgs/:orgId/comm/process-due-reminders
+// Trigger: scheduler or manual operator action
+ericaRouter.post('/orgs/:orgId/comm/process-due-reminders', async (req: Request, res: Response) => {
+  try {
+    const result = await processDueReminders(req.params.orgId);
     res.json({ result });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

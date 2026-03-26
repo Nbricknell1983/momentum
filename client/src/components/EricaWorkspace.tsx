@@ -484,6 +484,39 @@ export default function EricaWorkspace() {
     },
   });
 
+  // ── Communication queries ─────────────────────────────────────────────────
+  const { data: channelStateData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/comm/channel-state`],
+    enabled:  !!orgId,
+  });
+  const channelState = (channelStateData as any)?.channelState ?? null;
+
+  const { data: confirmationsData, refetch: refetchConfirmations } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/comm/confirmations`],
+    enabled:  !!orgId,
+  });
+  const confirmations: any[] = (confirmationsData as any)?.confirmations ?? [];
+
+  const { data: remindersData, refetch: refetchReminders } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/comm/reminders`],
+    enabled:  !!orgId,
+  });
+  const reminders: any[] = (remindersData as any)?.reminders ?? [];
+
+  const { data: commEventsData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/comm/events`],
+    enabled:  !!orgId,
+  });
+  const commEvents: any[] = (commEventsData as any)?.events ?? [];
+
+  const processDueRemindersMutation = useMutation({
+    mutationFn: () => apiRequest('POST', `/api/erica/orgs/${orgId}/comm/process-due-reminders`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/comm/reminders`] });
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/comm/events`] });
+    },
+  });
+
   const updateRuntimeConfigMutation = useMutation({
     mutationFn: (updates: Record<string, any>) =>
       apiRequest('PATCH', `/api/erica/orgs/${orgId}/runtime-config`, updates),
@@ -1966,6 +1999,240 @@ export default function EricaWorkspace() {
                         {entry.slot ?? entry.fallbackReason?.replace(/_/g, ' ') ?? entry.entityId ?? ''}
                       </span>
                       <span className="text-slate-400 shrink-0 ml-auto">{entry.performedBy}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── COMMUNICATION SECTION ─────────────────────────────────── */}
+
+          {/* Channel state banner */}
+          <div className="flex items-center gap-2 pt-2">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-xs font-medium text-slate-400 uppercase tracking-wide px-2">Confirmation + Reminders</span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          {/* Channel provider state */}
+          <Card className="border border-slate-200">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-slate-700">Communication channels</p>
+                  <div className="flex items-center gap-4">
+                    {/* Email */}
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${channelState?.email?.configured ? 'bg-green-400' : 'bg-slate-300'}`} />
+                      <span className="text-xs text-slate-600">Email</span>
+                      {!channelState?.email?.configured && channelState?.email?.missingSecrets?.length > 0 && (
+                        <span className="text-xs text-amber-600">
+                          — needs {channelState.email.missingSecrets[0]}
+                        </span>
+                      )}
+                    </div>
+                    {/* SMS */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-slate-300" />
+                      <span className="text-xs text-slate-400">SMS (not yet configured)</span>
+                    </div>
+                    {/* Manual */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-300" />
+                      <span className="text-xs text-slate-600">Manual fallback — always active</span>
+                    </div>
+                  </div>
+                  {!channelState?.email?.configured && (
+                    <p className="text-xs text-slate-500">
+                      Add <code className="font-mono bg-slate-100 px-1 rounded">RESEND_API_KEY</code>, <code className="font-mono bg-slate-100 px-1 rounded">SENDGRID_API_KEY</code>, or <code className="font-mono bg-slate-100 px-1 rounded">SMTP_HOST</code> to enable email confirmations and reminders.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Confirmations */}
+          <Card className="border border-slate-200">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-blue-600" />
+                  Booking Confirmations
+                </CardTitle>
+                <Button size="sm" variant="ghost" onClick={() => refetchConfirmations()} data-testid="btn-refresh-confirmations">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {confirmations.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-sm">
+                  <MessageSquare className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                  <p>No confirmations generated yet</p>
+                  <p className="text-xs mt-1">Confirmations are generated automatically on booking</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {confirmations.slice(0, 15).map((conf: any) => (
+                    <div
+                      key={conf.confirmationId ?? conf.id}
+                      className="flex items-start gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50 text-xs"
+                      data-testid={`confirmation-${conf.confirmationId ?? conf.id}`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {conf.status === 'sent'    ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> :
+                         conf.status === 'failed'  ? <X className="w-3.5 h-3.5 text-red-500" /> :
+                         conf.status === 'skipped' ? <Clock className="w-3.5 h-3.5 text-amber-500" /> :
+                                                     <Clock className="w-3.5 h-3.5 text-slate-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-slate-700 truncate">{conf.toName}</p>
+                          <Badge variant="outline" className={`text-xs shrink-0 ${
+                            conf.status === 'sent'    ? 'border-green-400 text-green-700' :
+                            conf.status === 'failed'  ? 'border-red-400 text-red-700' :
+                            conf.status === 'skipped' ? 'border-amber-400 text-amber-700' :
+                            'border-slate-300 text-slate-600'
+                          }`}>{conf.status}</Badge>
+                          <Badge variant="outline" className="text-xs shrink-0 border-blue-200 text-blue-600">{conf.channel}</Badge>
+                        </div>
+                        <p className="text-slate-500 truncate mt-0.5">{conf.subject}</p>
+                        {conf.failureReason && (
+                          <p className="text-red-500 mt-0.5">{conf.failureReason}</p>
+                        )}
+                        {conf.trigger && (
+                          <p className="text-slate-400 mt-0.5">{conf.trigger.replace(/_/g, ' ')}</p>
+                        )}
+                      </div>
+                      <span className="text-slate-400 shrink-0">
+                        {conf.createdAt ? new Date(conf.createdAt).toLocaleDateString('en-AU') : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Reminders */}
+          <Card className="border border-slate-200">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-purple-600" />
+                  Scheduled Reminders
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7 border-purple-200 text-purple-700 hover:bg-purple-50"
+                    onClick={() => processDueRemindersMutation.mutate()}
+                    disabled={processDueRemindersMutation.isPending}
+                    data-testid="btn-process-due-reminders"
+                  >
+                    {processDueRemindersMutation.isPending ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <Zap className="w-3 h-3 mr-1" />
+                    )}
+                    Process due
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => refetchReminders()} data-testid="btn-refresh-reminders">
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {reminders.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-sm">
+                  <Clock className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                  <p>No reminders scheduled yet</p>
+                  <p className="text-xs mt-1">Reminders are created automatically for confirmed bookings</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {reminders.slice(0, 20).map((rem: any) => (
+                    <div
+                      key={rem.reminderId ?? rem.id}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50 text-xs"
+                      data-testid={`reminder-${rem.reminderId ?? rem.id}`}
+                    >
+                      <div className="shrink-0">
+                        {rem.status === 'sent'       ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> :
+                         rem.status === 'scheduled'  ? <Clock className="w-3.5 h-3.5 text-blue-500" /> :
+                         rem.status === 'suppressed' ? <X className="w-3.5 h-3.5 text-slate-400" /> :
+                         rem.status === 'failed'     ? <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> :
+                                                       <Clock className="w-3.5 h-3.5 text-slate-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-slate-700">{rem.reminderType?.replace('_', '-')} reminder</p>
+                          <Badge variant="outline" className={`text-xs shrink-0 ${
+                            rem.status === 'sent'       ? 'border-green-400 text-green-700' :
+                            rem.status === 'scheduled'  ? 'border-blue-400 text-blue-700' :
+                            rem.status === 'suppressed' ? 'border-slate-300 text-slate-500' :
+                            rem.status === 'failed'     ? 'border-red-400 text-red-700' :
+                            'border-slate-300 text-slate-600'
+                          }`}>{rem.status}</Badge>
+                        </div>
+                        <p className="text-slate-500 truncate">{rem.toName} · {rem.channel}</p>
+                        {rem.suppressedReason && (
+                          <p className="text-slate-400 italic">{rem.suppressedReason}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-slate-600 font-medium">
+                          {rem.scheduledFor ? new Date(rem.scheduledFor).toLocaleDateString('en-AU') : ''}
+                        </p>
+                        <p className="text-slate-400">
+                          {rem.scheduledFor ? new Date(rem.scheduledFor).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Communication event log */}
+          {commEvents.length > 0 && (
+            <Card className="border border-slate-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-slate-600" />
+                  Communication Event Log
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-1.5">
+                  {commEvents.slice(0, 25).map((ev: any, i: number) => (
+                    <div
+                      key={ev.eventId ?? i}
+                      className="flex items-center gap-3 text-xs py-1.5 border-b border-slate-100 last:border-0"
+                      data-testid={`comm-event-${i}`}
+                    >
+                      <span className="text-slate-400 shrink-0 w-20">
+                        {ev.at ? new Date(ev.at).toLocaleDateString('en-AU') : ''}
+                      </span>
+                      <span className={`font-medium shrink-0 ${
+                        ev.eventType?.includes('sent')       ? 'text-green-700' :
+                        ev.eventType?.includes('failed')     ? 'text-red-700' :
+                        ev.eventType?.includes('skipped')    ? 'text-amber-700' :
+                        ev.eventType?.includes('suppressed') ? 'text-slate-500' :
+                        'text-blue-700'
+                      }`}>
+                        {(ev.eventType ?? '').replace(/_/g, ' ')}
+                      </span>
+                      {ev.channel && (
+                        <Badge variant="outline" className="text-xs border-slate-200 text-slate-500">{ev.channel}</Badge>
+                      )}
+                      <span className="text-slate-500 truncate">{ev.note}</span>
+                      <span className="text-slate-400 shrink-0 ml-auto">{ev.performedBy}</span>
                     </div>
                   ))}
                 </div>
