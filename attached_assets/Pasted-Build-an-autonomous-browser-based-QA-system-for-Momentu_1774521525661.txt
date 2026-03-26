@@ -1,0 +1,113 @@
+Build an autonomous browser-based QA system for Momentum that tests the app like a real user and produces structured bug reports plus Replit repair prompts.
+
+GOAL
+Create a repeatable QA sweep that navigates the app in a browser, tests key workflows on desktop and mobile, captures crashes/console errors/network failures/UX breakage, and outputs a structured report.
+
+REQUIREMENTS
+
+1. Use Playwright for browser automation.
+2. The QA runner must:
+- open the app
+- wait for rendering/network idle where appropriate
+- navigate all major sidebar/nav routes
+- revisit routes after navigation
+- scroll pages from top to bottom
+- test desktop and mobile viewport sizes
+- click visible buttons where safe
+- open and close modals/drawers
+- switch tabs/accordions
+- test safe forms without destructive actions
+- detect stuck loading states
+- detect blank screens
+- detect React/render crashes
+- capture console errors
+- capture failed network requests
+- detect body scroll lock bugs after modal close
+- detect clipped/off-screen/overlapping UI
+- detect content hidden behind sticky headers
+- detect route navigation failures
+- detect duplicated/flickering components where possible
+
+3. Test target areas should include:
+- dashboard/home
+- all major sidebar routes
+- list views
+- detail views
+- modal-heavy areas
+- tabbed interfaces
+- scheduling/cadence pages
+- key forms
+- any accessible route from primary navigation
+
+4. Output format:
+For every issue found, produce:
+- issueTitle
+- severity (critical/high/medium/low)
+- route
+- reproductionSteps
+- observedBehaviour
+- expectedBehaviour
+- consoleError
+- networkError
+- probableCause
+- recommendedFixApproach
+- replitPrompt
+
+5. Replit prompt generation:
+For each bug, generate a copy-pasteable repair prompt that:
+- clearly describes the bug
+- names likely route/component/file if known
+- states expected behaviour
+- tells Replit to inspect relevant files
+- asks for a fix without breaking adjacent UX
+- tells Replit to explain assumptions if uncertain
+
+6. Final summary output:
+- total bugs found
+- critical bug count
+- top 5 fixes to prioritise
+- one master Replit repair prompt for the highest-priority issues
+
+IMPLEMENTATION DETAILS
+
+- Add a Playwright test harness under something like:
+- tests/qa/
+- or qa/
+- Create a reusable QA runner module that:
+- registers console errors
+- registers request/response failures
+- tracks route transitions
+- performs generic user-like interactions
+- runs scroll checks on document and nested containers
+- runs viewport sweeps for desktop and mobile
+
+- Add route discovery:
+- derive routes from sidebar/navigation config if available
+- allow a manual seed list fallback
+
+- Add issue normalization:
+- convert raw Playwright findings into structured bug records
+- dedupe repeated findings from the same route/component/error signature
+
+- Add report generation:
+- JSON report
+- readable markdown report
+- generated Replit prompt per issue
+- master summary prompt
+
+- If auth is required, inspect the existing auth flow and add a safe authenticated QA path using the app’s current login mechanism.
+- Do not perform destructive actions like deleting records or sending irreversible external actions.
+- Prefer robust selectors and visible-text targeting, but inspect the actual codebase and use the most reliable approach available.
+- Keep the system maintainable and easy to rerun.
+
+DELIVERABLES
+1. Playwright QA runner
+2. Structured issue schema
+3. Markdown + JSON bug report output
+4. Replit prompt generator for each issue
+5. Master repair prompt generator
+6. npm script(s) to run the QA sweep locally
+7. brief README explaining how to run it
+
+IMPORTANT
+Inspect the actual Momentum codebase first and adapt the QA sweep to the existing route structure, auth flow, component architecture, and layout system. If anything is uncertain, explain assumptions before implementing.
