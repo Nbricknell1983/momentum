@@ -22,6 +22,8 @@ import { firestore } from '../firebase';
 import { getBatch, updateItemStatus, attachBriefToItem } from './batchService';
 import { buildEricaVapiPayloadWithOrg } from './vapiPayloadBuilder';
 import type { EricaCallBatch, EricaCallBatchItem } from '../../client/src/lib/ericaTypes';
+import { buildRuntimePacket, injectRuntimePacketIntoVapi } from './runtimePacketBuilder';
+import type { EricaRuntimeConfig } from './ericaRuntimeTypes';
 
 // ---------------------------------------------------------------------------
 // Launch result
@@ -129,10 +131,28 @@ export async function launchEricaBatchItem(params: {
   const momentumCallId = randomUUID();
   const brief          = item.brief!;
 
+  // ── Load org runtime config (non-fatal — fall back to defaults) ───────────
+  let runtimeConfig: Partial<EricaRuntimeConfig> = {};
+  try {
+    const cfgSnap = await db.collection('orgs').doc(orgId)
+      .collection('ericaConfig').doc('runtime').get();
+    if (cfgSnap.exists) runtimeConfig = cfgSnap.data() as Partial<EricaRuntimeConfig>;
+  } catch { /* use defaults */ }
+
+  // ── Build runtime packet ──────────────────────────────────────────────────
+  let runtimePacket;
+  try {
+    runtimePacket = buildRuntimePacket(brief, runtimeConfig);
+    console.log(`[erica-launch] Runtime packet built: ${runtimePacket.packetId} intent=${runtimePacket.callIntent}`);
+  } catch (err: any) {
+    console.warn(`[erica-launch] Runtime packet build failed: ${err.message} — proceeding with base payload`);
+    runtimePacket = null;
+  }
+
   // ── Build Vapi payload ────────────────────────────────────────────────────
   let payload: Record<string, any>;
   try {
-    payload = buildEricaVapiPayloadWithOrg({
+    const basePayload = buildEricaVapiPayloadWithOrg({
       momentumCallId,
       batchId,
       batchItemId: itemId,
@@ -140,6 +160,16 @@ export async function launchEricaBatchItem(params: {
       orgId,
       brief,
     });
+
+    // Inject runtime packet into assistantOverrides (enriches system prompt + opening)
+    if (runtimePacket && basePayload.assistantOverrides) {
+      basePayload.assistantOverrides = injectRuntimePacketIntoVapi(
+        runtimePacket,
+        basePayload.assistantOverrides,
+      );
+    }
+
+    payload = basePayload;
   } catch (err: any) {
     return { success: false, error: `Payload build failed: ${err.message}` };
   }
@@ -147,27 +177,29 @@ export async function launchEricaBatchItem(params: {
   // ── Write launch record to Firestore (before calling Vapi) ───────────────
   const callRef = db.collection('orgs').doc(orgId).collection('vapiCalls').doc(momentumCallId);
   await callRef.set({
-    callId:        momentumCallId,
+    callId:           momentumCallId,
     orgId,
     batchId,
-    batchItemId:   itemId,
-    briefId:       brief.briefId,
-    intent:        item.context?.callIntent,
-    entityType:    item.target.entityType,
-    entityId:      item.target.entityId,
-    entityName:    item.target.entityName,
-    businessName:  item.target.businessName,
-    phoneNumber:   brief.phone,
+    batchItemId:      itemId,
+    briefId:          brief.briefId,
+    runtimePacketId:  runtimePacket?.packetId ?? null,
+    intent:           item.context?.callIntent,
+    entityType:       item.target.entityType,
+    entityId:         item.target.entityId,
+    entityName:       item.target.entityName,
+    businessName:     item.target.businessName,
+    phoneNumber:      brief.phone,
     assistantId,
-    status:        'launching',
-    launchedAt:    new Date().toISOString(),
+    status:           'launching',
+    launchedAt:       new Date().toISOString(),
     launchedBy,
-    policyMode:    'approval_only',
-    toolCallCount: 0,
-    toolCallLog:   [],
-    objections:    [],
+    policyMode:       'approval_only',
+    toolCallCount:    0,
+    toolCallLog:      [],
+    objections:       [],
     approvalRequired: false,
-    metadata:      payload.metadata,
+    metadata:         payload.metadata,
+    inspectionSummary: runtimePacket?.inspectionSummary ?? null,
   });
 
   // ── Mark batch item as launching ──────────────────────────────────────────

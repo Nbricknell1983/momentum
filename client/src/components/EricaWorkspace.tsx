@@ -14,6 +14,7 @@ import {
   FileText, Eye, SkipForward, Trash2, RefreshCw, Phone, TrendingUp,
   Mic, BookOpen, Zap, ShieldCheck, MessageSquare, Users,
   Radio, Activity, ListOrdered, Loader2, PhoneMissed,
+  Settings, Terminal, ChevronUp, Copy, CheckCheck,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -430,6 +431,36 @@ export default function EricaWorkspace() {
   });
   const auditEvents = (eventsData as any)?.events ?? [];
 
+  const { data: runtimeConfigData, refetch: refetchRuntimeConfig } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/runtime-config`],
+    enabled:  !!orgId,
+  });
+  const runtimeConfig = (runtimeConfigData as any)?.config ?? {};
+
+  const { data: runtimePacketsData, refetch: refetchRuntimePackets } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/runtime-packets`],
+    enabled:  !!orgId,
+  });
+  const runtimePackets = (runtimePacketsData as any)?.packets ?? [];
+
+  const updateRuntimeConfigMutation = useMutation({
+    mutationFn: (updates: Record<string, any>) =>
+      apiRequest('PATCH', `/api/erica/orgs/${orgId}/runtime-config`, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/runtime-config`] });
+    },
+  });
+
+  const previewPacketMutation = useMutation({
+    mutationFn: (briefId: string) =>
+      apiRequest('POST', `/api/erica/orgs/${orgId}/briefs/${briefId}/preview-packet`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/runtime-packets`] });
+    },
+  });
+
+  const [selectedPacket, setSelectedPacket] = useState<any | null>(null);
+
   const launchItemMutation = useMutation({
     mutationFn: ({ batchId, itemId }: { batchId: string; itemId: string }) =>
       apiRequest('POST', `/api/erica/orgs/${orgId}/batches/${batchId}/items/${itemId}/launch-call`, {}),
@@ -448,7 +479,10 @@ export default function EricaWorkspace() {
     },
   });
 
-  const [launchingItemId, setLaunchingItemId] = useState<string | null>(null);
+  const [launchingItemId,    setLaunchingItemId]    = useState<string | null>(null);
+  const [previewPacketBriefId, setPreviewPacketBriefId] = useState<string | null>(null);
+  const [expandedPrompt,     setExpandedPrompt]     = useState(false);
+  const [copiedPrompt,       setCopiedPrompt]       = useState(false);
 
   async function handleLaunchItem(batchId: string, itemId: string) {
     setLaunchingItemId(itemId);
@@ -685,6 +719,7 @@ export default function EricaWorkspace() {
             { value: 'review',    label: 'Review',     icon: ShieldCheck },
             { value: 'execution', label: 'Execution',  icon: Radio },
             { value: 'results',   label: 'Results',    icon: TrendingUp },
+            { value: 'runtime',   label: 'Runtime',    icon: Settings },
             { value: 'inspect',   label: 'Inspect',    icon: Activity },
           ].map(({ value, label, icon: Icon }) => (
             <TabsTrigger
@@ -1141,6 +1176,303 @@ export default function EricaWorkspace() {
                     </Card>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── RUNTIME TAB ─────────────────────────────────────────────── */}
+        <TabsContent value="runtime" className="flex-1 overflow-y-auto p-6 mt-0 space-y-6">
+
+          {/* Runtime config controls */}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
+              <Settings className="w-4 h-4 text-slate-600" /> Erica Behaviour Settings
+            </h3>
+            <Card className="border border-slate-200">
+              <CardContent className="p-4 space-y-4">
+
+                {/* Objection handling mode */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">Objection handling mode</p>
+                    <p className="text-xs text-slate-500 mt-0.5">How Erica responds when a prospect raises an objection</p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {(['non_pushy', 'empathetic_only', 'direct'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => updateRuntimeConfigMutation.mutate({ objectionHandlingMode: mode })}
+                        data-testid={`btn-objection-mode-${mode}`}
+                        className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                          (runtimeConfig.objectionHandlingMode ?? 'non_pushy') === mode
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {mode.replace(/_/g, ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Close aggressiveness */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">Close aggressiveness</p>
+                    <p className="text-xs text-slate-500 mt-0.5">How many close attempts Erica makes before releasing</p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {(['soft', 'standard', 'persistent'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => updateRuntimeConfigMutation.mutate({ closeAggressiveness: mode })}
+                        data-testid={`btn-close-agg-${mode}`}
+                        className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                          (runtimeConfig.closeAggressiveness ?? 'standard') === mode
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Safety toggles */}
+                <div>
+                  <p className="text-sm font-medium text-slate-800 mb-2">Safety guardrails</p>
+                  <div className="space-y-1.5">
+                    {[
+                      { key: 'requireBriefBeforeLaunch', label: 'Require brief before launching any call' },
+                      { key: 'blockCallWithoutPhone',    label: 'Block calls with no phone number' },
+                      { key: 'blockCallWithoutBrief',    label: 'Block calls with no attached brief' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">{label}</span>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${
+                            runtimeConfig.safetyToggles?.[key] !== false
+                              ? 'border-green-300 text-green-700'
+                              : 'border-red-300 text-red-600'
+                          }`}
+                        >
+                          {runtimeConfig.safetyToggles?.[key] !== false ? 'ON' : 'OFF'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Generic fallback */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">Generic fallback</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Allow Erica to use a generic script if brief is missing</p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${runtimeConfig.genericFallbackAllowed ? 'border-orange-300 text-orange-700' : 'border-green-300 text-green-700'}`}
+                  >
+                    {runtimeConfig.genericFallbackAllowed ? 'ALLOWED (not recommended)' : 'BLOCKED (safe)'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Runtime packet preview — per brief */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-purple-600" /> Runtime Packets
+                <span className="text-xs font-normal text-slate-400">— built from Momentum brief at launch time</span>
+              </h3>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-500" onClick={() => refetchRuntimePackets()} data-testid="btn-refresh-packets">
+                <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+              </Button>
+            </div>
+
+            {/* Preview from brief */}
+            {batches.flatMap(b => b.items ?? []).filter(i => i.brief?.briefId).length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-slate-500 mb-2">Preview runtime packet for a ready brief:</p>
+                <div className="flex flex-wrap gap-2">
+                  {batches.flatMap(b => b.items ?? []).filter(i => i.brief?.briefId).slice(0, 6).map(item => (
+                    <Button
+                      key={item.itemId}
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={previewPacketMutation.isPending}
+                      onClick={async () => {
+                        const result = await previewPacketMutation.mutateAsync(item.brief!.briefId);
+                        setSelectedPacket((result as any)?.packet ?? null);
+                      }}
+                      data-testid={`btn-preview-packet-${item.itemId}`}
+                    >
+                      {previewPacketMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Eye className="w-3 h-3 mr-1" />}
+                      {item.targetName}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Selected packet inspection */}
+            {selectedPacket && (
+              <Card className="border border-purple-200 bg-purple-50/30 mb-4">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm text-purple-800 flex items-center gap-2">
+                      <Terminal className="w-4 h-4" /> Packet: {selectedPacket.packetId?.slice(0, 12)}…
+                    </CardTitle>
+                    <Button size="sm" variant="ghost" className="h-6 px-1 text-xs" onClick={() => setSelectedPacket(null)}>
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-4 pb-4 space-y-3">
+                  {/* Inspection summary */}
+                  {selectedPacket.inspectionSummary && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.entries(selectedPacket.inspectionSummary).map(([k, v]) => (
+                        <div key={k} className="bg-white rounded border border-purple-100 px-2 py-1.5">
+                          <p className="text-xs text-slate-500">{k.replace(/([A-Z])/g, ' $1').trim()}</p>
+                          <p className="text-xs font-medium text-slate-800 capitalize">{String(v)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Opening strategy */}
+                  {selectedPacket.openingStrategy && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-600 mb-1">Opening line</p>
+                      <p className="text-sm text-slate-700 bg-white border border-purple-100 rounded px-3 py-2 italic">
+                        "{selectedPacket.openingStrategy.openingLine}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Question plan */}
+                  {selectedPacket.questionStrategy?.stages && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-600 mb-1">Question plan ({selectedPacket.questionStrategy.framework})</p>
+                      <div className="space-y-1.5">
+                        {selectedPacket.questionStrategy.stages.map((s: any, i: number) => (
+                          <div key={i} className="bg-white border border-purple-100 rounded px-3 py-2">
+                            <p className="text-xs text-slate-500 mb-0.5 capitalize">{s.stage?.replace(/_/g, ' ')}</p>
+                            <p className="text-xs text-slate-700">"{s.question}"</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Allowed actions */}
+                  {selectedPacket.allowedActions && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-600 mb-1">Allowed actions</p>
+                      <div className="flex flex-wrap gap-1">
+                        {(selectedPacket.allowedActions.allowed ?? []).map((a: string) => (
+                          <Badge key={a} variant="outline" className="text-xs border-green-300 text-green-700 capitalize">{a.replace(/_/g, ' ')}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* System prompt viewer */}
+                  {selectedPacket.systemPrompt && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-semibold text-slate-600">System prompt</p>
+                        <div className="flex gap-1.5">
+                          <Button
+                            size="sm" variant="ghost" className="h-6 px-2 text-xs"
+                            onClick={() => setExpandedPrompt(p => !p)}
+                            data-testid="btn-toggle-prompt"
+                          >
+                            {expandedPrompt ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
+                            {expandedPrompt ? 'Collapse' : 'Expand'}
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost" className="h-6 px-2 text-xs"
+                            onClick={() => {
+                              navigator.clipboard.writeText(selectedPacket.systemPrompt);
+                              setCopiedPrompt(true);
+                              setTimeout(() => setCopiedPrompt(false), 2000);
+                            }}
+                            data-testid="btn-copy-prompt"
+                          >
+                            {copiedPrompt ? <CheckCheck className="w-3 h-3 mr-1 text-green-600" /> : <Copy className="w-3 h-3 mr-1" />}
+                            {copiedPrompt ? 'Copied' : 'Copy'}
+                          </Button>
+                        </div>
+                      </div>
+                      <pre className={`text-xs text-slate-700 bg-slate-900 text-slate-100 rounded p-3 overflow-x-auto ${expandedPrompt ? '' : 'max-h-36 overflow-y-hidden'}`}>
+                        {selectedPacket.systemPrompt}
+                      </pre>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Previous runtime packets */}
+            {runtimePackets.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500 font-medium">Recent packets</p>
+                {runtimePackets.slice(0, 5).map((packet: any) => (
+                  <div
+                    key={packet.id}
+                    className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-4 py-3 cursor-pointer hover:border-purple-200 hover:bg-purple-50/20 transition-colors"
+                    onClick={() => setSelectedPacket(packet)}
+                    data-testid={`packet-row-${packet.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Terminal className="w-4 h-4 text-purple-500" />
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{packet.entityName ?? packet.businessName}</p>
+                        <p className="text-xs text-slate-500 capitalize">{packet.callIntent?.replace(/_/g, ' ')}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {packet.inspectionSummary && (
+                        <div className="flex gap-1">
+                          <Badge variant="outline" className="text-xs border-purple-200 text-purple-700">
+                            {packet.inspectionSummary.openingStyleLabel}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs border-slate-200 text-slate-500">
+                            {packet.inspectionSummary.allowedActionCount} actions
+                          </Badge>
+                        </div>
+                      )}
+                      {packet.previewOnly && (
+                        <Badge variant="outline" className="text-xs border-amber-200 text-amber-600">preview</Badge>
+                      )}
+                      <span className="text-xs text-slate-400">
+                        {packet.generatedAt ? new Date(packet.generatedAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {runtimePackets.length === 0 && !selectedPacket && (
+              <div className="flex flex-col items-center justify-center h-24 text-slate-400">
+                <Terminal className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">No runtime packets yet</p>
+                <p className="text-xs mt-0.5">Preview a packet from a ready brief above, or launch a call to generate one automatically</p>
               </div>
             )}
           </div>

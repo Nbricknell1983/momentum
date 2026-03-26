@@ -1,0 +1,161 @@
+The Erica Execution Bridge is now complete and live.
+
+Next, I want to build the Erica Assistant Runtime Config Layer.
+
+Context:
+- Erica batch selection, source-aware call context, deal intelligence, client intelligence, and call brief generation are complete
+- Erica execution is live through Vapi
+- Calls can now be launched per item or sequentially from batches
+- Webhook reconciliation is live and writes events/results back into Momentum
+- What is missing is the runtime assistant configuration layer that controls exactly how Erica behaves in live conversations
+
+GOAL
+Build the Erica Assistant Runtime Config Layer so Erica can:
+- use the correct opening based on call type
+- use the structured call brief properly
+- follow NEPQ / Chris Voss / SWISH-informed conversation rules safely
+- handle objections contextually
+- move toward booking the appointment or nurture/review call
+- use only the tools/actions allowed for that call
+- return structured outcomes consistently
+
+IMPORTANT
+Vapi remains the voice layer.
+Momentum remains the source of truth for:
+- call intent
+- call brief
+- opening angle
+- question plan
+- objection predictions
+- close strategy
+- allowed tools/actions
+
+DO NOT:
+- let Erica revert to a generic one-size-fits-all script
+- let Vapi decide the strategy without the Momentum call brief
+- let Erica use tools outside the allowed actions
+- let Erica hard close unnaturally
+- let Erica ignore source context
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Erica runtime domain model
+Create typed models for at least:
+- EricaAssistantProfile
+- EricaRuntimeConfig
+- EricaOpeningStrategy
+- EricaQuestionStrategy
+- EricaObjectionHandlingPlan
+- EricaClosePlan
+- EricaAllowedActionSet
+- EricaConversationGuardrail
+- EricaRuntimePacket
+
+2. Runtime packet builder
+Build a service that converts EricaCallBrief into the exact runtime packet Erica should receive at call launch.
+Include:
+- who this is
+- why calling now
+- opening line
+- relationship state
+- tone
+- NEPQ question flow
+- Voss label/mirror/calibrated question options
+- objection predictions
+- close strategy
+- allowed actions
+- escalation conditions
+- what to avoid saying
+
+3. Assistant instruction framework
+Create the runtime instruction framework for Erica so she behaves differently for:
+- cold_outreach
+- discovery_qualification
+- strategy_follow_up
+- proposal_follow_up
+- nurture
+- upsell
+- churn_intervention
+- referral_ask
+- dormant_lead_reactivation
+
+For each, define:
+- opening style
+- discovery style
+- objection style
+- close style
+
+4. Guardrailed objection handling
+Implement controlled objection handling patterns for:
+- too expensive
+- too busy
+- need to think
+- already have provider
+- not ready
+- partner approval
+- bad prior experience
+- no urgency
+
+These must be:
+- grounded in the brief
+- non-pushy
+- designed to move toward the appointment, not argue
+
+5. Tool/action restriction layer
+Make sure Erica can only use the actions allowed in the runtime packet, such as:
+- book_appointment
+- take_message
+- request_callback
+- create_followup_task
+- log_objection
+- log_call_outcome
+
+6. Outcome contract
+Define the structured conversation outcome Erica should return, including:
+- booked / not booked
+- objection raised
+- sentiment/readiness
+- next step
+- notes summary
+- escalation required
+- follow-up needed
+
+7. Runtime inspection support
+Create an internal inspection view/service showing:
+- exact runtime packet sent to Erica
+- opening strategy chosen
+- objection plan chosen
+- close plan chosen
+- allowed actions
+- call-type specific instructions
+
+8. Config controls
+Allow internal control of:
+- Erica voice/persona settings
+- opening style variants
+- objection handling mode
+- close aggressiveness / softness
+- runtime safety toggles
+
+IMPORTANT RULES
+- Erica must always use the Momentum brief
+- Erica must not use a generic fallback unless explicitly configured
+- Erica must stay context-aware by source and relationship
+- Erica must stay appointment-focused
+- Erica must remain explainable and auditable
+
+OUTPUT FORMAT
+
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- Erica runtime domain model
+- runtime packet builder
+- assistant instruction framework
+- tool/action restriction layer

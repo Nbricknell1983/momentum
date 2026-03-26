@@ -35,6 +35,8 @@ import {
   listCallResults,
 } from './batchService';
 import { launchEricaBatchItem, launchNextBatchItem } from './vapiLaunchService';
+import { buildRuntimePacket, DEFAULT_ASSISTANT_PROFILE } from './runtimePacketBuilder';
+import type { EricaRuntimeConfig } from './ericaRuntimeTypes';
 import { firestore } from '../firebase';
 
 export const ericaRouter = Router();
@@ -366,6 +368,116 @@ ericaRouter.get('/orgs/:orgId/briefs/:briefId', async (req: Request, res: Respon
       .collection('ericaBriefs').doc(req.params.briefId).get();
     if (!snap.exists) return res.status(404).json({ error: 'Brief not found' });
     res.json({ brief: snap.data() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===========================================================================
+// RUNTIME CONFIG — org-level Erica behaviour settings
+// ===========================================================================
+
+// GET  /api/erica/orgs/:orgId/runtime-config
+ericaRouter.get('/orgs/:orgId/runtime-config', async (req: Request, res: Response) => {
+  try {
+    const db = firestore;
+    if (!db) return res.status(500).json({ error: 'Firestore not initialised' });
+    const snap = await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaConfig').doc('runtime').get();
+
+    const defaults: Partial<EricaRuntimeConfig> = {
+      objectionHandlingMode:  'non_pushy',
+      closeAggressiveness:    'standard',
+      genericFallbackAllowed: false,
+      assistantProfile:       DEFAULT_ASSISTANT_PROFILE,
+      safetyToggles: {
+        requireBriefBeforeLaunch: true,
+        blockCallWithoutPhone:    true,
+        blockCallWithoutBrief:    true,
+      },
+    };
+
+    res.json({ config: snap.exists ? { ...defaults, ...snap.data() } : defaults });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/erica/orgs/:orgId/runtime-config
+ericaRouter.patch('/orgs/:orgId/runtime-config', async (req: Request, res: Response) => {
+  try {
+    const db   = firestore;
+    if (!db) return res.status(500).json({ error: 'Firestore not initialised' });
+    const user = (req as any).user;
+
+    const allowedKeys: (keyof EricaRuntimeConfig)[] = [
+      'objectionHandlingMode', 'closeAggressiveness', 'genericFallbackAllowed',
+      'assistantProfile', 'openingStyleOverrides', 'safetyToggles',
+    ];
+
+    const updates: Record<string, any> = { updatedAt: new Date().toISOString(), updatedBy: user?.uid ?? 'unknown' };
+    for (const key of allowedKeys) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+
+    await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaConfig').doc('runtime')
+      .set(updates, { merge: true });
+
+    res.json({ ok: true, updates });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===========================================================================
+// RUNTIME PACKET PREVIEW — build the runtime packet for a brief on-demand
+// (used by the Inspect tab in EricaWorkspace for operator inspection)
+// ===========================================================================
+
+// POST /api/erica/orgs/:orgId/briefs/:briefId/preview-packet
+ericaRouter.post('/orgs/:orgId/briefs/:briefId/preview-packet', async (req: Request, res: Response) => {
+  try {
+    const db = firestore;
+    if (!db) return res.status(500).json({ error: 'Firestore not initialised' });
+
+    // Load brief
+    const briefSnap = await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaBriefs').doc(req.params.briefId).get();
+    if (!briefSnap.exists) return res.status(404).json({ error: 'Brief not found' });
+
+    // Load runtime config
+    const cfgSnap = await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaConfig').doc('runtime').get();
+    const runtimeConfig: Partial<EricaRuntimeConfig> = cfgSnap.exists ? cfgSnap.data() as any : {};
+
+    const brief = briefSnap.data() as any;
+    const packet = buildRuntimePacket(brief, runtimeConfig);
+
+    // Store the packet for later inspection
+    await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaRuntimePackets').doc(packet.packetId)
+      .set({ ...packet, storedAt: new Date().toISOString(), previewOnly: true });
+
+    res.json({ packet });
+  } catch (err: any) {
+    console.error('[erica-router] preview-packet error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/runtime-packets
+ericaRouter.get('/orgs/:orgId/runtime-packets', async (req: Request, res: Response) => {
+  try {
+    const db = firestore;
+    if (!db) return res.status(500).json({ error: 'Firestore not initialised' });
+    const snap = await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaRuntimePackets')
+      .orderBy('generatedAt', 'desc')
+      .limit(20)
+      .get();
+    const packets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ packets });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
