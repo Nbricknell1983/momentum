@@ -1,0 +1,277 @@
+PROJECT: Momentum
+FEATURE: Vapi Voice Agent Layer for Sales, Prospecting, Follow-Up, and Appointment Setting
+
+IMPORTANT CONTEXT
+
+This is the Momentum project.
+Momentum is the sales, strategy, communication, and account-growth platform.
+
+Momentum owns:
+- lead intelligence
+- sales execution
+- proposal / strategy workflow
+- onboarding transition
+- cadence
+- communication drafting
+- execution queue
+- expansion / churn / referral logic
+- autopilot policy
+- scheduled sweeps
+- manager workflows
+
+This is NOT the AI Systems website/runtime project.
+Do NOT build tenant website assistant components here.
+Do NOT build tenant booking/message/status backend logic here unless needed for Momentum’s own internal calling workflows.
+
+CORE GOAL
+
+Build Vapi into Momentum as the voice layer for sales and communication workflows.
+
+Momentum Vapi should support use cases such as:
+- outbound appointment setting
+- prospecting calls
+- inbound lead capture for Momentum
+- follow-up calls after strategies/proposals
+- qualification / discovery support
+- booking meetings onto calendar flows
+- account management follow-up calls
+- churn-risk intervention calls
+- referral ask calls
+- reactivation calls
+
+CRITICAL ARCHITECTURE RULE
+
+Vapi is the voice interface layer.
+Momentum remains the logic/orchestration layer.
+
+Responsibilities:
+
+Vapi:
+- outbound/inbound voice interactions
+- call/web voice interface
+- tool calling
+
+Momentum:
+- lead context
+- sales stage logic
+- cadence logic
+- communication policy
+- NEPQ-style question structure
+- objection handling structure
+- follow-up logic
+- account-growth/referral/churn logic
+
+OpenAI / reasoning layer:
+- language/reasoning where needed
+
+OpenCore / orchestration:
+- policies
+- guardrails
+- approvals
+- allowed actions
+
+IMPORTANT SALES SAFETY RULE
+
+Do NOT just dump NEPQ or Chris Voss prompts into a raw bot.
+Use those frameworks as guarded conversation structures inside Momentum logic.
+
+That means:
+- Momentum decides allowed conversational goals
+- Momentum decides next questions/prompts
+- Momentum decides whether an action is allowed
+- Vapi executes the conversation channel
+
+WHAT TO BUILD
+
+Build the Momentum Vapi Voice Agent Layer.
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Momentum Vapi integration architecture
+Design how Vapi fits into Momentum for:
+- outbound calling
+- inbound lead capture
+- follow-up calling
+- appointment-setting workflows
+- future web voice assistant on Momentum pages
+
+Clearly define:
+- frontend responsibilities
+- backend responsibilities
+- call workflow boundaries
+- policy boundaries
+- tool/API boundaries
+
+2. Momentum voice agent configuration model
+Create configuration for Momentum voice agents, including:
+- vapiEnabled
+- assistantId
+- assistantName
+- voice profile / persona settings
+- enabled call intents
+- approved channels
+- policy mode
+- escalation rules
+- compliance / safety notes
+- call outcome categories
+- calendar integration requirements
+- fallback behaviour
+
+3. Supported Momentum call intents
+At minimum support:
+- outbound_prospecting
+- appointment_setting
+- discovery_qualification
+- strategy_follow_up
+- proposal_follow_up
+- dormant_lead_reactivation
+- churn_intervention
+- referral_ask
+- inbound_lead_capture
+
+For each intent define:
+- purpose
+- entry conditions
+- what context Momentum provides
+- what success looks like
+- what escalation / handoff looks like
+- what actions are allowed
+
+4. Tool/API boundaries for Momentum voice agents
+Implement safe boundaries for actions such as:
+- lookupLead
+- lookupAccount
+- createLead
+- createFollowUpTask
+- createCallNote
+- scheduleMeetingRequest
+- requestCallback
+- logObjection
+- logCallOutcome
+- createCadenceItem
+- createApprovalRequest
+- createDraftFromCallOutcome
+
+Rules:
+- no direct raw writes from Vapi
+- everything must go through Momentum service boundaries
+- all actions must be auditable
+- actions must respect autopilot / approval policy
+
+5. Conversation framework layer
+Build guarded call frameworks influenced by:
+- NEPQ-style discovery / implication / solution framing
+- objection handling logic
+- follow-up logic
+- meeting booking logic
+
+Do not implement as uncontrolled prompt dumping.
+Implement as structured conversation state / policy-driven goals.
+
+6. Call workflow design
+Design core workflows such as:
+
+A. Prospecting call
+- introduce purpose
+- qualify interest
+- book meeting if fit
+- log outcome
+
+B. Appointment setting
+- confirm reason for call
+- offer times / request callback / create booking task
+- log next step
+
+C. Strategy/proposal follow-up
+- reference strategy/proposal context
+- identify blocker
+- create next step
+- log objection/outcome
+
+D. Inbound lead capture
+- collect name, business, service need, urgency
+- create lead / callback / task
+
+E. Referral ask / churn intervention
+- use only when Momentum logic says timing is appropriate
+- log result and next step
+
+7. Calendar / booking boundary
+Design integration boundaries for:
+- checking available meeting slots if available
+- creating booking requests
+- creating calendar handoff tasks
+- logging booked meeting outcomes
+
+If calendar integration is not configured yet, build clean boundaries and list missing setup.
+
+8. Execution queue integration
+Connect Vapi outcomes into existing Momentum systems:
+- cadence
+- communication drafting
+- execution queue
+- referral engine
+- expansion engine
+- account history
+- autopilot policy
+
+9. Agent workspace / inspection
+Create internal inspection/support for:
+- configured Momentum voice agents
+- enabled intents
+- recent calls
+- outcomes
+- blocked actions
+- missing setup
+- tool connectivity
+- policy decisions during calls
+
+10. Missing setup handling
+If Vapi setup is missing:
+- do not fake it
+- create clean boundaries
+- list exact missing setup in:
+
+MISSING SETUP / ACTION REQUIRED FROM NATHAN
+
+List things like:
+- Vapi keys
+- assistant IDs
+- webhook URLs
+- backend env vars
+- provider config
+- calendar integration config if required
+
+11. Future extensibility
+Design this so it can later support:
+- deeper autopilot calling policies
+- server-side scheduled voice campaigns
+- AI Systems-linked client/account calls
+- Momentum website voice assistant
+- richer inbound handling
+
+Focus this phase on Momentum sales/communication voice workflows first.
+
+IMPORTANT RULES
+
+- do not build tenant website assistant UI here
+- do not move AI Systems logic into Momentum
+- do not allow uncontrolled external actions
+- do not bypass policy / approval layers
+- do not fake missing Vapi setup
+
+OUTPUT FORMAT
+
+For each step:
+1. explain what you are building
+2. show file structure
+3. show code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop if blocked
+
+START WITH:
+- Momentum Vapi integration architecture
+- voice agent configuration model
+- supported call intent framework
+- Momentum tool/API boundaries

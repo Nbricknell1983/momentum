@@ -31,6 +31,8 @@ import { scoreGbpCandidate, buildLeadContext, scoreGbpSibling, type GbpLeadConte
 import { gatherPaidSearchEvidence } from "./services/paid-search/transparency-service";
 import { gatherPaidSearchViaSerpApi, isSerpApiConfigured } from "./services/paid-search/serpapi-service";
 import { integrationRouter } from "./integration";
+import { vapiRouter }       from "./vapi/router";
+import { vapiWebhookRouter } from "./vapi/webhookRouter";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -17198,6 +17200,14 @@ Return ONLY JSON:
   // AI Systems Integration Layer
   // ============================================
   app.use('/api/integration', integrationRouter);
+
+  // ============================================
+  // Vapi Voice Agent Layer
+  // ============================================
+  // Webhook is PUBLIC (secured by x-vapi-secret header, no Firebase auth)
+  app.use('/api/vapi/webhook', vapiWebhookRouter);
+  // All other Vapi routes require Firebase auth; mounted at /api/vapi
+  app.use('/api/vapi', vapiRouter);
 
   // ============================================
   // Real Provider Sending Layer

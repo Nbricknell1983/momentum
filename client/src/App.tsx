@@ -42,6 +42,7 @@ import BriefingPage from '@/pages/briefing';
 import UnifiedOpsPage from '@/pages/unified-ops';
 import AutopilotExecutionPage from '@/pages/autopilot-execution';
 import AISystemsSyncPage from '@/pages/ai-systems-sync';
+import VapiPage          from '@/pages/vapi';
 import LoginPage from '@/pages/login';
 import ReportPage from '@/pages/report';
 import StrategyReportPage from '@/pages/strategy-report';
@@ -98,6 +99,7 @@ function ProtectedRoutes() {
       <Route path="/unified-ops">{() => <ManagerGate component={UnifiedOpsPage} />}</Route>
       <Route path="/autopilot-execution">{() => <ManagerGate component={AutopilotExecutionPage} />}</Route>
       <Route path="/ai-systems-sync">{() => <ManagerGate component={AISystemsSyncPage} />}</Route>
+      <Route path="/vapi">{() => <ManagerGate component={VapiPage} />}</Route>
       <Route path="/sweeps">{() => <ManagerGate component={SweepsPage} />}</Route>
       <Route path="/portal/:clientId" component={ClientPortalPage} />
       <Route component={NotFound} />

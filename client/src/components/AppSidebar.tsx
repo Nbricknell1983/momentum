@@ -30,6 +30,7 @@ import {
   Globe,
   Cpu,
   Database,
+  Phone,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -74,6 +75,7 @@ const managerNavItems = [
   { title: 'Autopilot Policy', url: '/autopilot',   icon: SlidersHorizontal },
   { title: 'Exec Runner',      url: '/autopilot-execution', icon: Cpu },
   { title: 'AI Systems Sync',  url: '/ai-systems-sync', icon: Database },
+  { title: 'Vapi Voice Agent', url: '/vapi',            icon: Phone },
   { title: 'Daily Briefing',   url: '/briefing',    icon: Sparkles },
   { title: 'Unified Ops',      url: '/unified-ops', icon: Globe },
   { title: 'Scheduled Sweeps', url: '/sweeps',      icon: RefreshCw },
