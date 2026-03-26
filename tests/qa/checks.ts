@@ -157,6 +157,17 @@ export async function scrollPage(page: Page): Promise<void> {
 
 export async function checkScrollLock(page: Page): Promise<RawIssue | null> {
   try {
+    // First, press Escape to close any open dialogs/modals the runner may have opened
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    // Check if any Radix dialog is still open (open modals legitimately lock scroll)
+    const dialogOpen = await page.evaluate(() => {
+      const dialogs = document.querySelectorAll('[role="dialog"], [data-radix-dialog-content], [data-state="open"]');
+      return dialogs.length > 0;
+    });
+    if (dialogOpen) return null; // Modal still open — scroll lock is expected
+
     const bodyOverflow = await page.evaluate(() => {
       const style = window.getComputedStyle(document.body);
       return { overflow: style.overflow, overflowY: style.overflowY };
@@ -175,7 +186,7 @@ export async function checkScrollLock(page: Page): Promise<RawIssue | null> {
     ) {
       return {
         type: 'scroll_lock',
-        detail: `Body scroll appears locked — body: overflow=${bodyOverflow.overflow}, html: overflow=${htmlOverflow.overflow}`,
+        detail: `Body scroll appears locked after modal close — body: overflow=${bodyOverflow.overflow}, html: overflow=${htmlOverflow.overflow}`,
       };
     }
   } catch { /* ignore */ }
@@ -264,22 +275,34 @@ export async function clickSafeButtons(page: Page): Promise<void> {
 export async function checkRouteFailure(page: Page, expectedPath: string): Promise<RawIssue | null> {
   try {
     const currentUrl = page.url();
-    const url = new URL(currentUrl);
+    let pathname = '';
+    try {
+      pathname = new URL(currentUrl).pathname;
+    } catch { return null; }
 
-    // If we were redirected to login, the route requires auth that we don't have
-    if (url.pathname === '/login' && expectedPath !== '/login') {
+    // Redirected to /login — auth gate or unknown route
+    if (pathname === '/login' && expectedPath !== '/login') {
       return {
         type: 'route_failure',
         detail: `Route ${expectedPath} redirected to /login — auth gate or not found`,
       };
     }
 
-    // If we ended up on a 404-like page
+    // Redirected to /dashboard from a different expected route — likely ManagerGate
+    if (pathname === '/dashboard' && expectedPath !== '/dashboard') {
+      return {
+        type: 'route_failure',
+        detail: `Route ${expectedPath} redirected to /dashboard — likely ManagerGate (user lacks manager access)`,
+      };
+    }
+
+    // 404-like page
     const bodyText = await page.evaluate(() => document.body?.innerText ?? '');
     if (
-      bodyText.toLowerCase().includes('404') ||
-      bodyText.toLowerCase().includes('page not found') ||
-      bodyText.toLowerCase().includes('not found')
+      (bodyText.toLowerCase().includes('404') ||
+       bodyText.toLowerCase().includes('page not found') ||
+       bodyText.toLowerCase().includes('not found')) &&
+      bodyText.length < 500 // only flag if it's mostly that text, not an app page that mentions 404 incidentally
     ) {
       return {
         type: 'route_failure',

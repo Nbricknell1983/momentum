@@ -67,7 +67,7 @@ export default function MyWorkPage() {
     queryKey: ['/api/my-work', orgId],
     queryFn: async () => {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/my-work', {
+      const res = await fetch(`/api/my-work?orgId=${orgId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to load work items');

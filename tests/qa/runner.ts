@@ -1,7 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
-import { format } from 'date-fns';
 import type { QAConfig, RouteDefinition, RouteResult } from './types';
 import {
   attachConsoleCollector,
@@ -19,6 +18,26 @@ import {
 import { loginWithCredentials, waitForAuthReady } from './auth';
 
 const SCREENSHOTS_DIR = join(process.cwd(), 'tests', 'qa', 'screenshots');
+
+// Network hosts to suppress — external services that produce false positives
+const NOISE_HOSTS = [
+  'googleapis.com',
+  'identitytoolkit.googleapis.com',
+  'firebaseio.com',
+  'firebase.googleapis.com',
+  'firestore.googleapis.com',
+  'accounts.google.com',
+  'sentry.io',
+  'analytics.google.com',
+  'hot-update',
+  'favicon',
+  '__webpack',
+  'sockjs',
+];
+
+function isNoisyUrl(url: string): boolean {
+  return NOISE_HOSTS.some(h => url.includes(h));
+}
 
 export type ViewportPreset = { width: number; height: number; name: 'desktop' | 'mobile' };
 
@@ -57,11 +76,15 @@ export async function runQASweep(
     // ── Auth pass ───────────────────────────────────────────────────────────
     if (config.qaEmail && config.qaPassword) {
       log(`🔐  Authenticating as ${config.qaEmail}...`);
-      const authCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-      const authPage = await authCtx.newPage();
+
+      // Create ONE context for all authenticated route passes
+      const authCtx = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+      });
+      const authLoginPage = await authCtx.newPage();
 
       const authResult = await loginWithCredentials(
-        authPage,
+        authLoginPage,
         config.qaEmail,
         config.qaPassword,
         config.baseUrl,
@@ -72,12 +95,16 @@ export async function runQASweep(
         isManager = authResult.isManager;
         log(`✅  Authenticated — isManager=${isManager}`);
 
-        // ── Run desktop + mobile passes with authenticated context ──────────
+        // ── Use one persistent page per viewport to stay authenticated ──────
         for (const vp of VIEWPORTS) {
           log(`\n📐  Running ${vp.name} pass (${vp.width}×${vp.height})...`);
 
+          // Create one persistent page for this viewport sweep
+          const sweepPage = await authCtx.newPage();
+          await sweepPage.setViewportSize({ width: vp.width, height: vp.height });
+
           for (const route of routes) {
-            if (!route.requiresAuth) continue; // skip public routes on auth pass
+            if (!route.requiresAuth) continue;
             if (route.requiresManager && !isManager) {
               allResults.push(skipped(route, vp.name));
               continue;
@@ -87,22 +114,24 @@ export async function runQASweep(
               continue;
             }
 
-            const page = await authCtx.newPage();
-            await page.setViewportSize({ width: vp.width, height: vp.height });
-
-            const result = await testRoute(page, route, vp.name, config);
+            const result = await testRouteOnPage(sweepPage, route, vp.name, config);
             allResults.push(result);
-            log(`  ${statusIcon(result.status)} ${route.label} (${vp.name}) — ${result.rawIssues.length + result.consoleErrors.length + result.networkErrors.length} issues`);
-
-            await page.close();
+            log(
+              `  ${statusIcon(result.status)} ${route.label} (${vp.name}) — ` +
+              `${result.rawIssues.length + result.consoleErrors.length + result.networkErrors.length} issues`,
+            );
           }
+
+          await sweepPage.close();
         }
 
-        await authCtx.close();
+        await authLoginPage.close();
       } else {
         log(`❌  Authentication failed: ${authResult.error}`);
         log('    Continuing with unauthenticated routes only...');
       }
+
+      await authCtx.close();
     } else {
       log('⚠️   No QA_EMAIL/QA_PASSWORD provided — testing unauthenticated routes only');
     }
@@ -112,18 +141,18 @@ export async function runQASweep(
     const unauthRoutes = routes.filter(r => !r.requiresAuth);
 
     for (const vp of VIEWPORTS) {
+      const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+      const page = await ctx.newPage();
+
       for (const route of unauthRoutes) {
         if (config.skipRoutes.includes(route.path)) continue;
-        const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
-        const page = await ctx.newPage();
-
-        const result = await testRoute(page, route, vp.name, config);
+        const result = await testRouteOnPage(page, route, vp.name, config);
         allResults.push(result);
         log(`  ${statusIcon(result.status)} ${route.label} (${vp.name})`);
-
-        await page.close();
-        await ctx.close();
       }
+
+      await page.close();
+      await ctx.close();
     }
 
     return { authenticated, isManager, results: allResults };
@@ -132,15 +161,60 @@ export async function runQASweep(
   }
 }
 
-async function testRoute(
+/**
+ * Test a single route on an already-open page.
+ * The page is reused across routes to preserve Firebase auth state.
+ * Collectors are freshly created per route by wrapping the page listeners.
+ */
+async function testRouteOnPage(
   page: Page,
   route: RouteDefinition,
   viewport: 'desktop' | 'mobile',
   config: QAConfig,
 ): Promise<RouteResult> {
   const startTime = Date.now();
-  const { getErrors: getConsoleErrors } = attachConsoleCollector(page);
-  const { getErrors: getNetworkErrors } = attachNetworkCollector(page);
+
+  // Per-route collectors — only capture events AFTER navigation starts
+  const consoleErrors: string[] = [];
+  const networkErrors: { url: string; status: number; method: string }[] = [];
+
+  const consoleHandler = (msg: any) => {
+    if (msg.type() !== 'error') return;
+    const text: string = msg.text();
+    if (
+      text.includes('favicon') ||
+      text.includes('[vite]') ||
+      text.includes('PostCSS') ||
+      text.includes('ResizeObserver loop') ||
+      isNoisyUrl(text)
+    ) return;
+    consoleErrors.push(text);
+  };
+
+  const responseHandler = (res: any) => {
+    const status = res.status();
+    const url = res.url();
+    if (status < 400) return;
+    if (isNoisyUrl(url)) return;
+    networkErrors.push({ url, status, method: res.request().method() });
+  };
+
+  const requestFailHandler = (req: any) => {
+    const url = req.url();
+    if (isNoisyUrl(url)) return;
+    networkErrors.push({ url, status: 0, method: req.method() });
+  };
+
+  const pageErrorHandler = (err: Error) => {
+    if (!isNoisyUrl(err.message)) {
+      consoleErrors.push(`[pageerror] ${err.message}`);
+    }
+  };
+
+  page.on('console', consoleHandler);
+  page.on('response', responseHandler);
+  page.on('requestfailed', requestFailHandler);
+  page.on('pageerror', pageErrorHandler);
 
   const result: RouteResult = {
     route,
@@ -154,86 +228,110 @@ async function testRoute(
   };
 
   try {
-    // Navigate
     const url = `${config.baseUrl}${route.path}`;
+
+    // Navigate to the route
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.pageTimeout });
 
-    // Wait for network to settle
-    await Promise.race([
-      page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {}),
-      page.waitForTimeout(5000),
-    ]);
+    // Wait for sidebar to be visible — this confirms the app is fully loaded
+    // (Sidebar only renders after Firebase auth + membership + leads/clients all ready)
+    try {
+      await page.waitForSelector('[data-sidebar="sidebar"]', { timeout: 15000 });
+    } catch {
+      // No sidebar — could be a route failure or unauthenticated page
+    }
 
-    await waitForAuthReady(page);
+    // Extra settle time for Firestore data to populate
+    await page.waitForTimeout(2000);
 
-    // Check for route failure (redirect to login)
+    // Check if we got redirected (route failure)
     const routeFailure = await checkRouteFailure(page, route.path);
     if (routeFailure) {
       result.rawIssues.push(routeFailure);
       result.status = 'error';
+      // No point in running further checks on a redirect
+      result.loadTimeMs = Date.now() - startTime;
+      result.consoleErrors = [...consoleErrors];
+      result.networkErrors = [...networkErrors];
+      await takeScreenshot(page, route, viewport, result);
+      return result;
     }
 
-    // Generic content checks
+    // Content checks
     const blank = await checkBlankScreen(page);
     if (blank) { result.rawIssues.push(blank); result.status = 'error'; }
 
     const crash = await checkReactCrash(page);
     if (crash) { result.rawIssues.push(crash); result.status = 'error'; }
 
-    // Scroll the page
+    // Scroll through the page
     await scrollPage(page);
 
-    // Check for stuck loading
+    // Check for stuck loading spinner
     const stuck = await checkStuckLoading(page);
     if (stuck) { result.rawIssues.push(stuck); result.status = 'error'; }
 
     // Click through visible tabs
     await clickVisibleTabs(page);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(400);
 
-    // Click safe buttons
+    // Click safe buttons (non-destructive)
     await clickSafeButtons(page);
     await page.waitForTimeout(400);
 
-    // Check for scroll lock after any modal interactions
+    // Check scroll lock (after any modal interactions)
     const scrollLock = await checkScrollLock(page);
     if (scrollLock) { result.rawIssues.push(scrollLock); result.status = 'error'; }
 
-    // Check for clipped UI (desktop only — mobile is expected to scroll)
+    // Check for clipped UI (desktop only)
     if (viewport === 'desktop') {
       const clipped = await checkClippedUI(page);
       if (clipped) { result.rawIssues.push(clipped); result.status = 'error'; }
     }
 
-    // Scroll back to top for screenshot
-    await page.evaluate(() => window.scrollTo(0, 0));
-
-    // Take screenshot
-    const screenshotName = `${viewport}-${route.path.replace(/\//g, '-')}-${Date.now()}.jpeg`;
-    const screenshotPath = join(SCREENSHOTS_DIR, screenshotName);
-    await page.screenshot({ path: screenshotPath, type: 'jpeg', quality: 80, fullPage: false });
-    result.screenshotPath = screenshotPath;
-
     result.loadTimeMs = Date.now() - startTime;
-    result.consoleErrors = getConsoleErrors();
-    result.networkErrors = getNetworkErrors();
+    result.consoleErrors = [...consoleErrors];
+    result.networkErrors = [...networkErrors];
 
     if (result.consoleErrors.length > 0 || result.networkErrors.length > 0) {
       result.status = 'error';
     }
 
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await takeScreenshot(page, route, viewport, result);
+
     return result;
   } catch (err: any) {
     result.status = 'error';
     result.loadTimeMs = Date.now() - startTime;
-    result.consoleErrors = getConsoleErrors();
-    result.networkErrors = getNetworkErrors();
+    result.consoleErrors = [...consoleErrors];
+    result.networkErrors = [...networkErrors];
     result.rawIssues.push({
       type: 'render_error',
-      detail: `Playwright error navigating to ${route.path}: ${err?.message ?? String(err)}`,
+      detail: `Playwright error on ${route.path}: ${err?.message ?? String(err)}`,
     });
     return result;
+  } finally {
+    // Always remove listeners to avoid accumulating handlers across routes
+    page.off('console', consoleHandler);
+    page.off('response', responseHandler);
+    page.off('requestfailed', requestFailHandler);
+    page.off('pageerror', pageErrorHandler);
   }
+}
+
+async function takeScreenshot(
+  page: Page,
+  route: RouteDefinition,
+  viewport: 'desktop' | 'mobile',
+  result: RouteResult,
+): Promise<void> {
+  try {
+    const screenshotName = `${viewport}-${route.path.replace(/\//g, '-')}-${Date.now()}.jpeg`;
+    const screenshotPath = join(SCREENSHOTS_DIR, screenshotName);
+    await page.screenshot({ path: screenshotPath, type: 'jpeg', quality: 80, fullPage: false });
+    result.screenshotPath = screenshotPath;
+  } catch { /* ignore screenshot failures */ }
 }
 
 function skipped(route: RouteDefinition, viewport: 'desktop' | 'mobile'): RouteResult {

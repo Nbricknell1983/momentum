@@ -8,6 +8,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   PhoneCall, Plus, Play, Pause, X, ChevronRight, ChevronDown,
   AlertTriangle, CheckCircle, Clock, User, Building2, Target,
@@ -40,7 +41,7 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
-interface RootState { auth: { orgId?: string }; leads: { items: any[] }; clients: { items: any[] } }
+interface RootState { leads: any[]; clients: any[] }
 
 // ---------------------------------------------------------------------------
 // Status badge helpers
@@ -390,9 +391,10 @@ function BatchItemRow({
 
 export default function EricaWorkspace() {
   const qc      = useQueryClient();
-  const orgId   = useSelector((s: RootState) => s.auth.orgId) ?? '';
-  const leads   = useSelector((s: RootState) => s.leads?.items ?? []);
-  const clients = useSelector((s: RootState) => s.clients?.items ?? []);
+  const { orgId: authOrgId } = useAuth();
+  const orgId   = authOrgId ?? '';
+  const leads   = useSelector((s: RootState) => s.leads ?? []);
+  const clients = useSelector((s: RootState) => s.clients ?? []);
 
   const [activeTab,      setActiveTab]      = useState('batches');
   const [selectedBatch,  setSelectedBatch]  = useState<EricaCallBatch | null>(null);

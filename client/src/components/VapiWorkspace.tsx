@@ -20,8 +20,8 @@ import { Switch }  from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { useSelector } from 'react-redux';
-import type { RootState } from '@/store';
+import { useAuth } from '@/contexts/AuthContext';
+import { auth as firebaseAuth } from '@/lib/firebase';
 import { INTENT_DEFINITIONS } from '@/lib/vapiIntents';
 import { VAPI_TOOLS } from '@/lib/vapiTypes';
 import type { VapiCallRecord, VapiCallOutcome, VapiCallStatus, VapiCallIntent, VapiPolicyMode } from '@/lib/vapiTypes';
@@ -106,8 +106,12 @@ const INTENT_LABELS: Record<VapiCallIntent, string> = {
 export default function VapiWorkspace() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const orgId = useSelector((s: RootState) => s.auth?.orgId ?? '');
-  const token = useSelector((s: RootState) => s.auth?.token ?? '');
+  const { orgId: authOrgId } = useAuth();
+  const orgId = authOrgId ?? '';
+  const [token, setToken] = useState('');
+  useEffect(() => {
+    firebaseAuth.currentUser?.getIdToken().then(t => setToken(t)).catch(() => {});
+  }, [orgId]);
 
   const [expandedCall, setExpandedCall] = useState<string | null>(null);
   const [expandedIntent, setExpandedIntent] = useState<VapiCallIntent | null>(null);
