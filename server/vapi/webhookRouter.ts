@@ -27,12 +27,21 @@ export const vapiWebhookRouter = Router();
 
 function validateWebhookRequest(req: Request): boolean {
   if (!isVapiWebhookSecured()) {
-    // Warning: insecure. Still process so dev works without a secret.
+    // No secret configured — still process (dev mode)
     return true;
   }
   const cfg    = getVapiConfig();
-  const header = req.headers['x-vapi-secret'];
-  return header === cfg.webhookSecret;
+  const secret = cfg.webhookSecret!;
+
+  // Vapi sends Authorization: Bearer <secret> when configured via Integrations tab
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader === `Bearer ${secret}`) return true;
+
+  // Fallback: x-vapi-secret header (older Vapi webhook style)
+  const secretHeader = req.headers['x-vapi-secret'];
+  if (secretHeader && secretHeader === secret) return true;
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
