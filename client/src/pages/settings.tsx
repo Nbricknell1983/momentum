@@ -440,16 +440,25 @@ export default function SettingsPage() {
   const [isTogglingTwoFA, setIsTogglingTwoFA] = useState(false);
 
   useEffect(() => {
-    if (!user?.uid || !orgId) return;
-    fetch('/api/2fa/status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: user.uid, orgId }),
-    })
-      .then(r => r.json())
-      .then(d => setTwoFAEnabled(d.enabled ?? false))
-      .catch(() => setTwoFAEnabled(false));
-  }, [user?.uid, orgId]);
+    if (!user?.uid || !orgId || !authReady) return;
+    (async () => {
+      try {
+        const { getAuth } = await import('firebase/auth');
+        const firebaseAuth = getAuth();
+        const token = await firebaseAuth.currentUser?.getIdToken();
+        if (!token) return;
+        const r = await fetch('/api/2fa/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ uid: user.uid, orgId }),
+        });
+        const d = await r.json();
+        setTwoFAEnabled(d.enabled ?? false);
+      } catch {
+        setTwoFAEnabled(false);
+      }
+    })();
+  }, [user?.uid, orgId, authReady]);
 
   const handleOpen2FASetup = async () => {
     if (!user?.uid || !orgId) return;
@@ -1239,10 +1248,15 @@ export default function SettingsPage() {
     queryKey: ['/api/gbp/status', orgId],
     queryFn: async () => {
       if (!orgId) return { connected: false, connectionStatus: 'not_connected' as const, connectedAt: null, lastVerifiedAt: null, lastFailureAt: null, lastFailureReason: null, connectedAccountEmail: null, connectedAccountName: null, connectedGBPAccount: null, connectedGBPAccountTitle: null };
-      const r = await fetch(`/api/gbp/status?orgId=${orgId}`);
+      const { getAuth } = await import('firebase/auth');
+      const firebaseAuth = getAuth();
+      const token = await firebaseAuth.currentUser?.getIdToken();
+      const r = await fetch(`/api/gbp/status?orgId=${orgId}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       return r.json();
     },
-    enabled: !!orgId && isManager,
+    enabled: !!orgId && isManager && authReady,
     staleTime: 30_000,
   });
 

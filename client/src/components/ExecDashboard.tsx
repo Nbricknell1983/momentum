@@ -154,9 +154,9 @@ function RiskCard({ risk }: { risk: ExecutiveRiskSummary }) {
       <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3 leading-relaxed">{risk.description}</p>
       {risk.affectedNames.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
-          {risk.affectedNames.map(name => (
+          {risk.affectedNames.map((name, idx) => (
             <span
-              key={name}
+              key={`${name}-${idx}`}
               className="text-[10px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded"
             >
               {name}
@@ -200,9 +200,9 @@ function OpportunityCard({ opp }: { opp: ExecutiveOpportunitySummary }) {
       <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3 leading-relaxed">{opp.description}</p>
       {opp.affectedNames.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
-          {opp.affectedNames.map(name => (
+          {opp.affectedNames.map((name, idx) => (
             <span
-              key={name}
+              key={`${name}-${idx}`}
               className="text-[10px] px-1.5 py-0.5 bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300 rounded"
             >
               {name}

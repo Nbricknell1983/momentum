@@ -541,7 +541,10 @@ export default function BullpenCommandCenter() {
       });
       setThreads(items);
     }, err => {
-      console.error('[BullpenCC] threads load error:', err);
+      const isPermissionDenied = err?.code === 'permission-denied' || err?.message?.includes('Missing or insufficient permissions');
+      if (!isPermissionDenied) {
+        console.error('[BullpenCC] threads load error:', err);
+      }
     });
     return () => unsub();
   }, [orgId]);

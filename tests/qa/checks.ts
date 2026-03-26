@@ -136,7 +136,7 @@ export async function scrollPage(page: Page): Promise<void> {
     await page.evaluate(async () => {
       await new Promise<void>(resolve => {
         let totalHeight = 0;
-        const distance = 300;
+        const distance = 500;
         const timer = setInterval(() => {
           window.scrollBy(0, distance);
           totalHeight += distance;
@@ -145,9 +145,9 @@ export async function scrollPage(page: Page): Promise<void> {
             window.scrollTo(0, 0);
             resolve();
           }
-        }, 80);
-        // Timeout failsafe at 8 seconds
-        setTimeout(() => { clearInterval(timer); resolve(); }, 8000);
+        }, 60);
+        // Timeout failsafe at 3 seconds (down from 8)
+        setTimeout(() => { clearInterval(timer); resolve(); }, 3000);
       });
     });
   } catch { /* ignore */ }
@@ -242,11 +242,11 @@ export async function clickVisibleTabs(page: Page): Promise<void> {
     for (const sel of tabSelectors) {
       const tabs = page.locator(sel);
       const count = await tabs.count();
-      // Click up to 4 tabs to sweep the interface
-      for (let i = 0; i < Math.min(count, 4); i++) {
+      // Click up to 3 tabs to sweep the interface (reduced from 4 for speed)
+      for (let i = 0; i < Math.min(count, 3); i++) {
         try {
-          await tabs.nth(i).click({ timeout: 2000 });
-          await page.waitForTimeout(400);
+          await tabs.nth(i).click({ timeout: 1000 });
+          await page.waitForTimeout(200);
         } catch { /* ignore individual tab failures */ }
       }
     }
@@ -256,15 +256,16 @@ export async function clickVisibleTabs(page: Page): Promise<void> {
 // ── Safe button clicking ──────────────────────────────────────────────────────
 
 export async function clickSafeButtons(page: Page): Promise<void> {
-  // Only click clearly-safe buttons (refresh, close, cancel, view, details, expand)
-  const safeLabels = ['refresh', 'close', 'cancel', 'view details', 'expand', 'collapse', 'show', 'hide', 'open', 'load'];
+  // Only click clearly-safe buttons (refresh, close, cancel)
+  // Reduced set to avoid clicking 'open'/'load' which can navigate away
+  const safeLabels = ['refresh', 'close', 'cancel', 'collapse', 'expand'];
   try {
     for (const label of safeLabels) {
       const btn = page.locator(`button:has-text("${label}")`).first();
       const visible = await btn.isVisible().catch(() => false);
       if (visible) {
-        await btn.click({ timeout: 2000 }).catch(() => {});
-        await page.waitForTimeout(300);
+        await btn.click({ timeout: 800 }).catch(() => {});
+        await page.waitForTimeout(150);
       }
     }
   } catch { /* ignore */ }

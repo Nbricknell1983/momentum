@@ -17,7 +17,12 @@ function logFirestoreOperation(operation: string, path: string, orgId: string | 
   if (success) {
     console.log('[Firestore]', operation, 'SUCCESS', logData);
   } else {
-    console.error('[Firestore]', operation, 'DENIED/FAILED', logData, error);
+    const isPermissionDenied = error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions');
+    if (isPermissionDenied) {
+      console.warn('[Firestore]', operation, 'DENIED/FAILED', logData, error);
+    } else {
+      console.error('[Firestore]', operation, 'DENIED/FAILED', logData, error);
+    }
   }
 }
 

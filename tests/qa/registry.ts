@@ -101,8 +101,11 @@ export const PAGE_CONTRACTS: PageContract[] = [
       {
         name: 'Batch Name input is rendered in Create panel',
         run: async (page) => {
-          const input = page.locator('input[placeholder*="Batch"], input[placeholder*="batch"]').first();
-          const visible = await input.isVisible().catch(() => false);
+          // The input uses data-testid="input-batch-name" (placeholder is descriptive, not "Batch")
+          const byTestId = page.locator('[data-testid="input-batch-name"]');
+          const byPlaceholder = page.locator('input[placeholder*="Batch"], input[placeholder*="batch"]').first();
+          const visible = await byTestId.isVisible().catch(() => false)
+                       || await byPlaceholder.isVisible().catch(() => false);
           if (!visible) throw new Error('Batch name input not visible in Erica Create panel');
         },
       },

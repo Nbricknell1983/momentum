@@ -353,6 +353,11 @@ export default function AutopilotWorkspace() {
     const q = query(ref, orderBy('occurredAt', 'desc'), limit(50));
     const unsub = onSnapshot(q, snap => {
       setAuditEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as AutopilotAuditEvent)));
+    }, err => {
+      const isPermissionDenied = err?.code === 'permission-denied' || err?.message?.includes('Missing or insufficient permissions');
+      if (!isPermissionDenied) {
+        console.error('[Autopilot] audit load error:', err);
+      }
     });
     return () => unsub();
   }, [orgId]);

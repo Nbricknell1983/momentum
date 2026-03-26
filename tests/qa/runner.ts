@@ -100,8 +100,9 @@ export async function runQASweep(
           log(`\n📐  Running ${vp.name} pass (${vp.width}×${vp.height})...`);
 
           // Create one persistent page for this viewport sweep
-          const sweepPage = await authCtx.newPage();
-          await sweepPage.setViewportSize({ width: vp.width, height: vp.height });
+          // Use `let` so we can swap to a recovery page if the browser crashes mid-route
+          let activePage = await authCtx.newPage();
+          await activePage.setViewportSize({ width: vp.width, height: vp.height });
 
           for (const route of routes) {
             if (!route.requiresAuth) continue;
@@ -114,7 +115,35 @@ export async function runQASweep(
               continue;
             }
 
-            const result = await testRouteOnPage(sweepPage, route, vp.name, config);
+            let result: RouteResult;
+            try {
+              result = await testRouteOnPage(activePage, route, vp.name, config);
+            } catch (outerErr: any) {
+              // Browser/page crashed mid-route — record error, then recover with a fresh page
+              log(`  ⚠️  ${route.label} (${vp.name}) — browser crash, recovering...`);
+              result = {
+                route,
+                viewport: vp.name,
+                status: 'error',
+                loadTimeMs: 0,
+                consoleErrors: [],
+                networkErrors: [],
+                rawIssues: [{ type: 'render_error', detail: `Browser crash on ${route.path}: ${outerErr?.message ?? String(outerErr)}` }],
+              };
+              try {
+                await activePage.close().catch(() => {});
+                activePage = await authCtx.newPage();
+                await activePage.setViewportSize({ width: vp.width, height: vp.height });
+                const reAuth = await loginWithCredentials(activePage, config.qaEmail!, config.qaPassword!, config.baseUrl);
+                if (reAuth.success) {
+                  log(`     ↩️  Recovery OK — continuing sweep`);
+                } else {
+                  log(`     ❌  Recovery auth failed — remaining routes may show errors`);
+                }
+              } catch {
+                log(`     ❌  Recovery failed — continuing without page reset`);
+              }
+            }
             allResults.push(result);
             log(
               `  ${statusIcon(result.status)} ${route.label} (${vp.name}) — ` +
@@ -122,7 +151,7 @@ export async function runQASweep(
             );
           }
 
-          await sweepPage.close();
+          await activePage.close().catch(() => {});
         }
 
         await authLoginPage.close();
@@ -242,7 +271,7 @@ async function testRouteOnPage(
     }
 
     // Extra settle time for Firestore data to populate
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(800);
 
     // Check if we got redirected (route failure)
     const routeFailure = await checkRouteFailure(page, route.path);
@@ -273,11 +302,11 @@ async function testRouteOnPage(
 
     // Click through visible tabs
     await clickVisibleTabs(page);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(150);
 
     // Click safe buttons (non-destructive)
     await clickSafeButtons(page);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(150);
 
     // Check scroll lock (after any modal interactions)
     const scrollLock = await checkScrollLock(page);
