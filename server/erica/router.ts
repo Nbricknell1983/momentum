@@ -56,6 +56,12 @@ import { listCommEvents, listStatusHistory } from './bookingStatusService';
 import { checkRescheduleAvailability, confirmReschedule, listRescheduleChanges, listAllBookingChanges, listChangeAudit } from './rescheduleService';
 import { cancelBooking, listCancellationChanges } from './cancellationService';
 import type { RequestRescheduleToolPayload, ConfirmRescheduleToolPayload, RequestCancellationToolPayload } from './bookingChangeTypes';
+import {
+  createCampaign, getCampaign, listCampaigns, updateCampaign,
+  scheduleCampaign, pauseCampaign, resumeCampaign, stopCampaign,
+  skipTarget, retryTarget, listCampaignTargets, listCampaignRuns, listCampaignAudit,
+} from './campaignService';
+import { runCampaignCycle, computeCampaignHealth } from './campaignRunner';
 
 export const ericaRouter = Router();
 
@@ -791,4 +797,139 @@ ericaRouter.post('/orgs/:orgId/bookings/:bookingId/cancel', verifyFirebaseToken,
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// =============================================================================
+// CAMPAIGN ENDPOINTS
+// =============================================================================
+
+// GET  /api/erica/orgs/:orgId/campaigns
+ericaRouter.get('/orgs/:orgId/campaigns', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const campaigns = await listCampaigns(req.params.orgId, 100);
+    res.json({ campaigns });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// GET  /api/erica/orgs/:orgId/campaigns/:campaignId
+ericaRouter.get('/orgs/:orgId/campaigns/:campaignId', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const campaign = await getCampaign(req.params.orgId, req.params.campaignId);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+    res.json({ campaign });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns
+ericaRouter.post('/orgs/:orgId/campaigns', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const body = req.body;
+    if (!body.batchId) return res.status(400).json({ error: 'batchId is required' });
+    const campaign = await createCampaign({
+      orgId:       req.params.orgId,
+      name:        body.name ?? `Campaign ${new Date().toLocaleDateString('en-AU')}`,
+      description: body.description,
+      batchId:     body.batchId,
+      schedule:    body.schedule ?? {},
+      createdBy:   body.createdBy ?? 'operator',
+    });
+    res.json({ campaign });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/erica/orgs/:orgId/campaigns/:campaignId
+ericaRouter.patch('/orgs/:orgId/campaigns/:campaignId', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    await updateCampaign(req.params.orgId, req.params.campaignId, req.body, req.body.updatedBy ?? 'operator');
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns/:campaignId/schedule
+ericaRouter.post('/orgs/:orgId/campaigns/:campaignId/schedule', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    await scheduleCampaign(req.params.orgId, req.params.campaignId, req.body.performedBy ?? 'operator');
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns/:campaignId/pause
+ericaRouter.post('/orgs/:orgId/campaigns/:campaignId/pause', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    await pauseCampaign(req.params.orgId, req.params.campaignId, req.body.reason ?? 'Operator paused', req.body.performedBy ?? 'operator');
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns/:campaignId/resume
+ericaRouter.post('/orgs/:orgId/campaigns/:campaignId/resume', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    await resumeCampaign(req.params.orgId, req.params.campaignId, req.body.performedBy ?? 'operator');
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns/:campaignId/stop
+ericaRouter.post('/orgs/:orgId/campaigns/:campaignId/stop', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    await stopCampaign(req.params.orgId, req.params.campaignId, req.body.performedBy ?? 'operator');
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns/:campaignId/run-cycle
+ericaRouter.post('/orgs/:orgId/campaigns/:campaignId/run-cycle', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const result = await runCampaignCycle(req.params.orgId, req.params.campaignId);
+    res.json({ result });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// GET  /api/erica/orgs/:orgId/campaigns/:campaignId/health
+ericaRouter.get('/orgs/:orgId/campaigns/:campaignId/health', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const health = await computeCampaignHealth(req.params.orgId, req.params.campaignId);
+    res.json({ health });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// GET  /api/erica/orgs/:orgId/campaigns/:campaignId/targets
+ericaRouter.get('/orgs/:orgId/campaigns/:campaignId/targets', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const targets = await listCampaignTargets(req.params.orgId, req.params.campaignId);
+    res.json({ targets });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns/:campaignId/targets/:targetId/skip
+ericaRouter.post('/orgs/:orgId/campaigns/:campaignId/targets/:targetId/skip', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    await skipTarget(req.params.orgId, req.params.campaignId, req.params.targetId,
+      req.body.reason ?? 'Operator skipped', req.body.performedBy ?? 'operator');
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/erica/orgs/:orgId/campaigns/:campaignId/targets/:targetId/retry
+ericaRouter.post('/orgs/:orgId/campaigns/:campaignId/targets/:targetId/retry', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    await retryTarget(req.params.orgId, req.params.campaignId, req.params.targetId, req.body.performedBy ?? 'operator');
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// GET  /api/erica/orgs/:orgId/campaigns/:campaignId/runs
+ericaRouter.get('/orgs/:orgId/campaigns/:campaignId/runs', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const runs = await listCampaignRuns(req.params.orgId, req.params.campaignId, 100);
+    res.json({ runs });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// GET  /api/erica/orgs/:orgId/campaigns/:campaignId/audit
+ericaRouter.get('/orgs/:orgId/campaigns/:campaignId/audit', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const entries = await listCampaignAudit(req.params.orgId, req.params.campaignId, 200);
+    res.json({ entries });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

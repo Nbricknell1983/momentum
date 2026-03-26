@@ -1,7 +1,7 @@
 # Momentum Agent
 
 ## Overview
-Momentum Agent is an AI-assisted sales operating system designed to transform daily sales activities into consistent pipeline momentum. It functions as a productivity-focused admin dashboard, offering features such as a Kanban-style pipeline, activity tracking, nurture automation, and momentum scoring. The application aims to facilitate frictionless logging, reinforce follow-up discipline, and provide stage-aware coaching to enhance sales performance and pipeline growth. Its business vision is to provide a comprehensive, intelligent platform for sales teams, improving efficiency and driving pipeline growth, and unlocking significant market potential by streamlining sales operations.
+Momentum Agent is an AI-assisted sales operating system designed to transform daily sales activities into consistent pipeline momentum. It functions as a productivity-focused admin dashboard, offering features such as Kanban-style pipeline management, activity tracking, nurture automation, and momentum scoring. The application aims to facilitate frictionless logging, reinforce follow-up discipline, and provide stage-aware coaching to enhance sales performance and pipeline growth. Its business vision is to provide a comprehensive, intelligent platform for sales teams, improving efficiency and driving pipeline growth, and unlocking significant market potential by streamlining sales operations.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -40,7 +40,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Features
 - **Sales Operating System**: Pipeline Management, Conversation Intelligence, Lead & Client Management, Territory System, Nurture System, Activity Tracking, and Momentum Scoring.
-- **Website Workstream Agent**: Full website blueprint builder with planning, content, SEO, assets, and preview capabilities, including HTML generation, sitemap, and robots.txt.
+- **Website Workstream Agent**: Full website blueprint builder with planning, content, SEO, assets, and preview capabilities.
 - **SEO Engines**: SEO Preservation Engine, SEO Transparency + Comparison Engine, and Keyword Strategy Engine.
 - **AI Growth Operator**: Framework for automating growth activities with per-client automation modes and an AI Actions Feed.
 - **Autopilot Execution**: One-click auto-approval for queued AI actions.
@@ -56,10 +56,6 @@ Preferred communication style: Simple, everyday language.
 
 ### AI Systems Integration Layer
 - **Architecture**: Modular, production-grade server-to-server REST integration with provisioning, audit logging, status polling, and typed patching, ensuring idempotency and an 8-stage lifecycle.
-- **Direct AI Systems API Sync Layer**: Server-side sync service pulling live delivery summaries from AI Systems.
-
-### Client-Facing Strategy Experience Layer
-- **Domain Model**: Defines typed interfaces for strategy documents, reports, and presentations.
 
 ### Proposal Acceptance → Onboarding → Provisioning Flow
 - **Workflow**: Guided 4-step panel for scope selection, data capture, readiness assessment, and handoff/provisioning, supporting 9 modules.
@@ -73,9 +69,6 @@ Preferred communication style: Simple, everyday language.
 
 ### Autopilot Policy Layer
 - **Policy Engine**: Pure deterministic classifier evaluating rules based on safety level, escalation conditions, and global mode overrides. Default is `approval_only`.
-
-### Referral Engine
-- **Referral Adapter**: Derives referral readiness signals and appropriate ask styles.
 
 ### Automation Execution Layer
 - **Channel Adapters**: Explicit boundaries for communication channels (Email, SMS, Call, Voicemail). All communication items require human approval.
@@ -105,40 +98,40 @@ Preferred communication style: Simple, everyday language.
 
 ### Erica Calling System
 - **Domain Model**: Full typed model for calls and related intelligence.
-- **Adapters**: Deal Intelligence Adapter and Client Intelligence Adapter extract intelligence from records.
 - **Brief Generator**: Combines intelligence into a structured `EricaCallBrief` and Vapi context packet.
 - **Batch Service**: Firestore-backed batch lifecycle management.
 - **API Router**: REST API at `/api/erica/orgs/:orgId/*` for batch/item/result management.
-- **Workspace UI**: Premium calling workspace with 8 tabs (Batches, Selection, Review, Brief, Results, Runtime, Settings, Bookings).
+- **Workspace UI**: Premium calling workspace with 8 tabs.
 - **Guardrails**: Erica can only call records explicitly selected by a human, with a generated brief, valid phone number, and passing policy checks. No autonomous list building or bulk auto-dialling.
 
 ### Calendar + Booking Integration Layer
-- **Domain Model**: `bookingTypes.ts` — full typed model for slots, availability windows, confirmed bookings, and booking requests.
-- **Calendar Provider**: `calendarProvider.ts` — Google Calendar adapter + NullAdapter (clean fallback when secrets absent).
-- **Availability Service**: `availabilityService.ts` — free/busy checks, slot generation, availability windows stored in Firestore.
-- **Booking Service**: `bookingService.ts` — confirmed booking flow (with provider) and fallback booking request flow.
+- **Domain Model**: Full typed model for slots, availability windows, confirmed bookings, and booking requests.
+- **Calendar Provider**: Google Calendar adapter + NullAdapter.
+- **Availability Service**: Free/busy checks, slot generation, availability windows stored in Firestore.
+- **Booking Service**: Confirmed booking flow (with provider) and fallback booking request flow.
 - **Tool Handlers**: `check_availability`, `create_booking`, `create_booking_request` wired into `webhookReconciler.ts`.
-- **Firestore Collections**: `ericaBookings`, `ericaBookingRequests`, `ericaAvailabilityWindows`, `ericaBookingAudit`.
-- **Google Calendar Secrets**: `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, `GOOGLE_CALENDAR_REFRESH_TOKEN`, `GOOGLE_CALENDAR_CALENDAR_ID`.
 
 ### Confirmation + Reminder Automation Layer
-- **Domain Model**: `bookingCommunicationTypes.ts` — 10-state lifecycle model, typed confirmation/reminder/schedule/event interfaces.
-- **Confirmation Service**: `bookingConfirmationService.ts` — email provider chain (Resend → SendGrid → SMTP), HTML + plain-text bodies, manual fallback.
-- **Status Service**: `bookingStatusService.ts` — immutable status history, comm event audit log.
-- **Reminder Service**: `bookingReminderService.ts` — 24-hour + same-day reminders, suppression rules, due-reminder processor.
+- **Domain Model**: 10-state lifecycle model, typed confirmation/reminder/schedule/event interfaces.
+- **Confirmation Service**: Email provider chain (Resend → SendGrid → SMTP), HTML + plain-text bodies, manual fallback.
+- **Reminder Service**: 24-hour + same-day reminders, suppression rules, due-reminder processor.
 - **Auto-wired**: Confirmation + reminder schedule generated automatically on booking confirmation.
-- **Email Secrets (any one activates)**: `RESEND_API_KEY`, `SENDGRID_API_KEY`, or `SMTP_HOST`.
-- **Firestore Collections**: `ericaBookingConfirmations`, `ericaReminderSchedules`, `ericaReminders`, `ericaCommEvents`, `ericaBookingStatusHistory`.
+
+### Scheduled Calling Campaigns Layer
+- **Domain Model**: Typed models for `EricaCallingCampaign`, `EricaCampaignSchedule`, `EricaCampaignWindow`, `EricaCampaignRun`, `EricaCampaignTargetState`, `EricaCampaignOutcome`, `EricaCampaignThrottleRule`, `EricaCampaignHealth`.
+- **Campaign Service**: Full CRUD + controls: create from batch, schedule, pause, resume, stop, skip target, retry target, outcome refresh.
+- **Campaign Runner**: Picks next eligible target, validates (phone + brief + policy), launches via existing `launchEricaBatchItem`, updates throttle counters, writes run records, refreshes outcome counters.
+- **Campaign Scheduler**: 60-second background loop; transitions scheduled → running at correct time, runs one cycle per campaign per tick, updates health snapshot.
+- **Throttle Rules**: Max calls/hour, max calls/day, min seconds between calls, sequential vs controlled batch mode.
+- **Calling Window**: Configurable start/end hour, allowed weekdays, IANA timezone — enforced on every runner cycle.
+- **Campaigns Workspace Tab**: Create campaign from batch, schedule/pause/resume/stop controls, progress bar with outcome counters, target status list, run history, audit trail, health warnings.
 
 ### Reschedule + Cancel Layer
-- **Domain Model**: `bookingChangeTypes.ts` — typed models for change requests, outcomes, audit entries, tool payloads.
-- **Reschedule Service**: `rescheduleService.ts` — two-phase flow (offer slots → confirm), provider cancel + recreate, reminder rebuild, updated confirmation.
-- **Cancellation Service**: `cancellationService.ts` — cancel provider event, mark booking cancelled, suppress reminders, operator task fallback.
+- **Domain Model**: Typed models for change requests, outcomes, audit entries, tool payloads.
+- **Reschedule Service**: Two-phase flow (offer slots → confirm), provider cancel + recreate, reminder rebuild, updated confirmation.
+- **Cancellation Service**: Cancel provider event, mark booking cancelled, suppress reminders, operator task fallback.
 - **Fallback**: When provider is unavailable, operator follow-up task created in `cadenceItems`; full audit trail maintained.
 - **Tool Handlers**: `request_reschedule`/`check_reschedule_availability`, `confirm_reschedule`, `request_cancellation`/`confirm_cancellation` wired into `webhookReconciler.ts`.
-- **API Endpoints**: 7 new endpoints for change listing, audit, check-reschedule, confirm-reschedule, cancel.
-- **Firestore Collections**: `ericaBookingChanges`, `ericaBookingChangeAudit`.
-- **Workspace**: Bookings tab shows rescheduled/cancelled changes, offered slots, new slot, fallback reason, and change audit trail.
 
 ### Erica Execution Bridge
 - **Vapi Launch Service**: Launches individual items or next-eligible items via Vapi REST API.

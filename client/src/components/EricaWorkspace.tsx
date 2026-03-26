@@ -530,6 +530,49 @@ export default function EricaWorkspace() {
   });
   const changeAuditEntries: any[] = (changeAuditData as any)?.entries ?? [];
 
+  // ── Campaign queries ──────────────────────────────────────────────────────
+  const { data: campaignsData, refetch: refetchCampaigns } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/campaigns`],
+    enabled:  !!orgId,
+  });
+  const campaigns: any[] = (campaignsData as any)?.campaigns ?? [];
+
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+
+  const { data: campaignTargetsData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/campaigns/${selectedCampaignId}/targets`],
+    enabled:  !!orgId && !!selectedCampaignId,
+  });
+  const campaignTargets: any[] = (campaignTargetsData as any)?.targets ?? [];
+
+  const { data: campaignRunsData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/campaigns/${selectedCampaignId}/runs`],
+    enabled:  !!orgId && !!selectedCampaignId,
+  });
+  const campaignRuns: any[] = (campaignRunsData as any)?.runs ?? [];
+
+  const { data: campaignAuditData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/campaigns/${selectedCampaignId}/audit`],
+    enabled:  !!orgId && !!selectedCampaignId,
+  });
+  const campaignAuditEntries: any[] = (campaignAuditData as any)?.entries ?? [];
+
+  const createCampaignMutation = useMutation({
+    mutationFn: (data: { batchId: string; name: string }) =>
+      apiRequest('POST', `/api/erica/orgs/${orgId}/campaigns`, { ...data, createdBy: 'operator' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/campaigns`] }),
+  });
+
+  const campaignActionMutation = useMutation({
+    mutationFn: ({ campaignId: cId, action, body }: { campaignId: string; action: string; body?: any }) =>
+      apiRequest('POST', `/api/erica/orgs/${orgId}/campaigns/${cId}/${action}`, { performedBy: 'operator', ...body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/campaigns`] }),
+  });
+
+  const [newCampaignBatchId, setNewCampaignBatchId] = useState('');
+  const [newCampaignName, setNewCampaignName] = useState('');
+  const [showCreateCampaign, setShowCreateCampaign] = useState(false);
+
   const updateRuntimeConfigMutation = useMutation({
     mutationFn: (updates: Record<string, any>) =>
       apiRequest('PATCH', `/api/erica/orgs/${orgId}/runtime-config`, updates),
@@ -807,6 +850,7 @@ export default function EricaWorkspace() {
             { value: 'execution', label: 'Execution',  icon: Radio },
             { value: 'results',   label: 'Results',    icon: TrendingUp },
             { value: 'bookings',  label: 'Bookings',   icon: Calendar },
+            { value: 'campaigns', label: 'Campaigns',  icon: ListOrdered },
             { value: 'runtime',   label: 'Runtime',    icon: Settings },
             { value: 'inspect',   label: 'Inspect',    icon: Activity },
           ].map(({ value, label, icon: Icon }) => (
@@ -1267,6 +1311,310 @@ export default function EricaWorkspace() {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        {/* ── CAMPAIGNS TAB ───────────────────────────────────────────── */}
+        <TabsContent value="campaigns" className="flex-1 overflow-y-auto p-6 mt-0 space-y-6">
+
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">Scheduled Calling Campaigns</h3>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Schedule Erica to work through approved batches automatically within defined calling windows
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={() => refetchCampaigns()} data-testid="btn-refresh-campaigns">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                onClick={() => setShowCreateCampaign(v => !v)}
+                data-testid="btn-create-campaign"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />New campaign
+              </Button>
+            </div>
+          </div>
+
+          {/* Create campaign form */}
+          {showCreateCampaign && (
+            <Card className="border border-blue-200 bg-blue-50">
+              <CardContent className="p-4 space-y-3">
+                <p className="text-sm font-medium text-blue-800">Create campaign from batch</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Campaign name</label>
+                    <input
+                      type="text"
+                      className="w-full text-sm border border-slate-200 rounded px-3 py-1.5 bg-white"
+                      placeholder={`Campaign ${new Date().toLocaleDateString('en-AU')}`}
+                      value={newCampaignName}
+                      onChange={e => setNewCampaignName(e.target.value)}
+                      data-testid="input-campaign-name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Batch ID</label>
+                    <select
+                      className="w-full text-sm border border-slate-200 rounded px-3 py-1.5 bg-white"
+                      value={newCampaignBatchId}
+                      onChange={e => setNewCampaignBatchId(e.target.value)}
+                      data-testid="select-campaign-batch"
+                    >
+                      <option value="">Select a batch…</option>
+                      {batches.map((b: any) => (
+                        <option key={b.batchId ?? b.id} value={b.batchId ?? b.id}>
+                          {b.name ?? b.batchId}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 text-white text-xs"
+                    disabled={!newCampaignBatchId || createCampaignMutation.isPending}
+                    onClick={() => {
+                      if (!newCampaignBatchId) return;
+                      createCampaignMutation.mutate({
+                        batchId: newCampaignBatchId,
+                        name:    newCampaignName || `Campaign ${new Date().toLocaleDateString('en-AU')}`,
+                      });
+                      setShowCreateCampaign(false);
+                      setNewCampaignBatchId('');
+                      setNewCampaignName('');
+                    }}
+                    data-testid="btn-confirm-create-campaign"
+                  >
+                    {createCampaignMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                    Create campaign
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowCreateCampaign(false)}>Cancel</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Campaign list */}
+          {campaigns.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-slate-400">
+              <ListOrdered className="w-10 h-10 mb-3 opacity-30" />
+              <p className="font-medium">No campaigns yet</p>
+              <p className="text-sm mt-1">Create a campaign from an approved Erica batch to schedule automated calling</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {campaigns.map((c: any) => {
+                const isSelected = selectedCampaignId === c.campaignId;
+                const out = c.outcome ?? {};
+                const progress = out.total > 0 ? ((out.called + out.booked + out.skipped + out.suppressed) / out.total) * 100 : 0;
+
+                return (
+                  <Card
+                    key={c.campaignId}
+                    className={`border cursor-pointer transition-shadow ${isSelected ? 'border-blue-400 shadow-md' : 'border-slate-200 hover:shadow'}`}
+                    onClick={() => setSelectedCampaignId(isSelected ? null : c.campaignId)}
+                    data-testid={`campaign-card-${c.campaignId}`}
+                  >
+                    <CardContent className="p-4">
+                      {/* Campaign header row */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-slate-800 truncate">{c.name}</p>
+                            <Badge variant="outline" className={`text-xs shrink-0 ${
+                              c.status === 'running'    ? 'border-green-400 text-green-700 bg-green-50' :
+                              c.status === 'scheduled'  ? 'border-blue-400 text-blue-700 bg-blue-50' :
+                              c.status === 'paused'     ? 'border-amber-400 text-amber-700 bg-amber-50' :
+                              c.status === 'completed'  ? 'border-slate-300 text-slate-600' :
+                              c.status === 'cancelled'  ? 'border-red-300 text-red-600' :
+                              'border-slate-200 text-slate-500'
+                            }`}>
+                              {c.status === 'running' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-1 animate-pulse" />}
+                              {c.status}
+                            </Badge>
+                            {c.health?.flags?.length > 0 && (
+                              <Badge variant="outline" className="text-xs border-amber-300 text-amber-700">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                {c.health.flags[0].replace(/_/g, ' ')}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Batch: {c.batchName ?? c.batchId?.slice(0, 12)} ·
+                            {` ${c.schedule?.window?.startHour ?? 9}:00–${c.schedule?.window?.endHour ?? 17}:00`} ·
+                            {` max ${c.schedule?.throttle?.maxCallsPerHour ?? 10}/hr`} ·
+                            {` ${c.schedule?.window?.timezone ?? 'Australia/Sydney'}`}
+                          </p>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                          {c.status === 'draft' && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 border-green-300 text-green-700"
+                              onClick={() => campaignActionMutation.mutate({ campaignId: c.campaignId, action: 'schedule' })}
+                              data-testid={`btn-schedule-campaign-${c.campaignId}`}>
+                              <Play className="w-3 h-3 mr-1" />Schedule
+                            </Button>
+                          )}
+                          {c.status === 'running' && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 border-amber-300 text-amber-700"
+                              onClick={() => campaignActionMutation.mutate({ campaignId: c.campaignId, action: 'pause', body: { reason: 'Operator paused' } })}
+                              data-testid={`btn-pause-campaign-${c.campaignId}`}>
+                              <Pause className="w-3 h-3 mr-1" />Pause
+                            </Button>
+                          )}
+                          {c.status === 'paused' && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 border-green-300 text-green-700"
+                              onClick={() => campaignActionMutation.mutate({ campaignId: c.campaignId, action: 'resume' })}
+                              data-testid={`btn-resume-campaign-${c.campaignId}`}>
+                              <Play className="w-3 h-3 mr-1" />Resume
+                            </Button>
+                          )}
+                          {['running', 'paused', 'scheduled'].includes(c.status) && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 border-red-200 text-red-600"
+                              onClick={() => campaignActionMutation.mutate({ campaignId: c.campaignId, action: 'stop' })}
+                              data-testid={`btn-stop-campaign-${c.campaignId}`}>
+                              <X className="w-3 h-3 mr-1" />Stop
+                            </Button>
+                          )}
+                          {c.status === 'running' && (
+                            <Button size="sm" variant="outline" className="text-xs h-7 border-purple-200 text-purple-700"
+                              onClick={() => campaignActionMutation.mutate({ campaignId: c.campaignId, action: 'run-cycle' })}
+                              data-testid={`btn-run-cycle-${c.campaignId}`}>
+                              <Zap className="w-3 h-3 mr-1" />Run now
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      {out.total > 0 && (
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                            <span>{Math.round(progress)}% complete</span>
+                            <span>{out.called + out.booked} / {out.total} called</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500 rounded-full transition-all"
+                              style={{ width: `${Math.min(progress, 100)}%` }}
+                            />
+                          </div>
+                          {/* Outcome counters */}
+                          <div className="flex items-center gap-4 mt-2 text-xs">
+                            {out.booked > 0    && <span className="text-green-700 font-medium">{out.booked} booked</span>}
+                            {out.called > 0    && <span className="text-blue-700">{out.called} called</span>}
+                            {out.failed > 0    && <span className="text-red-600">{out.failed} failed</span>}
+                            {out.skipped > 0   && <span className="text-slate-500">{out.skipped} skipped</span>}
+                            {out.queued > 0    && <span className="text-slate-400">{out.queued} queued</span>}
+                            {out.total > 0     && <span className="text-slate-400 ml-auto">{Math.round(out.bookingRate * 100)}% book rate</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Next run / health */}
+                      {(c.health?.nextEligible || c.lastRunAt) && (
+                        <div className="mt-2 text-xs text-slate-400">
+                          {c.health?.nextEligible && !c.health?.healthy && (
+                            <span>Next eligible: {new Date(c.health.nextEligible).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                          )}
+                          {c.lastRunAt && (
+                            <span className="ml-3">Last run: {new Date(c.lastRunAt).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Expanded detail */}
+                      {isSelected && (
+                        <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
+
+                          {/* Targets */}
+                          {campaignTargets.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-600 mb-2">
+                                Targets ({campaignTargets.length})
+                              </p>
+                              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                {campaignTargets.slice(0, 30).map((t: any) => (
+                                  <div key={t.targetId} className="flex items-center gap-2 text-xs py-1 border-b border-slate-50"
+                                    data-testid={`campaign-target-${t.targetId}`}>
+                                    <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                      t.status === 'called'     ? 'bg-blue-400' :
+                                      t.status === 'booked'     ? 'bg-green-400' :
+                                      t.status === 'calling'    ? 'bg-purple-400 animate-pulse' :
+                                      t.status === 'failed'     ? 'bg-red-400' :
+                                      t.status === 'skipped'    ? 'bg-slate-300' :
+                                      t.status === 'suppressed' ? 'bg-amber-300' :
+                                      'bg-slate-200'
+                                    }`} />
+                                    <span className="text-slate-700 truncate flex-1">{t.entityName}</span>
+                                    <span className={`shrink-0 ${
+                                      t.status === 'called'     ? 'text-blue-600' :
+                                      t.status === 'booked'     ? 'text-green-700 font-medium' :
+                                      t.status === 'calling'    ? 'text-purple-600' :
+                                      t.status === 'failed'     ? 'text-red-600' :
+                                      'text-slate-400'
+                                    }`}>{t.status}</span>
+                                    {t.skipReason && <span className="text-slate-400 italic truncate max-w-24">{t.skipReason}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Run history */}
+                          {campaignRuns.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-600 mb-2">Run history ({campaignRuns.length})</p>
+                              <div className="space-y-1 max-h-36 overflow-y-auto">
+                                {campaignRuns.slice(0, 15).map((r: any, i: number) => (
+                                  <div key={r.runId ?? i} className="flex items-center gap-2 text-xs py-0.5">
+                                    <span className="text-slate-400 shrink-0 w-20">
+                                      {r.startedAt ? new Date(r.startedAt).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                                    </span>
+                                    <span className={`shrink-0 font-medium ${
+                                      r.outcome === 'launched'   ? 'text-green-700' :
+                                      r.outcome === 'failed'     ? 'text-red-600' :
+                                      r.outcome === 'suppressed' ? 'text-amber-600' :
+                                      'text-slate-500'
+                                    }`}>{r.outcome}</span>
+                                    <span className="text-slate-500 truncate">{r.targetName}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Campaign audit */}
+                          {campaignAuditEntries.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-600 mb-2">Audit trail</p>
+                              <div className="space-y-1 max-h-36 overflow-y-auto">
+                                {campaignAuditEntries.slice(0, 10).map((e: any, i: number) => (
+                                  <div key={e.auditId ?? i} className="flex items-center gap-2 text-xs py-0.5">
+                                    <span className="text-slate-400 shrink-0 w-20">
+                                      {e.at ? new Date(e.at).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                                    </span>
+                                    <span className="font-medium text-slate-700 shrink-0">{(e.eventType ?? '').replace(/_/g, ' ')}</span>
+                                    <span className="text-slate-500 truncate">{e.note}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* ── RUNTIME TAB ─────────────────────────────────────────────── */}

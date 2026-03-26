@@ -109,6 +109,7 @@ app.use((req, res, next) => {
       startAutopilotScheduler(port);
       startSweepScheduler(port);
       startAISystemsSyncScheduler();
+      startEricaCampaignScheduler();
     },
   );
 })();
@@ -390,6 +391,16 @@ function startAutopilotScheduler(port: number) {
   setTimeout(runScan, 30_000);
   setInterval(runScan, INTERVAL_MS);
   log(`Autopilot orchestrator started (every ${INTERVAL_MS / 60000} min)`, 'autopilot');
+}
+
+// ── Erica Campaign Scheduler ───────────────────────────────────────────────
+// Runs every 60 seconds. Processes eligible running campaigns.
+function startEricaCampaignScheduler() {
+  import('./erica/campaignScheduler').then(({ startCampaignScheduler }) => {
+    startCampaignScheduler();
+  }).catch((err: any) => {
+    log(`[campaign-scheduler] Failed to start: ${err.message}`, 'campaign-scheduler');
+  });
 }
 
 // ── AI Systems Delivery Summary Sync Scheduler ─────────────────────────────

@@ -1,0 +1,140 @@
+The Reschedule + Cancel Layer for Erica is now complete.
+
+Next, I want to build the Scheduled Calling Campaigns Layer for Erica.
+
+Context:
+- Erica batching, call briefs, runtime packets, Vapi launch, webhook reconciliation, booking, confirmations, reminders, reschedule, and cancel flows are all complete
+- Erica can currently call approved batch items and write outcomes back into Momentum
+- What is missing is the ability to schedule and run approved call batches on a timed cadence rather than only launching manually
+
+GOAL
+Build the Scheduled Calling Campaigns Layer so Momentum can:
+- schedule Erica call batches for later
+- run campaigns within defined calling windows
+- process targets sequentially or in controlled batches
+- respect time zones, business hours, and operator rules
+- pause/resume/stop campaigns
+- track campaign outcomes and performance
+- keep everything controlled, auditable, and policy-aware
+
+IMPORTANT
+Erica must still remain human-controlled.
+This is not uncontrolled autonomous dialing.
+
+Campaigns should only run from:
+- explicitly created Erica call batches
+- explicitly approved launch settings
+- valid targets with call briefs
+- policy-allowed execution paths
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Campaign domain model
+Create typed models for at least:
+- EricaCallingCampaign
+- EricaCampaignSchedule
+- EricaCampaignWindow
+- EricaCampaignRun
+- EricaCampaignTargetState
+- EricaCampaignOutcome
+- EricaCampaignThrottleRule
+- EricaCampaignPauseState
+- EricaCampaignHealth
+
+2. Campaign scheduling layer
+Build a scheduling model supporting:
+- run now
+- scheduled date/time
+- date range
+- weekdays only
+- call window start/end times
+- target timezone awareness
+- max calls per hour
+- max calls per day
+- sequential vs controlled batch mode
+
+3. Campaign runner
+Build the service that:
+- picks the next eligible target from a scheduled campaign
+- validates target still has:
+  - phone number
+  - brief
+  - policy eligibility
+  - not already completed/skipped
+- launches the call via the existing Erica execution bridge
+- updates campaign progress and target state
+
+4. Campaign controls
+Support:
+- create campaign from existing Erica batch
+- schedule campaign
+- start
+- pause
+- resume
+- stop/cancel
+- skip target
+- retry failed target
+
+5. Time window and guardrails
+Enforce:
+- no calls outside campaign window
+- no calls outside allowed timezone/business-hour rules
+- no duplicate calling of completed targets
+- no campaign progress if prerequisites fail
+- safe handling of partial failures
+
+6. Campaign outcome tracking
+Track at campaign level:
+- total targets
+- queued
+- called
+- booked
+- no answer
+- failed
+- skipped
+- follow-up needed
+- booking rate
+- contact rate
+
+7. Erica workspace integration
+Add a Campaigns section/tab showing:
+- scheduled campaigns
+- active campaigns
+- paused campaigns
+- completed campaigns
+- campaign progress bars
+- next run time
+- call outcome summary
+- health warnings
+
+8. Inspection/debug support
+Create internal inspection for:
+- why a campaign ran or did not run
+- which target was selected next
+- why a target was skipped/suppressed
+- exact campaign schedule settings
+- run history
+- failure reasons
+
+IMPORTANT RULES
+- campaigns must only run from approved Erica batches
+- do not create targets automatically
+- do not bypass existing call brief and policy guardrails
+- keep all campaign execution auditable
+- keep human stop/pause controls first-class
+
+OUTPUT FORMAT
+
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- campaign domain model
+- campaign scheduling layer
+- campaign runner
+- campaign controls
