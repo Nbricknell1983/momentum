@@ -41,7 +41,7 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
-interface RootState { leads: any[]; clients: any[] }
+interface RootState { app: { leads: any[]; clients: any[] } }
 
 // ---------------------------------------------------------------------------
 // Status badge helpers
@@ -393,8 +393,8 @@ export default function EricaWorkspace() {
   const qc      = useQueryClient();
   const { orgId: authOrgId } = useAuth();
   const orgId   = authOrgId ?? '';
-  const leads   = useSelector((s: RootState) => s.leads ?? []);
-  const clients = useSelector((s: RootState) => s.clients ?? []);
+  const leads   = useSelector((s: RootState) => s.app?.leads ?? []);
+  const clients = useSelector((s: RootState) => s.app?.clients ?? []);
 
   const [activeTab,      setActiveTab]      = useState('batches');
   const [selectedBatch,  setSelectedBatch]  = useState<EricaCallBatch | null>(null);
