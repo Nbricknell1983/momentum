@@ -1,0 +1,60 @@
+Upgrade QA/Tester Agent to catch Erica workflow breakages
+
+Context
+
+Momentum app (React/TS/Vite, Redux Toolkit, Firestore). Existing QA/Tester agent runs an automated scanner across 31 routes and reports/fixes obvious issues.
+A regression slipped through: EricaWorkspace read leads/clients from state.leads/state.clients instead of state.app.leads/state.app.clients. The scanner didn’t catch it because it wasn’t validating business flows or selector contracts.
+Goal
+Upgrade the existing QA/Tester agent to v2 with:
+
+Selector contract enforcement: forbid state.leads/state.clients anywhere and require centralized selectors.
+Route “page contract” checks (fast) for Erica Selection, Pipeline, Focus View.
+An end-to-end Erica “sell + book appointment” flow test with mocks and Firestore dual‑write verification.
+Single, merged QA report; CI gating; ability to run via the agent when I say “run the QA sweep and fix everything you find.”
+Tasks
+
+Centralize selectors
+Add src/state/appSelectors.ts with selectLeads/selectClients and migrate EricaWorkspace to use them.
+ESLint rule (static contract)
+Custom rule that errors on state.leads or state.clients access; wire into .eslintrc and CI.
+QA registry and Playwright harness
+qa/registry.ts with:
+Route contracts: Erica Selection (counts > 0 with seed; selecting adds to batch), Pipeline (stage badge renders; filters change list), Focus View (right panel and primary actions visible).
+Flows: ericaSellAndBookFlow() end-to-end.
+tests/e2e/contracts.spec.ts to run contracts, tests/e2e/erica-flow.spec.ts for the flow.
+Mocks and Dev hooks (test/dev only)
+Dev Outbox route (/__dev/outbox) listing last 20 emails/SMS.
+Calendar mock provider (createEvent returns id/start/end).
+Dialer mock connect()/hangup() returning callSid.
+window.__qaAudit.push(domainEvent) for assertions.
+All guarded behind NODE_ENV !== 'production'.
+Firestore emulator seed
+scripts/seed-test-data.ts: orgs/testco with 3–5 leads, rep user membership.
+Package/CI
+Scripts: qa:contracts, qa:flows, qa:sweep; produce HTML report + qa-report.json.
+CI: PRs run ESLint + contracts; nightly run flows. Fail build on any regression.
+Integrate with QA/Tester agent
+Update its “run the QA sweep” routine to:
+run ESLint rule
+run contracts
+run flows
+Parse results and summarize; if it’s a known-simple selector bug, suggest exact code diffs.
+Keep its fix mode focused on low-risk changes (selector path corrections, missing imports).
+Acceptance Criteria
+
+“Run the QA sweep” from the QA/Tester agent executes the three phases, uploads a single report, and fails on:
+Any direct state.leads/state.clients usage
+Empty Erica Selection counts with seed
+Any step of the sell+book flow failing
+Local: npm run qa:sweep passes with emulator + seed.
+CI: PRs blocked on selector/contract violations; nightly flow artifacts uploaded.
+Deliverables
+
+src/state/appSelectors.ts and component migrations (EricaWorkspace at minimum)
+ESLint custom rule + .eslintrc update
+qa/registry.ts, tests/e2e/contracts.spec.ts, tests/e2e/erica-flow.spec.ts
+Dev Outbox + mocks + audit shim (dev/test only)
+scripts/seed-test-data.ts and package.json scripts
+README-qa.md with local/CI instructions
+QA/Tester agent code updated to orchestrate the sweep and summarize results
+Please implement the upgrade, migrate EricaWorkspace to selectors, and open a PR: “QA/Tester v2 — Selector guard + Erica workflow E2E + page contracts.”

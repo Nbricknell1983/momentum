@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
+import { selectLeads, selectActivities } from '@/state/appSelectors';
 import { Lead, STAGE_LABELS } from '@/lib/types';
 import {
   derivePipelineMomentumScore, PipelineMomentumScore, MomentumTrajectory,
@@ -133,8 +133,8 @@ interface PipelineMomentumPanelProps {
 }
 
 export function PipelineMomentumPanel({ onLeadClick }: PipelineMomentumPanelProps) {
-  const leads     = useSelector((state: RootState) => state.leads || []);
-  const activities = useSelector((state: RootState) => state.activities || []);
+  const leads      = useSelector(selectLeads);
+  const activities = useSelector(selectActivities);
   const [filter, setFilter] = useState<FilterView>('all');
 
   // Only active leads

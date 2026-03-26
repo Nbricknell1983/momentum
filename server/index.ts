@@ -6,6 +6,7 @@ import { verifyFirebaseToken } from "./middleware/auth";
 import crypto from "crypto";
 import { isIntegrationConfigured } from "./integration/config";
 import { syncAllOrgClients } from "./integration/sync";
+import devRouter from "./routes/dev";
 
 const app = express();
 const httpServer = createServer(app);
@@ -72,6 +73,11 @@ app.use((req, res, next) => {
   app.use('/api/', verifyFirebaseToken);
 
   await registerRoutes(httpServer, app);
+
+  // Dev-only routes — outbox, calendar mock, dialer mock, health ping
+  if (process.env.NODE_ENV !== 'production') {
+    app.use('/__dev', devRouter);
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

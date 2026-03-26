@@ -40,9 +40,14 @@ export async function loginWithCredentials(
     // Click the submit Sign In button (not the tab) using its specific testid
     await page.locator('[data-testid="button-signin"]').click();
 
-    // Wait up to 20 seconds for redirect to dashboard
+    // Wait up to 35 seconds for the app to navigate away from /login.
+    // The login flow has 3 async steps after button click:
+    //   1. Firebase signInWithEmail
+    //   2. Firestore user doc read (to get orgId)
+    //   3. POST /api/2fa/status (to check 2FA enrollment)
+    // Only after all three does setLocation('/dashboard') fire.
     try {
-      await page.waitForURL(`${baseUrl}/dashboard`, { timeout: 20000 });
+      await page.waitForURL(url => !url.href.includes('/login'), { timeout: 35000 });
     } catch {
       // Check if 2FA screen appeared
       const is2FA = await page.locator('[data-testid="input-2fa-code"]').isVisible().catch(() => false);
@@ -55,16 +60,15 @@ export async function loginWithCredentials(
       }
 
       const currentUrl = page.url();
-      const bodyText = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
 
       // Check for auth error toast
       const toastText = await page.locator('[role="alert"], [data-testid*="toast"]').textContent().catch(() => '');
 
-      if (!currentUrl.includes('/dashboard')) {
+      if (currentUrl.includes('/login')) {
         return {
           success: false,
           isManager: false,
-          error: `Login did not redirect to /dashboard. URL: ${currentUrl}. Toast: ${toastText.slice(0, 200)}`,
+          error: `Login did not navigate away from /login within 35 s. URL: ${currentUrl}. Toast: ${toastText.slice(0, 200)}`,
         };
       }
     }

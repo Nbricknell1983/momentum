@@ -9,6 +9,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { useAuth } from '@/contexts/AuthContext';
+import { selectLeads, selectClients } from '@/state/appSelectors';
 import {
   PhoneCall, Plus, Play, Pause, X, ChevronRight, ChevronDown,
   AlertTriangle, CheckCircle, Clock, User, Building2, Target,
@@ -41,7 +42,6 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
-interface RootState { app: { leads: any[]; clients: any[] } }
 
 // ---------------------------------------------------------------------------
 // Status badge helpers
@@ -393,8 +393,8 @@ export default function EricaWorkspace() {
   const qc      = useQueryClient();
   const { orgId: authOrgId } = useAuth();
   const orgId   = authOrgId ?? '';
-  const leads   = useSelector((s: RootState) => s.app?.leads ?? []);
-  const clients = useSelector((s: RootState) => s.app?.clients ?? []);
+  const leads   = useSelector(selectLeads);
+  const clients = useSelector(selectClients);
 
   const [activeTab,      setActiveTab]      = useState('batches');
   const [selectedBatch,  setSelectedBatch]  = useState<EricaCallBatch | null>(null);
