@@ -496,6 +496,7 @@ function AgentIntelligenceCard({ lead, onRegenerate, isRegenerating, isPrepping 
               delta={(lead as any).evidenceDelta?.changes ?? null}
               deltaPrevGatheredAt={(lead as any).evidenceDelta?.prevGatheredAt ?? null}
               sitemapPageCount={(lead as any).sitemapPages?.length ?? 0}
+              sourceData={(lead as any).sourceData}
             />
           </div>
 

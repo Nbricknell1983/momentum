@@ -173,6 +173,7 @@ export function EvidencePresenceSection({
   ebGatheredAt, serpGeneratedAt, aiGeneratedAt,
   delta, deltaPrevGatheredAt,
   sitemapPageCount,
+  sourceData,
 }: {
   eb?: any;
   psAi?: PresenceSnapshot;
@@ -183,12 +184,31 @@ export function EvidencePresenceSection({
   delta?: any[] | null;
   deltaPrevGatheredAt?: string | null;
   sitemapPageCount?: number;
+  sourceData?: any;
 }) {
   const [activeDetail, setActiveDetail] = useState<PresenceInsightDetail | null>(null);
 
   const w   = eb?.website;
-  const gbp = eb?.gbp;
   const soc = eb?.social;
+
+  // If the evidence bundle has no confirmed GBP, fall back to sourceData fields
+  // (populated when the lead was prospected via Google Places or enriched via the scraper).
+  const ebGbp = eb?.gbp;
+  const sd = sourceData || {};
+  const gbpFromSource: any | null =
+    !ebGbp?.placeId && !ebGbp?.name && (sd.googlePlaceId || sd.googleRating != null)
+      ? {
+          placeId:  sd.googlePlaceId || null,
+          name:     sd.googleBusinessName || sd.googleName || null,
+          rating:   sd.googleRating ?? null,
+          reviewCount: sd.googleReviewCount ?? null,
+          mapsUrl:  sd.googleMapsUrl || null,
+          address:  sd.googleAddress || null,
+          phone:    sd.googlePhone || null,
+          _fromProspecting: true,
+        }
+      : null;
+  const gbp = ebGbp?.placeId || ebGbp?.name ? ebGbp : (gbpFromSource ?? ebGbp);
 
   const hasWebObs = !!w?.url;
   const hasGbpObs = !!gbp?.placeId || !!gbp?.name;
@@ -259,7 +279,11 @@ export function EvidencePresenceSection({
         <PresenceCard
           icon={MapPin}
           title="GBP / Maps"
-          badge={hasGbpObs ? <ObsBadge /> : psAi?.gbp ? <AiBadgeMini /> : null}
+          badge={
+            hasGbpObs && !gbp?._fromProspecting ? <ObsBadge /> :
+            hasGbpObs && gbp?._fromProspecting  ? <EstBadge /> :
+            psAi?.gbp ? <AiBadgeMini /> : null
+          }
           age={hasGbpObs ? ebAge : aiAge}
         >
           {hasGbpObs ? (
@@ -343,6 +367,12 @@ export function EvidencePresenceSection({
               {gbpInsights.map(insight => (
                 <PresenceInsightRow key={insight.id} insight={insight} onOpen={setActiveDetail} />
               ))}
+              {/* Prospecting source note */}
+              {gbp?._fromProspecting && (
+                <p className="text-[9px] text-amber-600 dark:text-amber-400 italic mt-0.5">
+                  From prospecting data — link the GBP listing to confirm full details
+                </p>
+              )}
               {/* Dev-only: ranked candidates */}
               {import.meta.env.DEV && gbp.candidates?.length > 1 && (
                 <details className="mt-1">
