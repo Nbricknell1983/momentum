@@ -662,7 +662,7 @@ export default function ExecutionQueue() {
 
   const pendingItems = useMemo(
     () =>
-      [...(cadenceState.byUrgency.overdue ?? []), ...(cadenceState.byUrgency.today ?? []), ...(cadenceState.byUrgency.this_week ?? [])].filter(
+      [...(cadenceState.overdueItems ?? []), ...(cadenceState.dueTodayItems ?? []), ...(cadenceState.dueThisWeekItems ?? [])].filter(
         i => i.status === 'pending',
       ),
     [cadenceState],
@@ -706,7 +706,7 @@ export default function ExecutionQueue() {
   }, [orgId]);
 
   // ── Counts for tab badges ─────────────────────────────────────────────────
-  const overdueCount = cadenceState.byUrgency.overdue?.filter(i => {
+  const overdueCount = cadenceState.overdueItems?.filter(i => {
     const s = queueState[i.id];
     return !s || (s.status !== 'sent' && s.status !== 'manually_sent' && s.status !== 'cancelled');
   }).length ?? 0;

@@ -133,9 +133,9 @@ export function deriveExecDashboard(
 
   // ── Cadence state ──────────────────────────────────────────────────────────
   const cadenceState = deriveCadenceState(leads, clients, {});
-  const overdueCadence = cadenceState.byUrgency.overdue?.length ?? 0;
-  const todayCadence = cadenceState.byUrgency.today?.length ?? 0;
-  const weeklyCadence = cadenceState.byUrgency.this_week?.length ?? 0;
+  const overdueCadence = cadenceState.overdueItems?.length ?? 0;
+  const todayCadence = cadenceState.dueTodayItems?.length ?? 0;
+  const weeklyCadence = cadenceState.dueThisWeekItems?.length ?? 0;
   const salesCadence = cadenceState.byCategory.sales?.length ?? 0;
   const onboardingCadence = cadenceState.byCategory.onboarding?.length ?? 0;
   const accountCadence = (cadenceState.byCategory.account_growth?.length ?? 0) + (cadenceState.byCategory.churn_intervention?.length ?? 0);
