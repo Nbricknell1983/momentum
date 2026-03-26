@@ -53,6 +53,9 @@ import type {
 import { listConfirmations, getConfirmationForBooking, getChannelProviderState } from './bookingConfirmationService';
 import { listReminderSchedules, listReminders, getScheduleForBooking, processDueReminders } from './bookingReminderService';
 import { listCommEvents, listStatusHistory } from './bookingStatusService';
+import { checkRescheduleAvailability, confirmReschedule, listRescheduleChanges, listAllBookingChanges, listChangeAudit } from './rescheduleService';
+import { cancelBooking, listCancellationChanges } from './cancellationService';
+import type { RequestRescheduleToolPayload, ConfirmRescheduleToolPayload, RequestCancellationToolPayload } from './bookingChangeTypes';
 
 export const ericaRouter = Router();
 
@@ -678,6 +681,113 @@ ericaRouter.post('/orgs/:orgId/comm/process-due-reminders', async (req: Request,
   try {
     const result = await processDueReminders(req.params.orgId);
     res.json({ result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================================
+// RESCHEDULE + CANCEL ENDPOINTS
+// =============================================================================
+
+// GET /api/erica/orgs/:orgId/booking-changes
+ericaRouter.get('/orgs/:orgId/booking-changes', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const changes = await listAllBookingChanges(req.params.orgId, 100);
+    res.json({ changes });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/booking-changes/reschedule
+ericaRouter.get('/orgs/:orgId/booking-changes/reschedule', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const changes = await listRescheduleChanges(req.params.orgId, 100);
+    res.json({ changes });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/booking-changes/cancellation
+ericaRouter.get('/orgs/:orgId/booking-changes/cancellation', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const changes = await listCancellationChanges(req.params.orgId, 100);
+    res.json({ changes });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/booking-changes/audit
+ericaRouter.get('/orgs/:orgId/booking-changes/audit', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const entries = await listChangeAudit(req.params.orgId, 200);
+    res.json({ entries });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/erica/orgs/:orgId/bookings/:bookingId/check-reschedule
+ericaRouter.post('/orgs/:orgId/bookings/:bookingId/check-reschedule', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const { orgId, bookingId } = req.params;
+    const body = req.body;
+    const payload: RequestRescheduleToolPayload = {
+      bookingId,
+      entityId:        body.entityId ?? '',
+      entityType:      body.entityType ?? 'lead',
+      reason:          body.reason ?? 'operator_requested',
+      reasonNote:      body.reasonNote,
+      preferenceTime:  body.preferenceTime ?? 'any',
+      timezone:        body.timezone ?? 'Australia/Sydney',
+      lookAheadDays:   Number(body.lookAheadDays ?? 7),
+      durationMinutes: Number(body.durationMinutes ?? 30),
+    };
+    const outcome = await checkRescheduleAvailability(orgId, payload, body.performedBy ?? 'operator');
+    res.json({ outcome });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/erica/orgs/:orgId/bookings/:bookingId/confirm-reschedule
+ericaRouter.post('/orgs/:orgId/bookings/:bookingId/confirm-reschedule', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const { orgId, bookingId } = req.params;
+    const body = req.body;
+    if (!body.changeId || !body.slotId || !body.windowId) {
+      return res.status(400).json({ error: 'changeId, slotId, and windowId are required' });
+    }
+    const payload: ConfirmRescheduleToolPayload = {
+      changeId:  body.changeId,
+      bookingId,
+      slotId:    body.slotId,
+      windowId:  body.windowId,
+    };
+    const outcome = await confirmReschedule(orgId, payload, body.performedBy ?? 'operator');
+    res.json({ outcome });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/erica/orgs/:orgId/bookings/:bookingId/cancel
+ericaRouter.post('/orgs/:orgId/bookings/:bookingId/cancel', verifyFirebaseToken, async (req: Request, res: Response) => {
+  try {
+    const { orgId, bookingId } = req.params;
+    const body = req.body;
+    const payload: RequestCancellationToolPayload = {
+      bookingId,
+      entityId:   body.entityId ?? '',
+      entityType: body.entityType ?? 'lead',
+      reason:     body.reason ?? 'operator_requested',
+      reasonNote: body.reasonNote,
+    };
+    const outcome = await cancelBooking(orgId, payload, body.performedBy ?? 'operator');
+    res.json({ outcome });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

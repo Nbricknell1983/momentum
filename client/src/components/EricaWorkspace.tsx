@@ -517,6 +517,19 @@ export default function EricaWorkspace() {
     },
   });
 
+  // ── Booking changes (reschedule + cancel) ─────────────────────────────────
+  const { data: bookingChangesData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/booking-changes`],
+    enabled:  !!orgId,
+  });
+  const bookingChanges: any[] = (bookingChangesData as any)?.changes ?? [];
+
+  const { data: changeAuditData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/booking-changes/audit`],
+    enabled:  !!orgId,
+  });
+  const changeAuditEntries: any[] = (changeAuditData as any)?.entries ?? [];
+
   const updateRuntimeConfigMutation = useMutation({
     mutationFn: (updates: Record<string, any>) =>
       apiRequest('PATCH', `/api/erica/orgs/${orgId}/runtime-config`, updates),
@@ -2004,6 +2017,132 @@ export default function EricaWorkspace() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* ── RESCHEDULE + CANCEL SECTION ──────────────────────────────── */}
+          {bookingChanges.length > 0 && (
+            <>
+              <div className="flex items-center gap-2 pt-2">
+                <div className="h-px flex-1 bg-slate-200" />
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-wide px-2">Reschedule + Cancel</span>
+                <div className="h-px flex-1 bg-slate-200" />
+              </div>
+
+              <Card className="border border-slate-200">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-orange-600" />
+                    Booking Changes
+                    <Badge variant="outline" className="text-xs border-orange-200 text-orange-700 ml-auto">
+                      {bookingChanges.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-2">
+                    {bookingChanges.slice(0, 20).map((change: any) => (
+                      <div
+                        key={change.changeId ?? change.id}
+                        className="flex items-start gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50 text-xs"
+                        data-testid={`booking-change-${change.changeId ?? change.id}`}
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {change.changeType === 'cancel' ? (
+                            <X className="w-3.5 h-3.5 text-red-500" />
+                          ) : (
+                            <RefreshCw className="w-3.5 h-3.5 text-orange-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-slate-700 truncate">
+                              {change.contactName ?? change.entityName ?? 'Unknown'}
+                            </p>
+                            <Badge variant="outline" className={`text-xs shrink-0 ${
+                              change.changeType === 'cancel'                ? 'border-red-300 text-red-700' :
+                              change.changeType === 'reschedule'           ? 'border-orange-300 text-orange-700' :
+                              'border-slate-300 text-slate-600'
+                            }`}>
+                              {change.changeType}
+                            </Badge>
+                            <Badge variant="outline" className={`text-xs shrink-0 ${
+                              change.status === 'confirmed'        ? 'border-green-400 text-green-700' :
+                              change.status === 'fallback_pending' ? 'border-amber-400 text-amber-700' :
+                              change.status === 'failed'           ? 'border-red-400 text-red-700' :
+                              change.status === 'awaiting_slot_selection' ? 'border-blue-400 text-blue-700' :
+                              'border-slate-300 text-slate-600'
+                            }`}>
+                              {(change.status ?? '').replace(/_/g, ' ')}
+                            </Badge>
+                          </div>
+                          <p className="text-slate-500 mt-0.5">
+                            {(change.reason ?? '').replace(/_/g, ' ')}
+                            {change.reasonNote ? ` — ${change.reasonNote}` : ''}
+                          </p>
+                          {change.offeredSlots?.length > 0 && (
+                            <p className="text-blue-600 mt-0.5">
+                              {change.offeredSlots.length} slot{change.offeredSlots.length !== 1 ? 's' : ''} offered
+                            </p>
+                          )}
+                          {change.newSlot && (
+                            <p className="text-green-600 mt-0.5">
+                              New time: {change.newSlot.timeLabel ?? change.newSlot.startIso}
+                            </p>
+                          )}
+                          {change.fallbackReason && (
+                            <p className="text-amber-600 mt-0.5 italic">{change.fallbackReason.replace(/_/g, ' ')}</p>
+                          )}
+                          <p className="text-slate-400 mt-0.5">
+                            Initiated by: {change.initiatedBy} · {change.entityType} / {change.entityId?.slice(0, 8)}
+                          </p>
+                        </div>
+                        <span className="text-slate-400 shrink-0">
+                          {change.createdAt ? new Date(change.createdAt).toLocaleDateString('en-AU') : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Change audit trail */}
+              {changeAuditEntries.length > 0 && (
+                <Card className="border border-slate-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-slate-600" />
+                      Change Audit Trail
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-1.5">
+                      {changeAuditEntries.slice(0, 20).map((entry: any, i: number) => (
+                        <div
+                          key={entry.auditId ?? i}
+                          className="flex items-center gap-3 text-xs py-1.5 border-b border-slate-100 last:border-0"
+                          data-testid={`change-audit-${i}`}
+                        >
+                          <span className="text-slate-400 shrink-0 w-20">
+                            {entry.at ? new Date(entry.at).toLocaleDateString('en-AU') : ''}
+                          </span>
+                          <span className={`font-medium shrink-0 ${
+                            entry.eventType?.includes('rescheduled')   ? 'text-green-700' :
+                            entry.eventType?.includes('cancelled')     ? 'text-red-700' :
+                            entry.eventType?.includes('fallback')      ? 'text-amber-700' :
+                            entry.eventType?.includes('slots_offered') ? 'text-blue-700' :
+                            'text-slate-700'
+                          }`}>
+                            {(entry.eventType ?? '').replace(/_/g, ' ')}
+                          </span>
+                          <span className="text-slate-500 truncate">{entry.note}</span>
+                          <span className="text-slate-400 shrink-0 ml-auto">{entry.performedBy}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
 
           {/* ── COMMUNICATION SECTION ─────────────────────────────────── */}

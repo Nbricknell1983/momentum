@@ -109,8 +109,36 @@ Preferred communication style: Simple, everyday language.
 - **Brief Generator**: Combines intelligence into a structured `EricaCallBrief` and Vapi context packet.
 - **Batch Service**: Firestore-backed batch lifecycle management.
 - **API Router**: REST API at `/api/erica/orgs/:orgId/*` for batch/item/result management.
-- **Workspace UI**: Premium calling workspace with 7 tabs.
+- **Workspace UI**: Premium calling workspace with 8 tabs (Batches, Selection, Review, Brief, Results, Runtime, Settings, Bookings).
 - **Guardrails**: Erica can only call records explicitly selected by a human, with a generated brief, valid phone number, and passing policy checks. No autonomous list building or bulk auto-dialling.
+
+### Calendar + Booking Integration Layer
+- **Domain Model**: `bookingTypes.ts` — full typed model for slots, availability windows, confirmed bookings, and booking requests.
+- **Calendar Provider**: `calendarProvider.ts` — Google Calendar adapter + NullAdapter (clean fallback when secrets absent).
+- **Availability Service**: `availabilityService.ts` — free/busy checks, slot generation, availability windows stored in Firestore.
+- **Booking Service**: `bookingService.ts` — confirmed booking flow (with provider) and fallback booking request flow.
+- **Tool Handlers**: `check_availability`, `create_booking`, `create_booking_request` wired into `webhookReconciler.ts`.
+- **Firestore Collections**: `ericaBookings`, `ericaBookingRequests`, `ericaAvailabilityWindows`, `ericaBookingAudit`.
+- **Google Calendar Secrets**: `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, `GOOGLE_CALENDAR_REFRESH_TOKEN`, `GOOGLE_CALENDAR_CALENDAR_ID`.
+
+### Confirmation + Reminder Automation Layer
+- **Domain Model**: `bookingCommunicationTypes.ts` — 10-state lifecycle model, typed confirmation/reminder/schedule/event interfaces.
+- **Confirmation Service**: `bookingConfirmationService.ts` — email provider chain (Resend → SendGrid → SMTP), HTML + plain-text bodies, manual fallback.
+- **Status Service**: `bookingStatusService.ts` — immutable status history, comm event audit log.
+- **Reminder Service**: `bookingReminderService.ts` — 24-hour + same-day reminders, suppression rules, due-reminder processor.
+- **Auto-wired**: Confirmation + reminder schedule generated automatically on booking confirmation.
+- **Email Secrets (any one activates)**: `RESEND_API_KEY`, `SENDGRID_API_KEY`, or `SMTP_HOST`.
+- **Firestore Collections**: `ericaBookingConfirmations`, `ericaReminderSchedules`, `ericaReminders`, `ericaCommEvents`, `ericaBookingStatusHistory`.
+
+### Reschedule + Cancel Layer
+- **Domain Model**: `bookingChangeTypes.ts` — typed models for change requests, outcomes, audit entries, tool payloads.
+- **Reschedule Service**: `rescheduleService.ts` — two-phase flow (offer slots → confirm), provider cancel + recreate, reminder rebuild, updated confirmation.
+- **Cancellation Service**: `cancellationService.ts` — cancel provider event, mark booking cancelled, suppress reminders, operator task fallback.
+- **Fallback**: When provider is unavailable, operator follow-up task created in `cadenceItems`; full audit trail maintained.
+- **Tool Handlers**: `request_reschedule`/`check_reschedule_availability`, `confirm_reschedule`, `request_cancellation`/`confirm_cancellation` wired into `webhookReconciler.ts`.
+- **API Endpoints**: 7 new endpoints for change listing, audit, check-reschedule, confirm-reschedule, cancel.
+- **Firestore Collections**: `ericaBookingChanges`, `ericaBookingChangeAudit`.
+- **Workspace**: Bookings tab shows rescheduled/cancelled changes, offered slots, new slot, fallback reason, and change audit trail.
 
 ### Erica Execution Bridge
 - **Vapi Launch Service**: Launches individual items or next-eligible items via Vapi REST API.

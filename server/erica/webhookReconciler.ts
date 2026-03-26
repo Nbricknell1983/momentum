@@ -23,11 +23,18 @@ import type { EricaCallResult } from '../../client/src/lib/ericaTypes';
 import type { EricaVapiCallPhase } from '../../client/src/lib/ericaExecutionTypes';
 import { checkAvailability } from './availabilityService';
 import { createConfirmedBooking, createBookingRequest } from './bookingService';
+import { checkRescheduleAvailability, confirmReschedule } from './rescheduleService';
+import { cancelBooking } from './cancellationService';
 import type {
   CheckAvailabilityToolPayload,
   CreateBookingToolPayload,
   CreateBookingRequestToolPayload,
 } from './bookingTypes';
+import type {
+  RequestRescheduleToolPayload,
+  ConfirmRescheduleToolPayload,
+  RequestCancellationToolPayload,
+} from './bookingChangeTypes';
 
 // ---------------------------------------------------------------------------
 // Extract Erica identifiers from Vapi metadata
@@ -460,6 +467,102 @@ export async function reconcileFunctionCall(
       };
     } catch (err: any) {
       return { result: `Booking request creation error: ${err.message}` };
+    }
+  }
+
+  // ── request_reschedule ──────────────────────────────────────────────────
+  if (functionName === 'request_reschedule' || functionName === 'check_reschedule_availability') {
+    const payload: RequestRescheduleToolPayload = {
+      bookingId:       parameters.bookingId ?? '',
+      entityId:        parameters.entityId ?? ids.entityId ?? '',
+      entityType:      parameters.entityType ?? ids.entityType ?? 'lead',
+      callId:          callId || undefined,
+      reason:          parameters.reason ?? 'prospect_requested',
+      reasonNote:      parameters.reasonNote ?? parameters.notes ?? undefined,
+      preferenceTime:  parameters.preferenceTime ?? 'any',
+      timezone:        parameters.timezone ?? 'Australia/Sydney',
+      lookAheadDays:   Number(parameters.lookAheadDays ?? 7),
+      durationMinutes: Number(parameters.durationMinutes ?? 30),
+    };
+
+    try {
+      const outcome = await checkRescheduleAvailability(orgId, payload, 'erica');
+      return {
+        result:       outcome.notes,
+        success:      outcome.success,
+        changeId:     outcome.changeId,
+        outcomeKey:   outcome.outcomeKey,
+        offeredSlots: (outcome.offeredSlots ?? []).slice(0, 5).map((s: any) => ({
+          slotId:    s.slotId,
+          windowId:  s.windowId,
+          label:     s.timeLabel,
+          startIso:  s.startIso,
+        })),
+        nextStep:     outcome.nextStep,
+        fallbackUsed: outcome.fallbackUsed,
+      };
+    } catch (err: any) {
+      return { result: `Reschedule availability error: ${err.message}` };
+    }
+  }
+
+  // ── confirm_reschedule ──────────────────────────────────────────────────
+  if (functionName === 'confirm_reschedule') {
+    const payload: ConfirmRescheduleToolPayload = {
+      changeId:    parameters.changeId ?? '',
+      bookingId:   parameters.bookingId ?? '',
+      slotId:      parameters.slotId ?? '',
+      windowId:    parameters.windowId ?? '',
+      callId:      callId || undefined,
+    };
+
+    if (!payload.changeId || !payload.bookingId || !payload.slotId) {
+      return { result: `confirm_reschedule requires changeId, bookingId, and slotId.` };
+    }
+
+    try {
+      const outcome = await confirmReschedule(orgId, payload, 'erica');
+      return {
+        result:         outcome.notes,
+        success:        outcome.success,
+        changeId:       outcome.changeId,
+        newSlotLabel:   outcome.newSlot?.timeLabel,
+        meetingLink:    outcome.meetingLink,
+        nextStep:       outcome.nextStep,
+        fallbackUsed:   outcome.fallbackUsed,
+      };
+    } catch (err: any) {
+      return { result: `Confirm reschedule error: ${err.message}` };
+    }
+  }
+
+  // ── request_cancellation / confirm_cancellation ─────────────────────────
+  if (functionName === 'request_cancellation' || functionName === 'confirm_cancellation') {
+    const payload: RequestCancellationToolPayload = {
+      bookingId:   parameters.bookingId ?? '',
+      entityId:    parameters.entityId ?? ids.entityId ?? '',
+      entityType:  parameters.entityType ?? ids.entityType ?? 'lead',
+      callId:      callId || undefined,
+      reason:      parameters.reason ?? 'prospect_requested',
+      reasonNote:  parameters.reasonNote ?? parameters.notes ?? undefined,
+    };
+
+    if (!payload.bookingId) {
+      return { result: `request_cancellation requires a bookingId.` };
+    }
+
+    try {
+      const outcome = await cancelBooking(orgId, payload, 'erica');
+      return {
+        result:               outcome.notes,
+        success:              outcome.success,
+        changeId:             outcome.changeId,
+        remindersSuppressed:  outcome.remindersSuppressed,
+        nextStep:             outcome.nextStep,
+        fallbackUsed:         outcome.fallbackUsed,
+      };
+    } catch (err: any) {
+      return { result: `Cancellation error: ${err.message}` };
     }
   }
 

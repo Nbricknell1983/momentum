@@ -1,0 +1,135 @@
+The Confirmation + Reminder Automation Layer is now complete.
+
+Next, I want to build the Reschedule + Cancel Layer for Erica bookings.
+
+Context:
+- Erica calling batches are live
+- Deal Intelligence, Client Intelligence, call briefs, runtime packets, Vapi launch, webhook reconciliation, and outcomes are all working
+- Calendar + Booking Integration is complete
+- Confirmation + Reminder Automation is complete
+- Erica can now sell appointments, confirm them, and trigger reminders
+- What is missing is the ability to handle appointment changes cleanly after booking
+
+GOAL
+Build the Reschedule + Cancel Layer so Momentum can:
+- process reschedule requests
+- process cancellation requests
+- update live bookings when provider integration is available
+- update booking requests when live booking is not available
+- keep confirmations/reminders/status history accurate
+- prepare for future Erica-assisted rescheduling over phone
+
+IMPORTANT
+Momentum remains the source of truth for:
+- booking state
+- booking request state
+- change history
+- communication outcomes
+- fallback reasons
+- linked call/entity context
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Reschedule/cancel domain model
+Create typed models for at least:
+- EricaBookingChangeRequest
+- EricaRescheduleOption
+- EricaRescheduleOutcome
+- EricaCancellationOutcome
+- EricaBookingChangeAudit
+- EricaBookingChangeReason
+- EricaBookingChangeStatus
+
+2. Booking provider boundary update
+Extend the existing calendar provider abstraction to support:
+- reschedule booking
+- cancel booking
+- return updated event details
+- return clear provider failure reasons
+
+If provider setup is missing, do not fake it.
+Use clean fallback handling.
+
+3. Reschedule flow
+Build the service that:
+- receives a reschedule request
+- checks availability if provider is live
+- offers new slots
+- confirms selected replacement slot
+- updates booking record
+- updates booking status history
+- updates reminder schedule accordingly
+
+4. Cancel flow
+Build the service that:
+- receives a cancellation request
+- cancels provider booking if live
+- marks booking as cancelled in Momentum
+- updates lifecycle history
+- suppresses future reminders
+- stores reason if provided
+
+5. Fallback logic
+If live provider actions are unavailable:
+- create a reschedule request task
+- create a cancellation request task
+- mark as pending_manual_action
+- keep full audit trail
+- surface clearly in UI
+
+6. Communication integration
+After reschedule/cancel:
+- generate updated confirmation if rescheduled
+- cancel or rebuild reminders
+- write communication events
+- keep the booking communication history accurate
+
+7. Erica tool integration
+Add/upgrade tools for:
+- request_reschedule
+- check_reschedule_availability
+- confirm_reschedule
+- request_cancellation
+- confirm_cancellation
+
+These tools must be policy-aware and only allowed when runtime packet permits.
+
+8. Erica workspace integration
+Upgrade the Bookings tab to show:
+- rescheduled bookings
+- cancelled bookings
+- pending change requests
+- reminder updates after changes
+- linked audit trail
+
+9. Inspection/debug support
+Create internal inspection for:
+- provider action attempted
+- new slot selected
+- cancellation reason
+- fallback reason
+- reminder changes
+- full booking change history
+
+IMPORTANT RULES
+- Do not fake provider-backed changes
+- Keep live-booking changes and manual fallback changes clearly separated
+- Keep all booking changes auditable
+- Keep all changes linked to entity, call, batch item, and communication history
+- If provider config is missing, stop cleanly and list exact missing setup
+
+OUTPUT FORMAT
+
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- reschedule/cancel domain model
+- provider boundary update
+- reschedule flow
+- cancel flow
