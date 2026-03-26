@@ -28,6 +28,15 @@ import { dispatchTool }              from './toolHandlers';
 import { updateCallStatus }          from './callService';
 import { isVapiWebhookSecured, getVapiConfig } from './config';
 import { firestore } from '../firebase';
+import {
+  isEricaCall,
+  extractEricaIds,
+  reconcileCallStarted,
+  reconcileTranscript,
+  reconcileFunctionCall,
+  reconcileCallEnded,
+  reconcileCallFailed,
+} from '../erica/webhookReconciler';
 
 export const vapiWebhookRouter = Router();
 
@@ -426,10 +435,51 @@ vapiWebhookRouter.post('/', async (req: Request, res: Response) => {
 
   console.log(`[vapi-webhook] type=${messageType} orgId=${orgId} callId=${callId} vapiCallId=${vapiCallId}`);
 
+  // ── ERICA BATCH CALL — route to Erica reconciler ──────────────────────────
+  // When the call metadata contains batchId + batchItemId, this is an Erica
+  // call launched from a human-approved batch. Route ALL events to the
+  // Erica reconciler which handles state, outcomes, and write-back.
+  const ericaIds = extractEricaIds(body);
+  if (isEricaCall(body)) {
+    console.log(`[vapi-webhook] Erica call detected — batchId=${ericaIds.batchId} itemId=${ericaIds.batchItemId}`);
+
+    if (messageType === 'call-started' || messageType === 'call-start' || messageType === 'call_start') {
+      await reconcileCallStarted(db, ericaIds, body);
+      return res.status(200).json({ success: true });
+    }
+
+    if (messageType === 'transcript') {
+      await reconcileTranscript(db, ericaIds, body);
+      return res.status(200).json({ success: true });
+    }
+
+    if (messageType === 'function-call' || messageType === 'function_call') {
+      const result = await reconcileFunctionCall(db, ericaIds, body);
+      return res.status(200).json({ success: true, ...result });
+    }
+
+    if (
+      messageType === 'call-ended' || messageType === 'call-end' ||
+      messageType === 'call_end' || messageType === 'end-of-call-report'
+    ) {
+      await reconcileCallEnded(db, ericaIds, body);
+      return res.status(200).json({ success: true });
+    }
+
+    if (messageType === 'call-failed' || messageType === 'call_failed') {
+      await reconcileCallFailed(db, ericaIds, body);
+      return res.status(200).json({ success: true });
+    }
+
+    // Any other Erica event — acknowledge
+    return res.status(200).json({ success: true, messageType });
+  }
+
+  // ── NON-ERICA: generic handlers below ─────────────────────────────────────
+
   // ── call.started ──────────────────────────────────────────────────────────
   if (messageType === 'call-started' || messageType === 'call-start' || messageType === 'call_start') {
     const { callerMemory } = await handleCallStarted(db, body, orgId, callId, vapiCallId);
-    // Return caller memory so Erica can personalise her opening
     return res.status(200).json({ success: true, callerMemory });
   }
 

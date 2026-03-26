@@ -1,0 +1,195 @@
+The full Erica Calling System is now live in Momentum.
+
+Next, I want to build the Vapi Execution Bridge for Erica.
+
+Context:
+- Erica batch selection, call context, deal intelligence, client intelligence, and call brief generation are already complete
+- EricaCallBrief already produces a formatted EricaVapiContextPacket
+- Batches can be created, reviewed, launched, paused, resumed, and cancelled
+- Guardrails are already enforced:
+  - no call without human-selected target
+  - no call without generated brief
+  - no call without phone number
+  - no call if blocked by policy
+- What is missing is the actual execution bridge between Momentum and Vapi
+
+GOAL
+Build the Vapi Execution Bridge so Momentum can:
+- launch Erica calls from approved batch items
+- send the correct context packet into Vapi for each call
+- track live call state
+- receive webhook events from Vapi
+- write outcomes back into Momentum automatically
+- keep the full system auditable and explainable
+
+IMPORTANT
+Vapi is the voice layer only.
+Momentum remains the source of truth for:
+- target selection
+- call preparation
+- call brief generation
+- allowed actions
+- outcomes
+- workflow state
+
+DO NOT:
+- let Vapi decide who to call
+- let Vapi call records outside a launched batch
+- let Vapi overwrite Momentum logic
+- create fake execution results
+- skip auth or webhook verification
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Erica Vapi execution domain model
+Create typed models for at least:
+- EricaVapiCallLaunch
+- EricaVapiCallState
+- EricaVapiWebhookEvent
+- EricaVapiExecutionResult
+- EricaVapiAssistantConfig
+- EricaVapiNumberConfig
+- EricaVapiErrorState
+- EricaVapiSyncState
+
+2. Vapi launch service
+Build the service that launches a call from a reviewed Erica batch item.
+It must:
+- validate batch item is allowed to call
+- validate brief exists
+- validate phone exists
+- build the outbound Vapi payload
+- include the EricaVapiContextPacket
+- store launch state on the batch item
+- mark item as calling / launched
+
+3. Vapi payload builder
+Create a clean builder that maps Momentum context into the Vapi request.
+Include:
+- target phone number
+- assistant / phone number config
+- structured metadata
+- EricaVapiContextPacket
+- call intent
+- entity identifiers
+- batch id
+- batch item id
+- org id
+- allowed tool/action context
+
+4. Batch launch execution
+Support:
+- launch one call from batch
+- launch next eligible call in batch
+- sequential batch processing
+- pause/resume/cancel batch execution
+- skip failed item and continue if configured
+
+5. Vapi webhook endpoint
+Build/upgrade the Momentum webhook endpoint to receive Vapi events securely.
+Support at minimum:
+- call.started
+- transcript
+- function_call
+- call.ended
+- call.failed if available
+- any status updates needed for syncing batch item state
+
+Security:
+- verify Authorization header using VAPI_WEBHOOK_SECRET
+- reject unauthorized requests cleanly
+
+6. Webhook-to-batch reconciliation
+When webhook events arrive:
+- identify the related org, batch, batch item, and entity
+- update live call state
+- append transcript/messages
+- capture function call outcomes
+- write final result back to EricaCallBatchItem
+- update EricaCallBatch summary stats
+
+7. Function/tool handling for Erica
+Handle at minimum:
+- book_appointment
+- take_message
+- recall_customer
+- request_callback
+- create_followup_task
+- log_objection
+- log_call_outcome
+
+All tool actions must:
+- go through Momentum service boundaries
+- be auditable
+- respect allowed actions from the call brief
+
+8. Call outcome write-back automation
+After call completion, automatically write back:
+- booked / not booked
+- objection raised
+- next step
+- notes summary
+- follow-up required
+- cadence impact if relevant
+- communication history entry if relevant
+
+9. Erica live execution workspace
+Upgrade the Erica workspace to show:
+- queued
+- launching
+- ringing
+- active
+- completed
+- failed
+- skipped
+- paused
+- cancelled
+
+Include:
+- live event stream per active call
+- transcript snippets
+- outcome state
+- retry / relaunch controls where appropriate
+
+10. Retry and failure handling
+Support:
+- failed launch
+- webhook mismatch
+- missing phone
+- Vapi error response
+- partial completion
+- manual retry
+- mark failed with explanation
+
+11. Inspection and debugging
+Create internal inspection for:
+- launch payload sent to Vapi
+- webhook events received
+- auth verification result
+- batch item execution history
+- final mapped outcome
+- exact failure reason where relevant
+
+IMPORTANT RULES
+- Momentum selects and prepares; Vapi executes voice only
+- no calling outside explicit human-launched batches
+- no call without a valid brief
+- no skipped auth
+- keep all execution tied to batch items and orgs
+- keep everything explainable and auditable
+
+OUTPUT FORMAT
+
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- Erica Vapi execution domain model
+- Vapi launch service
+- Vapi payload builder
+- webhook endpoint reconciliation

@@ -34,6 +34,8 @@ import {
   writeCallResult,
   listCallResults,
 } from './batchService';
+import { launchEricaBatchItem, launchNextBatchItem } from './vapiLaunchService';
+import { firestore } from '../firebase';
 
 export const ericaRouter = Router();
 
@@ -237,6 +239,133 @@ ericaRouter.get('/orgs/:orgId/results', async (req: Request, res: Response) => {
   try {
     const results = await listCallResults(req.params.orgId);
     res.json({ results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ERICA VAPI EXECUTION — Item-level call launch
+// POST /api/erica/orgs/:orgId/batches/:batchId/items/:itemId/launch-call
+// ---------------------------------------------------------------------------
+
+ericaRouter.post('/orgs/:orgId/batches/:batchId/items/:itemId/launch-call', async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const result = await launchEricaBatchItem({
+      orgId:      req.params.orgId,
+      batchId:    req.params.batchId,
+      itemId:     req.params.itemId,
+      launchedBy: user?.uid ?? 'unknown',
+    });
+
+    if (!result.success) {
+      return res.status(result.notConfigured ? 503 : 400).json({
+        error:         result.error,
+        blockedReason: result.blockedReason,
+        notConfigured: result.notConfigured ?? false,
+      });
+    }
+
+    res.json({
+      success:        true,
+      momentumCallId: result.momentumCallId,
+      vapiCallId:     result.vapiCallId,
+    });
+  } catch (err: any) {
+    console.error('[erica-router] launch-call error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Launch the next eligible item in the batch
+// POST /api/erica/orgs/:orgId/batches/:batchId/launch-next
+// ---------------------------------------------------------------------------
+
+ericaRouter.post('/orgs/:orgId/batches/:batchId/launch-next', async (req: Request, res: Response) => {
+  try {
+    const user   = (req as any).user;
+    const result = await launchNextBatchItem({
+      orgId:      req.params.orgId,
+      batchId:    req.params.batchId,
+      launchedBy: user?.uid ?? 'unknown',
+    });
+
+    if (result.done) {
+      return res.json({ done: true, message: 'All batch items have been processed' });
+    }
+    if (!result.launched) {
+      return res.status(400).json({ error: result.result?.error ?? 'No eligible items to launch' });
+    }
+
+    res.json({
+      launched:       true,
+      itemId:         result.itemId,
+      momentumCallId: result.result?.momentumCallId,
+      vapiCallId:     result.result?.vapiCallId,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Live call state — fetch vapiCalls for an org (Erica execution workspace)
+// GET /api/erica/orgs/:orgId/calls
+// ---------------------------------------------------------------------------
+
+ericaRouter.get('/orgs/:orgId/calls', async (req: Request, res: Response) => {
+  try {
+    const db = firestore;
+    if (!db) return res.status(500).json({ error: 'Firestore not initialised' });
+    const limit = parseInt(req.query.limit as string ?? '50');
+    const snap = await db.collection('orgs').doc(req.params.orgId)
+      .collection('vapiCalls')
+      .orderBy('launchedAt', 'desc')
+      .limit(Math.min(limit, 100))
+      .get();
+    const calls = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ calls });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Event audit log — inspection / debugging
+// GET /api/erica/orgs/:orgId/events
+// ---------------------------------------------------------------------------
+
+ericaRouter.get('/orgs/:orgId/events', async (req: Request, res: Response) => {
+  try {
+    const db = firestore;
+    if (!db) return res.status(500).json({ error: 'Firestore not initialised' });
+    const snap = await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaEventAudit')
+      .orderBy('receivedAt', 'desc')
+      .limit(100)
+      .get();
+    const events = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ events });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Brief inspection — fetch full brief for a call
+// GET /api/erica/orgs/:orgId/briefs/:briefId
+// ---------------------------------------------------------------------------
+
+ericaRouter.get('/orgs/:orgId/briefs/:briefId', async (req: Request, res: Response) => {
+  try {
+    const db = firestore;
+    if (!db) return res.status(500).json({ error: 'Firestore not initialised' });
+    const snap = await db.collection('orgs').doc(req.params.orgId)
+      .collection('ericaBriefs').doc(req.params.briefId).get();
+    if (!snap.exists) return res.status(404).json({ error: 'Brief not found' });
+    res.json({ brief: snap.data() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

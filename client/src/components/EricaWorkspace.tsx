@@ -5,7 +5,7 @@
 // Tabs: Batches | Selection | Review | Brief Inspection | Results | Settings
 // =============================================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import {
@@ -13,6 +13,7 @@ import {
   AlertTriangle, CheckCircle, Clock, User, Building2, Target,
   FileText, Eye, SkipForward, Trash2, RefreshCw, Phone, TrendingUp,
   Mic, BookOpen, Zap, ShieldCheck, MessageSquare, Users,
+  Radio, Activity, ListOrdered, Loader2, PhoneMissed,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -416,6 +417,55 @@ export default function EricaWorkspace() {
   });
   const results = (resultsData as any)?.results ?? [];
 
+  const { data: callsData, isLoading: callsLoading, refetch: refetchCalls } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/calls`],
+    enabled:  !!orgId,
+    refetchInterval: 5000,
+  });
+  const liveCalls = (callsData as any)?.calls ?? [];
+
+  const { data: eventsData, isLoading: eventsLoading, refetch: refetchEvents } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/events`],
+    enabled:  !!orgId,
+  });
+  const auditEvents = (eventsData as any)?.events ?? [];
+
+  const launchItemMutation = useMutation({
+    mutationFn: ({ batchId, itemId }: { batchId: string; itemId: string }) =>
+      apiRequest('POST', `/api/erica/orgs/${orgId}/batches/${batchId}/items/${itemId}/launch-call`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/batches`] });
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/calls`] });
+    },
+  });
+
+  const launchNextMutation = useMutation({
+    mutationFn: (batchId: string) =>
+      apiRequest('POST', `/api/erica/orgs/${orgId}/batches/${batchId}/launch-next`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/batches`] });
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/calls`] });
+    },
+  });
+
+  const [launchingItemId, setLaunchingItemId] = useState<string | null>(null);
+
+  async function handleLaunchItem(batchId: string, itemId: string) {
+    setLaunchingItemId(itemId);
+    try {
+      await launchItemMutation.mutateAsync({ batchId, itemId });
+      setActiveTab('execution');
+    } catch {}
+    setLaunchingItemId(null);
+  }
+
+  async function handleLaunchNext(batchId: string) {
+    try {
+      await launchNextMutation.mutateAsync(batchId);
+      setActiveTab('execution');
+    } catch {}
+  }
+
   // ---------------------------------------------------------------------------
   // Mutations
   // ---------------------------------------------------------------------------
@@ -633,7 +683,9 @@ export default function EricaWorkspace() {
             { value: 'batches',   label: 'Batches',   icon: BookOpen },
             { value: 'selection', label: 'Selection',  icon: Target },
             { value: 'review',    label: 'Review',     icon: ShieldCheck },
+            { value: 'execution', label: 'Execution',  icon: Radio },
             { value: 'results',   label: 'Results',    icon: TrendingUp },
+            { value: 'inspect',   label: 'Inspect',    icon: Activity },
           ].map(({ value, label, icon: Icon }) => (
             <TabsTrigger
               key={value}
@@ -944,6 +996,257 @@ export default function EricaWorkspace() {
             </div>
           )}
         </TabsContent>
+
+        {/* ── EXECUTION TAB ────────────────────────────────────────────── */}
+        <TabsContent value="execution" className="flex-1 overflow-y-auto p-6 mt-0 space-y-6">
+
+          {/* Batch launch controls */}
+          {batches.filter(b => b.status === 'ready' || b.status === 'active').length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Radio className="w-4 h-4 text-blue-600" /> Ready to Launch</h3>
+              {batches.filter(b => b.status === 'ready' || b.status === 'active').map(batch => (
+                <Card key={batch.batchId} className="border border-slate-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-medium text-slate-800">{batch.name}</p>
+                        <p className="text-xs text-slate-500">{batch.totalTargets} targets · {batch.completedCalls} completed · {batch.bookedCalls} booked</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                          disabled={launchNextMutation.isPending}
+                          onClick={() => handleLaunchNext(batch.batchId)}
+                          data-testid={`btn-launch-next-${batch.batchId}`}
+                        >
+                          {launchNextMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <SkipForward className="w-3.5 h-3.5 mr-1.5" />}
+                          Launch Next
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Item-level list */}
+                    <div className="space-y-1.5">
+                      {batch.items?.filter(i => i.status === 'pending' || i.status === 'brief_ready').slice(0, 5).map(item => (
+                        <div key={item.itemId} className="flex items-center justify-between bg-slate-50 rounded px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {item.sourceType === 'lead' ? <User className="w-3.5 h-3.5 text-slate-400" /> : <Building2 className="w-3.5 h-3.5 text-slate-400" />}
+                            <span className="text-sm text-slate-700">{item.targetName}</span>
+                            <Badge variant="outline" className="text-xs capitalize">{item.status.replace('_', ' ')}</Badge>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs text-green-700 hover:bg-green-50 hover:text-green-800"
+                            disabled={launchingItemId === item.itemId || item.status !== 'brief_ready'}
+                            onClick={() => handleLaunchItem(batch.batchId, item.itemId)}
+                            data-testid={`btn-launch-item-${item.itemId}`}
+                          >
+                            {launchingItemId === item.itemId ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3 mr-1" />}
+                            Call
+                          </Button>
+                        </div>
+                      ))}
+                      {(batch.items?.filter(i => i.status === 'pending' || i.status === 'brief_ready').length ?? 0) > 5 && (
+                        <p className="text-xs text-slate-400 text-center pt-1">
+                          +{(batch.items?.filter(i => i.status === 'pending' || i.status === 'brief_ready').length ?? 0) - 5} more pending items
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Live calls stream */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-green-600" /> Live Call Feed
+                <span className="text-xs font-normal text-slate-400">(auto-refreshes every 5s)</span>
+              </h3>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-500" onClick={() => refetchCalls()} data-testid="btn-refresh-calls">
+                <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+              </Button>
+            </div>
+
+            {callsLoading ? (
+              <div className="flex items-center justify-center h-20 text-slate-400"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading calls…</div>
+            ) : liveCalls.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-24 text-slate-400">
+                <PhoneMissed className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">No calls recorded yet</p>
+                <p className="text-xs mt-0.5">Launch a call from a ready batch to see it here</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {liveCalls.map((call: any) => {
+                  const isActive = call.phase && !['completed', 'failed', 'no_answer'].includes(call.phase);
+                  return (
+                    <Card key={call.id} className={`border ${isActive ? 'border-green-300 bg-green-50/30' : 'border-slate-200'}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {isActive
+                              ? <Radio className="w-4 h-4 text-green-600 animate-pulse" />
+                              : call.phase === 'failed' || call.phase === 'no_answer'
+                                ? <PhoneMissed className="w-4 h-4 text-red-400" />
+                                : <CheckCircle className="w-4 h-4 text-slate-400" />
+                            }
+                            <span className="font-medium text-sm text-slate-800">{call.targetName ?? call.id}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={`text-xs capitalize ${
+                                isActive ? 'border-green-400 text-green-700' :
+                                call.phase === 'failed' ? 'border-red-300 text-red-600' :
+                                'border-slate-300 text-slate-500'
+                              }`}
+                            >
+                              {call.phase?.replace(/_/g, ' ') ?? 'unknown'}
+                            </Badge>
+                            {call.launchedAt && (
+                              <span className="text-xs text-slate-400">
+                                {new Date(call.launchedAt).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Transcript excerpt */}
+                        {call.transcriptExcerpt && (
+                          <p className="text-xs text-slate-600 bg-white border border-slate-100 rounded px-2 py-1.5 italic mt-1">
+                            "{call.transcriptExcerpt}"
+                          </p>
+                        )}
+
+                        {/* Outcome */}
+                        {call.outcome && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-xs text-slate-500">Outcome:</span>
+                            <Badge variant="outline" className={`text-xs ${call.booked ? 'border-green-400 text-green-700' : 'border-slate-300 text-slate-500'}`}>
+                              {call.booked ? '✓ Booked' : call.outcome?.replace(/_/g, ' ')}
+                            </Badge>
+                          </div>
+                        )}
+
+                        <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
+                          {call.vapiCallId && <span>Vapi: {call.vapiCallId.slice(0, 12)}…</span>}
+                          {call.batchId && <span>Batch: {call.batchId.slice(0, 8)}…</span>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── INSPECT TAB ─────────────────────────────────────────────── */}
+        <TabsContent value="inspect" className="flex-1 overflow-y-auto p-6 mt-0 space-y-6">
+
+          {/* Event audit log */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <ListOrdered className="w-4 h-4 text-purple-600" /> Event Audit Log
+              </h3>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-500" onClick={() => refetchEvents()} data-testid="btn-refresh-events">
+                <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+              </Button>
+            </div>
+
+            {eventsLoading ? (
+              <div className="flex items-center justify-center h-20 text-slate-400"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading events…</div>
+            ) : auditEvents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-24 text-slate-400">
+                <Activity className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">No webhook events recorded yet</p>
+                <p className="text-xs mt-0.5">Erica call events will appear here after calls begin</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {auditEvents.map((ev: any) => (
+                  <div key={ev.id} className="bg-white border border-slate-200 rounded-lg px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs font-mono border-purple-200 text-purple-700">
+                          {ev.eventType ?? ev.messageType ?? 'unknown'}
+                        </Badge>
+                        {ev.batchId && (
+                          <span className="text-xs text-slate-500">batch: {ev.batchId.slice(0, 8)}…</span>
+                        )}
+                        {ev.itemId && (
+                          <span className="text-xs text-slate-500">item: {ev.itemId.slice(0, 8)}…</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-400">
+                        {ev.receivedAt ? new Date(ev.receivedAt).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                    {ev.notes && <p className="text-xs text-slate-500 mt-1">{ev.notes}</p>}
+                    {ev.error && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{ev.error}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* System configuration summary */}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-3">
+              <ShieldCheck className="w-4 h-4 text-blue-600" /> Execution Configuration
+            </h3>
+            <Card className="border border-slate-200">
+              <CardContent className="p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Webhook endpoint</p>
+                    <p className="font-mono text-slate-700">/api/vapi/webhook</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Auth header</p>
+                    <p className="font-mono text-slate-700">Authorization: Bearer {'{'}secret{'}'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Launch endpoint</p>
+                    <p className="font-mono text-slate-700">/api/erica/orgs/:orgId/batches/:batchId/items/:itemId/launch-call</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Reconciler</p>
+                    <p className="font-mono text-slate-700">isEricaCall() → batchId + itemId in metadata</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Call routing</p>
+                    <p className="font-mono text-slate-700">Erica calls → ericaWebhookReconciler</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Non-Erica calls</p>
+                    <p className="font-mono text-slate-700">→ generic Vapi handlers</p>
+                  </div>
+                </div>
+                <Separator />
+                <div className="flex items-center gap-2 text-xs">
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                  <span className="text-slate-600">Erica calls require explicit human selection + brief generation before launch</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                  <span className="text-slate-600">No autonomous bulk dialling — every call is human-approved</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                  <span className="text-slate-600">All webhook events are reconciled and written to Firestore</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
       </Tabs>
 
       {/* Brief inspector modal */}
