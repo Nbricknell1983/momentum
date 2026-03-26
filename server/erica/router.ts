@@ -38,6 +38,18 @@ import { launchEricaBatchItem, launchNextBatchItem } from './vapiLaunchService';
 import { buildRuntimePacket, DEFAULT_ASSISTANT_PROFILE } from './runtimePacketBuilder';
 import type { EricaRuntimeConfig } from './ericaRuntimeTypes';
 import { firestore } from '../firebase';
+import { getProviderState } from './calendarProvider';
+import {
+  listConfirmedBookings,
+  listBookingRequests,
+  listBookingAudit,
+  convertBookingRequest,
+} from './bookingService';
+import { listAvailabilityWindows, checkAvailability } from './availabilityService';
+import type {
+  EricaBookingSlot,
+  CheckAvailabilityToolPayload,
+} from './bookingTypes';
 
 export const ericaRouter = Router();
 
@@ -478,6 +490,97 @@ ericaRouter.get('/orgs/:orgId/runtime-packets', async (req: Request, res: Respon
       .get();
     const packets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     res.json({ packets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================================
+// BOOKING ENDPOINTS
+// =============================================================================
+
+// GET /api/erica/orgs/:orgId/bookings/provider-state
+ericaRouter.get('/orgs/:orgId/bookings/provider-state', async (_req: Request, res: Response) => {
+  try {
+    const state = getProviderState();
+    res.json({ providerState: state });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/bookings
+ericaRouter.get('/orgs/:orgId/bookings', async (req: Request, res: Response) => {
+  try {
+    const bookings = await listConfirmedBookings(req.params.orgId, Number(req.query.limit ?? 50));
+    res.json({ bookings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/booking-requests
+ericaRouter.get('/orgs/:orgId/booking-requests', async (req: Request, res: Response) => {
+  try {
+    const requests = await listBookingRequests(req.params.orgId, Number(req.query.limit ?? 50));
+    res.json({ requests });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/availability-windows
+ericaRouter.get('/orgs/:orgId/availability-windows', async (req: Request, res: Response) => {
+  try {
+    const windows = await listAvailabilityWindows(req.params.orgId, Number(req.query.limit ?? 20));
+    res.json({ windows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/erica/orgs/:orgId/booking-audit
+ericaRouter.get('/orgs/:orgId/booking-audit', async (req: Request, res: Response) => {
+  try {
+    const entries = await listBookingAudit(req.params.orgId, Number(req.query.limit ?? 100));
+    res.json({ entries });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/erica/orgs/:orgId/booking-requests/:requestId/convert
+ericaRouter.post('/orgs/:orgId/booking-requests/:requestId/convert', async (req: Request, res: Response) => {
+  try {
+    const { slot, format, performedBy } = req.body;
+    if (!slot || !format) return res.status(400).json({ error: 'slot and format required' });
+    const outcome = await convertBookingRequest(
+      req.params.orgId,
+      req.params.requestId,
+      slot as EricaBookingSlot,
+      format,
+      performedBy ?? 'operator',
+    );
+    res.json({ outcome });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/erica/orgs/:orgId/bookings/check-availability
+ericaRouter.post('/orgs/:orgId/bookings/check-availability', async (req: Request, res: Response) => {
+  try {
+    const payload: CheckAvailabilityToolPayload = {
+      entityId:        req.body.entityId ?? '',
+      entityType:      req.body.entityType ?? 'lead',
+      callId:          req.body.callId,
+      durationMinutes: Number(req.body.durationMinutes ?? 30),
+      preferenceTime:  req.body.preferenceTime ?? 'any',
+      timezone:        req.body.timezone ?? 'Australia/Sydney',
+      lookAheadDays:   Number(req.body.lookAheadDays ?? 7),
+    };
+    const result = await checkAvailability(req.params.orgId, payload);
+    res.json({ result });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

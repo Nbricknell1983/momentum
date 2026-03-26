@@ -21,6 +21,13 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { getBatch, updateItemStatus, writeCallResult } from './batchService';
 import type { EricaCallResult } from '../../client/src/lib/ericaTypes';
 import type { EricaVapiCallPhase } from '../../client/src/lib/ericaExecutionTypes';
+import { checkAvailability } from './availabilityService';
+import { createConfirmedBooking, createBookingRequest } from './bookingService';
+import type {
+  CheckAvailabilityToolPayload,
+  CreateBookingToolPayload,
+  CreateBookingRequestToolPayload,
+} from './bookingTypes';
 
 // ---------------------------------------------------------------------------
 // Extract Erica identifiers from Vapi metadata
@@ -306,6 +313,154 @@ export async function reconcileFunctionCall(
       }
     } catch {}
     return { result: `Call outcome logged: ${outcome}` };
+  }
+
+  // ── check_availability ─────────────────────────────────────────────────
+  if (functionName === 'check_availability') {
+    const payload: CheckAvailabilityToolPayload = {
+      entityId:        parameters.entityId ?? ids.entityId ?? '',
+      entityType:      parameters.entityType ?? ids.entityType ?? 'lead',
+      callId:          callId || undefined,
+      durationMinutes: Number(parameters.durationMinutes ?? 30),
+      preferenceTime:  parameters.preferenceTime ?? 'any',
+      timezone:        parameters.timezone ?? 'Australia/Sydney',
+      lookAheadDays:   Number(parameters.lookAheadDays ?? 7),
+    };
+
+    try {
+      const result = await checkAvailability(orgId, payload);
+      if (!result.configured) {
+        return {
+          result:   'Calendar not configured — booking request flow will be used instead.',
+          error:    result.notConfiguredMsg,
+          slots:    [],
+          provider: result.providerState,
+        };
+      }
+      if (!result.success) {
+        return { result: `Availability check failed: ${result.error}`, slots: [] };
+      }
+      const slotList = (result.slots ?? [])
+        .map((s: any, i: number) => `${i + 1}. ${s.timeLabel}`)
+        .join(' | ');
+      return {
+        result:    result.slotCount > 0
+          ? `Found ${result.slotCount} available slot${result.slotCount !== 1 ? 's' : ''}: ${slotList}`
+          : `No available slots found in the requested window`,
+        windowId:  result.windowId,
+        slotCount: result.slotCount,
+        slots:     result.slots,
+      };
+    } catch (err: any) {
+      return { result: `Availability check error: ${err.message}`, slots: [] };
+    }
+  }
+
+  // ── create_booking ──────────────────────────────────────────────────────
+  if (functionName === 'create_booking') {
+    const payload: CreateBookingToolPayload = {
+      entityId:       parameters.entityId ?? ids.entityId ?? '',
+      entityType:     parameters.entityType ?? ids.entityType ?? 'lead',
+      callId:         callId || undefined,
+      batchId:        ids.batchId || undefined,
+      batchItemId:    ids.batchItemId || undefined,
+      briefId:        ids.briefId || undefined,
+      slotId:         parameters.slotId ?? '',
+      windowId:       parameters.windowId ?? '',
+      format:         parameters.format ?? 'phone',
+      meetingPurpose: parameters.meetingPurpose ?? 'Discovery call',
+      contactEmail:   parameters.contactEmail,
+    };
+
+    if (!payload.slotId || !payload.windowId) {
+      return { result: 'Missing slotId or windowId — cannot confirm booking.' };
+    }
+
+    try {
+      // Attempt to pull entity data from Firestore for context
+      let entityData = {
+        entityName:   parameters.entityName ?? 'Unknown',
+        businessName: parameters.businessName ?? 'Unknown',
+        contactName:  parameters.contactName,
+        contactEmail: parameters.contactEmail,
+        phone:        parameters.phone,
+      };
+      try {
+        const col  = payload.entityType === 'client' ? 'clients' : 'leads';
+        const snap = await base.collection(col).doc(payload.entityId).get();
+        if (snap.exists) {
+          const d = snap.data()!;
+          entityData = {
+            entityName:   d.name ?? d.businessName ?? entityData.entityName,
+            businessName: d.businessName ?? entityData.businessName,
+            contactName:  d.contactName ?? d.name ?? entityData.contactName,
+            contactEmail: d.email ?? entityData.contactEmail,
+            phone:        d.phone ?? entityData.phone,
+          };
+        }
+      } catch { /* Non-critical — proceed with payload data */ }
+
+      const outcome = await createConfirmedBooking(orgId, payload, entityData, 'erica');
+      return {
+        result:          outcome.notes,
+        success:         outcome.success,
+        bookingId:       outcome.booking?.bookingId,
+        calendarEventId: outcome.calendarEventId,
+        meetingLink:     outcome.meetingLink,
+        nextStep:        outcome.nextStep,
+      };
+    } catch (err: any) {
+      return { result: `Booking creation error: ${err.message}` };
+    }
+  }
+
+  // ── create_booking_request ──────────────────────────────────────────────
+  if (functionName === 'create_booking_request') {
+    const payload: CreateBookingRequestToolPayload = {
+      entityId:          parameters.entityId ?? ids.entityId ?? '',
+      entityType:        parameters.entityType ?? ids.entityType ?? 'lead',
+      callId:            callId || undefined,
+      batchId:           ids.batchId || undefined,
+      batchItemId:       ids.batchItemId || undefined,
+      briefId:           ids.briefId || undefined,
+      meetingPurpose:    parameters.meetingPurpose ?? 'Discovery call',
+      preferredFormat:   parameters.preferredFormat ?? 'phone',
+      preferredTimezone: parameters.preferredTimezone ?? 'Australia/Sydney',
+      internalNotes:     parameters.internalNotes ?? parameters.notes ?? '',
+      fallbackReason:    parameters.fallbackReason ?? 'provider_not_configured',
+    };
+
+    try {
+      let entityData = {
+        entityName:   parameters.entityName ?? 'Unknown',
+        businessName: parameters.businessName ?? 'Unknown',
+        contactName:  parameters.contactName,
+        phone:        parameters.phone,
+      };
+      try {
+        const col  = payload.entityType === 'client' ? 'clients' : 'leads';
+        const snap = await base.collection(col).doc(payload.entityId).get();
+        if (snap.exists) {
+          const d = snap.data()!;
+          entityData = {
+            entityName:   d.name ?? d.businessName ?? entityData.entityName,
+            businessName: d.businessName ?? entityData.businessName,
+            contactName:  d.contactName ?? d.name ?? entityData.contactName,
+            phone:        d.phone ?? entityData.phone,
+          };
+        }
+      } catch { /* Non-critical */ }
+
+      const outcome = await createBookingRequest(orgId, payload, entityData, 'erica');
+      return {
+        result:       outcome.notes,
+        success:      outcome.success,
+        requestId:    outcome.bookingRequest?.requestId,
+        nextStep:     outcome.nextStep,
+      };
+    } catch (err: any) {
+      return { result: `Booking request creation error: ${err.message}` };
+    }
   }
 
   // Unknown function

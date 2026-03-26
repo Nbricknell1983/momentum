@@ -15,6 +15,7 @@ import {
   Mic, BookOpen, Zap, ShieldCheck, MessageSquare, Users,
   Radio, Activity, ListOrdered, Loader2, PhoneMissed,
   Settings, Terminal, ChevronUp, Copy, CheckCheck,
+  Calendar, CalendarCheck, CalendarX, Link2, MapPin,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -443,6 +444,46 @@ export default function EricaWorkspace() {
   });
   const runtimePackets = (runtimePacketsData as any)?.packets ?? [];
 
+  // ── Booking queries ───────────────────────────────────────────────────────
+  const { data: providerStateData, refetch: refetchProviderState } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/bookings/provider-state`],
+    enabled:  !!orgId,
+  });
+  const providerState = (providerStateData as any)?.providerState ?? null;
+
+  const { data: bookingsData, refetch: refetchBookings } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/bookings`],
+    enabled:  !!orgId,
+  });
+  const confirmedBookings: any[] = (bookingsData as any)?.bookings ?? [];
+
+  const { data: bookingRequestsData, refetch: refetchBookingRequests } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/booking-requests`],
+    enabled:  !!orgId,
+  });
+  const bookingRequests: any[] = (bookingRequestsData as any)?.requests ?? [];
+
+  const { data: availabilityWindowsData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/availability-windows`],
+    enabled:  !!orgId,
+  });
+  const availabilityWindows: any[] = (availabilityWindowsData as any)?.windows ?? [];
+
+  const { data: bookingAuditData } = useQuery({
+    queryKey: [`/api/erica/orgs/${orgId}/booking-audit`],
+    enabled:  !!orgId,
+  });
+  const bookingAuditEntries: any[] = (bookingAuditData as any)?.entries ?? [];
+
+  const convertBookingMutation = useMutation({
+    mutationFn: ({ requestId, slot, format }: { requestId: string; slot: any; format: string }) =>
+      apiRequest('POST', `/api/erica/orgs/${orgId}/booking-requests/${requestId}/convert`, { slot, format, performedBy: 'operator' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/bookings`] });
+      qc.invalidateQueries({ queryKey: [`/api/erica/orgs/${orgId}/booking-requests`] });
+    },
+  });
+
   const updateRuntimeConfigMutation = useMutation({
     mutationFn: (updates: Record<string, any>) =>
       apiRequest('PATCH', `/api/erica/orgs/${orgId}/runtime-config`, updates),
@@ -719,6 +760,7 @@ export default function EricaWorkspace() {
             { value: 'review',    label: 'Review',     icon: ShieldCheck },
             { value: 'execution', label: 'Execution',  icon: Radio },
             { value: 'results',   label: 'Results',    icon: TrendingUp },
+            { value: 'bookings',  label: 'Bookings',   icon: Calendar },
             { value: 'runtime',   label: 'Runtime',    icon: Settings },
             { value: 'inspect',   label: 'Inspect',    icon: Activity },
           ].map(({ value, label, icon: Icon }) => (
@@ -1577,6 +1619,360 @@ export default function EricaWorkspace() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* ── BOOKINGS TAB ─────────────────────────────────────────────── */}
+        <TabsContent value="bookings" className="flex-1 overflow-y-auto p-6 mt-0 space-y-6">
+
+          {/* Provider state banner */}
+          <Card className={`border ${providerState?.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className={`mt-0.5 p-2 rounded-full ${providerState?.configured ? 'bg-green-100' : 'bg-amber-100'}`}>
+                  <Calendar className={`w-4 h-4 ${providerState?.configured ? 'text-green-600' : 'text-amber-600'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm text-slate-800">
+                      {providerState?.configured ? 'Google Calendar Connected' : 'Calendar Not Configured'}
+                    </p>
+                    <Badge variant="outline" className={`text-xs ${providerState?.configured ? 'border-green-400 text-green-700' : 'border-amber-400 text-amber-700'}`}>
+                      {providerState?.provider ?? 'none'}
+                    </Badge>
+                  </div>
+                  {providerState?.configured ? (
+                    <p className="text-xs text-green-700 mt-0.5">
+                      Live availability checks and confirmed bookings are active. Erica can offer real slots during calls.
+                    </p>
+                  ) : (
+                    <div className="mt-1 space-y-1">
+                      <p className="text-xs text-amber-700">
+                        Erica will use the booking-request fallback flow until configured. Operators confirm appointments manually.
+                      </p>
+                      {(providerState?.missingSecrets ?? []).length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-slate-700">Missing Replit Secrets:</p>
+                          {(providerState?.missingSecrets ?? []).map((s: string) => (
+                            <div key={s} className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <X className="w-3 h-3 text-red-500 shrink-0" />
+                              <code className="font-mono">{s}</code>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(providerState?.missingSetup ?? []).length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-slate-700">Setup steps:</p>
+                          {(providerState?.missingSetup ?? []).map((s: string, i: number) => (
+                            <div key={i} className="flex items-start gap-1.5 text-xs text-slate-600">
+                              <span className="text-amber-500 font-medium shrink-0">{i + 1}.</span>
+                              <span>{s}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => refetchProviderState()}
+                  className="shrink-0"
+                  data-testid="btn-refresh-provider-state"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Summary strip */}
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { label: 'Confirmed Bookings', value: confirmedBookings.length, icon: CalendarCheck, color: 'text-green-700' },
+              { label: 'Pending Requests',   value: bookingRequests.filter((r: any) => r.status === 'pending').length, icon: Calendar, color: 'text-amber-700' },
+              { label: 'Availability Checks', value: availabilityWindows.length, icon: Clock, color: 'text-blue-700' },
+              { label: 'Audit Events',        value: bookingAuditEntries.length, icon: Activity, color: 'text-slate-700' },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <Card key={label} className="border border-slate-200">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <Icon className={`w-5 h-5 ${color} shrink-0`} />
+                  <div>
+                    <p className="text-2xl font-bold text-slate-800">{value}</p>
+                    <p className="text-xs text-slate-500">{label}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Confirmed bookings */}
+          <Card className="border border-slate-200">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CalendarCheck className="w-4 h-4 text-green-600" />
+                  Confirmed Bookings
+                </CardTitle>
+                <Button size="sm" variant="ghost" onClick={() => refetchBookings()} data-testid="btn-refresh-bookings">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {confirmedBookings.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  <CalendarCheck className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p>No confirmed bookings yet</p>
+                  <p className="text-xs mt-1">Bookings confirmed via Erica will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {confirmedBookings.map((booking: any) => (
+                    <div
+                      key={booking.bookingId ?? booking.id}
+                      className="flex items-start gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50"
+                      data-testid={`booking-confirmed-${booking.bookingId ?? booking.id}`}
+                    >
+                      <div className="mt-0.5">
+                        {booking.status === 'confirmed' ? (
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                        ) : booking.status === 'cancelled' ? (
+                          <CalendarX className="w-4 h-4 text-red-500" />
+                        ) : (
+                          <Calendar className="w-4 h-4 text-blue-500" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm text-slate-800 truncate">{booking.entityName}</p>
+                          <Badge variant="outline" className="text-xs shrink-0">{booking.status}</Badge>
+                        </div>
+                        <p className="text-xs text-slate-500 truncate">{booking.businessName}</p>
+                        {booking.slot && (
+                          <p className="text-xs text-blue-700 mt-0.5 font-medium">{booking.slot.timeLabel ?? booking.slot.dateLabel}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-xs text-slate-400">{booking.meetingPurpose}</span>
+                          {booking.meetingLink && (
+                            <a
+                              href={booking.meetingLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-blue-600 flex items-center gap-0.5 hover:underline"
+                            >
+                              <Link2 className="w-3 h-3" /> Meeting link
+                            </a>
+                          )}
+                          {booking.calendarEventId && (
+                            <span className="text-xs text-slate-400 flex items-center gap-0.5">
+                              <Calendar className="w-3 h-3" /> Calendar event saved
+                            </span>
+                          )}
+                        </div>
+                        {booking.callId && (
+                          <p className="text-xs text-slate-400 mt-0.5">Call: {booking.callId}</p>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 shrink-0">
+                        {booking.createdAt ? new Date(booking.createdAt).toLocaleDateString('en-AU') : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Booking requests */}
+          <Card className="border border-slate-200">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-amber-600" />
+                  Booking Requests
+                  <Badge className="bg-amber-100 text-amber-700 border-0 text-xs">
+                    Require operator action
+                  </Badge>
+                </CardTitle>
+                <Button size="sm" variant="ghost" onClick={() => refetchBookingRequests()} data-testid="btn-refresh-booking-requests">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {bookingRequests.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p>No booking requests pending</p>
+                  <p className="text-xs mt-1">
+                    {providerState?.configured
+                      ? `Requests appear here when Erica uses the fallback flow`
+                      : `Calendar not configured — all bookings will appear here as requests`}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {bookingRequests.map((req: any) => (
+                    <div
+                      key={req.requestId ?? req.id}
+                      className="p-3 rounded-lg border border-amber-100 bg-amber-50 space-y-2"
+                      data-testid={`booking-request-${req.requestId ?? req.id}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5">
+                          {req.status === 'converted' ? (
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                          ) : req.status === 'cancelled' ? (
+                            <X className="w-4 h-4 text-red-500" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-amber-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm text-slate-800 truncate">{req.entityName}</p>
+                            <Badge
+                              variant="outline"
+                              className={`text-xs shrink-0 ${
+                                req.status === 'pending'   ? 'border-amber-400 text-amber-700' :
+                                req.status === 'converted' ? 'border-green-400 text-green-700' :
+                                'border-slate-300 text-slate-600'
+                              }`}
+                            >
+                              {req.status}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-slate-500 truncate">{req.businessName}</p>
+                          <p className="text-xs text-slate-600 mt-0.5">{req.meetingPurpose}</p>
+                          {req.internalNotes && (
+                            <p className="text-xs text-slate-500 mt-0.5 italic">{req.internalNotes}</p>
+                          )}
+                          {req.fallbackReason && (
+                            <p className="text-xs text-amber-700 mt-0.5">
+                              Fallback: {req.fallbackReason.replace(/_/g, ' ')}
+                            </p>
+                          )}
+                          {req.callId && (
+                            <p className="text-xs text-slate-400 mt-0.5">Call: {req.callId}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="text-xs text-slate-400">
+                            {req.createdAt ? new Date(req.createdAt).toLocaleDateString('en-AU') : ''}
+                          </span>
+                          {req.status === 'pending' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-6 px-2 border-amber-300 text-amber-700 hover:bg-amber-100"
+                              onClick={() => {
+                                const slot = {
+                                  slotId:     `manual_${Date.now()}`,
+                                  windowId:   'manual',
+                                  startIso:   new Date().toISOString(),
+                                  endIso:     new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+                                  startLocal: 'TBD',
+                                  endLocal:   'TBD',
+                                  dateLabel:  'TBD',
+                                  timeLabel:  'Manually confirmed',
+                                  available:  true,
+                                  source:     'manual',
+                                };
+                                convertBookingMutation.mutate({
+                                  requestId: req.requestId,
+                                  slot,
+                                  format: req.preferredFormat ?? 'phone',
+                                });
+                              }}
+                              data-testid={`btn-convert-request-${req.requestId}`}
+                            >
+                              Mark Confirmed
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Availability windows */}
+          {availabilityWindows.length > 0 && (
+            <Card className="border border-slate-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  Recent Availability Lookups
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-2">
+                  {availabilityWindows.slice(0, 10).map((win: any) => (
+                    <div
+                      key={win.windowId ?? win.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50 text-xs"
+                      data-testid={`availability-window-${win.windowId ?? win.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <div>
+                          <p className="font-medium text-slate-700">{win.fromDate} → {win.toDate}</p>
+                          <p className="text-slate-500">{win.preference} · {win.durationMinutes}min · {win.timezone}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-slate-700">{(win.slots ?? []).length} slots</p>
+                        <p className="text-slate-400">{win.requestedAt ? new Date(win.requestedAt).toLocaleDateString('en-AU') : ''}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Booking audit */}
+          {bookingAuditEntries.length > 0 && (
+            <Card className="border border-slate-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-slate-600" />
+                  Booking Audit Log
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-1.5">
+                  {bookingAuditEntries.slice(0, 20).map((entry: any, i: number) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 text-xs py-1.5 border-b border-slate-100 last:border-0"
+                      data-testid={`booking-audit-${i}`}
+                    >
+                      <span className="text-slate-400 shrink-0 w-24">
+                        {entry.at ? new Date(entry.at).toLocaleDateString('en-AU') : ''}
+                      </span>
+                      <span className={`font-medium shrink-0 ${
+                        entry.type === 'booking_confirmed'        ? 'text-green-700' :
+                        entry.type === 'booking_request_created' ? 'text-amber-700' :
+                        'text-slate-700'
+                      }`}>
+                        {(entry.type ?? '').replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-slate-500 truncate">
+                        {entry.slot ?? entry.fallbackReason?.replace(/_/g, ' ') ?? entry.entityId ?? ''}
+                      </span>
+                      <span className="text-slate-400 shrink-0 ml-auto">{entry.performedBy}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
         </TabsContent>
 
       </Tabs>

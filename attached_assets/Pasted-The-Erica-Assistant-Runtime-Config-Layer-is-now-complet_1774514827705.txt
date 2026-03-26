@@ -1,0 +1,122 @@
+The Erica Assistant Runtime Config Layer is now complete and fully wired.
+
+Next, I want to build the Calendar + Booking Integration Layer for Erica.
+
+Context:
+- Erica calling batches are live
+- Deal Intelligence, Client Intelligence, call briefs, runtime packets, Vapi launch, webhook reconciliation, and outcomes are all working
+- Erica can now run context-aware appointment-setting calls
+- What is missing is the ability to check real availability and confirm real appointments directly
+
+GOAL
+Build the Calendar + Booking Integration Layer so Erica can:
+- check available appointment times
+- offer real slots during the call
+- confirm a selected slot
+- create booking records in Momentum
+- support reschedule/cancel flows later
+- fall back to booking requests when live availability is unavailable
+
+IMPORTANT
+Momentum remains the source of truth for:
+- booking intent
+- booking outcome
+- call result
+- linked lead/client/account context
+
+IMPLEMENT THESE PARTS IN ORDER
+
+1. Booking domain model
+Create typed models for at least:
+- EricaBookingRequest
+- EricaBookingSlot
+- EricaBookingAvailabilityWindow
+- EricaConfirmedBooking
+- EricaBookingProviderState
+- EricaBookingFallbackReason
+- EricaBookingOutcome
+
+2. Calendar provider boundary
+Create adapter boundaries for:
+- Google Calendar
+- generic calendar provider abstraction
+
+Support:
+- config check
+- get availability
+- create booking
+- update booking
+- cancel booking
+- timezone handling
+
+If provider setup is missing, do not fake it.
+Create the boundary and list exact missing setup.
+
+3. Availability service
+Build the service that:
+- receives booking intent from Erica
+- checks real availability
+- returns structured candidate slots
+- supports morning/afternoon preferences
+- supports service duration logic if available
+
+4. Booking confirmation flow
+Build the service that:
+- accepts selected slot
+- confirms booking
+- writes booking record to Momentum
+- links booking to lead/client/account and call record
+- returns structured success/failure result
+
+5. Fallback booking-request flow
+If live calendar is unavailable or no slot works:
+- create booking request
+- create follow-up task
+- write clear notes
+- return structured fallback result
+
+6. Erica tool integration
+Add/upgrade Erica tools for:
+- check_availability
+- create_booking
+- create_booking_request
+
+These must be allowed only when runtime packet permits.
+
+7. Erica workspace integration
+Show:
+- confirmed bookings
+- booking requests
+- booking failures/fallbacks
+- linked call records
+
+8. Inspection/debug support
+Create internal inspection for:
+- calendar provider config
+- availability lookups
+- booking attempts
+- fallback reasons
+- exact booking outcome
+
+IMPORTANT RULES
+- Do not fake availability
+- Keep live booking and booking-request flows separate
+- Keep all booking outcomes auditable
+- Keep everything linked to Erica call batches and outcomes
+- If provider setup is missing, stop and list it clearly
+
+OUTPUT FORMAT
+
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+Start with:
+- booking domain model
+- calendar provider boundary
+- availability service
+- booking confirmation flow
