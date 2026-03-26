@@ -1,0 +1,226 @@
+You are working inside the Momentum backend (Node.js + Express).
+
+We are implementing a VAPI webhook handler that will:
+
+1. Authenticate incoming requests using Bearer token
+2. Handle inbound calls
+3. Handle outbound AI calls
+4. Capture transcripts and caller data
+5. Trigger actions like booking appointments and sending messages
+
+---
+
+## 🔐 AUTHENTICATION (MANDATORY)
+
+Update webhook authentication:
+
+* Read Authorization header
+* Expect format: "Bearer momentum_erica"
+* Reject all other requests
+
+Example:
+
+const auth = req.headers.authorization;
+
+if (!auth || auth !== `Bearer ${process.env.VAPI_WEBHOOK_SECRET}`) {
+return res.status(401).json({ error: "Unauthorized" });
+}
+
+---
+
+## 📍 CREATE ROUTE
+
+POST /api/vapi/webhook
+
+This route must handle ALL VAPI events.
+
+---
+
+## 📦 EXPECTED EVENT TYPES
+
+Handle these event types:
+
+1. call.started
+2. call.ended
+3. transcript
+4. function_call (VERY IMPORTANT)
+
+---
+
+## 🧠 CORE LOGIC
+
+### 1. CALL STARTED
+
+When event.type === "call.started":
+
+* Extract:
+
+  * callId
+  * customer phone number
+  * assistant name (Erica)
+
+* Store in Firestore (or DB):
+  collection: calls
+
+{
+callId,
+phoneNumber,
+status: "active",
+startedAt: timestamp
+}
+
+---
+
+### 2. TRANSCRIPT EVENTS
+
+When event.type === "transcript":
+
+* Capture:
+
+  * speaker (user / assistant)
+  * message
+  * timestamp
+
+* Append to:
+  calls/{callId}/messages
+
+---
+
+### 3. FUNCTION CALLS (CRITICAL)
+
+When event.type === "function_call":
+
+Switch on event.function.name:
+
+---
+
+#### 📅 book_appointment
+
+Payload example:
+
+{
+name,
+phone,
+service,
+date,
+time
+}
+
+Action:
+
+* Save to:
+  appointments collection
+
+* Return success:
+
+res.json({
+result: "Appointment booked successfully"
+})
+
+---
+
+#### 📝 take_message
+
+Payload:
+
+{
+name,
+phone,
+message
+}
+
+Action:
+
+* Save to:
+  messages collection
+
+* OPTIONAL: trigger notification (future)
+
+---
+
+#### 🔁 recall_customer
+
+Payload:
+
+{
+phone
+}
+
+Action:
+
+* Lookup previous calls/messages
+* Return summary
+
+---
+
+### 4. CALL ENDED
+
+When event.type === "call.ended":
+
+* Update call record:
+
+status: "completed"
+endedAt: timestamp
+
+---
+
+## 🧾 RESPONSE FORMAT
+
+Always return:
+
+res.json({ success: true });
+
+---
+
+## 🧠 MEMORY SYSTEM (IMPORTANT)
+
+When a caller calls again:
+
+* Match by phone number
+
+* Load previous:
+
+  * calls
+  * appointments
+  * messages
+
+* Include in assistant context (future step)
+
+---
+
+## ⚙️ ENV VARIABLES REQUIRED
+
+VAPI_WEBHOOK_SECRET=momentum_erica
+
+---
+
+## 🧪 TEST CASES
+
+1. Incoming call → webhook triggered → stored
+2. User says “I want to book” → function_call fires → saved
+3. User leaves message → stored
+4. Repeat caller → system can retrieve memory
+
+---
+
+## 🚫 DO NOT
+
+* Do NOT skip auth
+* Do NOT assume event shape — always null check
+* Do NOT crash if missing fields
+
+---
+
+## ✅ GOAL
+
+After this:
+
+Erica should:
+
+* Answer calls
+* Book appointments
+* Take messages
+* Remember callers
+* Feed data back into Momentum
+
+This is the foundation of the Voice AI layer across ALL tenants.
