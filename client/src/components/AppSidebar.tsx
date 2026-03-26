@@ -31,6 +31,7 @@ import {
   Cpu,
   Database,
   Phone,
+  Mic,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -76,6 +77,7 @@ const managerNavItems = [
   { title: 'Exec Runner',      url: '/autopilot-execution', icon: Cpu },
   { title: 'AI Systems Sync',  url: '/ai-systems-sync', icon: Database },
   { title: 'Vapi Voice Agent', url: '/vapi',            icon: Phone },
+  { title: 'Erica Calling',   url: '/erica',           icon: Mic },
   { title: 'Daily Briefing',   url: '/briefing',    icon: Sparkles },
   { title: 'Unified Ops',      url: '/unified-ops', icon: Globe },
   { title: 'Scheduled Sweeps', url: '/sweeps',      icon: RefreshCw },

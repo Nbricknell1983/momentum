@@ -131,3 +131,16 @@ Preferred communication style: Simple, everyday language.
 - **Web Speech API**: Enables voice dictation.
 - **Local Falcon API**: Integrates GBP rank tracking services.
 - **Google Business Profile API**: Facilitates management of Google Business Profiles.
+- **Vapi**: Voice AI layer for Erica calling system.
+
+### Erica Calling System
+- **Domain Model**: `client/src/lib/ericaTypes.ts` — Full typed model: `EricaCallBatch`, `EricaCallBatchItem`, `EricaCallBrief`, `EricaDealIntelligenceSnapshot`, `EricaClientIntelligenceSnapshot`, `EricaCallContext`, `EricaObjectionPrediction`, etc.
+- **Source-Aware Context**: `client/src/lib/ericaCallContext.ts` — Derives call intent, tone, framework, opening angle, question plan (NEPQ + Voss), objection predictions, and close strategy from the source system.
+- **Deal Intelligence Adapter**: `client/src/lib/ericaDealAdapter.ts` — Extracts deal intel from lead records into a structured snapshot.
+- **Client Intelligence Adapter**: `client/src/lib/ericaClientAdapter.ts` — Extracts account intel from client records for nurture/expansion/referral/churn calls.
+- **Brief Generator**: `client/src/lib/ericaBriefGenerator.ts` — Combines all intelligence into a structured `EricaCallBrief` + Vapi context packet before each call.
+- **Batch Service**: `server/erica/batchService.ts` — Firestore-backed batch lifecycle management.
+- **API Router**: `server/erica/router.ts` — REST API at `/api/erica/orgs/:orgId/*` for batch/item/result management.
+- **Workspace UI**: `client/src/components/EricaWorkspace.tsx` — Premium calling workspace with target selection, batch review, brief inspection, and results reporting.
+- **Firestore Collections**: `orgs/{orgId}/ericaBatches`, `orgs/{orgId}/ericaBriefs`, `orgs/{orgId}/ericaCallResults`.
+- **Guardrails**: Erica can only call records explicitly selected by a human, with a generated brief, valid phone number, and passing policy checks. No autonomous list building or bulk auto-dialling.

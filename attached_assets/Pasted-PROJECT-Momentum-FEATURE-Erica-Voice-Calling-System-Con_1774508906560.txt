@@ -1,0 +1,500 @@
+PROJECT: Momentum
+FEATURE: Erica Voice Calling System (Context-Aware, Human-Controlled, Vapi-Powered)
+
+IMPORTANT CONTEXT
+
+This is the Momentum project.
+
+Momentum owns:
+- lead intelligence
+- deal intelligence
+- client intelligence
+- sales execution
+- proposal follow-up
+- nurture workflows
+- cadence
+- communication logic
+- expansion / churn / referral logic
+- onboarding transition
+- operator controls
+
+This is NOT the AI Systems website/runtime project.
+
+Do NOT build tenant website voice assistants here.
+Do NOT build generic uncontrolled auto-dialing here.
+
+Erica is a Momentum voice agent.
+
+--------------------------------------------------
+CORE PRODUCT GOAL
+--------------------------------------------------
+
+Build Erica as a controlled, context-aware voice calling system inside Momentum.
+
+Her job is to:
+- sell the appointment
+- book nurture/review calls
+- qualify leads
+- follow up strategically
+- handle objections naturally
+- write outcomes back into Momentum
+
+She must use:
+- NEPQ principles
+- Chris Voss / Never Split the Difference style framing
+- SWISH / pattern interruption techniques where appropriate
+
+But she must NEVER operate from a generic script.
+
+She must always call with:
+- the correct call context
+- the correct deal/client context
+- the correct objective
+- the correct opening angle
+
+--------------------------------------------------
+CRITICAL RULES
+--------------------------------------------------
+
+1. Erica must NEVER build her own calling list
+A human must manually select the companies/leads/accounts first.
+
+2. Erica must NEVER call without a call brief
+Before every call she must receive:
+- Deal Intelligence
+- Client Intelligence (if relevant)
+- source section
+- call objective
+- objection predictions
+- question plan
+- close strategy
+
+3. Erica must behave differently based on WHERE the call was launched from
+
+Examples:
+- Prospects / Leads = cold / semi-cold call
+- Clients = nurture / review / expansion call
+- Cadence = follow-up call
+- Expansion = upsell call
+- Referral = referral ask call
+
+4. Vapi is the voice layer only
+Momentum remains the source of truth for:
+- call preparation
+- logic
+- context
+- allowed actions
+- policy
+- outcomes
+
+5. Erica must remain human-controlled
+No uncontrolled auto-calling.
+No autonomous list building.
+No bulk calling without an explicit launch action.
+
+--------------------------------------------------
+WHAT I WANT BUILT
+--------------------------------------------------
+
+Build the full Erica Calling System inside Momentum.
+
+--------------------------------------------------
+IMPLEMENT THESE PARTS IN ORDER
+--------------------------------------------------
+
+1. ERICA DOMAIN MODEL
+
+Create typed models for at least:
+- EricaCallBatch
+- EricaCallBatchItem
+- EricaCallTarget
+- EricaCallBatchStatus
+- EricaCallLaunchState
+- EricaCallResult
+- EricaCallBrief
+- EricaDealIntelligenceSnapshot
+- EricaClientIntelligenceSnapshot
+- EricaObjectionPrediction
+- EricaQuestionPlan
+- EricaOpeningAngle
+- EricaCloseStrategy
+- EricaCallPreparationState
+- EricaCallContext
+- EricaCallIntent
+- EricaCallSource
+
+At minimum support call intents such as:
+- cold_outreach
+- discovery_qualification
+- strategy_follow_up
+- proposal_follow_up
+- nurture
+- upsell
+- churn_intervention
+- referral_ask
+- dormant_lead_reactivation
+
+--------------------------------------------------
+2. MANUAL SELECTION WORKFLOW
+
+Build the selection workflow so I can manually choose which companies Erica is allowed to call.
+
+Allow selection from:
+- prospects / leads
+- clients
+- cadence
+- expansion opportunities
+- referral candidates
+- other relevant Momentum lists
+
+Support:
+- select one or many records
+- create call batch
+- add/remove items from batch
+- save draft batch
+- review before launch
+
+Important:
+Erica must only call records explicitly included in a batch.
+
+--------------------------------------------------
+3. SOURCE-AWARE CALL CONTEXT
+
+Build the logic that determines call context from where the batch item came from.
+
+Examples:
+
+If source = leads/prospects:
+- callType = cold_outreach
+- relationship = new
+- objective = book_initial_consult
+- tone = curious / disarming
+
+If source = clients:
+- callType = nurture
+- relationship = existing
+- objective = book_review_call
+- tone = familiar / value-led
+
+If source = cadence:
+- callType = follow_up
+- relationship = depends on entity
+- objective = continue current process
+
+If source = expansion:
+- callType = upsell
+- objective = explore growth opportunity
+
+If source = referral:
+- callType = referral_ask
+- objective = request introduction/referral
+
+Create a structured EricaCallContext object that is attached to every batch item and later passed into Vapi.
+
+--------------------------------------------------
+4. DEAL INTELLIGENCE ADAPTER
+
+Build a service that extracts and normalises relevant pre-call inputs from Deal Intelligence, such as:
+- lead/account name
+- business name
+- contact name
+- stage
+- source
+- opportunity summary
+- products/services discussed
+- pricing/scope context
+- stated goals
+- known blockers
+- last proposal/strategy state
+- last activity
+- urgency
+- decision-maker information if available
+- next best action
+
+--------------------------------------------------
+5. CLIENT INTELLIGENCE ADAPTER
+
+Build a service that extracts and normalises relevant pre-call inputs from Client Intelligence, such as:
+- current account state
+- current products/modules
+- delivery history
+- health/risk state
+- prior outcomes
+- engagement level
+- communication history
+- milestones/wins
+- known frustrations
+- likely expansion opportunities
+- likely churn signals
+- relationship strength
+
+This should be optional for pure lead calls, but required for client/nurture/expansion/referral flows.
+
+--------------------------------------------------
+6. CALL BRIEF GENERATOR
+
+Build a structured call brief generator that combines:
+- EricaCallContext
+- Deal Intelligence
+- Client Intelligence
+- stage
+- blockers
+- objections
+- objective
+
+The EricaCallBrief must include:
+- who this person/business is
+- why Erica is calling now
+- best opening line
+- likely problem to explore
+- likely emotional drivers
+- likely objections
+- recommended NEPQ-style questions
+- recommended Voss-style labels/mirrors/calibrated questions
+- best close approach
+- what not to say
+- allowed actions/tools
+
+Important:
+This must be structured data, not just a raw prompt blob.
+
+--------------------------------------------------
+7. CALL BATCH REVIEW SCREEN
+
+Build a premium review screen showing:
+- selected companies
+- contact name
+- phone
+- stage
+- source
+- reason for call
+- call intent
+- call objective
+- deal summary
+- warnings / exclusions
+- whether required phone/contact data exists
+- whether the record is blocked by policy/stage
+
+Allow:
+- reorder priority
+- remove target
+- inspect call brief
+- inspect predicted objections
+- inspect opening angle
+
+--------------------------------------------------
+8. VAPI INTEGRATION LAYER
+
+Integrate Erica with Vapi as the voice channel.
+
+When a call is launched, Momentum must pass a structured context packet into Vapi, including:
+- callType
+- source
+- relationship
+- objective
+- deal summary
+- client summary
+- opening angle
+- objection predictions
+- question plan
+- close strategy
+- allowed tools/actions
+
+Do NOT let Vapi invent the strategy on its own.
+Momentum prepares the call. Vapi executes the voice interaction.
+
+Build the integration so Erica can:
+- launch one call at a time
+- launch a batch sequentially
+- pause batch
+- cancel batch
+- skip target
+
+--------------------------------------------------
+9. ERICA CONVERSATION FRAMEWORK
+
+Build Erica’s logic so she uses:
+- NEPQ discovery
+- Voss labeling/mirroring/calibrated questions
+- SWISH-style reframe/pattern interruption where appropriate
+
+But this must be grounded in the call brief.
+
+Examples:
+- cold lead → permission-based opening, discovery, problem awareness, appointment close
+- nurture client → relationship-based opening, reference history, review call booking
+- upsell call → value-led check-in, identify gap, position review call
+- referral ask → leverage win/momentum, soft ask or direct intro ask based on context
+
+Do not use one generic opener for every call.
+
+--------------------------------------------------
+10. OPENING STRATEGY RULES
+
+Create explicit opening strategy rules based on call type.
+
+Examples:
+
+cold_outreach:
+- disarm quickly
+- ask permission
+- use curiosity
+
+proposal_follow_up:
+- reference the proposal/strategy
+- identify blocker
+- create low-friction next step
+
+nurture:
+- reference relationship/history
+- provide value
+- book review/nurture call
+
+upsell:
+- reference results/opportunity
+- position conversation as growth review
+
+referral_ask:
+- reference win / positive momentum
+- ask in the correct style based on readiness
+
+--------------------------------------------------
+11. OBJECTION PREDICTION + HANDLING
+
+Use deal and client intelligence to predict objections such as:
+- too expensive
+- too busy
+- not ready
+- need to think
+- already have provider
+- poor prior agency experience
+- partner approval
+- no urgency
+
+For each predicted objection, prepare:
+- likely underlying concern
+- suggested framing
+- calibrated follow-up question
+- how the appointment resolves the issue
+- what Erica should avoid saying
+
+--------------------------------------------------
+12. CALL OUTCOME WRITE-BACK
+
+After every call, write back to Momentum:
+- call outcome
+- booked or not booked
+- objection raised
+- sentiment / readiness update
+- next step
+- summary notes
+- follow-up required
+- appointment details if booked
+
+Store outcomes against:
+- batch
+- batch item
+- entity (lead/client)
+- communication history
+- cadence / next best action where relevant
+
+--------------------------------------------------
+13. INTERNAL ERICA WORKSPACE
+
+Build a premium Erica Calling Workspace showing:
+- draft batches
+- ready-to-launch batches
+- active batches
+- paused batches
+- completed batches
+- outcomes by company
+- live/current call state
+- booking success rate
+- objections heard
+- follow-up needed
+
+Include:
+- batch queue view
+- target detail view
+- call brief inspection
+- result history
+
+--------------------------------------------------
+14. INTERNAL INSPECTION + EXPLAINABILITY
+
+Create inspection views/services so we can see:
+- what Deal Intelligence was used
+- what Client Intelligence was used
+- what source created the call context
+- what opening angle was chosen
+- what objections were predicted
+- what questions were recommended
+- what close strategy was selected
+- what Vapi context packet was sent
+- what came back from the call
+
+Everything must be explainable and auditable.
+
+--------------------------------------------------
+15. GUARDRAILS
+
+Do NOT allow Erica to call:
+- unselected records
+- records missing required phone/contact data
+- records blocked by policy
+- records manually excluded
+- records with invalid call context
+- records where required call brief generation failed
+
+Erica must not start calling until:
+- batch is explicitly launched by a human
+- target passes validation
+- call brief exists
+
+--------------------------------------------------
+16. FUTURE-READY DESIGN
+
+Design clean extension points for later:
+- automatic batch suggestions (not auto-calling)
+- richer autopilot approval workflows
+- calendar integration
+- tenant-specific Erica variants
+- direct AI Systems context enrichment
+- follow-up call sequences
+
+Do NOT build uncontrolled autonomy now.
+Focus on controlled, high-quality calling first.
+
+--------------------------------------------------
+IMPORTANT RULES
+--------------------------------------------------
+
+- Erica must not call without a call brief
+- Erica must not call without human-selected targets
+- Erica must not use generic one-size-fits-all scripting
+- Vapi must remain the voice layer, not the decision brain
+- Momentum remains the source of truth for preparation and outcomes
+- Keep all recommendations explainable
+- Keep the system auditable
+- Keep the workflow premium and operator-friendly
+
+--------------------------------------------------
+OUTPUT FORMAT
+--------------------------------------------------
+
+For each implementation step:
+1. explain what you are building
+2. show proposed file structure
+3. show the code
+4. explain assumptions
+5. list blockers / missing setup
+6. stop before moving to the next step if a critical dependency is missing
+
+--------------------------------------------------
+START WITH:
+- Erica domain model
+- manual selection workflow
+- source-aware call context
+- Deal Intelligence adapter
+- Client Intelligence adapter
+- Erica call brief generator

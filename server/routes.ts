@@ -33,6 +33,7 @@ import { gatherPaidSearchViaSerpApi, isSerpApiConfigured } from "./services/paid
 import { integrationRouter } from "./integration";
 import { vapiRouter }       from "./vapi/router";
 import { vapiWebhookRouter } from "./vapi/webhookRouter";
+import { ericaRouter }       from "./erica/router";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -17208,6 +17209,11 @@ Return ONLY JSON:
   app.use('/api/vapi/webhook', vapiWebhookRouter);
   // All other Vapi routes require Firebase auth; mounted at /api/vapi
   app.use('/api/vapi', vapiRouter);
+
+  // ============================================
+  // Erica Calling System
+  // ============================================
+  app.use('/api/erica', ericaRouter);
 
   // ============================================
   // Real Provider Sending Layer
