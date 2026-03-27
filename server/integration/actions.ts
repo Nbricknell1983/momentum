@@ -8,7 +8,7 @@
 
 import type { Firestore } from 'firebase-admin/firestore';
 import { randomUUID } from 'crypto';
-import { isIntegrationConfigured } from './config';
+import { isIntegrationConfigured, getIntegrationConfig } from './config';
 import { provisionTenant, readIntegrationMapping, buildProvisioningRequestBlock } from './provisioning';
 import { pollTenantStatus } from './status';
 import { sendTenantPatch, buildBusinessPatch, buildStrategyPatch, buildKeywordsPatch, buildTargetMarketPatch, buildModuleAddPatch, buildResearchPatch } from './patch';
@@ -33,6 +33,7 @@ import type {
   ModuleRequest,
 } from './types';
 import { INTEGRATION_SCHEMA_VERSION } from './config';
+import { toAiSystemsPayload } from './ai-systems-transform';
 
 // ---------------------------------------------------------------------------
 // Readiness check — validates data completeness before provisioning
@@ -139,7 +140,8 @@ export async function actionCreateTenant(params: {
   const modules      = mapModules(scopeSelection);
   const agents       = mapAgents(modules, scopeSelection.autopilot);
 
-  const payload: TenantProvisionPayload = {
+  // ── Assemble rich internal payload (Momentum's own format) ────────────────
+  const internalPayload: TenantProvisionPayload = {
     provisioningRequest,
     business:             mapBusiness(clientDoc),
     handoverSnapshot:     mapHandoverSnapshot({
@@ -170,7 +172,29 @@ export async function actionCreateTenant(params: {
     metadata:             mapMetadata({ clientDoc, userId, displayName, userEmail }),
   };
 
-  const result = await provisionTenant({ db, orgId, clientId, payload, userId });
+  // ── Transform to AI Systems' expected flat format ───────────────────────
+  const aiSystemsPayload = toAiSystemsPayload(internalPayload);
+
+  const result = await provisionTenant({ db, orgId, clientId, internalPayload, aiSystemsPayload, userId });
+
+  // ── Trigger AI Systems startup after successful provisioning ────────────
+  if (result.success && result.tenantId && isIntegrationConfigured()) {
+    try {
+      const cfg = getIntegrationConfig();
+      const startupUrl = `${cfg.baseUrl}/api/startup/tenants/${result.tenantId}/run`;
+      await fetch(startupUrl, {
+        method:  'POST',
+        headers: {
+          'Authorization':    `Bearer ${cfg.apiKey}`,
+          'Content-Type':     'application/json',
+          'X-Source-System':  'momentum',
+        },
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch {
+      // Startup trigger failure is non-fatal — can be retried via status refresh
+    }
+  }
 
   return {
     success:               result.success,
@@ -213,12 +237,14 @@ export async function actionRetryProvisioning(params: {
 // ---------------------------------------------------------------------------
 
 export interface RefreshStatusResult {
-  success:        boolean;
-  lifecycleState?: string;
-  portalUrl?:      string | null;
-  modules?:        Record<string, { status: string }>;
-  activeAgents?:   string[];
-  error?:          string;
+  success:          boolean;
+  lifecycleState?:  string;
+  portalUrl?:       string | null;
+  capabilities?:    string[];
+  modules?:         string[];
+  activeAgents?:    string[];
+  activeWorkflows?: { workflowType: string; status: string; scheduledAt: string }[];
+  error?:           string;
 }
 
 export async function actionRefreshStatus(params: {
@@ -270,29 +296,16 @@ export async function actionSendPatch(params: {
     return { success: false, error: 'No tenant found — provision first' };
   }
 
-  // Build provisioningRequest block for the PATCH
-  const provisioningReq = {
-    provisioningRequestId: randomUUID(),
-    sourceSystem:          'momentum' as const,
-    sourceOrgId:           orgId,
-    sourceClientId:        clientId,
-    requestedAt:           new Date().toISOString(),
-    requestedBy: {
-      userId:      userId || 'system',
-      displayName: 'Momentum Admin',
-      role:        'admin',
-    },
-    schemaVersion: INTEGRATION_SCHEMA_VERSION,
-  };
+  const patchRequestId = randomUUID();
 
   let patchPayload;
   switch (domain) {
-    case 'business':          patchPayload = buildBusinessPatch(provisioningReq, data); break;
-    case 'strategy':          patchPayload = buildStrategyPatch(provisioningReq, data); break;
-    case 'researchArtifacts': patchPayload = buildResearchPatch(provisioningReq, data); break;
-    case 'keywords':          patchPayload = buildKeywordsPatch(provisioningReq, data); break;
-    case 'targetMarket':      patchPayload = buildTargetMarketPatch(provisioningReq, data); break;
-    case 'requestedModules':  patchPayload = buildModuleAddPatch(provisioningReq, data as Record<string, ModuleRequest>); break;
+    case 'business':          patchPayload = buildBusinessPatch(patchRequestId, data); break;
+    case 'strategy':          patchPayload = buildStrategyPatch(patchRequestId, data); break;
+    case 'researchArtifacts': patchPayload = buildResearchPatch(patchRequestId, data); break;
+    case 'keywords':          patchPayload = buildKeywordsPatch(patchRequestId, data); break;
+    case 'targetMarket':      patchPayload = buildTargetMarketPatch(patchRequestId, data); break;
+    case 'requestedModules':  patchPayload = buildModuleAddPatch(patchRequestId, data as Record<string, ModuleRequest>); break;
     default:
       return { success: false, error: `Unknown patch domain: ${domain}` };
   }
