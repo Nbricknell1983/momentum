@@ -486,17 +486,12 @@ export interface TenantStatusWorkflow {
 
 export interface TenantStatusResponse {
   tenantId:               string;
-  provisioningRequestId:  string;
   sourceClientId:         string;
   lifecycleState:         TenantLifecycleState;
-  lifecycleHistory:       { state: TenantLifecycleState; at: string }[];
-  capabilities:           Record<string, boolean>;
-  modules:                Record<string, TenantStatusModule>;
+  capabilities:           string[];
+  modules:                string[];
   activeAgents:           string[];
-  pendingWorkflows:       TenantStatusWorkflow[];
-  portalUrl:              string | null;
-  inviteSent:             boolean;
-  inviteSentAt:           string | null;
+  activeWorkflows:        { workflowType: string; status: string; scheduledAt: string }[];
   lastUpdated:            string;
 }
 
@@ -594,13 +589,28 @@ export type PatchDomain =
   | 'onboarding'
   | 'metadata';
 
+/** AI Systems' expected PATCH payload shape */
+export interface AiSystemsPatchPayload {
+  schemaVersion:          '1.0';
+  provisioningRequestId:  string;
+  sourceSystem:           'momentum';
+  fields:                 PatchField[];
+}
+
+export interface PatchField {
+  path:       string;
+  value:      unknown;
+  mergeMode:  'replace' | 'merge' | 'additive';
+}
+
+/** @deprecated Internal type — use AiSystemsPatchPayload for outbound requests */
 export interface PatchRequest {
   provisioningRequest:  Omit<ProvisioningRequest, 'schemaVersion'> & { schemaVersion: SchemaVersion };
   patch: {
     domain:   PatchDomain;
-    merge?:   Record<string, unknown>;       // for merge-semantic domains
-    replace?: Record<string, unknown>;       // for replace-semantic domains
-    addModule?: Record<string, ModuleRequest>;  // for additive module expansion
+    merge?:   Record<string, unknown>;
+    replace?: Record<string, unknown>;
+    addModule?: Record<string, ModuleRequest>;
     requiredCapabilityUpdate?: Partial<RequestedCapabilities>;
   };
 }

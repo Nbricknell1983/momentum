@@ -23,7 +23,7 @@
 
 import type { Firestore } from 'firebase-admin/firestore';
 import { getIntegrationConfig, isIntegrationConfigured, INTEGRATION_PATHS } from './config';
-import type { PatchDomain, PatchRequest, PatchTenantResponse, ModuleRequest } from './types';
+import type { PatchDomain, PatchRequest, PatchTenantResponse, ModuleRequest, AiSystemsPatchPayload, PatchField } from './types';
 import { logPatchEvent } from './audit';
 import { appendSyncError } from './provisioning';
 
@@ -65,7 +65,7 @@ export async function sendTenantPatch(params: {
   tenantId:               string;
   provisioningRequestId:  string;
   domain:                 PatchDomain;
-  patchPayload:           PatchRequest;
+  patchPayload:           AiSystemsPatchPayload;
   userId?:                string;
   attempt?:               number;
 }): Promise<PatchResult> {
@@ -167,61 +167,111 @@ export async function sendTenantPatch(params: {
 }
 
 // ---------------------------------------------------------------------------
+// Helper — build an AiSystemsPatchPayload
+// ---------------------------------------------------------------------------
+
+function buildPatchPayload(
+  provisioningRequestId: string,
+  fields: PatchField[]
+): AiSystemsPatchPayload {
+  return {
+    schemaVersion:          '1.0',
+    provisioningRequestId,
+    sourceSystem:           'momentum',
+    fields,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Typed PATCH builders — one per approved domain
 // ---------------------------------------------------------------------------
 
 /** Merge partial business fields (name, phone, email, address etc.) */
 export function buildBusinessPatch(
-  provisioningReq: PatchRequest['provisioningRequest'],
+  provisioningRequestId: string,
   fields: Record<string, unknown>
-): PatchRequest {
-  return { provisioningRequest: provisioningReq, patch: { domain: 'business', merge: fields } };
+): AiSystemsPatchPayload {
+  return buildPatchPayload(provisioningRequestId,
+    Object.entries(fields).map(([key, value]) => ({
+      path:      `tenant.${key}`,
+      value,
+      mergeMode: 'merge' as const,
+    }))
+  );
 }
 
 /** Replace entire strategy artifact */
 export function buildStrategyPatch(
-  provisioningReq: PatchRequest['provisioningRequest'],
+  provisioningRequestId: string,
   strategy: Record<string, unknown>
-): PatchRequest {
-  return { provisioningRequest: provisioningReq, patch: { domain: 'strategy', replace: strategy } };
+): AiSystemsPatchPayload {
+  return buildPatchPayload(provisioningRequestId, [{
+    path:      'handoverSnapshot',
+    value:     strategy,
+    mergeMode: 'merge',
+  }]);
 }
 
 /** Replace entire researchArtifacts artifact */
 export function buildResearchPatch(
-  provisioningReq: PatchRequest['provisioningRequest'],
+  provisioningRequestId: string,
   artifacts: Record<string, unknown>
-): PatchRequest {
-  return { provisioningRequest: provisioningReq, patch: { domain: 'researchArtifacts', replace: artifacts } };
+): AiSystemsPatchPayload {
+  return buildPatchPayload(provisioningRequestId, [{
+    path:      'handoverSnapshot.competitorUrls',
+    value:     artifacts,
+    mergeMode: 'replace',
+  }]);
 }
 
 /** Replace entire keywords artifact */
 export function buildKeywordsPatch(
-  provisioningReq: PatchRequest['provisioningRequest'],
+  provisioningRequestId: string,
   keywords: Record<string, unknown>
-): PatchRequest {
-  return { provisioningRequest: provisioningReq, patch: { domain: 'keywords', replace: keywords } };
+): AiSystemsPatchPayload {
+  return buildPatchPayload(provisioningRequestId, [{
+    path:      'handoverSnapshot.keywordStrategy',
+    value:     keywords,
+    mergeMode: 'replace',
+  }]);
 }
 
 /** Additive union of locations (merge service areas / priority suburbs) */
 export function buildTargetMarketPatch(
-  provisioningReq: PatchRequest['provisioningRequest'],
+  provisioningRequestId: string,
   fields: Record<string, unknown>
-): PatchRequest {
-  return { provisioningRequest: provisioningReq, patch: { domain: 'targetMarket', merge: fields } };
+): AiSystemsPatchPayload {
+  return buildPatchPayload(provisioningRequestId, [{
+    path:      'handoverSnapshot.serviceAreas',
+    value:     fields,
+    mergeMode: 'additive',
+  }]);
 }
 
 /** Additive module expansion — can add modules, cannot remove */
 export function buildModuleAddPatch(
-  provisioningReq: PatchRequest['provisioningRequest'],
+  provisioningRequestId: string,
   modules: Record<string, ModuleRequest>
-): PatchRequest {
-  return { provisioningRequest: provisioningReq, patch: { domain: 'requestedModules', addModule: modules } };
+): AiSystemsPatchPayload {
+  return buildPatchPayload(provisioningRequestId,
+    Object.entries(modules).map(([key, value]) => ({
+      path:      `modules.${key}`,
+      value,
+      mergeMode: 'additive' as const,
+    }))
+  );
 }
 
 /** Merge onboarding fields */
 export function buildOnboardingPatch(
-  provisioningReq: PatchRequest['provisioningRequest'],
+  provisioningRequestId: string,
   fields: Record<string, unknown>
-): PatchRequest {
-  return { provisioningRequest: provisioningReq, patch: { domain: 'onboarding', merge: fields } };
+): AiSystemsPatchPayload {
+  return buildPatchPayload(provisioningRequestId,
+    Object.entries(fields).map(([key, value]) => ({
+      path:      `tenant.${key}`,
+      value,
+      mergeMode: 'merge' as const,
+    }))
+  );
 }

@@ -13,13 +13,13 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { randomUUID } from 'crypto';
 import { getIntegrationConfig, isIntegrationConfigured, INTEGRATION_PATHS } from './config';
-import { TenantProvisionPayloadSchema } from './schema';
 import type {
   TenantProvisionPayload,
   CreateTenantResponse,
   AiSystemsIntegration,
   ProvisioningSyncError,
 } from './types';
+import type { AiSystemsProvisionPayload } from './ai-systems-transform';
 import {
   logRequestCreated,
   logValidationPassed,
@@ -157,13 +157,14 @@ export async function provisionTenant(params: {
   db:                   Firestore;
   orgId:                string;
   clientId:             string;
-  payload:              TenantProvisionPayload;
+  internalPayload:      TenantProvisionPayload;
+  aiSystemsPayload:     AiSystemsProvisionPayload;
   userId?:              string;
   attempt?:             number;
 }): Promise<ProvisioningResult> {
-  const { db, orgId, clientId, payload, userId } = params;
+  const { db, orgId, clientId, internalPayload, aiSystemsPayload, userId } = params;
   const attempt = params.attempt ?? 1;
-  const provisioningRequestId = payload.provisioningRequest.provisioningRequestId;
+  const provisioningRequestId = aiSystemsPayload.provisioningRequestId;
 
   if (!isIntegrationConfigured()) {
     return {
@@ -177,35 +178,17 @@ export async function provisionTenant(params: {
   const cfg = getIntegrationConfig();
 
   // ── 1. Compute payload hash ───────────────────────────────────────────────
-  const payloadHash = stableHash(payload).slice(0, 16);
+  const payloadHash = stableHash(aiSystemsPayload).slice(0, 16);
   await logRequestCreated({ db, orgId, clientId, provisioningRequestId, attempt, userId, payloadHash });
 
-  // ── 2. Zod validation ─────────────────────────────────────────────────────
-  const parsed = TenantProvisionPayloadSchema.safeParse(payload);
-  if (!parsed.success) {
-    const errors = parsed.error.errors.map(e => ({
-      path:     e.path.join('.'),
-      rule:     e.code,
-      message:  e.message,
-    }));
-    await logValidationFailed({ db, orgId, clientId, provisioningRequestId, attempt, userId, errors });
-    await appendSyncError(db, orgId, clientId, {
-      occurredAt: new Date().toISOString(),
-      action:     'provision',
-      httpStatus: null,
-      message:    `Payload validation failed: ${errors.map(e => `${e.path}: ${e.message}`).join('; ')}`,
-      attempt,
-    });
-    return { success: false, provisioningRequestId, validationErrors: errors, attempt };
-  }
-
+  // ── 2. Log validation (AI Systems will validate on its side) ──────────────
   await logValidationPassed({ db, orgId, clientId, provisioningRequestId, attempt, userId });
 
   // ── 3. Send outbound request ───────────────────────────────────────────────
   const endpoint = `${cfg.baseUrl}${INTEGRATION_PATHS.createTenant}`;
   await logOutboundRequest({ db, orgId, clientId, provisioningRequestId, attempt, userId, endpoint });
 
-  const result = await sendRequest(endpoint, 'POST', cfg.apiKey, parsed.data, cfg.requestTimeoutMs);
+  const result = await sendRequest(endpoint, 'POST', cfg.apiKey, aiSystemsPayload, cfg.requestTimeoutMs);
 
   await logResponseReceived({
     db, orgId, clientId, provisioningRequestId, attempt, userId,
@@ -225,7 +208,7 @@ export async function provisionTenant(params: {
       portalUrl:              null,
       provisionedAt:          new Date().toISOString(),
       lastSyncedAt:           new Date().toISOString(),
-      lastSyncedVersion:      payload.provisioningRequest.schemaVersion,
+      lastSyncedVersion:      aiSystemsPayload.schemaVersion,
       syncErrors:             [],
     };
     await writeIntegrationMapping(db, orgId, clientId, integration);
@@ -245,7 +228,14 @@ export async function provisionTenant(params: {
   }
 
   // ── 5. Handle failure ─────────────────────────────────────────────────────
-  const errorMessage = (result.body as any)?.error || (result.body as any)?.message || `HTTP ${result.status}`;
+  const body = result.body as any;
+  const issues = body?.issues;
+  const issueDetail = issues
+    ? Object.entries(issues).map(([field, msgs]) => `${field}: ${(msgs as string[]).join(', ')}`).join('; ')
+    : null;
+  const errorMessage = issueDetail
+    ? `${body?.error || 'Validation failed'} — ${issueDetail}`
+    : body?.error || body?.message || `HTTP ${result.status}`;
   const shouldRetry = attempt < cfg.maxRetries && isRetryableStatus(result.status);
 
   await appendSyncError(db, orgId, clientId, {

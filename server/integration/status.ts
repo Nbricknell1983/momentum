@@ -12,13 +12,15 @@ import { logStatusPoll } from './audit';
 import { readIntegrationMapping, writeIntegrationMapping, appendSyncError } from './provisioning';
 
 export interface StatusPollResult {
-  success:        boolean;
-  lifecycleState?: string;
-  portalUrl?:      string | null;
-  modules?:        Record<string, { status: string }>;
-  activeAgents?:   string[];
-  error?:          string;
-  httpStatus?:     number;
+  success:          boolean;
+  lifecycleState?:  string;
+  portalUrl?:       string | null;
+  capabilities?:    string[];
+  modules?:         string[];
+  activeAgents?:    string[];
+  activeWorkflows?: { workflowType: string; status: string; scheduledAt: string }[];
+  error?:           string;
+  httpStatus?:      number;
 }
 
 export async function pollTenantStatus(params: {
@@ -90,7 +92,7 @@ export async function pollTenantStatus(params: {
         lastSyncedVersion:      null,
       }),
       lifecycleState:     body.lifecycleState,
-      portalUrl:          body.portalUrl || existing?.portalUrl || null,
+      portalUrl:          existing?.portalUrl || null,
       lastSyncedAt:       new Date().toISOString(),
       lastSyncedVersion:  cfg.schemaVersion,
     };
@@ -98,11 +100,13 @@ export async function pollTenantStatus(params: {
     await writeIntegrationMapping(db, orgId, clientId, updated);
 
     return {
-      success:        true,
-      lifecycleState: body.lifecycleState,
-      portalUrl:      body.portalUrl || null,
-      modules:        body.modules,
-      activeAgents:   body.activeAgents,
+      success:          true,
+      lifecycleState:   body.lifecycleState,
+      portalUrl:        null,
+      capabilities:     body.capabilities,
+      modules:          body.modules,
+      activeAgents:     body.activeAgents,
+      activeWorkflows:  body.activeWorkflows,
     };
   } catch (err: any) {
     durationMs = Date.now() - start;
