@@ -13,6 +13,11 @@
 
 import type { TenantProvisionPayload } from './types';
 
+/** Remove undefined values from an object (Firestore rejects undefined) */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
 // ---------------------------------------------------------------------------
 // AI Systems expected types (mirrors AI Systems schemas.ts)
 // ---------------------------------------------------------------------------
@@ -307,15 +312,14 @@ export function toAiSystemsPayload(
     sourceOrgId:            provisioningRequest.sourceOrgId,
     sourceClientId:         provisioningRequest.sourceClientId,
 
-    tenant: {
+    tenant: stripUndefined({
       name:             business.legalName || business.tradingName || 'Unknown Business',
       subdomain:        generateSubdomain(business.legalName || business.tradingName || ''),
       category:         mapCategoryToEnum(business.businessCategory),
       contactEmail:     business.primaryContact.email || business.email || undefined,
       contactPhone:     business.primaryContact.phone || business.phone || undefined,
       businessAddress:  business.address.fullFormatted || undefined,
-      branding:         undefined,  // AI Systems applies defaults
-    },
+    }) as AiSystemsTenantData,
 
     capabilities: capabilitiesToArray(requestedCapabilities),
     modules:      modulesToSpecArray(requestedModules),
@@ -324,13 +328,13 @@ export function toAiSystemsPayload(
     handoverSnapshot: toAiSystemsHandover(internalPayload),
     nextBestActions:  toNextBestActions(internalPayload),
 
-    metadata: {
+    metadata: stripUndefined({
       tags:           metadata.tags,
       salesOwner:     metadata.salesOwner,
       closeDate:      metadata.closeDate,
       contractValue:  metadata.contractValue,
       billingCycle:   metadata.billingCycle,
       sourceCampaign: metadata.sourceCampaign,
-    },
+    }),
   };
 }
