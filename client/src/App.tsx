@@ -229,7 +229,7 @@ function AppLayout() {
           <AppSidebar />
           <div className="flex flex-col flex-1 min-w-0">
             <TopBar onAgentClick={() => setIsAgentOpen(true)} />
-            <main className="flex-1 overflow-hidden">
+            <main className="flex-1 overflow-y-auto">
               <ProtectedRoutes />
             </main>
           </div>
