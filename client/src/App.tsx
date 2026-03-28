@@ -13,6 +13,7 @@ import AppSidebar from '@/components/AppSidebar';
 import TopBar from '@/components/TopBar';
 import ImpersonationBanner from '@/components/ImpersonationBanner';
 import AISalesEngine from '@/components/AISalesEngine';
+import OnboardingTour from '@/components/OnboardingTour';
 import DashboardPage from '@/pages/dashboard';
 import PipelinePage from '@/pages/pipeline';
 import NurturePage from '@/pages/nurture';
@@ -235,11 +236,12 @@ function AppLayout() {
           </div>
         </div>
       </div>
-      <AISalesEngine 
-        isOpen={isAgentOpen} 
+      <AISalesEngine
+        isOpen={isAgentOpen}
         onClose={() => { setIsAgentOpen(false); setAiSection(null); }}
         activeSection={aiSection}
       />
+      <OnboardingTour />
     </SidebarProvider>
   );
 }
