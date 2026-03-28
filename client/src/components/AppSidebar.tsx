@@ -1,50 +1,16 @@
 import { Link, useLocation } from 'wouter';
 import {
-  LayoutDashboard,
-  Kanban,
-  Calendar,
-  CheckSquare,
-  Settings,
-  Moon,
-  Sun,
-  Heart,
-  Users,
-  Search,
-  BarChart3,
-  Radio,
-  Zap,
-  Inbox,
-  Map,
-  Activity,
-  Bot,
-  Brain,
-  TrendingUp,
-  Bell,
-  Mail,
-  LineChart,
-  Send,
-  GitMerge,
-  SlidersHorizontal,
-  RefreshCw,
-  Sparkles,
-  Globe,
-  Cpu,
-  Database,
-  Phone,
-  Mic,
+  LayoutDashboard, Kanban, Calendar, CheckSquare, Settings, Moon, Sun,
+  Heart, Users, Search, Brain, TrendingUp, Bell, Mail, Send, GitMerge,
+  SlidersHorizontal, RefreshCw, Sparkles, Database, Mic, Inbox, Activity,
+  Bot, LineChart, ChevronRight, Shield, UserSearch,
 } from 'lucide-react';
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarHeader,
-  SidebarFooter,
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
+  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  SidebarHeader, SidebarFooter,
 } from '@/components/ui/sidebar';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,44 +18,84 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
-const navItems = [
-  { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
-  { title: 'Pipeline', url: '/pipeline', icon: Kanban },
-  { title: 'Nurture', url: '/nurture', icon: Heart },
-  { title: 'Clients', url: '/clients', icon: Users },
-  { title: 'Research', url: '/research', icon: Search },
-  { title: 'My Work', url: '/my-work', icon: Inbox },
-  { title: 'Daily Plan', url: '/daily-plan', icon: Calendar },
-  { title: 'Tasks', url: '/tasks', icon: CheckSquare },
-  { title: 'Settings', url: '/settings', icon: Settings },
+// ─── Navigation Structure ────────────────────────────────────────────────────
+
+interface NavItem {
+  title: string;
+  url: string;
+  icon: typeof LayoutDashboard;
+  badge?: boolean;
+}
+
+interface NavSection {
+  label: string;
+  items: NavItem[];
+  defaultOpen?: boolean;
+  managerOnly?: boolean;
+}
+
+const coreItems: NavItem[] = [
+  { title: 'Dashboard',  url: '/dashboard',   icon: LayoutDashboard },
+  { title: 'Pipeline',   url: '/pipeline',    icon: Kanban },
+  { title: 'Clients',    url: '/clients',     icon: Users },
+  { title: 'Daily Plan', url: '/daily-plan',  icon: Calendar },
+  { title: 'My Work',    url: '/my-work',     icon: Inbox, badge: true },
 ];
 
-const managerNavItems = [
-  { title: 'Exec Dashboard',   url: '/exec',         icon: LineChart },
-  { title: 'Management',       url: '/management',   icon: BarChart3 },
-  { title: 'Agent Command',    url: '/agents',       icon: Brain },
-  { title: 'Expansion Engine', url: '/expansion',   icon: TrendingUp },
-  { title: 'Cadence',          url: '/cadence',     icon: Bell },
-  { title: 'Comms Drafts',     url: '/comms',       icon: Mail },
-  { title: 'Execution Queue',  url: '/execution',   icon: Send },
-  { title: 'Referral Engine',  url: '/referral',    icon: GitMerge },
-  { title: 'Autopilot Policy', url: '/autopilot',   icon: SlidersHorizontal },
-  { title: 'Exec Runner',      url: '/autopilot-execution', icon: Cpu },
-  { title: 'AI Systems Sync',  url: '/ai-systems-sync', icon: Database },
-  { title: 'Vapi Voice Agent', url: '/vapi',            icon: Phone },
-  { title: 'Erica Calling',   url: '/erica',           icon: Mic },
-  { title: 'Daily Briefing',   url: '/briefing',    icon: Sparkles },
-  { title: 'Unified Ops',      url: '/unified-ops', icon: Globe },
-  { title: 'Scheduled Sweeps', url: '/sweeps',      icon: RefreshCw },
-  { title: 'Bullpen',        url: '/bullpen',        icon: Radio },
-  { title: 'OpenClaw Setup', url: '/openclaw-setup', icon: Zap },
-  { title: 'Route Map',      url: '/routes',         icon: Map },
-];
+const salesSection: NavSection = {
+  label: 'Sales',
+  defaultOpen: false,
+  items: [
+    { title: 'Nurture',     url: '/nurture',    icon: Heart },
+    { title: 'Research',     url: '/research',   icon: Search },
+    { title: 'Erica',       url: '/erica',      icon: Mic },
+    { title: 'Cadence',     url: '/cadence',     icon: Bell },
+    { title: 'Referrals',   url: '/referral',    icon: GitMerge },
+    { title: 'Prospects',   url: '/research',    icon: UserSearch },
+  ],
+};
 
-const adminNavItems = [
-  { title: 'Queue Health',       url: '/admin/queue-health',       icon: Activity },
-  { title: 'Autopilot Settings', url: '/admin/autopilot-settings', icon: Bot },
-];
+const intelligenceSection: NavSection = {
+  label: 'Intelligence',
+  defaultOpen: false,
+  managerOnly: true,
+  items: [
+    { title: 'Exec Dashboard', url: '/exec',             icon: LineChart },
+    { title: 'Daily Brief',    url: '/briefing',          icon: Sparkles },
+    { title: 'Expansion',      url: '/expansion',         icon: TrendingUp },
+    { title: 'AI Systems',     url: '/ai-systems-sync',   icon: Database },
+  ],
+};
+
+const automationSection: NavSection = {
+  label: 'Automation',
+  defaultOpen: false,
+  managerOnly: true,
+  items: [
+    { title: 'Agent Control',   url: '/agents',               icon: Brain },
+    { title: 'Autopilot',       url: '/autopilot',            icon: SlidersHorizontal },
+    { title: 'Sweeps',          url: '/sweeps',               icon: RefreshCw },
+    { title: 'Comms',           url: '/comms',                icon: Mail },
+    { title: 'Execution',       url: '/execution',            icon: Send },
+  ],
+};
+
+const adminSection: NavSection = {
+  label: 'Admin',
+  defaultOpen: false,
+  managerOnly: true,
+  items: [
+    { title: 'System Health',   url: '/admin/queue-health',         icon: Activity },
+    { title: 'Autopilot Config', url: '/admin/autopilot-settings',  icon: Bot },
+    { title: 'Security',        url: '/admin/queue-health',         icon: Shield },
+    { title: 'Tasks',           url: '/tasks',                      icon: CheckSquare },
+    { title: 'Settings',        url: '/settings',                   icon: Settings },
+  ],
+};
+
+const allSections: NavSection[] = [salesSection, intelligenceSection, automationSection, adminSection];
+
+// ─── My Work Badge Counter ───────────────────────────────────────────────────
 
 function useMyWorkCount(orgId: string | null) {
   const [count, setCount] = useState(0);
@@ -105,11 +111,14 @@ function useMyWorkCount(orgId: string | null) {
   return count;
 }
 
+// ─── Sidebar Component ───────────────────────────────────────────────────────
+
 export default function AppSidebar() {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { isManager, effectiveIsManager, user, orgId } = useAuth();
   const myWorkCount = useMyWorkCount(orgId ?? null);
+  const showManager = effectiveIsManager && isManager;
 
   return (
     <Sidebar>
@@ -123,79 +132,37 @@ export default function AppSidebar() {
           />
         </Link>
       </SidebarHeader>
+
       <SidebarContent>
+        {/* Core — always visible, never collapses */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = location === item.url || 
-                  (item.url !== '/dashboard' && location.startsWith(item.url));
-                const isMyWork = item.url === '/my-work';
-                const badge = isMyWork && myWorkCount > 0 ? myWorkCount : null;
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(' ', '-')}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span className="flex-1">{item.title}</span>
-                        {badge !== null && (
-                          <span className="ml-auto text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5 leading-none">
-                            {badge}
-                          </span>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {coreItems.map((item) => (
+                <NavLink
+                  key={item.url}
+                  item={item}
+                  isActive={location === item.url || (item.url !== '/dashboard' && location.startsWith(item.url))}
+                  badge={item.badge && myWorkCount > 0 ? myWorkCount : undefined}
+                />
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        {effectiveIsManager && isManager && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Management</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {managerNavItems.map((item) => {
-                  const isActive = location === item.url;
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild isActive={isActive}>
-                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-        {effectiveIsManager && isManager && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Admin</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {adminNavItems.map((item) => {
-                  const isActive = location.startsWith(item.url);
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild isActive={isActive}>
-                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(' ', '-')}`}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+
+        {/* Collapsible sections */}
+        {allSections.map((section) => {
+          if (section.managerOnly && !showManager) return null;
+          return (
+            <CollapsibleSection
+              key={section.label}
+              section={section}
+              location={location}
+            />
+          );
+        })}
       </SidebarContent>
+
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
@@ -215,14 +182,63 @@ export default function AppSidebar() {
             onClick={toggleTheme}
             data-testid="button-theme-toggle"
           >
-            {theme === 'light' ? (
-              <Moon className="h-3.5 w-3.5" />
-            ) : (
-              <Sun className="h-3.5 w-3.5" />
-            )}
+            {theme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
           </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+// ─── Collapsible Section ─────────────────────────────────────────────────────
+
+function CollapsibleSection({ section, location }: { section: NavSection; location: string }) {
+  const hasActiveChild = section.items.some(item => location === item.url || location.startsWith(item.url));
+  const [open, setOpen] = useState(section.defaultOpen || hasActiveChild);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <SidebarGroup>
+        <CollapsibleTrigger asChild>
+          <SidebarGroupLabel className="cursor-pointer select-none flex items-center justify-between hover:bg-sidebar-accent/50 rounded-md px-2 transition-colors">
+            <span>{section.label}</span>
+            <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+          </SidebarGroupLabel>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.url + item.title}
+                  item={item}
+                  isActive={location === item.url}
+                />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
+  );
+}
+
+// ─── Single Nav Link ─────────────────────────────────────────────────────────
+
+function NavLink({ item, isActive, badge }: { item: NavItem; isActive: boolean; badge?: number }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild isActive={isActive}>
+        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+          <item.icon className="h-4 w-4" />
+          <span className="flex-1">{item.title}</span>
+          {badge !== undefined && badge > 0 && (
+            <span className="ml-auto text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5 leading-none">
+              {badge}
+            </span>
+          )}
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
