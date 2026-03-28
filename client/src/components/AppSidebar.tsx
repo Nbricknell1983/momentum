@@ -11,6 +11,7 @@ import {
   SidebarHeader, SidebarFooter,
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,6 +26,7 @@ interface NavItem {
   url: string;
   icon: typeof LayoutDashboard;
   badge?: boolean;
+  tooltip: string;
 }
 
 interface NavSection {
@@ -35,23 +37,23 @@ interface NavSection {
 }
 
 const coreItems: NavItem[] = [
-  { title: 'Dashboard',  url: '/dashboard',   icon: LayoutDashboard },
-  { title: 'Pipeline',   url: '/pipeline',    icon: Kanban },
-  { title: 'Clients',    url: '/clients',     icon: Users },
-  { title: 'Daily Plan', url: '/daily-plan',  icon: Calendar },
-  { title: 'My Work',    url: '/my-work',     icon: Inbox, badge: true },
+  { title: 'Dashboard',  url: '/dashboard',   icon: LayoutDashboard, tooltip: 'Overview of your pipeline, targets, and activity' },
+  { title: 'Pipeline',   url: '/pipeline',    icon: Kanban, tooltip: 'Manage leads through your sales stages' },
+  { title: 'Clients',    url: '/clients',     icon: Users, tooltip: 'View and manage your active clients' },
+  { title: 'Daily Plan', url: '/daily-plan',  icon: Calendar, tooltip: 'Your AI-managed schedule and daily targets' },
+  { title: 'My Work',    url: '/my-work',     icon: Inbox, badge: true, tooltip: 'Tasks and actions assigned to you' },
 ];
 
 const salesSection: NavSection = {
   label: 'Sales',
   defaultOpen: false,
   items: [
-    { title: 'Nurture',     url: '/nurture',    icon: Heart },
-    { title: 'Research',     url: '/research',   icon: Search },
-    { title: 'Erica',       url: '/erica',      icon: Mic },
-    { title: 'Cadence',     url: '/cadence',     icon: Bell },
-    { title: 'Referrals',   url: '/referral',    icon: GitMerge },
-    { title: 'Prospects',   url: '/research',    icon: UserSearch },
+    { title: 'Nurture',     url: '/nurture',    icon: Heart, tooltip: 'Warm leads with automated follow-up sequences' },
+    { title: 'Research',     url: '/research',   icon: Search, tooltip: 'Research prospects and gather business intelligence' },
+    { title: 'Erica',       url: '/erica',      icon: Mic, tooltip: 'AI voice agent — calls, nurtures, and books appointments' },
+    { title: 'Cadence',     url: '/cadence',     icon: Bell, tooltip: 'Manage follow-up timing and communication schedules' },
+    { title: 'Referrals',   url: '/referral',    icon: GitMerge, tooltip: 'Track and manage client referral opportunities' },
+    { title: 'Prospects',   url: '/research',    icon: UserSearch, tooltip: 'Discover new businesses that need your services' },
   ],
 };
 
@@ -60,10 +62,10 @@ const intelligenceSection: NavSection = {
   defaultOpen: false,
   managerOnly: true,
   items: [
-    { title: 'Exec Dashboard', url: '/exec',             icon: LineChart },
-    { title: 'Daily Brief',    url: '/briefing',          icon: Sparkles },
-    { title: 'Expansion',      url: '/expansion',         icon: TrendingUp },
-    { title: 'AI Systems',     url: '/ai-systems-sync',   icon: Database },
+    { title: 'Exec Dashboard', url: '/exec',             icon: LineChart, tooltip: 'Performance overview — revenue, pipeline, and team metrics' },
+    { title: 'Daily Brief',    url: '/briefing',          icon: Sparkles, tooltip: 'AI-generated morning briefing with priorities and insights' },
+    { title: 'Expansion',      url: '/expansion',         icon: TrendingUp, tooltip: 'Growth opportunities — upsell, new markets, and scope expansion' },
+    { title: 'AI Systems',     url: '/ai-systems-sync',   icon: Database, tooltip: 'Sync status between Momentum and AI Systems delivery engine' },
   ],
 };
 
@@ -72,11 +74,11 @@ const automationSection: NavSection = {
   defaultOpen: false,
   managerOnly: true,
   items: [
-    { title: 'Agent Control',   url: '/agents',               icon: Brain },
-    { title: 'Autopilot',       url: '/autopilot',            icon: SlidersHorizontal },
-    { title: 'Sweeps',          url: '/sweeps',               icon: RefreshCw },
-    { title: 'Comms',           url: '/comms',                icon: Mail },
-    { title: 'Execution',       url: '/execution',            icon: Send },
+    { title: 'Agent Control',   url: '/agents',               icon: Brain, tooltip: 'Manage AI agents — start, stop, configure behaviour' },
+    { title: 'Autopilot',       url: '/autopilot',            icon: SlidersHorizontal, tooltip: 'Rules that control what agents can do automatically' },
+    { title: 'Sweeps',          url: '/sweeps',               icon: RefreshCw, tooltip: 'Scheduled scans that detect follow-up and churn opportunities' },
+    { title: 'Comms',           url: '/comms',                icon: Mail, tooltip: 'Draft and review automated communications before sending' },
+    { title: 'Execution',       url: '/execution',            icon: Send, tooltip: 'Queue of pending actions waiting to be executed' },
   ],
 };
 
@@ -85,11 +87,11 @@ const adminSection: NavSection = {
   defaultOpen: false,
   managerOnly: true,
   items: [
-    { title: 'System Health',   url: '/admin/queue-health',         icon: Activity },
-    { title: 'Autopilot Config', url: '/admin/autopilot-settings',  icon: Bot },
-    { title: 'Security',        url: '/admin/queue-health',         icon: Shield },
-    { title: 'Tasks',           url: '/tasks',                      icon: CheckSquare },
-    { title: 'Settings',        url: '/settings',                   icon: Settings },
+    { title: 'System Health',   url: '/admin/queue-health',         icon: Activity, tooltip: 'Monitor agent queues, failures, and system status' },
+    { title: 'Autopilot Config', url: '/admin/autopilot-settings',  icon: Bot, tooltip: 'Configure automation rules and safety limits' },
+    { title: 'Security',        url: '/admin/queue-health',         icon: Shield, tooltip: 'Security alerts, credential status, and vulnerability scans' },
+    { title: 'Tasks',           url: '/tasks',                      icon: CheckSquare, tooltip: 'All tasks across the organisation' },
+    { title: 'Settings',        url: '/settings',                   icon: Settings, tooltip: 'Organisation settings, integrations, and user management' },
   ],
 };
 
@@ -228,17 +230,24 @@ function CollapsibleSection({ section, location }: { section: NavSection; locati
 function NavLink({ item, isActive, badge }: { item: NavItem; isActive: boolean; badge?: number }) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={isActive}>
-        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-          <item.icon className="h-4 w-4" />
-          <span className="flex-1">{item.title}</span>
-          {badge !== undefined && badge > 0 && (
-            <span className="ml-auto text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5 leading-none">
-              {badge}
-            </span>
-          )}
-        </Link>
-      </SidebarMenuButton>
+      <Tooltip delayDuration={400}>
+        <TooltipTrigger asChild>
+          <SidebarMenuButton asChild isActive={isActive}>
+            <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+              <item.icon className="h-4 w-4" />
+              <span className="flex-1">{item.title}</span>
+              {badge !== undefined && badge > 0 && (
+                <span className="ml-auto text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5 leading-none">
+                  {badge}
+                </span>
+              )}
+            </Link>
+          </SidebarMenuButton>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-[200px] text-xs">
+          {item.tooltip}
+        </TooltipContent>
+      </Tooltip>
     </SidebarMenuItem>
   );
 }

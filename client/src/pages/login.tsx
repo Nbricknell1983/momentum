@@ -340,7 +340,7 @@ export default function LoginPage() {
                 style={{ filter: 'brightness(0) invert(1) drop-shadow(0 0 12px rgba(139,92,246,0.6))' }}
               />
             </div>
-            <p className="text-sm text-violet-200/60">Sign in to access your CRM dashboard</p>
+            <p className="text-sm text-violet-200/60">Turn every opportunity into revenue</p>
           </div>
 
           <button
