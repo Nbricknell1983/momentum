@@ -644,6 +644,7 @@ export async function reconcileCallEnded(
         durationSeconds,
         callSummary:    summary,
         callTranscript: report?.transcript ?? null,
+        recordingUrl:   report?.artifact?.recordingUrl ?? report?.call?.artifact?.recordingUrl ?? null,
         finalOutcome:   outcome,
         lastUpdatedAt:  new Date().toISOString(),
       }, { merge: true });

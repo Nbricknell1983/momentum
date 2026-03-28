@@ -393,6 +393,7 @@ async function handleCallEnded(
     durationSeconds: durationMs ? Math.round(durationMs / 1000) : null,
     callSummary:     report?.summary ?? report?.call?.analysis?.summary ?? null,
     callTranscript:  report?.transcript ?? null,
+    recordingUrl:    report?.artifact?.recordingUrl ?? report?.call?.artifact?.recordingUrl ?? null,
     lastUpdatedAt:   new Date().toISOString(),
   };
 
