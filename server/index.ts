@@ -27,6 +27,11 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Health check — must be before any auth middleware
+app.get('/_health', (_req, res) => {
+  res.status(200).send('OK');
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -65,6 +70,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  try {
   // ── Generate internal scheduler key (in-memory, rotated on each restart) ──
   process.env.INTERNAL_SCHEDULER_KEY = crypto.randomBytes(24).toString('hex');
 
@@ -82,9 +88,8 @@ app.use((req, res, next) => {
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
+    console.error(`[Error] ${status} ${message}`, err.stack || '');
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after
@@ -106,18 +111,22 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);
-      startBullpenScheduler(port);
-      startPrepReadinessScheduler(port);
-      startAutopilotScheduler(port);
-      startSweepScheduler(port);
-      startAISystemsSyncScheduler();
-      startEricaCampaignScheduler();
+      try { startBullpenScheduler(port); } catch (e) { console.error('[Scheduler] Bullpen failed to start:', e); }
+      try { startPrepReadinessScheduler(port); } catch (e) { console.error('[Scheduler] PrepReadiness failed to start:', e); }
+      try { startAutopilotScheduler(port); } catch (e) { console.error('[Scheduler] Autopilot failed to start:', e); }
+      try { startSweepScheduler(port); } catch (e) { console.error('[Scheduler] Sweep failed to start:', e); }
+      try { startAISystemsSyncScheduler(); } catch (e) { console.error('[Scheduler] AISystemsSync failed to start:', e); }
+      try { startEricaCampaignScheduler(); } catch (e) { console.error('[Scheduler] EricaCampaign failed to start:', e); }
     },
   );
+
+  } catch (err) {
+    console.error('[FATAL] Server failed to start:', err);
+    process.exit(1);
+  }
 })();
 
 // ── Bullpen Daily Scheduler ────────────────────────────────────────────────
